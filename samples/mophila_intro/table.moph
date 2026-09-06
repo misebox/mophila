@@ -1,0 +1,52 @@
+# table.moph — 時間 1: 時刻と値の表。間は補間され、duration で全体が伸び縮みする
+
+import { W, H, v, track, ink, dim, accent, blue, review, dwell, longer } from .theme
+import { place, text, heading, card, outline, loop_demo, scene, add, say, close } from .slides
+
+# 同じ表を、違う duration で
+func bouncer(color, life) {
+  let b = new View { box: (4, 3) }
+  b.place(new Rect { position: apos!(:topLeft, 0, 0), w: 4, h: 3, fill: #1b2130 })
+  let c = new Circle { position: apos!(:center, 0.6, 1.5), radius: 0.35, fill: color }
+  b.place(c)
+  let go = context c as o {
+    motion (t) {
+      0:   o.position.x = 0.6
+      0.5: o.position.x = 3.4 :ease
+      1:   o.position.x = 0.6 :ease
+    }
+  }
+  go.duration = life
+  let tl = new Timeline {}
+  tl.place(go, at: 0s)
+  b.addTrack(tl)
+  b
+}
+
+export func run(now) {
+  log("table", now)
+  let sc = scene()
+  add(sc, [heading("時刻と値を、表に書く")], now)
+  add(sc, card([
+    "let go = context c as o {",
+    "  motion (t) {",
+    "    0:   o.position.x = 0.6",
+    "    0.5: o.position.x = 3.4 :ease",
+    "    1:   o.position.x = 0.6 :ease",
+    "  }",
+    "}",
+    "go.duration = 2s      # 右上",
+    "go.duration = 4s      # 右下",
+  ], 0.7, 1.8, 7.6, 0.28), now + 0.4s)
+  let t1 = now + 0.5s
+  let end = t1 + 22s
+  let x0 = 9.4
+  add(sc, [outline(x0 - 0.1, 1.5, 3.4, 2.6), outline(x0 - 0.1, 4.3, 3.4, 2.6), text("duration = 2s", x0 + 3.6, 2.8, 0.3, dim, :left), text("duration = 4s", x0 + 3.6, 5.6, 0.3, dim, :left)], t1)
+  loop_demo(bouncer(accent, 2s), x0, 1.6, 3.2, t1, 2s, end)
+  loop_demo(bouncer(blue, 4s), x0, 4.4, 3.2, t1, 4s, end)
+  let t = say(sc, "変化は、時刻と値の表で書きます。間は補間されます。", t1)
+  t = say(sc, ":ease を付けた区間は、ゆっくり始まり、ゆっくり止まります。", t)
+  t = say(sc, "時刻を 0 から 1 で書き、duration を変えると、同じ表が伸び縮みします。", t)
+  t = say(sc, "上は 2 秒、下は 4 秒で往復しています。", t)
+  close(sc, longer(t, end))
+}

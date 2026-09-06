@@ -1,0 +1,18 @@
+# grid.moph — 4 つのサンプルを 2x2 に並べて同時に再生する (View の入れ子と import の例)
+
+import .orbit
+import .bars
+import .clock
+import .bounce
+
+let v = new View { box: (16, 9) }
+v.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 9, fill: #202028 })
+
+let cells = [(orbit.output, 0.3, 0.3), (bars.output, 8.2, 0.3), (clock.output, 0.3, 4.6), (bounce.output, 8.2, 4.6)]
+let track = new Timeline {}
+for (sub, x, y) in cells {
+  v.place(sub, at: apos!(:topLeft, x, y), w: 7.5)
+  track.place(sub, at: 0s)
+}
+v.addTrack(track)
+output v

@@ -1,0 +1,14 @@
+# title.moph — 冒頭
+
+import { W, H, ink, dim, title_time, pause, longer } from .theme
+import { text, show, scene, say, close } from .slides
+
+export func run(now) {
+  let sc = scene()
+  let a = text("mophila", W / 2, 3.7, 1.6, ink, :center)
+  let b = text("動画を、コードで書く", W / 2, 5.3, 0.55, dim, :center)
+  let t = say(sc, "mophila は、動画をコードで書く言語です。", now + 1s)
+  let end = longer(t, now + title_time)
+  show([a, b], now, end)
+  close(sc, end)
+}

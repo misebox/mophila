@@ -1,0 +1,15 @@
+# ending.moph — 終わり
+
+import { W, H, ink, dim, title_time, longer } from .theme
+import { text, show, scene, say, close } from .slides
+
+export func run(now) {
+  log("end", now)
+  let sc = scene()
+  let a = text("mophila", W / 2, 4.2, 1.4, ink, :center)
+  let b = text("この動画も、mophila で書かれている", W / 2, 5.6, 0.45, dim, :center)
+  let t = say(sc, "この動画も、mophila で書かれています。", now + 1s)
+  let end = longer(t, now + title_time)
+  show([a, b], now, end)
+  close(sc, end) - 0.8s
+}

@@ -1,0 +1,52 @@
+# llm.moph — LLM と書く 1: 言語なので、文章で頼めば LLM が書ける (依頼 → コード → 動画)
+
+import { W, H, v, track, ink, dim, accent, panel, line, mono, review, dwell, dwell_code, longer } from .theme
+import { place, show, text, heading, card, outline, scene, add, say, close } from .slides
+import ..crowd
+
+export func run(now) {
+  log("llm", now)
+  let sc = scene()
+  add(sc, [heading("言語だから、LLM が書ける")], now)
+  # 依頼の吹き出し
+  let ask = [place(new Rect { position: apos!(:topLeft, 0.7, 1.6), w: 7.6, h: 0.9, radius: 0.3, fill: #22304a, opacity: 0 }),
+             place(new TextArea { text: "夕暮れの通りを、人が歩いていく動画を作って。奥の人は小さく。", position: apos!(:topLeft, 1.0, 1.8), w: 7.0, fontSize: 0.27, fill: ink, align: :left, opacity: 0 })]
+  let t1 = now + 0.5s
+  add(sc, ask, t1)
+  let t = say(sc, "文章で頼むと、LLM がスクリプトを書きます。", t1)
+  # コードが 1 行ずつ現れる
+  let lines = [
+    "import { make } from .walker",
+    "for (ground, w, start) in people {      # 奥から順",
+    "  let p = make(#e8ecf7, #8b93a7, 8s)",
+    "  v.place(p, at: apos!(:bottomLeft, -w, ground), w: w)",
+    "  let walk = context p as o {",
+    "    motion (t) { 0: o.position.x = -w  1: o.position.x = 16.5 }",
+    "  }",
+    "  track.place(p, at: start)",
+    "  track.place(walk, at: start)",
+    "}",
+  ]
+  let code = card(lines, 0.7, 2.7, 7.6, 0.23)
+  let t2 = t
+  add(sc, [code[0]], t2)
+  for (i, o) in code.enumerate() {
+    if i > 0 { add(sc, [o], t2 + i * 0.25s) }
+  }
+  t = say(sc, "walker を import して、奥行きの違う 3 人を置く。それだけです。", t2 + 0.5s)
+  let t3 = longer(t, t2 + 4s)
+  let end = t3 + 12s
+  add(sc, [outline(8.8, 1.8, 6.6, 6.6 * 9 / 16)], t3)
+  # crowd の View は冒頭で置いてあるので、ここでは位置と大きさを変えて動かし直す
+  let small = context crowd.output as o {
+    motion (t) {
+      0s: o.position = apos!(:topLeft, 8.8, 1.8), o.w = 6.6
+    }
+  }
+  track.place(small, at: t3 - 0.1s)
+  track.place(crowd.output, at: t3)
+  show([crowd.output], t3, end)
+  t = say(sc, "書いたものが、そのまま動画になります。", t3)
+  t = say(sc, "直したければ、文章で言い直します。", t)
+  close(sc, longer(t, end))
+}

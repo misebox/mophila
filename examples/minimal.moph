@@ -1,0 +1,20 @@
+# minimal.moph — 最初に動かす対象
+
+let view = new View { box: vector!(200, 200) }
+let redCircle = new Circle { position: apos!(:center, 100, 100), radius: 10, fill: #e04040 }
+
+# context は式。最後の式 (motion) が値になる
+let grow = context redCircle as c {
+  motion (t) {
+    0s: c.radius = 10
+    3s: c.radius = 100
+  }
+}
+
+let x = (1 + 2) * 3 ^ 2 / 4 % 5
+log("x = ", x)
+log("x = {x}, doubled = {d}".format(x, x * 2))
+
+view.place(redCircle)
+view.addTrack(grow)
+output view

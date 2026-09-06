@@ -1,0 +1,120 @@
+# mophila の構文 (GBNF)。src/parser.rs と対応させる。空白と改行の扱いは注記のとおり
+#
+# - 文は改行で区切る。{ } の中も同じ
+# - ( ) [ ] { } の中では、"," の後と "{" "[" "(" の直後、"}" "]" ")" の直前に改行を置ける
+# - コメントは "# " (# の後に空白) から行末
+
+root        ::= (ws stmt)* ws
+
+# ---------- 文 ----------
+stmt        ::= let-stmt
+              | func-decl
+              | type-def
+              | tuple-def
+              | import-stmt
+              | export-stmt
+              | output-stmt
+              | return-stmt
+              | for-stmt
+              | assign-stmt
+              | expr
+
+let-stmt    ::= "let" sp pattern (ws ":" ws type-ann)? ws "=" ws expr
+func-decl   ::= "func" sp ident ws "(" params ")" ws block
+type-def    ::= "type" sp ident ws "=" ws ident (ws "|" ws ident)*
+tuple-def   ::= "tuple" sp ident ws "(" (ws ident ws ":" ws type-ann (ws "," ws ident ws ":" ws type-ann)*)? ws ")"
+import-stmt ::= "import" sp import-src (sp "as" sp ident)?
+              | "import" ws "{" ws ident (ws "," ws ident)* ws "}" sp "from" sp import-src
+import-src  ::= ident | ("." | "..")+ ident ("." ident)* | string
+export-stmt ::= "export" sp (let-stmt | func-decl)
+output-stmt ::= "output" sp expr
+return-stmt ::= "return" sp expr
+for-stmt    ::= "for" sp pattern sp "in" sp expr ws block
+assign-stmt ::= target ws "=" ws expr
+              | target (ws "," ws target)+ ws "=" ws expr (ws "," ws expr)+
+target      ::= ident | expr "." ident | expr "[" ws expr ws "]"
+
+block       ::= "{" (ws stmt)* ws "}"
+
+pattern     ::= ident
+              | "(" ws pattern (ws "," ws pattern)* ws ")"
+              | "[" ws pattern (ws "," ws pattern)* ws "]"
+
+params      ::= (ws param (ws "," ws param)*)? ws
+param       ::= pattern (ws "=" ws expr)?
+
+# 型注釈。< > の中はトークン列として読む (例: Func<Number, Number -> Number>)
+type-ann    ::= ident ("<" type-tokens ">")?
+type-tokens ::= (ident | "," | "->" | "..." | "." | "<" type-tokens ">" | sp)*
+
+# ---------- 式 (優先順位の低い順) ----------
+expr        ::= or-expr
+or-expr     ::= and-expr (ws "or" ws and-expr)*
+and-expr    ::= eq-expr (ws "and" ws eq-expr)*
+eq-expr     ::= cmp-expr (ws ("==" | "!=") ws cmp-expr)?
+cmp-expr    ::= range-expr (ws ("<=" | ">=" | "<" | ">") ws range-expr)?
+range-expr  ::= add-expr (ws ("..=" | "..") ws add-expr)?
+add-expr    ::= mul-expr (ws ("+" | "-") ws mul-expr)*
+mul-expr    ::= pow-expr (ws ("*" | "/" | "%") ws pow-expr)*
+pow-expr    ::= unary-expr (ws "^" ws pow-expr)?
+unary-expr  ::= ("-" | "not" sp) unary-expr | postfix-expr
+postfix-expr ::= primary (postfix)*
+postfix     ::= "." ident
+              | "." integer
+              | "(" args ")"
+              | "[" ws expr ws "]"
+
+primary     ::= number | duration | color | string | symbol | bool
+              | specific-tuple
+              | ident
+              | "(" ws expr ws ")"
+              | "(" ws expr (ws "," ws expr)+ ws ")"
+              | "[" (ws expr (ws "," ws expr)*)? ws "]"
+              | dict
+              | new-expr
+              | if-expr
+              | func-expr
+              | context-expr
+              | motion-expr
+
+args        ::= (ws arg (ws "," ws arg)*)? ws
+arg         ::= (ident ws ":" ws)? expr
+
+specific-tuple ::= ident "!(" args ")"
+
+dict        ::= "{" (ws dict-entry (ws "," ws dict-entry)*)? ws "}"
+dict-entry  ::= string ws ":" ws expr | ident
+
+new-expr    ::= "new" sp ident ws "{" (ws ident ws ":" ws expr (ws "," ws ident ws ":" ws expr)*)? ws ","? ws "}"
+              | "new" sp ident ws "(" (ws ident ws "=" ws expr (ws "," ws ident ws "=" ws expr)*)? ws ")"
+
+if-expr     ::= "if" sp expr ws block (ws "else" ws (if-expr | block))?
+func-expr   ::= "func" ws "(" params ")" ws block
+context-expr ::= "context" sp expr sp "as" sp ident (ws "," ws expr sp "as" sp ident)* ws block
+
+# motion (t, a, b) { 行 }  /  motion target [:attr.path, ...] { 行 }  /  motion { 行 }
+motion-expr ::= "motion" ws motion-head? ws "{" (ws motion-row)* ws "}"
+motion-head ::= "(" ws ident (ws "," ws ident)* ws ")"
+              | ident ws "[" ws attr-path (ws "," ws attr-path)* ws "]"
+attr-path   ::= symbol ("." ident)*
+
+# 時刻は Duration か 0..1 の実数。範囲 (0..1:) は補間せず毎フレーム式を評価する
+motion-row  ::= key-time (".." key-time)? ":" ws row-items? (sp modifier)*
+key-time    ::= duration | number
+row-items   ::= row-item (ws "," ws row-item)*
+row-item    ::= expr ws "=" ws expr | expr
+modifier    ::= ":linear" | ":ease" | ":ease_in" | ":ease_out" | ":fade"
+
+# ---------- 字句 ----------
+ident       ::= [A-Za-z_] [A-Za-z0-9_]*
+integer     ::= [0-9]+
+number      ::= [0-9]+ ("." [0-9]+)? "%"?
+duration    ::= ([0-9]+ ("." [0-9]+)? ("ms" | "s" | "m" | "h"))+
+              | [0-9]+ ":" [0-9]+ (":" [0-9]+)? ("." [0-9]+)?
+color       ::= "#" ([0-9a-fA-F]{8} | [0-9a-fA-F]{6} | [0-9a-fA-F]{4} | [0-9a-fA-F]{3})
+string      ::= "\"" ([^"\\\n] | "\\" ["\\nt])* "\""
+symbol      ::= ":" ident
+bool        ::= "true" | "false"
+
+sp          ::= [ \t]+
+ws          ::= [ \t\n]*

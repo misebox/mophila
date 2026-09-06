@@ -1,0 +1,35 @@
+# theme.moph — intro の画面、色、時間の決まり。全ファイルが共有する
+
+import math
+
+export let W = 16
+export let H = 9
+export let v = new View { box: (W, H) }
+export let track = new Timeline {}
+
+export let bg     = #0f1218
+export let ink    = #f2f4f8
+export let dim    = #8f97ab
+export let panel  = #171c27
+export let line   = #2f3850
+export let accent = #ffb454
+export let blue   = #6fa4ff
+export let green  = #5fcf9a
+export let mono   = #cfd6ea
+
+v.place(new Rect { position: apos!(:topLeft, 0, 0), w: W, h: H, fill: bg })
+
+# ---------- 時間の決まり (テンポを変えるときはここだけ触る) ----------
+export let fade_time = 0.4s    # 出し入れのフェード
+export let stagger   = 0.08s   # 複数を一緒に出すときのずらし
+export let chapter_time = 3.5s # 章の見出し
+export let title_time = 6s
+export let review    = 2.5s    # 場面の最後の項目のあとに見返す時間
+export let pause     = 0.8s    # 場面と場面の間
+export let read_rate = 0.25    # 字幕 1 文字の秒
+export let code_rate = 0.3     # コード 1 文字の秒
+export let min_dwell = 1.5
+
+export func dwell(s) { math.max(min_dwell, s.replace(" ", "").len() * read_rate) * 1s }
+export func dwell_code(s) { math.max(min_dwell, s.replace(" ", "").len() * code_rate) * 1s }
+export func longer(a, b) { math.max(a / 1s, b / 1s) * 1s }

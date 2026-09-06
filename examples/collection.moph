@@ -1,0 +1,76 @@
+# collection.moph — List / Tuple / Range / Dict (すべて仮)
+
+# ---- List ----
+let xs = [1, 2, 3]
+let ys = []                      # 空
+
+xs[0]                            # 1
+xs[-1]                           # 3 (末尾)
+xs.len()                         # 3
+
+xs.push(4)                       # [1, 2, 3, 4]。破壊的
+let zs = xs + [5, 6]             # 連結。新しい List
+let sub = xs[1..3]               # [2, 3]。スライス
+
+xs.contains(2)                   # true
+xs.index_of(3)                   # 2。無ければ -1
+
+# 変換
+xs.map(func (x) { x * 2 })       # [2, 4, 6]
+xs.filter(func (x) { x > 1 })    # [2, 3]
+xs.reduce(0, func (acc, x) { acc + x })   # 6
+xs.sum()                         # 6
+xs.reverse()                     # [3, 2, 1]
+xs.sort()                        # 昇順
+xs.enumerate()                   # [(0, 1), (1, 2), (2, 3)]
+xs.zip([10, 20, 30])             # [(1, 10), (2, 20), (3, 30)]
+
+# 図形の List
+let v = new View { box: vector!(4, 3) }
+let circles = [1, 2, 3].map(func (i) {
+  new Circle { position: apos!(:center, i, 1.5), radius: 0.3, fill: #e04040 }
+})
+for c in circles {
+  v.place(c)
+}
+
+# ---- String ----
+"hello".len()                    # 5 (文字数)
+"a b c".replace(" ", "")         # "abc"
+["a", "b"].join("-")             # "a-b"
+
+# ---- Tuple ----
+let p = (1, 1.5)
+p.0                              # 1
+p.1                              # 1.5
+let (x, y) = p                   # 分割代入
+let q = (x, y, 0)                # 要素数は自由
+
+# 座標用の別名 (Tuple の要素に名前を付ける)
+p.x                              # 1。2 要素の Tuple に限り .x .y で参照できる
+p.y                              # 1.5
+
+# ---- Range ----
+let r = 0..5                     # 0, 1, 2, 3, 4
+let ri = 0..=5                   # 0 〜 5
+r.to_list()                      # [0, 1, 2, 3, 4]
+r.len()                          # 5
+for i in 0..3 { log(i) }
+
+# 実数の範囲 (for には使えない。均等に分ける)
+let fs = (0..=1).steps(4)        # [0, 0.25, 0.5, 0.75, 1]
+
+# ---- Dict ----
+let m = { "red": #e04040, "green": #40a040 }
+m["red"]                         # #e04040
+m.keys()                         # ["red", "green"]
+m.values()
+m.has("blue")                    # false
+m["blue"] = #4040e0              # 追加
+for (k, val) in m {
+  log("{k}: {val}".format(k, val))
+}
+
+log(xs, zs, sub, fs)                 # [1, 2, 3, 4] [1, 2, 3, 4, 5, 6] [2, 3] [0, 0.25, 0.5, 0.75, 1]
+log(p.0, p.1, x, y, q, p.x, p.y)    # 1 1.5 1 1.5 (1, 1.5, 0) 1 1.5
+log(m["red"], m.keys(), m.has("blue"), m.has("cyan"))   # #e04040 ["red", "green", "blue"] true false

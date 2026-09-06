@@ -1,0 +1,64 @@
+# boxes.moph — 組み合わせ 1: 座標は箱の中の値。大きさは出力のときに決まる
+
+import math
+import { W, H, v, track, ink, dim, accent, blue, review, dwell } from .theme
+import { place, text, heading, card, outline, demo, scene, add, say, close } from .slides
+
+# 同じ絵の箱を作る (1 つの View は 1 か所にしか置けない)
+func picture(life) {
+  let b = new View { box: (4, 3) }
+  b.place(new Rect { position: apos!(:topLeft, 0, 0), w: 4, h: 3, fill: #1b2130 })
+  let c = new Circle { position: apos!(:center, 1.4, 1.5), radius: 0.8, fill: accent }
+  b.place(c)
+  let r = new Rect { position: apos!(:center, 3.0, 1.5), w: 1.0, h: 1.6, radius: 0.2, fill: blue }
+  b.place(r)
+  let sway = context c as o, r as q {
+    motion (t) {
+      0..1: o.position.y = 1.5 + 0.3 * math.sin(math.TAU * t * (life / 1s) / 3)
+      0..1: q.position.y = 1.5 - 0.3 * math.sin(math.TAU * t * (life / 1s) / 3)
+    }
+  }
+  sway.duration = life
+  let tl = new Timeline {}
+  tl.place(sway, at: 0s)
+  b.addTrack(tl)
+  b
+}
+
+export func run(now) {
+  log("boxes", now)
+  let sc = scene()
+  add(sc, [heading("座標は、箱の中の値")], now)
+  add(sc, card([
+    "let b = new View { box: (4, 3) }",
+    "b.place(new Circle {",
+    "  position: apos!(:center, 1.4, 1.5), radius: 0.8,",
+    "})",
+    "b.place(new Rect {",
+    "  position: apos!(:center, 3.0, 1.5), w: 1, h: 1.6,",
+    "})",
+    "output b",
+    "",
+    "$ mophila render a.moph --size fhd",
+    "$ mophila render a.moph --size vga",
+  ], 0.7, 1.8, 7.6, 0.28), now + 0.4s)
+  let t1 = now + 0.5s
+  let fx = 8.9
+  let fy = 2.6
+  let fw = 4.0
+  let fh = fw * 9 / 16
+  add(sc, [outline(fx, fy, fw, fh), text("--size fhd (16:9)", fx + fw / 2, fy + fh + 0.35, 0.27, dim, :center)], t1)
+  let t = say(sc, "座標は、箱の中の値で書きます。この箱は横 4、縦 3 です。", t1)
+  t = say(sc, "ピクセルの数は、どこにも書きません。", t)
+  let t2 = t
+  let gx = fx + fw + 0.4
+  let gw = 2.6
+  let gh = gw * 3 / 4
+  add(sc, [outline(gx, fy, gw, gh), text("--size vga (4:3)", gx + gw / 2, fy + gh + 0.35, 0.27, dim, :center)], t2)
+  t = say(sc, "16:9 に出せば余白が付き、4:3 ならぴったり収まります。", t2)
+  t = say(sc, "大きさは、出力するときにコマンドが決めます。", t)
+  let end = t + 1s
+  demo(picture(end - t1), fx + (fw - fh * 4 / 3) / 2, fy, fh * 4 / 3, t1, end)
+  demo(picture(end - t2), gx, fy, gw, t2, end)
+  close(sc, end)
+}

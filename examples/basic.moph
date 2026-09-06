@@ -1,0 +1,53 @@
+# basic.moph — 束縛、リテラル、型 (すべて仮)
+
+# 束縛は let。再代入は = のみ
+let n = 3
+n = n + 1
+
+# 数値。整数と実数を区別しない
+let a = 1
+let b = 1.5
+let c = 1/3          # 分数。0.333... ではなく 1/3 として保持する
+
+# Duration
+let d1 = 83s
+let d2 = 1m23s
+let d3 = 01:23           # mm:ss
+let d4 = 01:23:45.678    # hh:mm:ss.fff
+let d5 = 500ms
+
+# Color
+let red   = #e04040
+let half  = #e04040cc            # 8 桁目までで不透明度
+let short = #e44                 # 3 桁 = #ee4444。4 桁なら不透明度付き
+let named = red
+let plain = new Color(r=224, g=64, b=64, a=1)   # 糖衣なしの形
+let t1 = rgb!(224, 64, 64)                     # specific tuple。Color を返す
+let t2 = rgba!(224, 64, 64, 1)
+
+# パーセント。100% は 1.0
+let full = 100%
+let q    = 25%                   # 0.25
+
+# 文字列
+let s = "hello"
+let t = "n = {n}".format(n)     # {name} を順に置き換える。名前は説明用
+
+# 真偽値
+let ok = true
+
+# タプルとリスト
+let p  = (1, 1.5)        # 座標などに使う
+let xs = [1, 2, 3]
+
+# オブジェクト生成
+let c = new Circle { fill: red, radius: 0.5 }
+
+# 属性の参照と更新
+let r = c.radius
+c.radius = 1
+
+# ログ出力 (stderr)。動画には出ない
+log("radius = ", r)
+log("radius = {r}".format(r))
+log(c)                           # オブジェクトはそのまま表示

@@ -1,0 +1,84 @@
+# fractal.moph — 枝分かれする木。各枝は親の先端から生え、親が動けば子も動く
+# 部品が互いに依存する形: 枝の行は毎フレーム親の to を読む (0..1 の範囲行)。木は根から順に伸び、伸び切ったら風に揺れる
+
+import math
+
+let v = new View { box: (16, 9) }
+let track = new Timeline {}
+v.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 9, fill: #0d1117 })
+
+# ---------- 形と時間の決まり ----------
+let levels     = 8            # 枝分かれの回数 (枝は 2^(levels+1) - 1 本)
+let total      = 14s          # 動画の長さ
+let trunk_len  = 2.1
+let shrink     = 0.72         # 1 段ごとの長さの比
+let spread     = 0.46         # 枝の開き (rad)
+let grow_time  = 0.9          # 1 段が伸びる秒数
+let grow_gap   = 0.5          # 次の段が伸び始めるまでの秒数
+let sway_amp   = 0.035        # 揺れの角度 (rad)。先端ほど大きい
+let sway_period = 4.5         # 揺れの周期 (秒)
+let colors = [#7a4f33, #8a5c3a, #97693f, #8c7a42, #7c8c45, #62984c, #4aa25a, #46ad78, #6cc496]
+
+let seconds = total / 1s      # t は 0..1 なので、秒に直すときに掛ける
+
+func smooth(k) { k * k * (3 - 2 * k) }
+
+# level 段目の枝が t (0..1) の時点でどこまで伸びているか (0..1)
+func growth(t, level) {
+  let k = (t * seconds - level * grow_gap) / grow_time
+  smooth(math.min(1, math.max(0, k)))
+}
+
+# 揺れ。段が深いほど大きく、phase で枝ごとにずらす
+func sway(t, level, phase) {
+  sway_amp * level * math.sin(t * seconds / sway_period * math.TAU + phase)
+}
+
+func direction(angle) { vector!(math.cos(angle), -math.sin(angle)) }
+
+# 親の先端から角度 angle に伸びる枝を作り、その先にさらに 2 本作る
+func branch(parent, angle, len, level, phase) {
+  let line = new Line { from: (0, 0), to: (0, 0), stroke: colors[level], strokeWidth: 0.18 * shrink ^ level, opacity: 0.95 }
+  v.place(line)
+  let tl = context line as b, parent as p {
+    motion (t) {
+      0..1: b.from = p.to
+      0..1: b.to = p.to + direction(angle + sway(t, level, phase)) * (len * growth(t, level))
+    }
+  }
+  tl.duration = total
+  track.place(tl)
+  if level < levels {
+    branch(line, angle + spread, len * shrink, level + 1, phase + 0.4)
+    branch(line, angle - spread, len * shrink, level + 1, phase - 0.4)
+  } else {
+    # 先端の葉。枝が伸び切ってから出る
+    let leaf = new Circle { position: apos!(:center, 0, 0), radius: 0.06, fill: #b9e88a, opacity: 0 }
+    v.place(leaf)
+    let ltl = context leaf as f, line as b {
+      motion (t) {
+        0..1: f.position = apos!(:center, b.to)
+        0..1: f.opacity = growth(t, level + 1) * 0.9
+      }
+    }
+    ltl.duration = total
+    track.place(ltl)
+  }
+}
+
+# 幹は地面から。先端は伸びるだけで揺れない
+let root = (8, 8.6)
+let trunk = new Line { from: root, to: root, stroke: colors[0], strokeWidth: 0.18, opacity: 0.95 }
+v.place(trunk)
+let trunk_tl = context trunk as b {
+  motion (t) {
+    0..1: b.to = root + direction(math.PI / 2) * (trunk_len * growth(t, 0))
+  }
+}
+trunk_tl.duration = total
+track.place(trunk_tl)
+branch(trunk, math.PI / 2 + spread, trunk_len * shrink, 1, 0.4)
+branch(trunk, math.PI / 2 - spread, trunk_len * shrink, 1, -0.4)
+
+v.addTrack(track)
+output v

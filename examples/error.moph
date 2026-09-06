@@ -1,0 +1,63 @@
+# error.moph — エラーの種類と例 (すべて仮)。各行がエラー
+
+# ---- エラー種別のツリー ----
+# Error
+# ├─ SyntaxError            構文として読めない
+# │  ├─ UnexpectedToken
+# │  └─ InvalidLiteral       色の桁数、Duration の形式など
+# ├─ NameError              名前が解決できない
+# │  ├─ UndefinedVariable
+# │  ├─ UndefinedAttribute
+# │  └─ AssignWithoutLet
+# ├─ TypeError              型が合わない
+# │  ├─ OperandType          演算子の左右
+# │  ├─ AttributeType        属性に入れる値
+# │  ├─ ArgumentType         関数・コンストラクタの引数
+# │  ├─ ArityMismatch        引数や列の数
+# │  └─ NotPlaceable         place できない型
+# ├─ ValueError             型は合うが値が不正
+# │  ├─ DurationRequired     時刻の単位が混在、相対時刻なのに duration が無い
+# │  └─ OutOfRange
+# └─ RuntimeError           実行時
+#    ├─ DivisionByZero
+#    ├─ FontNotFound
+#    ├─ AudioUnreadable      import した音声を ffprobe が読めない (音声ストリームが無い、ffprobe が無い)
+#    ├─ ShaderCompile        Shader の関数に GPU で計算できないものがある (描画時に出る)
+#    └─ ShaderUnavailable    GPU の無い場面で Shader を描こうとした
+
+# ---- SyntaxError ----
+let d = #e0404                 # SyntaxError.InvalidLiteral: color literal must have 3, 4, 6 or 8 hex digits
+let e = 1:2:3:4                # SyntaxError.InvalidLiteral: invalid duration literal "1:2:3:4"
+let f = (1, 2                  # SyntaxError.UnexpectedToken: expected ")" but found end of line
+
+let v = new View { box: vector!(4, 3) }
+let tr = new Timeline { duration: 10s }
+let n = 1
+
+# ---- NameError ----
+let y = z + 1                  # NameError.UndefinedVariable: "z" is not defined
+import "nope.m4a" as bgm       # NameError.UndefinedVariable: cannot read "nope.m4a": ... is not a file
+w = 1                          # NameError.AssignWithoutLet: "w" is not defined; use "let w = ..."
+let x = new Circle { radius: 1 }
+x.width = 2                    # NameError.UndefinedAttribute: Circle has no attribute "width"
+
+# ---- TypeError ----
+let a = 1s + 1                 # TypeError.OperandType: cannot add Duration and Number
+let c = #e04040 + 1            # TypeError.OperandType: cannot add Color and Number
+x.position = 1                 # TypeError.AttributeType: Circle.position expects AnchoredPosition, found Number
+let ta = new TextArea { text: 1 }   # TypeError.ArgumentType: TextArea.text expects String, found Number
+let mo = motion { 0s: 0, 1s: 1 }
+mo.apply(x, func (x, t, [p, q]) { x.radius = p })   # TypeError.ArityMismatch: motion has 1 column but 2 parameters given
+tr.place(mo, at: 0s)           # TypeError.NotPlaceable: Motion cannot be placed; apply it to make a Timeline
+tr.place(1, at: 0s)            # TypeError.ArgumentType: Timeline.place expects Timeline, Audio or Subtitle, found Number
+
+# ---- ValueError ----
+let m = motion { 0s: 0, 0.5: 1 }   # ValueError.DurationRequired: keyframe times must be all Duration or all Number (0..1)
+let m2 = motion { 5: 0 }       # ValueError.OutOfRange: relative keyframe time must be within 0..1
+tr.place(new Subtitle { text: "a" }, at: 0s)   # ValueError.DurationRequired: a Subtitle needs duration before it is placed
+v.place(1)                     # TypeError.ArgumentType: View.place expects Placeable, found Number
+let h = #e04040 * 2            # ValueError.OutOfRange: color channel exceeds 1.0
+
+# ---- RuntimeError ----
+let g = 1 / (n - n)            # RuntimeError.DivisionByZero: division by zero
+let t2 = new TextArea { text: "a", font: "NoSuchFont" }   # RuntimeError.FontNotFound: font "NoSuchFont" not found   (未実装: フォント読み込みは M2)

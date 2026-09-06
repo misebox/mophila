@@ -1,0 +1,21 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "mophila",
+  "scopeName": "source.mophila",
+  "patterns": [
+    { "name": "comment.line.number-sign.mophila", "match": "#\\s.*$|#$" },
+    { "name": "constant.other.color.mophila", "match": "#[0-9a-fA-F]{8}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{3}\\b" },
+    { "name": "string.quoted.double.mophila", "begin": "\"", "end": "\"", "patterns": [{ "name": "constant.character.escape.mophila", "match": "\\\\." }] },
+    { "name": "keyword.control.mophila", "match": "\\b(let|func|if|else|for|in|return|new|context|as|motion|output|import|export|from|type|tuple)\\b" },
+    { "name": "keyword.operator.logical.mophila", "match": "\\b(and|or|not)\\b" },
+    { "name": "constant.language.mophila", "match": "\\b(true|false)\\b" },
+    { "name": "constant.numeric.duration.mophila", "match": "\\b[0-9]+(\\.[0-9]+)?(ms|s|m|h)(\\b|(?=[0-9]))|\\b[0-9]+:[0-9]+(:[0-9]+)?(\\.[0-9]+)?" },
+    { "name": "constant.numeric.mophila", "match": "\\b[0-9]+(\\.[0-9]+)?%?" },
+    { "name": "constant.other.symbol.mophila", "match": ":[A-Za-z_][A-Za-z0-9_]*" },
+    { "name": "support.class.mophila", "match": "\\b(Circle|Rect|Line|Polygon|TextArea|View|Timeline|Color|Motion|Vector|AnchoredPosition|Number|Duration|String|Bool|Tuple|List|Dict|Range|Func|Nothing)\\b" },
+    { "name": "entity.name.function.macro.mophila", "match": "\\b[A-Za-z_][A-Za-z0-9_]*!(?=\\()" },
+    { "name": "support.function.mophila", "match": "\\b(log|type_of)(?=\\()" },
+    { "name": "entity.name.function.mophila", "match": "\\b[A-Za-z_][A-Za-z0-9_]*(?=\\()" },
+    { "name": "keyword.operator.mophila", "match": "\\.\\.=?|->|[-+*/%^=<>!]=?" }
+  ]
+}

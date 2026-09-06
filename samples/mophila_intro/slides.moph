@@ -1,0 +1,114 @@
+# slides.moph — intro の場面を組む部品。基本形は「左にコード、右にそれが動く箱、下にナレーションの字幕」
+
+import math
+import { W, H, v, track, ink, dim, panel, line, accent, mono, fade_time, stagger, chapter_time, review, pause, dwell, longer } from .theme
+
+export func place(o) {
+  v.place(o)
+  o
+}
+
+export func fade(o, at, from, to) {
+  let tl = context o as x {
+    motion (t) {
+      0: x.opacity = from
+      1: x.opacity = to
+    }
+  }
+  tl.duration = fade_time
+  track.place(tl, at: at)
+}
+
+# at から end まで見せる。end の時点で消え終わる
+export func show(objs, at, end) {
+  for (i, o) in objs.enumerate() {
+    fade(o, at + i * stagger, 0, 1)
+    fade(o, end - fade_time, 1, 0)
+  }
+}
+
+export func text(s, x, y, size, color, anchor) {
+  place(new TextArea { text: s, position: apos!(anchor, x, y), fontSize: size, fill: color, align: :center, opacity: 0 })
+}
+
+export func heading(s) { text(s, W / 2, 0.95, 0.66, accent, :center) }
+
+# コードのカード。高さは行数から。戻り値は図形の List
+export func card(lines, x, y, w, size) {
+  let lh = size * 1.6
+  let h = lines.len() * lh + size * 1.2
+  let objs = [place(new Rect { position: apos!(:topLeft, x, y), w: w, h: h, radius: 0.15, fill: panel, stroke: line, strokeWidth: 0.04, opacity: 0 })]
+  for (i, s) in lines.enumerate() {
+    objs.push(place(new TextArea { text: s, position: apos!(:topLeft, x + size * 0.8, y + size * 0.6 + i * lh), fontSize: size, fill: mono, align: :left, opacity: 0 }))
+  }
+  objs
+}
+
+# 線だけの枠 (先に置いた View を隠さない)
+export func outline(x, y, w, h) {
+  place(new Rect { position: apos!(:topLeft, x, y), w: w, h: h, radius: 0.15, stroke: line, strokeWidth: 0.04, opacity: 0 })
+}
+
+# 別の View を箱として置き、at からその Timeline を動かす。end で消える
+export func demo(sub, x, y, w, at, end) {
+  sub.opacity = 0
+  v.place(sub, at: apos!(:topLeft, x, y), w: w)
+  track.place(sub, at: at)
+  show([sub], at, end)
+  sub
+}
+
+# 別の View を at から len だけ動かして消す。中の Timeline は len で切るので、あとで同じ View を置き直せる
+# (切らないと、中の Timeline が最後まで進んで終わった値を書き続ける)
+export func demo_cut(sub, x, y, w, at, len) {
+  sub.opacity = 0
+  v.place(sub, at: apos!(:topLeft, x, y), w: w)
+  let cut = new Timeline { duration: len }
+  cut.place(sub, at: 0s)
+  track.place(cut, at: at)
+  show([sub], at, at + len)
+  sub
+}
+
+# 箱を置き、every ごとに置き直して end まで繰り返す
+export func loop_demo(sub, x, y, w, at, every, end) {
+  demo(sub, x, y, w, at, end)
+  let n = math.ceil((end - at) / every)
+  for i in 1..n { track.place(sub, at: at + i * every) }
+  sub
+}
+
+export func repeat(tl, at, every, end) {
+  let n = math.ceil((end - at) / every)
+  for i in 0..n { track.place(tl, at: at + i * every) }
+}
+
+# 場面: 出したものと字幕を覚えておき、終わりが決まったら一斉に置く。字幕は同時に 1 つ
+export func scene() { { "items": [], "captions": [] } }
+export func add(sc, objs, at) { sc["items"].push((objs, at)) }
+# ナレーション 1 行。読む時間と間を空けた、次の行を出せる時刻を返す
+export func say(sc, s, at) {
+  sc["captions"].push((s, at))
+  at + dwell(s) + 0.6s
+}
+export func close(sc, end) {
+  for (objs, at) in sc["items"] { show(objs, at, end) }
+  let caps = sc["captions"]
+  for (i, c) in caps.enumerate() {
+    let (s, at) = c
+    let stop = end
+    if i + 1 < caps.len() {
+      let (next_s, next_at) = caps[i + 1]
+      stop = next_at
+    }
+    track.place(new Subtitle { text: s, duration: stop - at }, at: at)
+  }
+  end + pause
+}
+
+export func chapter(title, at) {
+  let t = text(title, W / 2, 4.2, 0.95, ink, :center)
+  let bar = place(new Rect { position: apos!(:center, W / 2, 5.25), w: 3.2, h: 0.06, fill: accent, opacity: 0 })
+  show([t, bar], at, at + chapter_time)
+  at + chapter_time + pause
+}

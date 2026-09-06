@@ -1,0 +1,85 @@
+# bars.moph — 棒グラフが順に伸び、値のラベルが後から現れる
+
+let v = new View { box: (16, 9) }
+v.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 9, fill: #f7f7f2 })
+
+let title = new TextArea { text: "Monthly visitors", position: apos!(:topLeft, 1, 0.6), fontSize: 0.7, fill: #202020, opacity: 0 }
+v.place(title)
+
+# 軸
+let x_axis = new Line { from: (1.5, 7.5), to: (15, 7.5), stroke: #808080, strokeWidth: 0.03, opacity: 0 }
+let y_axis = new Line { from: (1.5, 2), to: (1.5, 7.5), stroke: #808080, strokeWidth: 0.03, opacity: 0 }
+v.place(x_axis)
+v.place(y_axis)
+
+let data = [
+  { "label": "Jan", "value": 32, "color": #4080e0 },
+  { "label": "Feb", "value": 48, "color": #4080e0 },
+  { "label": "Mar", "value": 41, "color": #4080e0 },
+  { "label": "Apr", "value": 65, "color": #40a060 },
+  { "label": "May", "value": 80, "color": #40a060 },
+  { "label": "Jun", "value": 74, "color": #e0a020 },
+]
+let max = 100
+let chart_h = 5
+let bar_w = 1.4
+let gap = 0.8
+
+let track = new Timeline {}
+
+func fade_in(o, at) {
+  track.place(context o as x { motion (t) { 0s: x.opacity = 0
+    0.6s: x.opacity = 1 } }, at: at)
+}
+fade_in(title, 0s)
+fade_in(x_axis, 1s)
+fade_in(y_axis, 1s)
+
+# 棒は下端を固定 (bottom を基準点にする) して h だけ伸ばす
+func grow(bar, h, delay) {
+  let tl = context bar as b {
+    motion (t) {
+      0s: b.h = 0.01
+      1.5s: b.h = h :ease_out
+    }
+  }
+  track.place(tl, at: delay)
+}
+
+func appear(label, delay) {
+  let tl = context label as l {
+    motion (t) {
+      0s: l.opacity = 0
+      0.4s: l.opacity = 1
+    }
+  }
+  track.place(tl, at: delay)
+}
+
+for (i, d) in data.enumerate() {
+  let x = 2.2 + i * (bar_w + gap)
+  let h = chart_h * d["value"] / max
+  let bar = new Rect { position: apos!(:bottom, x + bar_w / 2, 7.5), w: bar_w, h: 0.01, fill: d["color"] }
+  v.place(bar)
+  grow(bar, h, 2s + i * 0.9s)
+
+  let name = new TextArea { text: d["label"], position: apos!(:top, x + bar_w / 2, 7.7), fontSize: 0.4, fill: #404040, align: :center }
+  v.place(name)
+
+  let value = new TextArea { text: "{v}".format(d["value"]), position: apos!(:bottom, x + bar_w / 2, 7.5 - h - 0.15), fontSize: 0.4, fill: #202020, align: :center, opacity: 0 }
+  v.place(value)
+  appear(value, 2s + i * 0.9s + 1.5s)
+
+  # 最大の棒は最後に色を変えて強調する
+  if d["value"] == 80 {
+    track.place(context bar as b {
+      motion (t) {
+        0s:   b.fill = d["color"]
+        0.8s: b.fill = #e04040 :ease
+      }
+    }, at: 10.5s)
+  }
+}
+
+v.addTrack(track)
+output v

@@ -1,0 +1,79 @@
+# animation.moph — view への配置、motion、timeline (すべて仮)
+
+let v = new View { box: vector!(4, 3) }
+
+# ---- View に置く。位置は図形の position で決まる ----
+let red   = new Circle { position: apos!(:center, 1, 1.5), radius: 0.5, fill: #e04040 }
+let green = new Rect   { position: apos!(:topLeft, 2, 0.5), w: 1, h: 1, fill: #40a040, stroke: #000000, strokeWidth: 0.05 }
+let line  = new Line   { from: vector!(0, 3), to: vector!(4, 0), stroke: #4040e0, strokeWidth: 0.03 }
+let tri   = new Polygon { points: [vector!(3, 2), vector!(4, 3), vector!(2, 3)], fill: #e0a020 }
+v.place(red)
+v.place(green)
+v.place(line)
+v.place(tri)
+
+# ---- Motion: 値の時間変化。対象なし ----
+# t = その行の時刻 (秒)、a = 1 列目、b = 2 列目 (同じ行の左の列を参照)
+let m1 = motion (t, a, b) {
+  1s: t*3, a*1, b*3      # 3, 3, 9
+  2s: t*4, a*2, b*4      # 8, 16, 64
+  5s: t*3, a*3, b*5      # 15, 45, 225
+}
+# m1.duration は 5s。延ばすには
+m1.duration = 10s
+
+# 定数だけの Motion。行末に Ease / Effect を書ける
+let m2 = motion {
+  0s: 0
+  2s: 3
+  5s: 0 :ease_out
+}
+
+# ---- Timeline: Motion を対象に当てる ----
+let c1 = new Circle { position: apos!(:center, 0.5, 1.5), radius: 0.3, fill: #a0a0a0 }
+v.place(c1)
+
+# apply は組み込みメソッド。列を受け取る関数を渡す
+let calc = func (c1, t, [x, r, _]) {
+  context c1 as o {
+    o.position, o.radius = apos!(:center, x / 5, 1.5), r / 100
+  }
+}
+let tl1 = m1.apply(c1, calc)
+
+# context で囲んで属性に代入する形。戻り値は Timeline
+let tl2 = context c1 as o {
+  motion (t) {
+    1s: o.radius = t / 10
+    2s: o.radius = t / 5
+    5s: o.radius = t / 10
+  }
+}
+
+# 属性名を先に列挙する形
+let tl3 = motion c1 [:position, :radius] {
+  0s: apos!(:center, 0.5, 0.5), 0.5 :fade
+  2s: apos!(:center, 3.5, 2.5), 1
+  5s: apos!(:center, 0.5, 0.5) :ease_out
+}
+
+# 参照を辿った先だけ
+let tl4 = motion c1 [:position.x] {
+  0s: 0.5
+  2s: 3.5
+}
+
+log(m1, m2, tl1, tl2, tl3, tl4)
+
+# ---- Timeline を Timeline に置く ----
+let track = new Timeline { duration: 10s }
+track.place(tl1, at: 0s)
+track.place(tl3, at: 3s, fadeIn: 1s)
+
+let sub = new Timeline {}
+sub.place(tl2, at: 0s)
+track.place(sub, at: 5s)         # 5s 時点に sub。sub の長さは中身で決まる
+
+# ---- View に Timeline を付けて出力 ----
+v.addTrack(track)
+output v

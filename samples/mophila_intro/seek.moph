@@ -1,0 +1,62 @@
+# seek.moph — 時間 4: どの時刻の絵も、その時刻だけから決まる。途中へ飛んでも同じ絵
+
+import math
+import { W, H, v, track, ink, dim, accent, blue, line, review, dwell, longer } from .theme
+import { place, text, heading, card, outline, scene, add, say, close } from .slides
+
+export func run(now) {
+  log("seek", now)
+  let sc = scene()
+  add(sc, [heading("絵は、時刻の関数")], now)
+  add(sc, card([
+    "# 時刻 t の絵 = 最初の状態に、t までに始まった",
+    "#            Timeline を置いた順に当てたもの",
+    "# 前のフレームには依存しない",
+    "#",
+    "# だから途中の時刻へ飛んでも同じ絵になり、",
+    "# preview で戻しても、render で 1 枚だけ出しても、同じ",
+    "$ mophila render a.moph --at 2.5s -o frame.png",
+  ], 0.7, 1.8, 7.6, 0.28), now + 0.4s)
+  # 右: 時間軸の印と、その時刻の絵 (ボールの位置は印の時刻だけから決まる)
+  let x0 = 9.4
+  let x1 = 15.0
+  let ay = 6.3
+  let axis = [place(new Line { from: (x0, ay), to: (x1, ay), stroke: line, strokeWidth: 0.05, opacity: 0 })]
+  for i in 0..=4 {
+    let x = x0 + i * (x1 - x0) / 4
+    axis.push(place(new Line { from: (x, ay - 0.12), to: (x, ay + 0.12), stroke: line, strokeWidth: 0.04, opacity: 0 }))
+    axis.push(text("{s}s".format(i), x, ay + 0.4, 0.26, dim, :center))
+  }
+  let marker = place(new Circle { position: apos!(:center, x0, ay), radius: 0.13, fill: ink, opacity: 0 })
+  let frame = outline(x0, 1.8, x1 - x0, 3.9)
+  let ball = place(new Circle { position: apos!(:center, x0 + 0.5, 3.75), radius: 0.35, fill: accent, opacity: 0 })
+  let t1 = now + 0.5s
+  add(sc, axis + [marker, frame, ball], t1)
+  # 印は進んだり飛んだりする。ボールは印の時刻 (0..4 秒) だけから位置を決める
+  let jump = context marker as m {
+    motion (t) {
+      0s:   m.position.x = x0
+      4s:   m.position.x = x1
+      4.5s: m.position.x = x1
+      4.6s: m.position.x = x0 + (x1 - x0) * 0.3
+      6.6s: m.position.x = x0 + (x1 - x0) * 0.8
+      7.1s: m.position.x = x0 + (x1 - x0) * 0.8
+      7.2s: m.position.x = x0 + (x1 - x0) * 0.1
+      10s:  m.position.x = x0 + (x1 - x0) * 0.8
+    }
+  }
+  let follow = context ball as b, marker as m {
+    motion (t) {
+      0..1: b.position = apos!(:center, x0 + 0.5 + (x1 - x0 - 1) * (m.position.x - x0) / (x1 - x0), 3.75 - 1.4 * math.abs(math.sin(math.PI * (m.position.x - x0) / (x1 - x0) * 2)))
+    }
+  }
+  let end = t1 + 20s
+  follow.duration = end - t1
+  track.place(jump, at: t1)
+  track.place(jump, at: t1 + 10s)
+  track.place(follow, at: t1)
+  let t = say(sc, "どの時刻の絵も、その時刻だけから決まります。", t1)
+  t = say(sc, "前のフレームには依存しないので、途中へ飛んでも同じ絵です。", t)
+  t = say(sc, "preview で戻しても、1 枚だけ画像にしても、同じになります。", t)
+  close(sc, longer(t, end))
+}

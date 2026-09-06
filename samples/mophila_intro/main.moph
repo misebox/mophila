@@ -1,0 +1,50 @@
+# main.moph — mophila の紹介。作れるもの / 組み合わせ / 時間の書き方 / LLM と書く / 使う
+# 場面は 1 ファイルずつ。run(now) が場面を組み、次の開始時刻を返す。設定は theme、部品は slides。
+# 字幕は動画の字幕トラック。音楽は bgm.m4a
+
+import { v, track } from .theme
+import { chapter } from .slides
+import "bgm.m4a" as bgm
+import .title
+import .works
+import .boxes
+import .parts
+import .files
+import .table
+import .rows
+import .placing
+import .seek
+import .llm
+import .tools
+import .review
+import .commands
+import .ending
+
+let now = 0s
+now = title.run(now)
+now = works.run(now)
+
+now = chapter("組み合わせ", now)
+now = boxes.run(now)
+now = parts.run(now)
+now = files.run(now)
+
+now = chapter("時間の書き方", now)
+now = table.run(now)
+now = rows.run(now)
+now = placing.run(now)
+now = seek.run(now)
+
+now = chapter("LLM と書く", now)
+now = llm.run(now)
+now = tools.run(now)
+now = review.run(now)
+
+now = chapter("使う", now)
+now = commands.run(now)
+now = ending.run(now)
+log("total:", now)
+
+track.place(bgm, at: 0s, loop: true, volume: 0.5, fadeOut: 3s)
+v.addTrack(track)
+output v

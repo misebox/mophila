@@ -1,0 +1,48 @@
+{
+  "name": "mophila",
+  "displayName": "mophila",
+  "description": "Language support for mophila (.moph) motion graphics scripts",
+  "version": "0.1.0",
+  "publisher": "mophila",
+  "license": "MIT",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Programming Languages"],
+  "main": "./extension.js",
+  "activationEvents": ["onLanguage:mophila"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "mophila",
+        "aliases": ["mophila", "moph"],
+        "extensions": [".moph"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "mophila",
+        "scopeName": "source.mophila",
+        "path": "./syntaxes/mophila.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "mophila",
+      "properties": {
+        "mophila.serverPath": {
+          "type": "string",
+          "default": "mophila",
+          "description": "Path to the mophila binary. The server is started as `<serverPath> lsp`."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.0.0"
+  },
+  "scripts": {
+    "package": "vsce package --allow-missing-repository --skip-license"
+  }
+}

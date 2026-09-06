@@ -1,0 +1,46 @@
+# works.moph — 作れるもの。サンプルの動画を 1 つずつ全画面で出す
+
+import { W, H, v, track, dim, pause } from .theme
+import { demo, demo_cut, scene, say, close, text, show } from .slides
+import ..crowd
+import ..mandelbrot
+import ..fractal
+import ..walker
+import ..orbit
+import ..bars
+import ..clock
+import ..bounce
+
+export func run(now) {
+  log("works", now)
+  let sc = scene()
+  let t = say(sc, "これらは、すべてこの言語のスクリプトです。", now + 0.5s)
+  # 1 つずつ、少し重ねながら
+  let items = [(crowd.output, 0s, 7s), (mandelbrot.output, 6s, 7s), (fractal.output, 12s, 7s), (walker.output, 18s, 6s)]
+  let at = now
+  for (sub, from, len) in items {
+    demo_cut(sub, 0, 0, 16, at + from, len)
+  }
+  # crowd はあとの場面で小さく置き直すので、ここでは全画面に戻しておく
+  let full = context crowd.output as o {
+    motion (t) {
+      0s: o.position = apos!(:topLeft, 0, 0), o.w = 16
+    }
+  }
+  track.place(full, at: at)
+  # Mandelbrot は 40 秒目 (うずまきの所) から見せる。置く時刻を前にずらすと、その分進んだ所から始まる
+  let deep = new Timeline { duration: 47s }
+  deep.place(mandelbrot.output, at: 0s)
+  track.place(deep, at: at + 6s - 40s)
+  t = say(sc, "図形の動画も、フラクタルも、歩く人も。", at + 8s)
+  t = say(sc, "どれも短いファイルです。", at + 19s)
+  # 最後に 2x2
+  let grid = [(orbit.output, 0.55, 0.2), (bars.output, 8.25, 0.2), (clock.output, 0.55, 4.4), (bounce.output, 8.25, 4.4)]
+  let g0 = at + 24s
+  let end = g0 + 12s
+  for (sub, x, y) in grid {
+    demo(sub, x, y, 7.2, g0, end)
+  }
+  t = say(sc, "軌道、グラフ、時計、跳ねるボールも同じです。", g0 + 0.5s)
+  close(sc, end)
+}

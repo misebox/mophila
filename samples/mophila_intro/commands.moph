@@ -1,0 +1,26 @@
+# commands.moph — 使う: 動画にも画像にもできて、その場でプレビューもできる
+
+import { W, H, v, track, dim, review, dwell, dwell_code, longer } from .theme
+import { place, heading, card, scene, add, say, close } from .slides
+
+export func run(now) {
+  log("commands", now)
+  let sc = scene()
+  add(sc, [heading("動画にも、画像にも、その場でも")], now)
+  let cmds = [
+    ("mophila render scene.moph -o scene.mp4 --size fhd --fps 30", "動画。--size で画面サイズ、--fps でフレームレート", ["render で動画を出します。"]),
+    ("mophila render scene.moph -o frame.png --size fhd --at 2.5s", "画像。--at の時刻の 1 枚", ["--at で時刻を指定すると、その時刻の画像を出します。"]),
+    ("mophila preview scene.moph", "その場で再生。一時停止と時刻の移動", ["preview は、その場でウィンドウに再生します。"]),
+    ("mophila bundle scene.moph -o scene", "実行ファイル。スクリプトと import 先を埋め込む", ["bundle は、スクリプトを埋め込んだ実行ファイルを作ります。"]),
+  ]
+  let t = now + 0.5s
+  for (i, c) in cmds.enumerate() {
+    let (cmd, desc, narration) = c
+    let y = 1.9 + i * 1.3
+    let objs = card(["$ " + cmd], 1.2, y, 13.6, 0.36)
+    objs.push(place(new TextArea { text: desc, position: apos!(:topLeft, 1.7, y + 0.95), w: 12.5, fontSize: 0.28, fill: dim, align: :left, opacity: 0 }))
+    add(sc, objs, t)
+    for line in narration { t = say(sc, line, t + 0.3s) }
+  }
+  close(sc, t + review)
+}

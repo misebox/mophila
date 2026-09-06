@@ -1,0 +1,191 @@
+# fractal.moph — エスケープタイム系フラクタルの部品。反復式・精度・色付けを関数で差し替える。
+# escape_time(...) が Shader を返すので、図形の fill に入れて使う。
+#   formula:   反復式 (mandelbrot / burning_ship / multibrot(n) / julia(c))
+#   precision: :plain (32 bit のまま反復) か :perturbation (基準軌道をここで 64 bit で計算し、GPU は差分だけ反復)
+#   coloring:  func (mu, z) -> Color。mu は滑らかな脱出回数 (集合の中は -1)、z は脱出時の値
+#   center / span: 複素平面の中心と、最初に見える横幅。zoom: func (t) -> 倍率。max_iter: func (zoom) -> 反復の上限
+#   at / box:  塗る図形が占める箱の座標 (既定は (0, 0) から 16 x 9)。flip: true で虚軸を下向きにする (Burning Ship の慣習)
+
+import math
+
+export func cmul(a, b) { vector!(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x) }
+export func cabs2(z) { z.x * z.x + z.y * z.y }
+func cpow(z, n) {
+  let r = vector!(1, 0)
+  for i in 0..n { r = cmul(r, z) }
+  r
+}
+# 二項係数 C(n, j)
+func binom(n, j) {
+  let r = 1
+  for i in 0..j { r = r * (n - i) / (i + 1) }
+  r
+}
+# |c + d| - |c| を桁落ちなしで
+func diffabs(c, d) {
+  if c >= 0 {
+    if c + d >= 0 { return d }
+    return -(2 * c + d)
+  }
+  if c + d <= 0 { return -d }
+  2 * c + d
+}
+
+# ---------- 反復式 ----------
+# Dict で表す。p はピクセルの複素座標、k は param(t) (Julia の c など)、Z は基準軌道、d は差分、dp は中心からの差
+#   seed(p, k): 最初の z / step(z, p, k): 次の z / start(dp): 差分の初期値 / delta(Z, d, dp, k): 差分の次の値 / degree: 次数
+export let mandelbrot = {
+  "seed": func (p, k) { vector!(0, 0) },
+  "step": func (z, p, k) { cmul(z, z) + p },
+  "start": func (dp) { vector!(0, 0) },
+  "delta": func (Z, d, dp, k) { cmul(Z, d) * 2 + cmul(d, d) + dp },
+  "degree": 2,
+}
+
+# Julia 集合。c は Vector か、func (t) -> Vector。摂動法は c が一定のときだけ正しい
+export func julia(c) {
+  let param = if type_of(c) == "Func" { c } else { func (t) { c } }
+  {
+    "seed": func (p, k) { p },
+    "step": func (z, p, k) { cmul(z, z) + k },
+    "start": func (dp) { dp },
+    "delta": func (Z, d, dp, k) { cmul(Z, d) * 2 + cmul(d, d) },
+    "degree": 2,
+    "param": param,
+  }
+}
+
+export let burning_ship = {
+  "seed": func (p, k) { vector!(0, 0) },
+  "step": func (z, p, k) {
+    let a = vector!(math.abs(z.x), math.abs(z.y))
+    cmul(a, a) + p
+  },
+  "start": func (dp) { vector!(0, 0) },
+  "delta": func (Z, d, dp, k) {
+    let a = vector!(math.abs(Z.x), math.abs(Z.y))
+    let e = vector!(diffabs(Z.x, d.x), diffabs(Z.y, d.y))
+    cmul(a, e) * 2 + cmul(e, e) + dp
+  },
+  "degree": 2,
+}
+
+# z^n + p (n は 2 以上の整数)
+export func multibrot(n) {
+  {
+    "seed": func (p, k) { vector!(0, 0) },
+    "step": func (z, p, k) { cpow(z, n) + p },
+    "start": func (dp) { vector!(0, 0) },
+    "delta": func (Z, d, dp, k) {
+      # (Z + d)^n - Z^n = Σ C(n, j) Z^(n-j) d^j  (j = 1..n)
+      let sum = vector!(0, 0)
+      for j in 1..=n { sum = sum + cmul(cpow(Z, n - j), cpow(d, j)) * binom(n, j) }
+      sum + dp
+    },
+    "degree": n,
+  }
+}
+
+# ---------- 精度 ----------
+export let plain = :plain
+export let perturbation = :perturbation
+
+# ---------- 色付け ----------
+# 滑らかな脱出回数で stops (Color の List) を period ごとに 1 周させる。集合の中は inside
+export func smooth(stops, period, inside = #000000) {
+  let last = stops.len() - 1
+  func (mu, z) {
+    if mu < 0 { return inside }
+    let p = (mu / period) % 1 * last
+    let i = math.floor(p)
+    let u = p - i
+    stops[i] * (1 - u) + stops[i + 1] * u
+  }
+}
+
+# ---------- 本体 ----------
+export func escape_time(formula, coloring, center, span, precision = :perturbation, zoom = func (t) { 1 }, max_iter = func (zoom) { 200 }, samples = 1, at = vector!(0, 0), box = vector!(16, 9), flip = false, bailout = 256, ref_iter = 8000) {
+  let seed = formula["seed"]
+  let step = formula["step"]
+  let start = formula["start"]
+  let ln_degree = math.ln(formula["degree"])
+  let param = if formula.has("param") { formula["param"] } else { func (t) { vector!(0, 0) } }
+  let limit_of = max_iter
+  let zoom_of = zoom
+  # ピクセルの箱の座標 → 中心からの複素座標の差
+  let up = if flip { 1 } else { -1 }
+  func offset(x, y, zm) {
+    let scale = span / zm / box.x
+    vector!((x - at.x - box.x / 2) * scale, (y - at.y - box.y / 2) * scale * up)
+  }
+  # 滑らかな脱出回数
+  func escaped(n, r2) { n + 1 - math.ln(math.ln(r2) / 2) / ln_degree }
+
+  if precision == :plain {
+    return new Shader {
+      samples: samples,
+      color: func (x, y, t) {
+        let zm = zoom_of(t)
+        let k = param(t)
+        let p = center + offset(x, y, zm)
+        let z = seed(p, k)
+        let limit = limit_of(zm)
+        for n in 0..limit {
+          let r2 = cabs2(z)
+          if r2 > bailout { return coloring(escaped(n, r2), z) }
+          z = step(z, p, k)
+        }
+        coloring(-1, z)
+      },
+    }
+  }
+  if precision != :perturbation {
+    log("escape_time: precision must be :plain or :perturbation")
+  }
+  if not formula.has("delta") {
+    log("escape_time: this formula has no delta; use precision: :plain")
+  }
+  let delta = formula["delta"]
+  # 基準軌道 (中心の点の軌道) を 64 bit で。[re, im, re, im, ...]。脱出したらそこまで
+  let k0 = param(0)
+  func reference() {
+    let orbit = []
+    let Z = seed(center, k0)
+    for n in 0..ref_iter {
+      orbit.push(Z.x)
+      orbit.push(Z.y)
+      if cabs2(Z) > bailout { return orbit }
+      Z = step(Z, center, k0)
+    }
+    orbit
+  }
+  let orbit = reference()
+  let ref_len = orbit.len() / 2
+  new Shader {
+    samples: samples,
+    args: orbit,
+    color: func (x, y, t, ref) {
+      let zm = zoom_of(t)
+      let k = param(t)
+      let dp = offset(x, y, zm)
+      let limit = limit_of(zm)
+      let d = start(dp)
+      let m = 0
+      for n in 0..limit {
+        let Z = vector!(ref[2 * m], ref[2 * m + 1])
+        let z = Z + d
+        let r2 = cabs2(z)
+        if r2 > bailout { return coloring(escaped(n, r2), z) }
+        # z が差分より小さくなったら、基準を先頭に戻して差分 = z から数え直す (基準が尽きたときも)
+        if r2 < cabs2(d) or m + 1 >= ref_len {
+          d = z
+          m = 0
+          Z = vector!(ref[0], ref[1])
+        }
+        d = delta(Z, d, dp, k)
+        m = m + 1
+      }
+      coloring(-1, vector!(0, 0))
+    },
+  }
+}

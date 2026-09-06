@@ -1,0 +1,51 @@
+# function.moph — 関数 (すべて仮)
+
+# 定義
+func double(x) {
+  x * 2                  # 最後の式が戻り値
+}
+
+func add(a, b) {
+  return a + b           # return も使える
+}
+
+# if の中の return は関数を抜ける
+func sign(x) {
+  if x < 0 { return -1 }
+  1
+}
+
+# 無名関数
+let triple = func (x) { x * 3 }
+
+# 分割代入する引数
+let sum3 = func ([a, b, c]) { a + b + c }
+sum3([1, 2, 3])          # 6
+
+# 既定値と名前付き引数
+func circle_at(pos, r = 0.5, fill = #a0a0a0) {
+  new Circle { position: pos, radius: r, fill: fill }
+}
+let c1 = circle_at(apos!(:center, 1, 1))
+let c2 = circle_at(apos!(:center, 2, 1), fill: #e04040)
+
+# 関数を返す
+func scaler(k) {
+  func (x) { x * k }
+}
+let half = scaler(1/2)
+half(4)                  # 2
+
+# context: オブジェクトに短い別名を付けて属性を扱う
+let c = new Circle {}
+let variableWithLongName = new Rect {}
+context c as o, variableWithLongName as v {
+  o.position, o.radius = apos!(:center, 1, 1.5), 0.5
+  o.fill = #4040e0
+  v.w = 1
+}
+
+log(double(3), add(1, 2), triple(3), sum3([1, 2, 3]), half(4))   # 6 3 9 6 2
+log(sign(-5), sign(3))   # -1 1
+log(c1, c2)
+log(c)

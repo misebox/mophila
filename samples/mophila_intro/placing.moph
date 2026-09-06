@@ -1,0 +1,52 @@
+# placing.moph — 時間 3: Timeline に時刻を指定して置く。入れ子、繰り返し、音と字幕も同じ軸
+
+import { W, H, v, track, ink, dim, accent, blue, green, line, review, dwell, longer } from .theme
+import { place, text, heading, card, repeat, scene, add, say, close } from .slides
+
+export func run(now) {
+  log("placing", now)
+  let sc = scene()
+  add(sc, [heading("時刻を指定して、置く")], now)
+  add(sc, card([
+    "# 人を出る時刻をずらして置く。渡り切ったらまた置く",
+    "for (p, start) in people {",
+    "  track.place(p, at: start)",
+    "  track.place(p, at: start + 18s)",
+    "}",
+    "# 音楽と字幕も同じ Timeline",
+    "track.place(bgm, at: 0s, loop: true, volume: 0.6)",
+    "track.place(new Subtitle { text: \"…\", duration: 5s },",
+    "            at: 12s)",
+  ], 0.7, 1.8, 7.6, 0.28), now + 0.4s)
+  # 右: 時間軸に並んだ帯。再生位置の線が渡る
+  let x0 = 9.6
+  let lane_w = 5.6
+  let lanes = [("人 1", blue, 0.0, 2.2), ("人 2", blue, 1.0, 2.2), ("人 3", blue, 2.6, 2.2), ("音", green, 0, 5.6), ("字幕", accent, 1.3, 1.6)]
+  let objs = []
+  for (i, l) in lanes.enumerate() {
+    let (name, color, from, len) = l
+    let y = 2.3 + i * 0.95
+    objs.push(text(name, x0 - 0.4, y, 0.3, dim, :right))
+    objs.push(place(new Rect { position: apos!(:topLeft, x0 + from, y - 0.25), w: len, h: 0.5, radius: 0.1, fill: color, opacity: 0 }))
+    if i == 4 {
+      objs.push(place(new Rect { position: apos!(:topLeft, x0 + 3.6, y - 0.25), w: 1.4, h: 0.5, radius: 0.1, fill: color, opacity: 0 }))
+    }
+  }
+  let t1 = now + 0.5s
+  add(sc, objs, t1)
+  let head = place(new Line { from: (x0, 1.9), to: (x0, 6.4), stroke: ink, strokeWidth: 0.05, opacity: 0 })
+  add(sc, [head], t1)
+  let sweep = context head as h {
+    motion (t) {
+      0s: h.from.x = x0, h.to.x = x0
+      6s: h.from.x = x0 + lane_w, h.to.x = x0 + lane_w
+    }
+  }
+  let t = say(sc, "動きは、Timeline に時刻を指定して置きます。", t1)
+  t = say(sc, "置いた時刻から、その動きが始まります。同じものを何度でも置けます。", t)
+  t = say(sc, "音楽と字幕も、同じ Timeline に置きます。", t)
+  t = say(sc, "この動画の音楽と字幕も、そう書いてあります。", t)
+  let end = t + review
+  repeat(sweep, t1, 6s, end)
+  close(sc, end)
+}

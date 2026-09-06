@@ -1,0 +1,43 @@
+# files.moph — 組み合わせ 3: ファイルも部品。import して置くだけ
+
+import { W, H, v, track, ink, dim, accent, blue, green, line, panel, review, dwell } from .theme
+import { place, text, heading, card, scene, add, say, close } from .slides
+
+func box(label, cx, cy, w, color) {
+  [place(new Rect { position: apos!(:center, cx, cy), w: w, h: 1.0, radius: 0.15, fill: panel, stroke: color, strokeWidth: 0.05, opacity: 0 }),
+   text(label, cx, cy, 0.4, ink, :center)]
+}
+func link(x1, y1, x2, y2) {
+  place(new Line { from: (x1, y1), to: (x2, y2), stroke: line, strokeWidth: 0.05, opacity: 0 })
+}
+
+export func run(now) {
+  log("files", now)
+  let sc = scene()
+  add(sc, [heading("ファイルも、部品")], now)
+  add(sc, card([
+    "import { make } from .walker",
+    "import { escape_time, mandelbrot } from ..lib.fractal",
+    "import ..orbit",
+    "",
+    "v.place(orbit.output, at: apos!(:topLeft, 1, 1), w: 6)",
+    "track.place(orbit.output, at: 0s)",
+  ], 0.7, 1.8, 7.6, 0.28), now + 0.4s)
+  # 右: crowd.moph が walker.moph と fractal.moph からできている図
+  let cx = 12.2
+  let top = box("crowd.moph", cx, 2.6, 4.2, accent)
+  let l1 = box("walker.moph", cx - 1.6, 5.0, 2.8, blue)
+  let l2 = box("lib/fractal.moph", cx + 1.6, 5.0, 2.8, green)
+  let e1 = link(cx - 0.8, 3.1, cx - 1.6, 4.5)
+  let e2 = link(cx + 0.8, 3.1, cx + 1.6, 4.5)
+  let t = say(sc, "ファイルも部品です。import すると、そのファイルが export したものが使えます。", now + 0.5s)
+  add(sc, top, now + 0.5s)
+  let t1 = t
+  add(sc, l1 + [e1], t1)
+  t = say(sc, "夕暮れの通りは、歩く人のファイルと、", t1)
+  let t2 = t
+  add(sc, l2 + [e2], t2)
+  t = say(sc, "空を塗る Shader の部品からできています。", t2)
+  t = say(sc, "output した View も、そのまま別の箱に置けます。", t)
+  close(sc, t + review)
+}

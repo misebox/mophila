@@ -1,0 +1,67 @@
+# bounce.moph — 色の違うボールが順に落ちて弾み、8 秒後に逆再生で戻る。落下は ease_in (加速)、上昇は ease_out (減速)
+
+let v = new View { box: (16, 9) }
+v.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 9, fill: #1c1c24 })
+let floor = 7.8
+v.place(new Line { from: (0, floor), to: (16, floor), stroke: #50505a, strokeWidth: 0.05 })
+
+let colors = [#e04040, #e0a020, #40a060, #4080e0, #a060e0]
+let track = new Timeline {}
+
+# 1 個分の落下と 3 回のバウンド。高さは 1 回ごとに 55% に減る
+func drop(ball, r) {
+  let top = 1 + r
+  let ground = floor - r
+  let h1 = (ground - top) * 0.55
+  let h2 = h1 * 0.55
+  let h3 = h2 * 0.55
+  context ball as b {
+    motion (t) {
+      0s:   b.position.y = top
+      1s:   b.position.y = ground            :ease_in
+      1.6s: b.position.y = ground - h1       :ease_out
+      2.2s: b.position.y = ground            :ease_in
+      2.6s: b.position.y = ground - h2       :ease_out
+      3s:   b.position.y = ground            :ease_in
+      3.25s: b.position.y = ground - h3      :ease_out
+      3.5s: b.position.y = ground            :ease_in
+    }
+  }
+}
+
+# 着地の瞬間だけ影を濃くする
+func shadow_pulse(shadow) {
+  context shadow as s {
+    motion (t) {
+      0s:   s.opacity = 0.15
+      1s:   s.opacity = 0.6
+      1.3s: s.opacity = 0.2
+      2.2s: s.opacity = 0.5
+      2.5s: s.opacity = 0.2
+      3s:   s.opacity = 0.4
+      3.5s: s.opacity = 0.25
+    }
+  }
+}
+
+for (i, color) in colors.enumerate() {
+  let r = 0.45 + i * 0.05
+  let x = 2.5 + i * 2.75
+  let shadow = new Rect { position: apos!(:center, x, floor), w: r * 2.4, h: 0.12, fill: #000000, opacity: 0.15 }
+  let ball = new Circle { position: apos!(:center, x, 1 + r), radius: r, fill: color }
+  v.place(shadow)
+  v.place(ball)
+  let fall = drop(ball, r)
+  let pulse = shadow_pulse(shadow)
+  track.place(fall, at: i * 0.3s)
+  track.place(pulse, at: i * 0.3s)
+  # 逆再生。reverse は区間ごとの ease_in / ease_out を入れ替える
+  track.place(fall.reverse(), at: 8s + i * 0.3s)
+  track.place(pulse.reverse(), at: 8s + i * 0.3s)
+}
+
+let title = new TextArea { text: "bounce", position: apos!(:topLeft, 0.5, 0.3), fontSize: 0.6, fill: #d0d0d8 }
+v.place(title)
+
+v.addTrack(track)
+output v

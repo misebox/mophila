@@ -1,0 +1,157 @@
+# crowd.moph — 夕暮れの通り。walker.moph の make() で作った人たちが、奥行きの違う位置を歩いていく。
+# 奥の人ほど小さく、薄く、ゆっくり (幅に比例した速さなので足は滑らない)。空は Shader のグラデーション。
+# 日が暮れると街灯が点き、遠くの窓に灯りが入り、星が出て、最後に全体が暗転する
+
+import math
+import { make, speed, floor } from .walker
+
+let v = new View { box: (16, 9) }
+let track = new Timeline {}
+let total = 26s
+let seconds = total / 1s
+let dusk_end = 4        # ここから暗くなり始める (秒)
+let night_at = 18       # 完全に夜になる (秒)
+
+# すべてをこの箱に入れ、最後に箱ごとフェードアウトする (下は黒)
+v.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 9, fill: #000000 })
+let stage = new View { box: (16, 9) }
+v.place(stage, at: apos!(:topLeft, 0, 0), w: 16)
+
+# 空: 上は群青、地平線は橙。dusk_end から night_at にかけて夜になる
+let dusk = new Shader {
+  color: func (x, y, t) {
+    let k = y / 6.2
+    let night = math.min(1, math.max(0, (t - dusk_end) / (night_at - dusk_end)))
+    let top = #1c2452 * (1 - night) + #05070f * night
+    let horizon = #f0965a * (1 - night) + #2a2236 * night
+    top * (1 - k * k) + horizon * (k * k)
+  },
+}
+stage.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 6.2, fill: dusk })
+# 星: 夜になってから出る
+let stars = []
+for i in 0..30 {
+  let s = new Circle { position: apos!(:center, (math.sin(i * 12.9898) * 43758.5453) % 1 * 16, (math.sin(i * 78.233) * 43758.5453) % 1 * 3.5), radius: 0.03, fill: #ffffff, opacity: 0 }
+  stage.place(s)
+  stars.push(s)
+}
+stage.place(new Rect { position: apos!(:topLeft, 0, 6.2), w: 16, h: 2.8, fill: #1a1d2a })
+# 遠くの街並みと、その窓 (夜に順に点く)
+let windows = []
+for i in 0..14 {
+  let h = 0.4 + 0.9 * (0.5 + 0.5 * math.sin(i * 2.3))
+  let x = i * 1.2 - 0.3
+  stage.place(new Rect { position: apos!(:bottomLeft, x, 6.2), w: 1.0, h: h, fill: #232a45 })
+  for j in 0..math.floor(h / 0.3) {
+    for k in 0..3 {
+      if (math.sin((i * 7 + j * 3 + k) * 12.9898) * 43758.5453) % 1 > 0.45 {
+        let w = new Rect { position: apos!(:bottomLeft, x + 0.15 + k * 0.3, 6.05 - j * 0.3), w: 0.14, h: 0.16, fill: #f6d27a, opacity: 0 }
+        stage.place(w)
+        windows.push(w)
+      }
+    }
+  }
+}
+
+# 人: (足元の高さ, 箱の幅, 手前の色, 奥の色, 出る時刻)。奥から順に置く
+let people = [
+  (6.9, 2.4, #8d93a8, #5c6278, 0.5s),
+  (7.2, 3.0, #9aa1b8, #666d86, 4s),
+  (7.6, 3.8, #c2c8dc, #7f8699, 2s),
+  (8.2, 4.8, #e2b46a, #9c7a45, 6.5s),
+  (8.7, 6.0, #e8ecf7, #8b93a7, 0s),
+  (8.7, 6.0, #d9645a, #8a3f3a, 11s),
+]
+for (ground, w, near, far, start) in people {
+  let scale = w / 6
+  let x0 = -w
+  let x1 = 16 + 0.5
+  let cross = (x1 - x0) / (speed * scale)
+  let p = make(near, far, cross * 1s)
+  stage.place(p, at: apos!(:bottomLeft, x0, ground + (6 - floor) * scale), w: w)
+  let walk = context p as o {
+    motion (t) {
+      0: o.position.x = x0
+      1: o.position.x = x1
+    }
+  }
+  walk.duration = cross * 1s
+  # 横切り終わったら 3 秒後にまた左から。動画の中で渡り切れる分だけ
+  let n = math.ceil((seconds - start / 1s) / (cross + 3))
+  for i in 0..n {
+    let at = start + i * (cross + 3) * 1s
+    if at + cross * 1s <= total {
+      track.place(p, at: at)
+      track.place(walk, at: at)
+    }
+  }
+}
+
+# 手前の街灯。夜になると点く (光の玉と、足元の光だまり)
+let lamps = []
+for x in [3.5, 11.5] {
+  stage.place(new Rect { position: apos!(:bottomLeft, x, 8.8), w: 0.12, h: 4.1, fill: #2b3150 })
+  let cx = x + 0.06
+  let bulb = new Circle { position: apos!(:center, cx, 4.7), radius: 0.22, fill: #ffe6a8, opacity: 0.25 }
+  # 光の玉と光だまりは、中心から外へ薄くなる Shader で塗る
+  let glow = new Shader { color: func (px, py, t) {
+    let d2 = (px - cx) * (px - cx) + (py - 4.7) * (py - 4.7)
+    rgba!(255, 230, 168, math.exp(-d2 / 0.3) * 0.8)
+  } }
+  let spread = new Shader { color: func (px, py, t) {
+    let dx = (px - cx) / 1.8
+    let dy = (py - 8.75) / 0.3
+    rgba!(255, 230, 168, math.exp(-(dx * dx + dy * dy)) * 0.6)
+  } }
+  let halo = new Circle { position: apos!(:center, cx, 4.7), radius: 1.3, fill: glow, opacity: 0 }
+  let pool = new Rect { position: apos!(:center, cx, 8.75), w: 4.5, h: 0.7, fill: spread, opacity: 0 }
+  stage.place(pool)
+  stage.place(halo)
+  stage.place(bulb)
+  let on = context bulb as b, halo as h, pool as g {
+    motion (t) {
+      0s: b.opacity = 0.25, h.opacity = 0, g.opacity = 0
+      0.1s: b.opacity = 1, h.opacity = 1, g.opacity = 1
+      0.25s: b.opacity = 0.4, h.opacity = 0.3, g.opacity = 0.3
+      0.6s: b.opacity = 1, h.opacity = 1, g.opacity = 1
+    }
+  }
+  lamps.push(on)
+}
+let lamp_at = 12s
+track.place(lamps[0], at: lamp_at)
+track.place(lamps[1], at: lamp_at + 0.7s)
+
+# 遠くの窓が順に点く
+for (i, w) in windows.enumerate() {
+  let lit = context w as o {
+    motion (t) {
+      0s: o.opacity = 0
+      0.4s: o.opacity = 0.9
+    }
+  }
+  track.place(lit, at: 13s + (math.sin(i * 3.7) * 0.5 + 0.5) * 6s)
+}
+
+# 星が出て、瞬く
+for (i, s) in stars.enumerate() {
+  let twinkle = context s as o {
+    motion (t) {
+      0..1: o.opacity = math.min(1, math.max(0, (t * seconds - 15 - i * 0.1) / 3)) * (0.5 + 0.5 * math.sin(math.TAU * t * seconds / 2 + i))
+    }
+  }
+  twinkle.duration = total
+  track.place(twinkle, at: 0s)
+}
+
+# 最後に全体をフェードアウト
+let fade_out = context stage as s {
+  motion (t) {
+    0s: s.opacity = 1
+    2.5s: s.opacity = 0 :ease_in
+  }
+}
+track.place(fade_out, at: total - 2.5s)
+
+v.addTrack(track)
+output v

@@ -14,6 +14,7 @@ use lsp_types::{
     ServerCapabilities, SymbolKind, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Uri, WorkspaceEdit,
 };
 
+use crate::docs::{BUILTINS, MATH, METHODS};
 use crate::eval::{Interp, KINDS, schema};
 use crate::lexer::{Tok, Token, lex};
 use crate::value::Value;
@@ -25,33 +26,6 @@ const KEYWORDS: &[&str] = &[
 const SYMBOLS: &[&str] = &[
     "center", "topLeft", "topRight", "bottomLeft", "bottomRight", "top", "bottom", "left", "right", "linear", "ease", "ease_in", "ease_out",
     "fade",
-];
-const METHODS: &[(&str, &str)] = &[
-    ("place", "View / Timeline に置く"),
-    ("addTrack", "View に Timeline を付ける"),
-    ("apply", "Motion を対象に当てて Timeline にする"),
-    ("reverse", "Motion / Timeline を逆再生にする"),
-    ("format", "\"{name}\".format(値, ...) 位置で置き換える"),
-    ("len", "文字数 / 要素数"),
-    ("replace", "文字列の置き換え"),
-    ("map", "List の各要素に関数を当てる"),
-    ("filter", "条件に合う要素だけ"),
-    ("reduce", "畳み込み"),
-    ("enumerate", "(番号, 要素) の List"),
-    ("join", "List を文字列にする"),
-    ("push", "List に追加"),
-    ("sort", "並べ替え"),
-    ("keys", "Dict のキー"),
-    ("values", "Dict の値"),
-    ("has", "Dict にキーがあるか"),
-    ("x", "Vector / AnchoredPosition の x"),
-    ("y", "Vector / AnchoredPosition の y"),
-    ("anchor", "AnchoredPosition の基準点"),
-    ("vector", "AnchoredPosition の座標"),
-    ("output", "import したモジュールが output した View"),
-    ("duration", "Motion / Timeline / Audio の長さ"),
-    ("volume", "place の引数: 音声の音量 (1 がそのまま)"),
-    ("loop", "place の引数: 音声を duration: か動画の終わりまで繰り返す (Bool)"),
 ];
 
 /// 開いている文書と、最後に保存時に実行したときのトップレベルの値
@@ -326,7 +300,7 @@ fn complete(uri: &Uri, text: &str, pos: Position) -> Vec<CompletionItem> {
                 }
             }
         }
-        for (m, doc) in METHODS {
+        for (m, doc) in METHODS.iter().map(|m| (&m.name, &m.doc)) {
             items.push(item(m, CompletionItemKind::METHOD, doc));
         }
         return items;
@@ -412,8 +386,11 @@ fn hover(text: &str, globals: &[(String, Value)], pos: Position) -> Option<Hover
         let shown = v.to_string();
         let shown: String = shown.chars().take(120).collect();
         format!("`{word}`: {}\n\n```\n{shown}\n```\n\n(保存時の実行結果)", v.type_name())
-    } else if let Some((_, doc)) = METHODS.iter().find(|(m, _)| *m == word) {
-        format!("**{word}** — {doc}")
+    } else if let Some(b) = BUILTINS.iter().chain(MATH).find(|b| b.name.trim_end_matches('!') == word) {
+        format!("`{}` — {}", b.signature, b.doc)
+    } else if let Some(m) = METHODS.iter().find(|m| m.name == word) {
+        let all: Vec<String> = METHODS.iter().filter(|m| m.name == word).map(|m| format!("- `{}` ({}) — {}", m.signature, m.receiver, m.doc)).collect();
+        if all.len() > 1 { format!("**{word}**\n\n{}", all.join("\n")) } else { format!("`{}` ({}) — {}", m.signature, m.receiver, m.doc) }
     } else if KEYWORDS.contains(&word.as_str()) {
         format!("キーワード `{word}`")
     } else {

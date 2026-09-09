@@ -1,0 +1,78 @@
+*, *::before, *::after { box-sizing: border-box; }
+
+:root {
+  --top-h: 52px;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --code-bg: color-mix(in oklch, var(--so-text) 4%, var(--so-bg));
+}
+
+body { margin: 0; font-size: var(--so-font-size-lg); line-height: 1.7; }
+main { padding-block: var(--so-space-6) 96px; }
+
+/* 上のバー */
+.top { position: sticky; top: 0; z-index: 10; height: var(--top-h); background: var(--so-bg); border-bottom: 1px solid var(--so-border); }
+.top-row { display: flex; align-items: center; gap: var(--so-space-6); height: var(--top-h); }
+.brand { font-weight: 600; letter-spacing: 0.01em; color: var(--so-text); text-decoration: none; }
+.top-nav { display: flex; gap: var(--so-space-5); margin-left: var(--so-space-4); overflow-x: auto; }
+.top-nav a, .top-gh { color: var(--so-text-muted); text-decoration: none; font-size: var(--so-font-size-md); white-space: nowrap; }
+.top-nav a.active, .top-nav a:hover, .top-gh:hover { color: var(--so-text); }
+.top-gh { margin-left: auto; }
+
+/* 本文の幅。文章のページは狭く */
+.narrow { max-width: 760px; }
+.lead { font-size: var(--so-font-size-lg); }
+
+/* サイドバー付き */
+.with-side { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: var(--so-space-6); align-items: start; }
+.side { position: sticky; top: calc(var(--top-h) + var(--so-space-5)); max-height: calc(100vh - var(--top-h) - var(--so-space-6)); overflow-y: auto; font-size: var(--so-font-size-md); padding-right: var(--so-space-3); }
+.side-group + .side-group { margin-top: var(--so-space-5); }
+.side-title { color: var(--so-text-muted); font-size: var(--so-font-size-sm); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: var(--so-space-1); }
+.side-link { display: block; color: var(--so-text-muted); text-decoration: none; padding: 3px 0; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-link.deep { padding-left: var(--so-space-4); font-size: var(--so-font-size-sm); }
+.side-link:hover { color: var(--so-text); }
+.side-link.active { color: var(--so-text); font-weight: 600; }
+.main { min-width: 0; }
+@media (max-width: 800px) {
+  .with-side { grid-template-columns: 1fr; }
+  .side { position: static; max-height: none; }
+}
+
+/* 見出しの位置は上のバーの分だけ下げる */
+[id] { scroll-margin-top: calc(var(--top-h) + var(--so-space-4)); }
+.section { display: flex; flex-direction: column; gap: var(--so-space-4); }
+.section + .section { padding-top: var(--so-space-5); border-top: 1px solid var(--so-border); }
+.entry { padding-top: var(--so-space-3); }
+.sub { color: var(--so-text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-top: var(--so-space-4); }
+
+/* コード */
+code { font-family: var(--mono); font-size: 0.92em; }
+pre.code { background: var(--code-bg); border: 1px solid var(--so-border); border-radius: var(--so-radius); padding: var(--so-space-4); overflow-x: auto; font-size: var(--so-font-size-md); line-height: 1.55; margin: 0; }
+pre.code code { font-size: 1em; }
+
+/* 動画 */
+video.sample { width: 100%; max-width: min(720px, var(--native, 720px)); aspect-ratio: 16 / 9; border-radius: var(--so-radius); background: #000; display: block; }
+.hero { margin: 0; }
+.hero figcaption { margin-top: var(--so-space-2); }
+.meta { font-variant-numeric: tabular-nums; }
+
+/* 使い方のコマンド表 */
+.commands { display: grid; grid-template-columns: 1fr; gap: var(--so-space-1) 0; margin: 0; }
+.commands dt { margin-top: var(--so-space-3); }
+.commands dd { margin: 0; }
+
+.plain { margin: 0; padding-left: 1.2em; }
+.plain li + li { margin-top: var(--so-space-1); }
+.links { display: flex; gap: var(--so-space-5); }
+.gh { font-size: var(--so-font-size-sm); align-self: flex-start; }
+
+/* Markdown */
+.md { max-width: 860px; }
+.md h1 { font-size: var(--so-font-size-2xl); margin: 0 0 var(--so-space-4); }
+.md h2 { font-size: var(--so-font-size-xl); margin: var(--so-space-6) 0 var(--so-space-3); padding-top: var(--so-space-5); border-top: 1px solid var(--so-border); }
+.md h3 { font-size: var(--so-font-size-lg); margin: var(--so-space-5) 0 var(--so-space-2); }
+.md p, .md ul, .md ol { margin: 0 0 var(--so-space-3); }
+.md pre { background: var(--code-bg); border: 1px solid var(--so-border); border-radius: var(--so-radius); padding: var(--so-space-4); overflow-x: auto; font-size: var(--so-font-size-md); line-height: 1.55; }
+.md table { border-collapse: collapse; display: block; overflow-x: auto; margin: 0 0 var(--so-space-4); font-size: var(--so-font-size-md); }
+.md th, .md td { border: 1px solid var(--so-border); padding: 6px 10px; text-align: left; vertical-align: top; }
+.md th { background: var(--code-bg); }
+.md a { color: var(--so-color-primary-base); }

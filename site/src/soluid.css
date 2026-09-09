@@ -1,0 +1,653 @@
+/* core/soluid.css */
+/* ============================================
+   soluid design tokens
+
+   Color system:
+   - Each semantic color (primary/neutral/danger/success/warning/info)
+     is defined by a single --*-base value.
+   - hover/active/subtle/subtle-fg/border/fg are derived via color-mix()
+     against --so-text and --so-bg, so dark mode "just works" by
+     swapping --so-bg and --so-text.
+   - To customize: override any --*-base in your own CSS, or set them
+     via soluid.config.json `colors` field.
+   ============================================ */
+
+/* --- Density: normal (default) --- */
+
+:root,
+[data-density="normal"] {
+  --so-space-1: 4px;
+  --so-space-2: 8px;
+  --so-space-3: 12px;
+  --so-space-4: 16px;
+  --so-space-5: 24px;
+  --so-space-6: 32px;
+
+  --so-control-height-sm: 28px;
+  --so-control-height-md: 36px;
+  --so-control-height-lg: 44px;
+
+  --so-font-size-xs: 10px;
+  --so-font-size-sm: 12px;
+  --so-font-size-md: 14px;
+  --so-font-size-lg: 16px;
+  --so-font-size-xl: 20px;
+  --so-font-size-2xl: 26px;
+  --so-font-size-3xl: 34px;
+
+  --so-line-height: 1.5;
+  --so-line-height-tight: 1.25;
+  --so-radius: 6px;
+  --so-disabled-opacity: 0.5;
+
+  --so-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1), 0 4px 16px rgba(0, 0, 0, 0.06);
+  --so-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --so-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+/* --- Density: dense --- */
+
+[data-density="dense"] {
+  --so-space-1: 2px;
+  --so-space-2: 4px;
+  --so-space-3: 8px;
+  --so-space-4: 12px;
+  --so-space-5: 16px;
+  --so-space-6: 24px;
+
+  --so-control-height-sm: 24px;
+  --so-control-height-md: 28px;
+  --so-control-height-lg: 36px;
+
+  --so-font-size-xs: 10px;
+  --so-font-size-sm: 11px;
+  --so-font-size-md: 12px;
+  --so-font-size-lg: 14px;
+  --so-font-size-xl: 17px;
+  --so-font-size-2xl: 22px;
+  --so-font-size-3xl: 28px;
+
+  --so-radius: 4px;
+}
+
+/* --- Global tokens (light) --- */
+
+:root {
+  --so-bg: #ffffff;
+  --so-bg-subtle: #f8f9fa;
+  --so-text: #111827;
+  --so-text-muted: #6b7280;
+  --so-border: #e5e7eb;
+  /* The edge of a control, not of a surface: WCAG 1.4.11 wants 3:1 against
+     the background for the boundary that tells a control apart. */
+  --so-border-control: #8a919b;
+
+  /* One step per layer, so a host can move the whole library at once. */
+  --so-z-overlay: 1000;
+  --so-z-toast: 1100;
+
+  /* Semantic color bases. Override these to recolor the entire system.
+     Chosen so each one clears 4.5:1 both as text on its own subtle tint and
+     under white text on the solid fill. */
+  --so-color-primary-base: #1961d2;
+  --so-color-neutral-base: #616875;
+  --so-color-danger-base: #cc1926;
+  --so-color-success-base: #00790a;
+  --so-color-warning-base: #a25100;
+  --so-color-info-base: #00708d;
+
+  --so-ring: var(--so-color-primary-base);
+}
+
+/* --- Global tokens (dark) ---
+   Swaps bg/text/border; the color bases are overridden further down.
+   Derived shades auto-adapt because they mix against --so-bg and --so-text. */
+
+[data-theme="dark"] {
+  --so-bg: #0f172a;
+  --so-bg-subtle: #1e293b;
+  --so-text: #f1f5f9;
+  --so-text-muted: #94a3b8;
+  --so-border: #334155;
+  --so-border-control: #64748b;
+
+  /* Black shadows are invisible on a dark ground; these are deeper. */
+  --so-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5), 0 4px 16px rgba(0, 0, 0, 0.4);
+  --so-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.6);
+  --so-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.7);
+}
+
+/* --- Derived semantic colors ---
+   Defined once at :root scope; they reference --so-bg / --so-text which
+   change per theme, so the derived values follow automatically. */
+
+:root {
+  /* primary */
+  --so-color-primary-fg: #ffffff;
+  --so-color-primary-hover: color-mix(in oklch, var(--so-color-primary-base), var(--so-text) 14%);
+  --so-color-primary-active: color-mix(in oklch, var(--so-color-primary-base), var(--so-text) 26%);
+  --so-color-primary-subtle: color-mix(in oklch, var(--so-color-primary-base) 14%, var(--so-bg));
+  --so-color-primary-subtle-fg: color-mix(in oklch, var(--so-color-primary-base), var(--so-text) 35%);
+  --so-color-primary-border: color-mix(in oklch, var(--so-color-primary-base) 50%, var(--so-bg));
+
+  /* neutral */
+  --so-color-neutral-fg: #ffffff;
+  --so-color-neutral-hover: color-mix(in oklch, var(--so-color-neutral-base), var(--so-text) 14%);
+  --so-color-neutral-active: color-mix(in oklch, var(--so-color-neutral-base), var(--so-text) 26%);
+  --so-color-neutral-subtle: color-mix(in oklch, var(--so-color-neutral-base) 10%, var(--so-bg));
+  --so-color-neutral-subtle-fg: color-mix(in oklch, var(--so-color-neutral-base), var(--so-text) 40%);
+  --so-color-neutral-border: color-mix(in oklch, var(--so-color-neutral-base) 35%, var(--so-bg));
+
+  /* danger */
+  --so-color-danger-fg: #ffffff;
+  --so-color-danger-hover: color-mix(in oklch, var(--so-color-danger-base), var(--so-text) 14%);
+  --so-color-danger-active: color-mix(in oklch, var(--so-color-danger-base), var(--so-text) 26%);
+  --so-color-danger-subtle: color-mix(in oklch, var(--so-color-danger-base) 14%, var(--so-bg));
+  --so-color-danger-subtle-fg: color-mix(in oklch, var(--so-color-danger-base), var(--so-text) 35%);
+  --so-color-danger-border: color-mix(in oklch, var(--so-color-danger-base) 50%, var(--so-bg));
+
+  /* success */
+  --so-color-success-fg: #ffffff;
+  --so-color-success-hover: color-mix(in oklch, var(--so-color-success-base), var(--so-text) 14%);
+  --so-color-success-active: color-mix(in oklch, var(--so-color-success-base), var(--so-text) 26%);
+  --so-color-success-subtle: color-mix(in oklch, var(--so-color-success-base) 14%, var(--so-bg));
+  --so-color-success-subtle-fg: color-mix(in oklch, var(--so-color-success-base), var(--so-text) 35%);
+  --so-color-success-border: color-mix(in oklch, var(--so-color-success-base) 50%, var(--so-bg));
+
+  /* warning */
+  --so-color-warning-fg: #ffffff;
+  --so-color-warning-hover: color-mix(in oklch, var(--so-color-warning-base), var(--so-text) 14%);
+  --so-color-warning-active: color-mix(in oklch, var(--so-color-warning-base), var(--so-text) 26%);
+  --so-color-warning-subtle: color-mix(in oklch, var(--so-color-warning-base) 14%, var(--so-bg));
+  --so-color-warning-subtle-fg: color-mix(in oklch, var(--so-color-warning-base), var(--so-text) 35%);
+  --so-color-warning-border: color-mix(in oklch, var(--so-color-warning-base) 50%, var(--so-bg));
+
+  /* info */
+  --so-color-info-fg: #ffffff;
+  --so-color-info-hover: color-mix(in oklch, var(--so-color-info-base), var(--so-text) 14%);
+  --so-color-info-active: color-mix(in oklch, var(--so-color-info-base), var(--so-text) 26%);
+  --so-color-info-subtle: color-mix(in oklch, var(--so-color-info-base) 14%, var(--so-bg));
+  --so-color-info-subtle-fg: color-mix(in oklch, var(--so-color-info-base), var(--so-text) 35%);
+  --so-color-info-border: color-mix(in oklch, var(--so-color-info-base) 50%, var(--so-bg));
+}
+
+/* --- Color bases (dark) ---
+   A single base cannot clear 4.5:1 in both themes: reading as text on white
+   needs it darker than reading as text on #0f172a allows. Dark therefore gets
+   its own, lighter set, and the solid fills carry dark text instead of white.
+   Declared after the block above so these win at equal specificity. */
+
+[data-theme="dark"] {
+  --so-color-primary-base: #468eff;
+  --so-color-neutral-base: #888f9e;
+  --so-color-danger-base: #ff5451;
+  --so-color-success-base: #00a741;
+  --so-color-warning-base: #d07c00;
+  --so-color-info-base: #009ebc;
+
+  --so-color-primary-fg: var(--so-bg);
+  --so-color-neutral-fg: var(--so-bg);
+  --so-color-danger-fg: var(--so-bg);
+  --so-color-success-fg: var(--so-bg);
+  --so-color-warning-fg: var(--so-bg);
+  --so-color-info-fg: var(--so-bg);
+}
+
+/* --- Root container --- */
+
+body {
+  background-color: var(--so-bg);
+  color: var(--so-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  line-height: var(--so-line-height);
+}
+
+/* --- Focus ring --- */
+
+:focus-visible {
+  outline: 2px solid var(--so-ring);
+  outline-offset: 2px;
+}
+
+/* --- Reduced motion --- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* Windows High Contrast drops backgrounds and shadows; the states drawn with
+   them alone get a system colour or a border instead. */
+@media (forced-colors: active) {
+  .so-radio-button__input:checked + .so-radio-button__indicator .so-radio-button__dot,
+  .so-switch__track[aria-checked="true"],
+  .so-progress__bar,
+  .so-carousel__dot--active::before,
+  .so-segmented__item--active,
+  .so-calendar__day--selected {
+    forced-color-adjust: none;
+    background-color: Highlight;
+    color: HighlightText;
+  }
+
+  .so-switch__track,
+  .so-switch__thumb,
+  .so-carousel__dot::before,
+  .so-progress,
+  .so-tooltip,
+  .so-slider__input::-webkit-slider-runnable-track,
+  .so-slider__input::-moz-range-track {
+    border: 1px solid CanvasText;
+  }
+
+  .so-divider,
+  .so-menu-separator {
+    height: 0;
+    border-top: 1px solid CanvasText;
+  }
+}
+
+/* iOS Safari zooms into a field whose text is under 16px; on touch screens
+   the text inputs use at least that. */
+@media (pointer: coarse) {
+  .so-text-field__input,
+  .so-textarea__input,
+  .so-select__input,
+  .so-combobox__input,
+  .so-number-input__input,
+  .so-pin-input__box,
+  .so-color-picker__hex-input {
+    font-size: max(16px, 1em);
+  }
+}
+
+
+/* Container.css */
+.so-container {
+  width: 100%;
+  margin-inline: auto;
+}
+
+.so-container--padded {
+  padding-inline: var(--so-space-4);
+}
+
+/* --- Sizes --- */
+
+.so-container--sm {
+  max-width: 640px;
+}
+
+.so-container--md {
+  max-width: 800px;
+}
+
+.so-container--lg {
+  max-width: 1024px;
+}
+
+.so-container--xl {
+  max-width: 1280px;
+}
+
+.so-container--full {
+  max-width: none;
+}
+
+
+/* Stack.css */
+.so-stack {
+  display: flex;
+  flex-direction: column;
+}
+
+.so-stack--gap-1 {
+  gap: var(--so-space-1);
+}
+.so-stack--gap-2 {
+  gap: var(--so-space-2);
+}
+.so-stack--gap-3 {
+  gap: var(--so-space-3);
+}
+.so-stack--gap-4 {
+  gap: var(--so-space-4);
+}
+.so-stack--gap-5 {
+  gap: var(--so-space-5);
+}
+.so-stack--gap-6 {
+  gap: var(--so-space-6);
+}
+
+.so-stack--align-start {
+  align-items: flex-start;
+}
+.so-stack--align-center {
+  align-items: center;
+}
+.so-stack--align-end {
+  align-items: flex-end;
+}
+.so-stack--align-stretch {
+  align-items: stretch;
+}
+
+.so-stack--justify-start {
+  justify-content: flex-start;
+}
+.so-stack--justify-center {
+  justify-content: center;
+}
+.so-stack--justify-end {
+  justify-content: flex-end;
+}
+.so-stack--justify-between {
+  justify-content: space-between;
+}
+.so-stack--justify-around {
+  justify-content: space-around;
+}
+
+
+/* Table.css */
+.so-table-wrapper {
+  overflow-x: auto;
+  border: 1px solid var(--so-border);
+  border-radius: var(--so-radius);
+}
+
+.so-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--so-font-size-md);
+  color: var(--so-text);
+}
+
+.so-table__row--header {
+  background-color: var(--so-bg-subtle);
+}
+
+.so-table__header {
+  font-weight: 600;
+  text-align: start;
+  white-space: nowrap;
+}
+
+.so-table__cell {
+  padding: var(--so-space-3) var(--so-space-4);
+  border-bottom: 1px solid var(--so-border);
+}
+
+.so-table__cell--start {
+  text-align: start;
+}
+
+.so-table__cell--center {
+  text-align: center;
+}
+
+.so-table__cell--end {
+  text-align: end;
+}
+
+.so-table__cell--checkbox {
+  width: 40px;
+  text-align: center;
+}
+
+.so-table__row:last-child .so-table__cell {
+  border-bottom: none;
+}
+
+.so-table__row--selected {
+  background-color: var(--so-color-primary-subtle);
+}
+
+.so-table__row:hover:not(.so-table__row--header) {
+  background-color: var(--so-bg-subtle);
+}
+
+.so-table__row--selected:hover {
+  background-color: var(--so-color-primary-subtle);
+}
+
+/* --- Sort --- */
+
+.so-table__sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--so-space-1);
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+}
+
+.so-table__sort-button:focus-visible {
+  outline: 2px solid var(--so-ring);
+  outline-offset: 2px;
+}
+
+.so-table__sort-icon {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: var(--so-space-1);
+}
+
+.so-table__sort-icon::after {
+  content: "\2195"; /* up-down arrow */
+  font-size: 1em;
+  opacity: 0.35;
+}
+
+.so-table__sort-icon--asc::after {
+  content: "\25B2"; /* triangle up */
+  font-size: 0.7em;
+  opacity: 1;
+}
+
+.so-table__sort-icon--desc::after {
+  content: "\25BC"; /* triangle down */
+  font-size: 0.7em;
+  opacity: 1;
+}
+
+
+/* Heading.css */
+.so-heading {
+  margin: 0;
+  color: var(--so-text);
+  font-weight: 600;
+  line-height: var(--so-line-height-tight);
+  text-wrap: balance;
+}
+
+/* --- Sizes --- */
+
+.so-heading--sm {
+  font-size: var(--so-font-size-sm);
+}
+.so-heading--md {
+  font-size: var(--so-font-size-md);
+}
+.so-heading--lg {
+  font-size: var(--so-font-size-lg);
+}
+.so-heading--xl {
+  font-size: var(--so-font-size-xl);
+}
+.so-heading--2xl {
+  font-size: var(--so-font-size-2xl);
+  font-weight: 700;
+}
+.so-heading--3xl {
+  font-size: var(--so-font-size-3xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+
+/* Text.css */
+.so-text {
+  margin: 0;
+  line-height: var(--so-line-height);
+}
+
+/* --- Sizes --- */
+
+.so-text--xs {
+  font-size: var(--so-font-size-xs);
+}
+.so-text--sm {
+  font-size: var(--so-font-size-sm);
+}
+.so-text--md {
+  font-size: var(--so-font-size-md);
+}
+.so-text--lg {
+  font-size: var(--so-font-size-lg);
+}
+
+/* --- Weights --- */
+
+.so-text--weight-normal {
+  font-weight: 400;
+}
+.so-text--weight-medium {
+  font-weight: 500;
+}
+.so-text--weight-semibold {
+  font-weight: 600;
+}
+.so-text--weight-bold {
+  font-weight: 700;
+}
+
+/* --- Tones --- */
+
+.so-text--tone-default {
+  color: var(--so-text);
+}
+.so-text--tone-muted {
+  color: var(--so-text-muted);
+}
+.so-text--tone-primary {
+  color: var(--so-color-primary-subtle-fg);
+}
+.so-text--tone-danger {
+  color: var(--so-color-danger-subtle-fg);
+}
+.so-text--tone-success {
+  color: var(--so-color-success-subtle-fg);
+}
+.so-text--tone-warning {
+  color: var(--so-color-warning-subtle-fg);
+}
+.so-text--tone-info {
+  color: var(--so-color-info-subtle-fg);
+}
+
+/* --- Alignment --- */
+
+.so-text--align-start {
+  text-align: start;
+}
+.so-text--align-center {
+  text-align: center;
+}
+.so-text--align-end {
+  text-align: end;
+}
+
+/* --- Truncation --- */
+
+.so-text--truncate {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+
+/* VisuallyHidden.css */
+.so-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+
+/* Link.css */
+.so-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--so-space-1);
+  border-radius: 2px;
+  font-size: inherit;
+  transition: color 0.15s;
+}
+
+.so-link__external-icon {
+  width: 0.85em;
+  height: 0.85em;
+  flex-shrink: 0;
+}
+
+/* --- Underline --- */
+
+.so-link--underline-always {
+  text-decoration: underline;
+}
+
+.so-link--underline-hover {
+  text-decoration: none;
+}
+
+.so-link--underline-hover:hover {
+  text-decoration: underline;
+}
+
+.so-link--underline-none {
+  text-decoration: none;
+}
+
+/* --- Tones --- */
+
+.so-link--primary {
+  color: var(--so-color-primary-subtle-fg);
+}
+
+.so-link--primary:hover {
+  color: var(--so-color-primary-hover);
+}
+
+.so-link--neutral {
+  color: var(--so-text);
+}
+
+.so-link--neutral:hover {
+  color: var(--so-color-neutral-hover);
+}
+
+.so-link--danger {
+  color: var(--so-color-danger-subtle-fg);
+}
+
+.so-link--danger:hover {
+  color: var(--so-color-danger-hover);
+}
+

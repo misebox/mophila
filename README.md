@@ -4,7 +4,7 @@
 
 ![育つ木の前を人が歩く](docs/readme.gif)
 
-上の 8 秒は `samples/readme.moph`。木 (`samples/fractal.moph`) と歩く人 (`samples/walker.moph`) を import して置いただけ。
+上の 8 秒は `samples/passerby.moph`。木 (`samples/fractal.moph`) と歩く人 (`samples/walker.moph`) を import して置いただけ。
 
 ```
 let v = new View { box: (16, 9) }
@@ -51,7 +51,7 @@ cargo install --path .
 
 | コマンド | 内容 |
 |---|---|
-| `mophila render a.moph -o a.mp4 --size fhd --fps 30` | 動画を出す。`-o a.png --at 2.5s` で画像 |
+| `mophila render a.moph -o a.mp4 --size fhd --fps 30` | 動画を出す。`-o a.png --at 2.5s` で画像。`--trim 00:15..00:30` で区間だけ (`00:15` は 15 秒以降、`..01:30` は 1 分 30 秒まで) |
 | `mophila preview a.moph` | ウィンドウで実時間再生。Space で一時停止、← → で移動 |
 | `mophila run a.moph` | 描画せずに実行する (`log` の確認) |
 | `mophila timeline a.moph` | 何が、いつ、どう変わるかをテキストで出す |
@@ -65,6 +65,7 @@ VS Code 拡張と Neovim の設定は `editors/vscode/README.md`。構文ハイ�
 
 ## 文書
 
+- ドキュメントページ (`site/`、bun + SolidJS + soluid)。サンプルの動画、組み込みとライブラリの説明、仕様の写し。`bun run docs` でその場で見る (要 bun)。元データ `site/src/data.json` と動画は `bun run docs:gen` (= `scripts/docgen.py --media`) で作り直す。ライブラリの説明はソースの `##` コメントから
 - `docs/mophila-spec.md` — 言語仕様
 - `docs/mophila.gbnf` — 文法 (GBNF)
 - `docs/skills/mophila/SKILL.md` — 書き方の知恵 (LLM に書かせるときに渡す)

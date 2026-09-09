@@ -1,0 +1,9 @@
+{
+  "name": "mophila-root",
+  "private": true,
+  "scripts": {
+    "docs": "bun run --cwd site dev",
+    "docs:build": "bun run --cwd site build",
+    "docs:gen": "python3 scripts/docgen.py --media"
+  }
+}

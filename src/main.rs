@@ -1,6 +1,7 @@
 mod ast;
 mod audio;
 mod bundle;
+mod docs;
 mod encode;
 mod error;
 mod eval;
@@ -85,7 +86,13 @@ enum Command {
         cols: u32,
     },
     /// Language Server (stdio)。エディタから起動する
-    Lsp,
+    Lsp {
+        /// クライアント (vscode-languageclient など) が付ける印。stdio しかないので無視する
+        #[arg(long)]
+        stdio: bool,
+    },
+    /// 組み込みの説明を JSON で出す (scripts/docgen.py が読む)
+    Doc,
     /// スクリプトを埋め込んだ実行ファイルを作る
     Bundle {
         /// スクリプト (.moph)
@@ -120,6 +127,30 @@ struct OutputArgs {
     /// ウィンドウ再生のとき、最後まで再生したら先頭に戻る
     #[arg(long)]
     r#loop: bool,
+    /// 動画のこの区間だけを出す。00:15..00:30 (15 秒から 30 秒)、00:15 (15 秒以降)、..01:30 (最初から 1 分 30 秒)
+    #[arg(long, value_parser = parse_trim)]
+    trim: Option<Trim>,
+}
+
+/// --trim の区間。None は端まで
+#[derive(Clone, Copy)]
+struct Trim {
+    from: Option<f64>,
+    to: Option<f64>,
+}
+
+fn parse_trim(s: &str) -> Result<Trim, String> {
+    let side = |part: &str| -> Result<Option<f64>, String> { if part.is_empty() { Ok(None) } else { parse_duration(part).map(Some) } };
+    let trim = match s.split_once("..") {
+        Some((a, b)) => Trim { from: side(a)?, to: side(b)? },
+        None => Trim { from: side(s)?, to: None },
+    };
+    if let (Some(a), Some(b)) = (trim.from, trim.to) {
+        if b <= a {
+            return Err(format!("trim end must be after start: {s}"));
+        }
+    }
+    Ok(trim)
 }
 
 /// Duration リテラルを秒に変換する
@@ -224,7 +255,11 @@ fn run() -> Result<(), Box<dyn Error>> {
             Ok(())
         }
         Command::Sheet { script, output, every, times, cell, cols } => sheet(&std::fs::read_to_string(&script)?, base_dir(&script), &output, every, times, cell, cols),
-        Command::Lsp => lsp::run(),
+        Command::Lsp { .. } => lsp::run(),
+        Command::Doc => {
+            println!("{}", serde_json::to_string_pretty(&docs::json())?);
+            Ok(())
+        }
         Command::Bundle { script, output } => bundle::write(std::path::Path::new(&script), &output),
     }
 }
@@ -267,6 +302,14 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
     let mut renderer = timing.measure("startup", || gpu::HeadlessRenderer::new(width, height))?;
     interp.cache_mut().shaders = Some(renderer.shader_runner());
     let is_image = std::path::Path::new(&output).extension().is_some_and(|e| e == "png");
+    // --trim の区間。映像はこの時刻から描き、音声と字幕もこの区間に合わせてずらして切る
+    let trim = args.trim.unwrap_or(Trim { from: None, to: None });
+    let from = trim.from.unwrap_or(0.0).min(duration);
+    let to = trim.to.unwrap_or(duration).min(duration);
+    if !is_image && to <= from {
+        return Err(format!("--trim starts at {from}s but the video ends at {duration}s").into());
+    }
+    let media = media.window(from, to);
     let mut ffmpeg = encode::Ffmpeg::spawn(
         &output,
         encode::Settings {
@@ -275,7 +318,7 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
             fps: args.fps,
             codec: if is_image { "png" } else { &args.codec },
             pix_fmt: if is_image { "rgba" } else { &args.pix_fmt },
-            media: if is_image { None } else { Some((&media, duration)) },
+            media: if is_image { None } else { Some((&media, to - from)) },
         },
     )?;
 
@@ -283,8 +326,8 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
     let times: Vec<f64> = if is_image {
         vec![args.at.ok_or("--at is required for image output")?]
     } else {
-        let frames = (duration * f64::from(args.fps)).round() as u32;
-        (0..frames).map(|f| f64::from(f) / f64::from(args.fps)).collect()
+        let frames = ((to - from) * f64::from(args.fps)).round() as u32;
+        (0..frames).map(|f| from + f64::from(f) / f64::from(args.fps)).collect()
     };
     // フレーム N を GPU に投入したら、その完了を待つ前にフレーム N+1 の eval と scene を進める。
     // N の読み戻しは N+1 を投入した後に行う (GPU が N を描いている間に CPU が N+1 を組み立てる)

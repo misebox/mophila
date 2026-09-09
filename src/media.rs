@@ -8,6 +8,8 @@ pub struct AudioClip {
     pub name: String,
     /// 動画の時間軸での開始
     pub at: f64,
+    /// ファイルの何秒目から鳴らすか (--trim で途中から始まるとき)
+    pub offset: f64,
     /// 実際に鳴らす長さ。繰り返しは duration: か動画の終わりまで
     pub length: f64,
     pub fade_in: f64,
@@ -33,6 +35,45 @@ pub struct Media {
 impl Media {
     pub fn is_empty(&self) -> bool {
         self.clips.is_empty() && self.cues.is_empty()
+    }
+
+    /// from..to の区間だけにする。時刻は from が 0 になるようにずらし、区間の外は切る
+    pub fn window(self, from: f64, to: f64) -> Media {
+        let span = to - from;
+        let clips = self
+            .clips
+            .into_iter()
+            .filter_map(|mut c| {
+                let start = c.at - from;
+                let end = (start + c.length).min(span);
+                if end <= 0.0 || start >= span {
+                    return None;
+                }
+                if start < 0.0 {
+                    // 途中から鳴らす。フェードインはもう終わっている
+                    c.offset += -start;
+                    c.fade_in = (c.fade_in + start).max(0.0);
+                }
+                c.at = start.max(0.0);
+                c.length = end - c.at;
+                Some(c)
+            })
+            .collect();
+        let cues = self
+            .cues
+            .into_iter()
+            .filter_map(|mut q| {
+                let start = q.at - from;
+                let end = (start + q.length).min(span);
+                if end <= 0.0 || start >= span {
+                    return None;
+                }
+                q.at = start.max(0.0);
+                q.length = end - q.at;
+                Some(q)
+            })
+            .collect();
+        Media { clips, cues }
     }
 }
 
@@ -74,6 +115,7 @@ fn walk(placed: &Placed, origin: f64, limit: f64, out: &mut Media) {
                 path: audio.path.clone(),
                 name: audio.name.clone(),
                 at: start,
+                offset: 0.0,
                 length,
                 fade_in: placed.fade_in,
                 fade_out: placed.fade_out,

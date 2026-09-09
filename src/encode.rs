@@ -109,7 +109,7 @@ fn add_media(cmd: &mut Command, output: &str, media: &Media, duration: f64) -> R
     let mut filters: Vec<String> = Vec::new();
     for (i, clip) in media.clips.iter().enumerate() {
         let mut chain = vec![
-            format!("atrim=duration={}", clip.length),
+            format!("atrim=start={}:duration={}", clip.offset, clip.length),
             "asetpts=PTS-STARTPTS".to_string(),
             "aformat=sample_rates=48000:channel_layouts=stereo".to_string(),
         ];

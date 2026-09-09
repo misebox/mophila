@@ -1,0 +1,13 @@
+{
+  "componentDir": "src/components/ui",
+  "cssPath": "src/soluid.css",
+  "components": [
+    "Container",
+    "Stack",
+    "Table",
+    "Heading",
+    "Text",
+    "Link"
+  ],
+  "componentsVersion": "0.2.14"
+}

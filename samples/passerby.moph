@@ -1,7 +1,7 @@
-# readme.moph — README に載せる短い動画。育つ木 (fractal.moph) の前を、歩く人 (walker.moph) が横切る。
-# 2 つのサンプルを import して置くだけで 1 つの絵になる。
+# passerby.moph — 育つ木 (fractal.moph) の前を、歩く人 (walker.moph) が通り過ぎる。8 秒
+# 2 つのサンプルを import して置くだけで 1 つの絵になる。README の GIF はこれ。
 # docs/readme.gif の作り方:
-#   mophila render samples/readme.moph -o r.mp4 --size 400x225 --fps 10 --codec libx264rgb --pix-fmt rgb24
+#   mophila render samples/passerby.moph -o r.mp4 --size 400x225 --fps 10 --codec libx264rgb --pix-fmt rgb24
 #   ffmpeg -i r.mp4 -vf "palettegen=max_colors=64:stats_mode=diff" pal.png
 #   ffmpeg -i r.mp4 -i pal.png -lavfi "paletteuse=dither=none:diff_mode=rectangle" docs/readme.gif
 

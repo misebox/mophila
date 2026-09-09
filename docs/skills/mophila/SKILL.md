@@ -15,6 +15,7 @@ description: Write or debug mophila (.moph) motion graphics scripts in this repo
 cargo run -- run a.moph                              # 描画せず実行。log と型エラーの確認
 cargo run -- render a.moph -o out.png --at 2.5s --size 480x270   # 1 フレーム
 cargo run -- render a.moph -o out.mp4 --size 360p    # 動画 (fps 既定 10)。-o 省略時は output.mp4 (--at 付きなら output.png)
+cargo run -- render a.moph -o part.mp4 --trim 00:15..00:30   # 区間だけ (00:15 は 15 秒以降、..01:30 は最初から)
 cargo run -- preview a.moph [--loop] [--at 1s]       # ウィンドウで再生 (--at はその時刻で一時停止して開く)。
 cargo run -- timeline a.moph [--filter k=v]           # 変化の一覧をテキストで
 cargo run -- lsp                                      # Language Server (VS Code 拡張は editors/vscode/)

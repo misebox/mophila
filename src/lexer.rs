@@ -88,8 +88,8 @@ pub fn lex(src: &str) -> Result<Vec<Token>> {
                 line_start = i;
             }
             '#' => {
-                // "# " はコメント。それ以外は色リテラル
-                if matches!(chars.get(i + 1), None | Some(' ') | Some('\t') | Some('\n') | Some('\r')) {
+                // "# " はコメント、"##" はドキュメントコメント (docgen が読む)。それ以外は色リテラル
+                if matches!(chars.get(i + 1), None | Some(' ') | Some('\t') | Some('\n') | Some('\r') | Some('#')) {
                     while i < chars.len() && chars[i] != '\n' {
                         i += 1;
                     }

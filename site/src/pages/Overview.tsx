@@ -24,7 +24,7 @@ export const Overview: Component = () => (
     <section class="hero">
       <div>
         <h1 class="hero-title">動画を、<br />コードで書く。</h1>
-        <p class="hero-lead">mophila は動画のための小さな言語です。スクリプトを解釈し、GPU で描いて、ffmpeg で動画か画像にします。</p>
+        <p class="hero-lead">図形と、その動きを書くための言語です。GPU で描画し、動画や画像として書き出します。</p>
         <div class="hero-links">
           <a href={href("start")} class="primary">使い方</a>
           <a href={href("samples")}>サンプル</a>
@@ -32,8 +32,8 @@ export const Overview: Component = () => (
         </div>
       </div>
       <figure>
-        <video class="sample" src="media/passerby.mp4" autoplay muted loop playsinline preload="metadata" />
-        <figcaption>木と歩く人を別のファイルから import して置いただけ。</figcaption>
+        <video class="sample" src="media/first.mp4" autoplay muted loop playsinline preload="metadata" />
+        <figcaption>図形のアニメーションを、短いコードで書けます。</figcaption>
       </figure>
     </section>
     <div class="reading">

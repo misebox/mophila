@@ -138,7 +138,7 @@ pub enum StmtKind {
     Let(Pattern, Option<TypeAnn>, Expr),
     /// type Name = A | B
     TypeDef(String, Vec<String>),
-    /// tuple name(field: Type, ...)
+    /// record name(field: Type, ...)
     TupleDef(String, Vec<(String, String)>),
     /// import name  /  import "file.moph" as name
     Import(ImportKind),

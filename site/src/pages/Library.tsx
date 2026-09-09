@@ -46,6 +46,7 @@ const ModulePage: Component<{ lib: Lib }> = (props) => (
           <Table
             columns={[
               { key: "name", header: "名前", render: (v, it) => <a href={href("lib", itemId(props.lib, it.name))}><code>{String(v)}</code></a> },
+              { key: "returns", header: "型", render: (v) => <code>{(v as { type: string }).type}</code> },
               { key: "summary", header: "説明" },
             ]}
             data={items}
@@ -60,18 +61,29 @@ const ModulePage: Component<{ lib: Lib }> = (props) => (
 const ItemPage: Component<{ lib: Lib; item: LibItem }> = (props) => (
   <Stack gap={3}>
     <Text size="sm" tone="muted"><a href={href("lib", props.lib.name)}>{props.lib.name}</a> / {props.item.category}</Text>
-    <Heading level={1} size="xl"><code>{props.item.signature}</code></Heading>
+    <Heading level={1} size="xl">{props.item.name}</Heading>
     <Text>{props.item.summary}</Text>
-    <ImportLine lib={props.lib} names={[props.item.name]} />
-    <Show when={props.item.params.length > 0 || props.item.returns}>
-      <Table
-        columns={[
-          { key: "name", header: "引数", render: (v) => <code>{String(v)}</code> },
-          { key: "doc", header: "説明" },
-        ]}
-        data={[...props.item.params.map(([name, doc]) => ({ name, doc })), ...(props.item.returns ? [{ name: "戻り値", doc: props.item.returns }] : [])]}
-        rowKey={(r) => r.name}
-      />
+    <pre class="code"><code>{`import { ${props.item.name} } from ${props.lib.name}\n\n`}{props.item.call}{props.item.returns.type ? (props.item.isFunc ? ` -> ${props.item.returns.type}` : `: ${props.item.returns.type}`) : ""}</code></pre>
+    <Show when={props.item.returns.type || props.item.returns.doc}>
+      <Stack gap={1}>
+        <Heading level={2} size="sm" class="sub">{props.item.isFunc ? "戻り値" : "型"}</Heading>
+        <Text><code>{props.item.returns.type}</code>{props.item.returns.doc ? ` — ${props.item.returns.doc}` : ""}</Text>
+      </Stack>
+    </Show>
+    <Show when={props.item.params.length > 0}>
+      <Stack gap={1}>
+        <Heading level={2} size="sm" class="sub">引数</Heading>
+        <Table
+          columns={[
+            { key: "name", header: "名前", render: (v) => <code>{String(v)}</code> },
+            { key: "type", header: "型", render: (v) => <code>{String(v)}</code> },
+            { key: "default", header: "既定", render: (v) => (v ? <code>{String(v)}</code> : <span class="none">なし</span>) },
+            { key: "doc", header: "説明" },
+          ]}
+          data={props.item.params}
+          rowKey={(r) => r.name}
+        />
+      </Stack>
     </Show>
     <GitHubLink href={blob(props.lib.path)} />
   </Stack>

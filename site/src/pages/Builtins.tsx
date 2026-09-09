@@ -8,6 +8,7 @@ const EntryTable: Component<{ rows: Entry[] }> = (props) => (
   <Table
     columns={[
       { key: "signature", header: "書き方", render: (v) => <code>{String(v)}</code> },
+      { key: "returns", header: "戻り値", render: (v) => <code>{String(v)}</code> },
       { key: "doc", header: "説明" },
     ]}
     data={props.rows}
@@ -23,20 +24,20 @@ const unions = (): string[] => [...new Set(data.types.map((t) => t.union).filter
 const typeLinks = (match: (t: TypeDoc) => boolean) =>
   data.types.filter(match).map((t) => ({ label: t.name, href: href("builtins", t.name), active: current() === t.name }));
 
-const currentLabel = (): string => (current() === "functions" ? "関数" : current() === "constructors" ? "コンストラクタ" : current());
+const currentLabel = (): string => (current() === "functions" ? "Function" : current() === "constructors" ? "Record" : current());
 
 const Functions: Component = () => (
   <Stack gap={3}>
-    <Heading level={1} size="xl">関数</Heading>
-    <Text tone="muted">import なしで使えるもの。</Text>
+    <Heading level={1} size="xl">Function</Heading>
+    <Text tone="muted">import なしで呼べる関数。</Text>
     <EntryTable rows={data.builtins.filter((b) => !isConstructor(b))} />
   </Stack>
 );
 
 const Constructors: Component = () => (
   <Stack gap={3}>
-    <Heading level={1} size="xl">コンストラクタ</Heading>
-    <Text tone="muted">値を作る書き方。関数ではなく specific tuple (名前と要素の型を持つ Tuple) を作る。型の決まった場所では素の Tuple からも変換される (<a href={href("docs", "spec/3-4-specific-tuple")}>仕様 3.4</a>)。</Text>
+    <Heading level={1} size="xl">Record</Heading>
+    <Text tone="muted">名前と、型の付いたフィールドを持つ値。<code>name!(...)</code> で作り、フィールドは <code>v.x</code> のように名前で読む。同じ名前で引数の違う定義を複数持てる。型の決まった場所には素の Tuple も書ける (<a href={href("docs", "spec/3-4-record")}>仕様 3.4</a>)。自分で作るときは <code>record name(field: Type, ...)</code>。</Text>
     <EntryTable rows={data.builtins.filter(isConstructor)} />
   </Stack>
 );
@@ -70,6 +71,7 @@ const TypePage: Component<{ type: TypeDoc }> = (props) => (
         <Table
           columns={[
             { key: "signature", header: "書き方", render: (v) => <code>{String(v)}</code> },
+            { key: "returns", header: "戻り値", render: (v) => <code>{String(v)}</code> },
             { key: "doc", header: "説明" },
           ]}
           data={props.type.methods}
@@ -95,11 +97,11 @@ export const Builtins: Component = () => (
         groups={[
           {
             items: [
-              { label: "関数", href: href("builtins", "functions"), active: current() === "functions" },
-              { label: "コンストラクタ", href: href("builtins", "constructors"), active: current() === "constructors" },
+              { label: "Function", href: href("builtins", "functions"), active: current() === "functions" },
+              { label: "Record", href: href("builtins", "constructors"), active: current() === "constructors" },
             ],
           },
-          { title: "型", items: typeLinks((t) => t.union === "") },
+          { title: "Type", items: typeLinks((t) => t.union === "") },
           ...unions().map((u) => ({ title: u, items: typeLinks((t) => t.union === u) })),
         ]}
       />

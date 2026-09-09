@@ -3,32 +3,38 @@
   {
    "doc": "引数を空白区切りで stderr に出す。動画には出ない",
    "name": "log",
-   "signature": "log(値, ...)"
+   "returns": "Nothing",
+   "signature": "log(値: Any, ...)"
   },
   {
-   "doc": "型名を String で返す",
+   "doc": "型名を返す",
    "name": "type_of",
-   "signature": "type_of(値)"
+   "returns": "String",
+   "signature": "type_of(値: Any)"
   },
   {
-   "doc": "Vector。座標や複素数",
+   "doc": "座標や複素数に使う実数 2 つの組",
    "name": "vector!",
-   "signature": "vector!(x, y)"
+   "returns": "Vector",
+   "signature": "vector!(x: Number, y: Number)"
   },
   {
-   "doc": "AnchoredPosition。基準点付きの位置。anchor は :center :topLeft :topRight :bottomLeft :bottomRight :top :bottom :left :right",
+   "doc": "位置と、その位置がものの どこ を指すか",
    "name": "apos!",
-   "signature": "apos!(:anchor, x, y) / apos!(:anchor, vector)"
+   "returns": "AnchoredPosition",
+   "signature": "apos!(anchor: Anchor, x: Number, y: Number) / apos!(anchor: Anchor, v: Vector)"
   },
   {
-   "doc": "Color。各 0..255",
+   "doc": "各 0..255",
    "name": "rgb!",
-   "signature": "rgb!(r, g, b)"
+   "returns": "Color",
+   "signature": "rgb!(r: Number, g: Number, b: Number)"
   },
   {
-   "doc": "Color。r g b は 0..255、a は 0..1",
+   "doc": "r g b は 0..255、a は 0..1",
    "name": "rgba!",
-   "signature": "rgba!(r, g, b, a)"
+   "returns": "Color",
+   "signature": "rgba!(r: Number, g: Number, b: Number, a: Number)"
   }
  ],
  "types": [
@@ -64,17 +70,20 @@
     {
      "doc": "文字数",
      "name": "len",
+     "returns": "Number",
      "signature": "s.len()"
     },
     {
-     "doc": "文字列の置き換え",
+     "doc": "from を to に置き換えた文字列",
      "name": "replace",
-     "signature": "s.replace(from, to)"
+     "returns": "String",
+     "signature": "s.replace(from: String, to: String)"
     },
     {
      "doc": "{ } を順に引数で置き換える。名前は説明用",
      "name": "format",
-     "signature": "\"{name}\".format(値, ...)"
+     "returns": "String",
+     "signature": "\"{name}\".format(値: Any, ...)"
     }
    ],
    "name": "String",
@@ -94,14 +103,16 @@
    "make": "0..5  0..=5",
    "methods": [
     {
-     "doc": "List にする",
+     "doc": "範囲の整数を並べた List",
      "name": "to_list",
+     "returns": "List<Number>",
      "signature": "(0..n).to_list()"
     },
     {
-     "doc": "端を含めて n 等分した Number の List",
+     "doc": "両端を含めて n 等分した値の List (要素は n + 1 個)",
      "name": "steps",
-     "signature": "(0..=1).steps(n)"
+     "returns": "List<Number>",
+     "signature": "(0..=1).steps(n: Number)"
     }
    ],
    "name": "Range",
@@ -123,67 +134,80 @@
     {
      "doc": "要素数",
      "name": "len",
+     "returns": "Number",
      "signature": "xs.len()"
     },
     {
-     "doc": "末尾に追加 (その List を変える)",
+     "doc": "末尾に追加する。その List 自身が変わる",
      "name": "push",
-     "signature": "xs.push(値)"
+     "returns": "Nothing",
+     "signature": "xs.push(値: T)"
     },
     {
-     "doc": "(番号, 要素) の List。for (i, x) in xs.enumerate() で使う",
+     "doc": "番号と要素の組。for (i, x) in xs.enumerate() で使う",
      "name": "enumerate",
+     "returns": "List<(Number, T)>",
      "signature": "xs.enumerate()"
     },
     {
-     "doc": "逆順の List",
+     "doc": "逆順にした新しい List",
      "name": "reverse",
+     "returns": "List<T>",
      "signature": "xs.reverse()"
     },
     {
-     "doc": "含むか",
+     "doc": "その値を含むか",
      "name": "contains",
-     "signature": "xs.contains(値)"
+     "returns": "Bool",
+     "signature": "xs.contains(値: T)"
     },
     {
-     "doc": "最初の位置。無ければ -1",
+     "doc": "最初に現れる位置。無ければ -1",
      "name": "index_of",
-     "signature": "xs.index_of(値)"
+     "returns": "Number",
+     "signature": "xs.index_of(値: T)"
     },
     {
      "doc": "Number の合計",
      "name": "sum",
+     "returns": "Number",
      "signature": "xs.sum()"
     },
     {
-     "doc": "文字列にして sep でつなぐ",
+     "doc": "各要素を文字列にして sep でつなぐ",
      "name": "join",
-     "signature": "xs.join(sep)"
+     "returns": "String",
+     "signature": "xs.join(sep: String)"
     },
     {
-     "doc": "各要素に関数を当てた List",
+     "doc": "各要素に f を通した結果の List",
      "name": "map",
-     "signature": "xs.map(func (x) { ... })"
+     "returns": "List<U>",
+     "signature": "xs.map(f: Func<T -> U>)"
     },
     {
-     "doc": "条件に合う要素だけの List",
+     "doc": "f が true を返した要素だけの List",
      "name": "filter",
-     "signature": "xs.filter(func (x) { ... })"
+     "returns": "List<T>",
+     "signature": "xs.filter(f: Func<T -> Bool>)"
     },
     {
-     "doc": "畳み込み",
+     "doc": "初期値から順に f を通して 1 つの値にする",
      "name": "reduce",
-     "signature": "xs.reduce(初期値, func (acc, x) { ... })"
+     "returns": "U",
+     "signature": "xs.reduce(初期値: U, f: Func<U, T -> U>)"
     },
     {
-     "doc": "昇順に並べた List (Number か Duration)",
+     "doc": "昇順に並べた新しい List (要素は Number か Duration)",
      "name": "sort",
+     "returns": "List<T>",
      "signature": "xs.sort()"
     },
     {
-     "doc": "(x, y) の List",
+     "doc": "同じ位置どうしを組にする。短い方に合わせる",
      "name": "zip",
-     "signature": "xs.zip(ys)"
+     "returns": "List<(T, U)>",
+     "signature": "xs.zip(ys: List<U>)"
     }
    ],
    "name": "List",
@@ -197,21 +221,25 @@
     {
      "doc": "キーの List",
      "name": "keys",
+     "returns": "List<String>",
      "signature": "d.keys()"
     },
     {
      "doc": "値の List",
      "name": "values",
+     "returns": "List<T>",
      "signature": "d.values()"
     },
     {
-     "doc": "キーがあるか",
+     "doc": "そのキーがあるか",
      "name": "has",
-     "signature": "d.has(key)"
+     "returns": "Bool",
+     "signature": "d.has(key: String)"
     },
     {
      "doc": "要素数",
      "name": "len",
+     "returns": "Number",
      "signature": "d.len()"
     }
    ],
@@ -226,11 +254,13 @@
     {
      "doc": "x 成分",
      "name": "x",
+     "returns": "Number",
      "signature": "v.x"
     },
     {
      "doc": "y 成分",
      "name": "y",
+     "returns": "Number",
      "signature": "v.y"
     }
    ],
@@ -243,23 +273,27 @@
    "make": "apos!(:center, x, y)",
    "methods": [
     {
-     "doc": "基準点 (Symbol)",
+     "doc": "基準点 (:center など)",
      "name": "anchor",
+     "returns": "Symbol",
      "signature": "p.anchor"
     },
     {
-     "doc": "座標 (Vector)",
+     "doc": "座標",
      "name": "vector",
+     "returns": "Vector",
      "signature": "p.vector"
     },
     {
-     "doc": "x 成分。書き換えも可",
+     "doc": "x 成分。代入もできる",
      "name": "x",
+     "returns": "Number",
      "signature": "p.x"
     },
     {
-     "doc": "y 成分。書き換えも可",
+     "doc": "y 成分。代入もできる",
      "name": "y",
+     "returns": "Number",
      "signature": "p.y"
     }
    ],
@@ -292,20 +326,27 @@
      "doc": "中身をまとめて 1 枚として掛ける不透明度",
      "name": "opacity",
      "type": "Number"
+    },
+    {
+     "doc": "中身をまとめて 1 枚にしてから、下の絵と重ねるときの重ね方",
+     "name": "blend",
+     "type": "Blend"
     }
    ],
    "doc": "座標系を持つ入れ物。中に図形や View を place し、addTrack で Timeline を付ける。output した View が動画になる",
    "make": "new View { box: (16, 9) }",
    "methods": [
     {
-     "doc": "図形を置く。View を置くときは位置と大きさ (w か h の片方なら比率を保つ)",
+     "doc": "箱の中に置く。View を置くときは at と大きさを渡す (w か h の片方だけなら比率を保つ)",
      "name": "place",
-     "signature": "v.place(shape) / v.place(view, at:, w:, h:)"
+     "returns": "Nothing",
+     "signature": "v.place(o: Placeable, at: AnchoredPosition, w: Number, h: Number)"
     },
     {
-     "doc": "Timeline を付ける。output する View に付けたものが動画になる",
+     "doc": "この View の動きとして Timeline を付ける。output する View に付けたものが動画になる",
      "name": "addTrack",
-     "signature": "v.addTrack(timeline)"
+     "returns": "Nothing",
+     "signature": "v.addTrack(tl: Timeline)"
     }
    ],
    "name": "View",
@@ -319,22 +360,25 @@
      "type": "Duration"
     }
    ],
-   "doc": "何を、いつ動かすか。motion を対象に当てたもの、別の Timeline、Audio、Subtitle を place で時刻に置く",
-   "make": "new Timeline {}  context o as x { motion (t) { ... } }",
+   "doc": "どの対象のどの属性が、いつ、どの値になるかの並び。行に属性への代入を書いた motion がこれになる。別の Timeline、Audio、Subtitle も place で時刻に置ける",
+   "make": "new Timeline {}  motion (t) { 0s: c.radius = 1  2s: c.radius = 3 }",
    "methods": [
     {
-     "doc": "Timeline / View / Audio / Subtitle を時刻に置く。duration volume loop は Audio だけ",
+     "doc": "at の時刻に置く。duration volume loop は Audio だけ",
      "name": "place",
-     "signature": "tl.place(x, at:, fadeIn:, fadeOut:, duration:, volume:, loop:)"
+     "returns": "Nothing",
+     "signature": "tl.place(x: Timeline | View | Audio | Subtitle, at: Duration, fadeIn: Duration, fadeOut: Duration, duration: Duration, volume: Number, loop: Bool)"
     },
     {
-     "doc": "逆再生の Timeline",
+     "doc": "時間を逆にした Timeline",
      "name": "reverse",
+     "returns": "Timeline",
      "signature": "tl.reverse()"
     },
     {
      "doc": "全体の長さ。0..1 で書いた表はこれに合わせて伸縮する",
      "name": "duration",
+     "returns": "Duration",
      "signature": "tl.duration = 8s"
     }
    ],
@@ -343,22 +387,25 @@
   },
   {
    "attrs": [],
-   "doc": "時刻と値の表。対象を持たないので、apply か context で対象に当てて Timeline にする",
+   "doc": "時刻と値の表。どの対象のどの属性に入れるかは持たない。apply がそれを決めて Timeline にする",
    "make": "motion (t) { 0s: 1  2s: 3 }",
    "methods": [
     {
-     "doc": "対象に当てて Timeline にする",
+     "doc": "表の行ごとに f を呼び、そこで target の属性に代入された値を、その時刻の値とする Timeline を返す",
      "name": "apply",
-     "signature": "m.apply(target, func (target, t, [cols]) { ... })"
+     "returns": "Timeline",
+     "signature": "m.apply(target: Placeable, f: Func<Placeable, Duration, List -> Nothing>)"
     },
     {
-     "doc": "逆再生の Motion",
+     "doc": "時間を逆にした Motion",
      "name": "reverse",
+     "returns": "Motion",
      "signature": "m.reverse()"
     },
     {
-     "doc": "全体の長さ。0..1 で書いた表はこれに合わせて伸縮する",
+     "doc": "全体の長さを決める。0..1 で書いた表はこれに合わせて伸縮する。代入だけで、読み出しはできない",
      "name": "duration",
+     "returns": "",
      "signature": "m.duration = 8s"
     }
    ],
@@ -379,7 +426,7 @@
     }
    ],
    "doc": "字幕。画面には描かず、Timeline に置くと動画の字幕トラックになる",
-   "make": "new Subtitle { text:, duration: }",
+   "make": "new Subtitle { text: \"ここに字幕\", duration: 2s }",
    "methods": [],
    "name": "Subtitle",
    "union": ""
@@ -390,17 +437,83 @@
    "make": "import \"bgm.m4a\" as bgm",
    "methods": [
     {
-     "doc": "ファイルの長さ (Duration)",
+     "doc": "ファイルの長さ",
      "name": "duration",
+     "returns": "Duration",
      "signature": "bgm.duration"
     },
     {
      "doc": "import に書いたパス",
      "name": "file",
+     "returns": "String",
      "signature": "bgm.file"
     }
    ],
    "name": "Audio",
+   "union": ""
+  },
+  {
+   "attrs": [],
+   "doc": "位置がものの どこ を指すか。apos! に渡す",
+   "make": ":center :topLeft :topRight :bottomLeft :bottomRight :top :bottom :left :right",
+   "methods": [],
+   "name": "Anchor",
+   "union": ""
+  },
+  {
+   "attrs": [],
+   "doc": "TextArea の行の寄せ方",
+   "make": ":left :center :right",
+   "methods": [],
+   "name": "Align",
+   "union": ""
+  },
+  {
+   "attrs": [],
+   "doc": "motion の行末に書く、値の変わり方",
+   "make": ":linear :ease_in :ease_out :ease",
+   "methods": [],
+   "name": "Ease",
+   "union": ""
+  },
+  {
+   "attrs": [],
+   "doc": "motion の行末に書く効果",
+   "make": ":fade",
+   "methods": [],
+   "name": "Effect",
+   "union": ""
+  },
+  {
+   "attrs": [],
+   "doc": "線の端の形",
+   "make": ":butt :round :square",
+   "methods": [],
+   "name": "StrokeCap",
+   "union": ""
+  },
+  {
+   "attrs": [],
+   "doc": "線の角の形",
+   "make": ":miter :round :bevel",
+   "methods": [],
+   "name": "StrokeJoin",
+   "union": ""
+  },
+  {
+   "attrs": [],
+   "doc": "下の絵との重ね方",
+   "make": ":normal :multiply :screen :overlay :darken :lighten :difference :add",
+   "methods": [],
+   "name": "Blend",
+   "union": ""
+  },
+  {
+   "attrs": [],
+   "doc": "Gradient の広がり方",
+   "make": ":linear :radial :sweep",
+   "methods": [],
+   "name": "GradientKind",
    "union": ""
   },
   {
@@ -411,12 +524,14 @@
     {
      "doc": "そのファイルが output した View",
      "name": "output",
+     "returns": "View",
      "signature": "mod.output"
     },
     {
-     "doc": "そのファイルが export した名前",
-     "name": "name",
-     "signature": "mod.name"
+     "doc": "そのモジュールが export した値。名前の数だけ読める",
+     "name": "export",
+     "returns": "その値の型",
+     "signature": "mod.<export した名前>"
     }
    ],
    "name": "Module",
@@ -450,15 +565,119 @@
      "type": "Number"
     },
     {
+     "doc": "線の端の形。:butt (既定) :round :square",
+     "name": "strokeCap",
+     "type": "StrokeCap"
+    },
+    {
+     "doc": "線の角の形。:miter (既定) :round :bevel",
+     "name": "strokeJoin",
+     "type": "StrokeJoin"
+    },
+    {
+     "doc": "破線。線と間の長さを順に並べた Number の List (例 [0.6, 0.4])",
+     "name": "dash",
+     "type": "List"
+    },
+    {
+     "doc": "破線の始まりをずらす長さ。motion で動かすと破線が流れる",
+     "name": "dashOffset",
+     "type": "Number"
+    },
+    {
      "doc": "不透明度 0..1",
      "name": "opacity",
      "type": "Number"
+    },
+    {
+     "doc": "時計回りの回転 (度)。中心は position。Line は from、Polygon と Path は囲む四角形の中心",
+     "name": "rotation",
+     "type": "Number"
+    },
+    {
+     "doc": "下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add",
+     "name": "blend",
+     "type": "Blend"
     }
    ],
    "doc": "position を中心に、radius の半径で描く円",
-   "make": "new Circle { position:, radius:, fill: }",
+   "make": "new Circle { position: apos!(:center, 8, 4.5), radius: 1, fill: #4080e0 }",
    "methods": [],
    "name": "Circle",
+   "union": "Shape"
+  },
+  {
+   "attrs": [
+    {
+     "doc": "基準点付きの位置 (apos!)",
+     "name": "position",
+     "type": "AnchoredPosition"
+    },
+    {
+     "doc": "横の半径",
+     "name": "rx",
+     "type": "Number"
+    },
+    {
+     "doc": "縦の半径",
+     "name": "ry",
+     "type": "Number"
+    },
+    {
+     "doc": "塗り。Color か Shader",
+     "name": "fill",
+     "type": "Paint"
+    },
+    {
+     "doc": "線の色",
+     "name": "stroke",
+     "type": "Color"
+    },
+    {
+     "doc": "線の太さ (箱の座標の単位)",
+     "name": "strokeWidth",
+     "type": "Number"
+    },
+    {
+     "doc": "線の端の形。:butt (既定) :round :square",
+     "name": "strokeCap",
+     "type": "StrokeCap"
+    },
+    {
+     "doc": "線の角の形。:miter (既定) :round :bevel",
+     "name": "strokeJoin",
+     "type": "StrokeJoin"
+    },
+    {
+     "doc": "破線。線と間の長さを順に並べた Number の List (例 [0.6, 0.4])",
+     "name": "dash",
+     "type": "List"
+    },
+    {
+     "doc": "破線の始まりをずらす長さ。motion で動かすと破線が流れる",
+     "name": "dashOffset",
+     "type": "Number"
+    },
+    {
+     "doc": "不透明度 0..1",
+     "name": "opacity",
+     "type": "Number"
+    },
+    {
+     "doc": "時計回りの回転 (度)。中心は position。Line は from、Polygon と Path は囲む四角形の中心",
+     "name": "rotation",
+     "type": "Number"
+    },
+    {
+     "doc": "下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add",
+     "name": "blend",
+     "type": "Blend"
+    }
+   ],
+   "doc": "楕円。rx が横の半径、ry が縦の半径",
+   "make": "new Ellipse { position: apos!(:center, 8, 4.5), rx: 3, ry: 1.4, fill: #4080e0 }",
+   "methods": [],
+   "name": "Ellipse",
    "union": "Shape"
   },
   {
@@ -499,13 +718,43 @@
      "type": "Number"
     },
     {
+     "doc": "線の端の形。:butt (既定) :round :square",
+     "name": "strokeCap",
+     "type": "StrokeCap"
+    },
+    {
+     "doc": "線の角の形。:miter (既定) :round :bevel",
+     "name": "strokeJoin",
+     "type": "StrokeJoin"
+    },
+    {
+     "doc": "破線。線と間の長さを順に並べた Number の List (例 [0.6, 0.4])",
+     "name": "dash",
+     "type": "List"
+    },
+    {
+     "doc": "破線の始まりをずらす長さ。motion で動かすと破線が流れる",
+     "name": "dashOffset",
+     "type": "Number"
+    },
+    {
      "doc": "不透明度 0..1",
      "name": "opacity",
      "type": "Number"
+    },
+    {
+     "doc": "時計回りの回転 (度)。中心は position。Line は from、Polygon と Path は囲む四角形の中心",
+     "name": "rotation",
+     "type": "Number"
+    },
+    {
+     "doc": "下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add",
+     "name": "blend",
+     "type": "Blend"
     }
    ],
    "doc": "幅 w、高さ h の四角形。radius を付けると角が丸くなる",
-   "make": "new Rect { position:, w:, h:, fill: }",
+   "make": "new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 9, fill: #f5f4f0 }",
    "methods": [],
    "name": "Rect",
    "union": "Shape"
@@ -538,13 +787,43 @@
      "type": "Number"
     },
     {
+     "doc": "線の端の形。:butt (既定) :round :square",
+     "name": "strokeCap",
+     "type": "StrokeCap"
+    },
+    {
+     "doc": "線の角の形。:miter (既定) :round :bevel",
+     "name": "strokeJoin",
+     "type": "StrokeJoin"
+    },
+    {
+     "doc": "破線。線と間の長さを順に並べた Number の List (例 [0.6, 0.4])",
+     "name": "dash",
+     "type": "List"
+    },
+    {
+     "doc": "破線の始まりをずらす長さ。motion で動かすと破線が流れる",
+     "name": "dashOffset",
+     "type": "Number"
+    },
+    {
      "doc": "不透明度 0..1",
      "name": "opacity",
      "type": "Number"
+    },
+    {
+     "doc": "時計回りの回転 (度)。中心は position。Line は from、Polygon と Path は囲む四角形の中心",
+     "name": "rotation",
+     "type": "Number"
+    },
+    {
+     "doc": "下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add",
+     "name": "blend",
+     "type": "Blend"
     }
    ],
    "doc": "from から to へ引く 1 本の線。太さは strokeWidth、色は stroke",
-   "make": "new Line { from:, to:, stroke:, strokeWidth: }",
+   "make": "new Line { from: (0, 0), to: (4, 3), stroke: #303030, strokeWidth: 0.1 }",
    "methods": [],
    "name": "Line",
    "union": "Shape"
@@ -572,15 +851,119 @@
      "type": "Number"
     },
     {
+     "doc": "線の端の形。:butt (既定) :round :square",
+     "name": "strokeCap",
+     "type": "StrokeCap"
+    },
+    {
+     "doc": "線の角の形。:miter (既定) :round :bevel",
+     "name": "strokeJoin",
+     "type": "StrokeJoin"
+    },
+    {
+     "doc": "破線。線と間の長さを順に並べた Number の List (例 [0.6, 0.4])",
+     "name": "dash",
+     "type": "List"
+    },
+    {
+     "doc": "破線の始まりをずらす長さ。motion で動かすと破線が流れる",
+     "name": "dashOffset",
+     "type": "Number"
+    },
+    {
      "doc": "不透明度 0..1",
      "name": "opacity",
      "type": "Number"
+    },
+    {
+     "doc": "時計回りの回転 (度)。中心は position。Line は from、Polygon と Path は囲む四角形の中心",
+     "name": "rotation",
+     "type": "Number"
+    },
+    {
+     "doc": "下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add",
+     "name": "blend",
+     "type": "Blend"
     }
    ],
    "doc": "points の頂点を順に結んで閉じた図形。points は Vector の List",
-   "make": "new Polygon { points:, fill: }",
+   "make": "new Polygon { points: [(0, 0), (2, 0), (1, 2)], fill: #3f9b6d }",
    "methods": [],
    "name": "Polygon",
+   "union": "Shape"
+  },
+  {
+   "attrs": [
+    {
+     "doc": "始点",
+     "name": "from",
+     "type": "Vector"
+    },
+    {
+     "doc": "(:move | :line | :quad | :curve, 点...) の List。:quad は制御点 1 つ、:curve は 2 つを先に書く",
+     "name": "segments",
+     "type": "List"
+    },
+    {
+     "doc": "true なら始点に戻って閉じる (既定は false)",
+     "name": "closed",
+     "type": "Bool"
+    },
+    {
+     "doc": "塗り。Color か Shader",
+     "name": "fill",
+     "type": "Paint"
+    },
+    {
+     "doc": "線の色",
+     "name": "stroke",
+     "type": "Color"
+    },
+    {
+     "doc": "線の太さ (箱の座標の単位)",
+     "name": "strokeWidth",
+     "type": "Number"
+    },
+    {
+     "doc": "線の端の形。:butt (既定) :round :square",
+     "name": "strokeCap",
+     "type": "StrokeCap"
+    },
+    {
+     "doc": "線の角の形。:miter (既定) :round :bevel",
+     "name": "strokeJoin",
+     "type": "StrokeJoin"
+    },
+    {
+     "doc": "破線。線と間の長さを順に並べた Number の List (例 [0.6, 0.4])",
+     "name": "dash",
+     "type": "List"
+    },
+    {
+     "doc": "破線の始まりをずらす長さ。motion で動かすと破線が流れる",
+     "name": "dashOffset",
+     "type": "Number"
+    },
+    {
+     "doc": "不透明度 0..1",
+     "name": "opacity",
+     "type": "Number"
+    },
+    {
+     "doc": "時計回りの回転 (度)。中心は position。Line は from、Polygon と Path は囲む四角形の中心",
+     "name": "rotation",
+     "type": "Number"
+    },
+    {
+     "doc": "下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add",
+     "name": "blend",
+     "type": "Blend"
+    }
+   ],
+   "doc": "曲線も引ける形。from から始まり、segments の (:move | :line | :quad | :curve, 点...) を順にたどる。closed: true で始点に戻って閉じる",
+   "make": "new Path { from: (0, 0), segments: [(:line, (2, 0)), (:curve, (3, 1), (3, 2), (2, 3))], closed: true }",
+   "methods": [],
+   "name": "Path",
    "union": "Shape"
   },
   {
@@ -613,7 +996,7 @@
     {
      "doc": ":left :center :right",
      "name": "align",
-     "type": "Symbol"
+     "type": "Align"
     },
     {
      "doc": "塗り。Color か Shader",
@@ -631,13 +1014,43 @@
      "type": "Number"
     },
     {
+     "doc": "線の端の形。:butt (既定) :round :square",
+     "name": "strokeCap",
+     "type": "StrokeCap"
+    },
+    {
+     "doc": "線の角の形。:miter (既定) :round :bevel",
+     "name": "strokeJoin",
+     "type": "StrokeJoin"
+    },
+    {
+     "doc": "破線。線と間の長さを順に並べた Number の List (例 [0.6, 0.4])",
+     "name": "dash",
+     "type": "List"
+    },
+    {
+     "doc": "破線の始まりをずらす長さ。motion で動かすと破線が流れる",
+     "name": "dashOffset",
+     "type": "Number"
+    },
+    {
      "doc": "不透明度 0..1",
      "name": "opacity",
      "type": "Number"
+    },
+    {
+     "doc": "時計回りの回転 (度)。中心は position。Line は from、Polygon と Path は囲む四角形の中心",
+     "name": "rotation",
+     "type": "Number"
+    },
+    {
+     "doc": "下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add",
+     "name": "blend",
+     "type": "Blend"
     }
    ],
    "doc": "text を描く。w を付けるとその幅で折り返し、align で行の寄せ方を決める",
-   "make": "new TextArea { text:, position:, fontSize:, fill: }",
+   "make": "new TextArea { text: \"hello\", position: apos!(:center, 8, 4.5), fontSize: 1, fill: #303030 }",
    "methods": [],
    "name": "TextArea",
    "union": "Shape"
@@ -650,15 +1063,51 @@
     {
      "doc": "成分 0..255",
      "name": "r",
+     "returns": "Number",
      "signature": "c.r / c.g / c.b"
     },
     {
      "doc": "不透明度 0..1",
      "name": "a",
+     "returns": "Number",
      "signature": "c.a"
     }
    ],
    "name": "Color",
+   "union": "Paint"
+  },
+  {
+   "attrs": [
+    {
+     "doc": ":linear (既定) :radial :sweep",
+     "name": "kind",
+     "type": "GradientKind"
+    },
+    {
+     "doc": ":linear の始点、:radial と :sweep の中心 (箱の座標)",
+     "name": "from",
+     "type": "Vector"
+    },
+    {
+     "doc": ":linear の終点",
+     "name": "to",
+     "type": "Vector"
+    },
+    {
+     "doc": ":radial の半径",
+     "name": "radius",
+     "type": "Number"
+    },
+    {
+     "doc": "Color の List。等間隔に並ぶ。2 つ以上",
+     "name": "stops",
+     "type": "List"
+    }
+   ],
+   "doc": "色が連続して変わる塗り。stops は等間隔に並ぶ。kind が :linear なら from から to へ、:radial なら from を中心に radius まで、:sweep なら from のまわりを 1 周する",
+   "make": "new Gradient { from: (0, 0), to: (16, 9), stops: [#4080e0, #e0604a] }",
+   "methods": [],
+   "name": "Gradient",
    "union": "Paint"
   },
   {
@@ -680,7 +1129,7 @@
     }
    ],
    "doc": "位置 (x, y) と時刻 t から、そのピクセルの色を返す関数。図形の fill に入れると GPU で走る",
-   "make": "new Shader { color: func (x, y, t) { ... } }",
+   "make": "new Shader { color: func (x, y, t) { rgb!(x * 16, 0, 128) } }",
    "methods": [],
    "name": "Shader",
    "union": "Paint"
@@ -694,72 +1143,86 @@
     {
      "doc": "円周率",
      "name": "PI",
+     "returns": "Number",
      "signature": "math.PI"
     },
     {
      "doc": "2π",
      "name": "TAU",
+     "returns": "Number",
      "signature": "math.TAU"
     },
     {
      "doc": "自然対数の底",
      "name": "E",
+     "returns": "Number",
      "signature": "math.E"
     },
     {
      "doc": "正弦 (ラジアン)",
      "name": "sin",
-     "signature": "math.sin(x)"
+     "returns": "Number",
+     "signature": "math.sin(x: Number)"
     },
     {
      "doc": "余弦 (ラジアン)",
      "name": "cos",
-     "signature": "math.cos(x)"
+     "returns": "Number",
+     "signature": "math.cos(x: Number)"
     },
     {
      "doc": "切り捨て",
      "name": "floor",
-     "signature": "math.floor(x)"
+     "returns": "Number",
+     "signature": "math.floor(x: Number)"
     },
     {
      "doc": "切り上げ",
      "name": "ceil",
-     "signature": "math.ceil(x)"
+     "returns": "Number",
+     "signature": "math.ceil(x: Number)"
     },
     {
      "doc": "絶対値",
      "name": "abs",
-     "signature": "math.abs(x)"
+     "returns": "Number",
+     "signature": "math.abs(x: Number)"
     },
     {
      "doc": "平方根",
      "name": "sqrt",
-     "signature": "math.sqrt(x)"
+     "returns": "Number",
+     "signature": "math.sqrt(x: Number)"
     },
     {
      "doc": "自然対数",
      "name": "ln",
-     "signature": "math.ln(x)"
+     "returns": "Number",
+     "signature": "math.ln(x: Number)"
     },
     {
      "doc": "e の x 乗",
      "name": "exp",
-     "signature": "math.exp(x)"
+     "returns": "Number",
+     "signature": "math.exp(x: Number)"
     },
     {
      "doc": "(x, y) の角度 (ラジアン)",
      "name": "atan2",
-     "signature": "math.atan2(y, x)"
+     "returns": "Number",
+     "signature": "math.atan2(y: Number, x: Number)"
     },
     {
      "doc": "最大",
      "name": "max",
-     "signature": "math.max(a, b, ...)"
+     "returns": "Number",
+     "signature": "math.max(a: Number, b: Number, ...)"
     },
     {
      "doc": "最小",
      "name": "min",
-     "signature": "math.min(a, b, ...)"
+     "returns": "Number",
+     "signature": "math.min(a: Number, b: Number, ...)"
     }
    ],
    "items": []
@@ -772,108 +1235,164 @@
     {
      "name": "mix",
      "category": "混ぜる",
+     "isFunc": true,
      "signature": "mix(a, b, k)",
+     "call": "mix(a, b, k)",
      "summary": "2 色を混ぜる。k が 0 なら a、1 なら b",
      "params": [
-      [
-       "a",
-       "Color"
-      ],
-      [
-       "b",
-       "Color"
-      ],
-      [
-       "k",
-       "0..1"
-      ]
+      {
+       "name": "a",
+       "type": "Color",
+       "doc": "k が 0 のときの色",
+       "default": ""
+      },
+      {
+       "name": "b",
+       "type": "Color",
+       "doc": "k が 1 のときの色",
+       "default": ""
+      },
+      {
+       "name": "k",
+       "type": "Number",
+       "doc": "混ぜる割合 0..1",
+       "default": ""
+      }
      ],
-     "returns": "Color"
+     "returns": {
+      "type": "Color",
+      "doc": ""
+     }
     },
     {
      "name": "lighten",
      "category": "混ぜる",
+     "isFunc": true,
      "signature": "lighten(c, k)",
+     "call": "lighten(c, k)",
      "summary": "白に近づける。k が 1 なら白",
      "params": [
-      [
-       "c",
-       "Color"
-      ],
-      [
-       "k",
-       "0..1"
-      ]
+      {
+       "name": "c",
+       "type": "Color",
+       "doc": "元の色",
+       "default": ""
+      },
+      {
+       "name": "k",
+       "type": "Number",
+       "doc": "白に寄せる割合 0..1",
+       "default": ""
+      }
      ],
-     "returns": "Color (不透明度は c のまま)"
+     "returns": {
+      "type": "Color",
+      "doc": "不透明度は c のまま"
+     }
     },
     {
      "name": "darken",
      "category": "混ぜる",
+     "isFunc": true,
      "signature": "darken(c, k)",
+     "call": "darken(c, k)",
      "summary": "黒に近づける。k が 1 なら黒",
      "params": [
-      [
-       "c",
-       "Color"
-      ],
-      [
-       "k",
-       "0..1"
-      ]
+      {
+       "name": "c",
+       "type": "Color",
+       "doc": "元の色",
+       "default": ""
+      },
+      {
+       "name": "k",
+       "type": "Number",
+       "doc": "黒に寄せる割合 0..1",
+       "default": ""
+      }
      ],
-     "returns": "Color (不透明度は c のまま)"
+     "returns": {
+      "type": "Color",
+      "doc": "不透明度は c のまま"
+     }
     },
     {
      "name": "alpha",
      "category": "作る",
+     "isFunc": true,
      "signature": "alpha(c, a)",
+     "call": "alpha(c, a)",
      "summary": "不透明度だけ変えた色",
      "params": [
-      [
-       "c",
-       "Color"
-      ],
-      [
-       "a",
-       "0..1"
-      ]
+      {
+       "name": "c",
+       "type": "Color",
+       "doc": "元の色",
+       "default": ""
+      },
+      {
+       "name": "a",
+       "type": "Number",
+       "doc": "不透明度 0..1",
+       "default": ""
+      }
      ],
-     "returns": "Color"
+     "returns": {
+      "type": "Color",
+      "doc": ""
+     }
     },
     {
      "name": "hsl",
      "category": "作る",
+     "isFunc": true,
      "signature": "hsl(h, s, l)",
+     "call": "hsl(h, s, l)",
      "summary": "色相・彩度・明度から作る",
      "params": [
-      [
-       "h",
-       "色相 0..360 (0 が赤、120 が緑、240 が青)"
-      ],
-      [
-       "s",
-       "彩度 0..1"
-      ],
-      [
-       "l",
-       "明度 0..1"
-      ]
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "色相 0..360 (0 が赤、120 が緑、240 が青)",
+       "default": ""
+      },
+      {
+       "name": "s",
+       "type": "Number",
+       "doc": "彩度 0..1",
+       "default": ""
+      },
+      {
+       "name": "l",
+       "type": "Number",
+       "doc": "明度 0..1",
+       "default": ""
+      }
      ],
-     "returns": "Color"
+     "returns": {
+      "type": "Color",
+      "doc": ""
+     }
     },
     {
      "name": "gray",
      "category": "作る",
+     "isFunc": true,
      "signature": "gray(v)",
+     "call": "gray(v)",
      "summary": "灰色。0 が黒、255 が白",
      "params": [
-      [
-       "v",
-       "0..255"
-      ]
+      {
+       "name": "v",
+       "type": "Number",
+       "doc": "明るさ 0..255",
+       "default": ""
+      }
      ],
-     "returns": "Color"
+     "returns": {
+      "type": "Color",
+      "doc": ""
+     }
     }
    ]
   },
@@ -883,95 +1402,180 @@
    "entries": [],
    "items": [
     {
+     "name": "polar",
+     "category": "位置",
+     "isFunc": true,
+     "signature": "polar(cx, cy, r, degrees)",
+     "call": "polar(cx, cy, r, degrees)",
+     "summary": "中心から距離 r、角度 degrees の点。0 が真上で、時計回り",
+     "params": [
+      {
+       "name": "cx",
+       "type": "Number",
+       "doc": "中心の x",
+       "default": ""
+      },
+      {
+       "name": "cy",
+       "type": "Number",
+       "doc": "中心の y",
+       "default": ""
+      },
+      {
+       "name": "r",
+       "type": "Number",
+       "doc": "中心からの距離",
+       "default": ""
+      },
+      {
+       "name": "degrees",
+       "type": "Number",
+       "doc": "角度 (度)",
+       "default": ""
+      }
+     ],
+     "returns": {
+      "type": "Vector",
+      "doc": ""
+     }
+    },
+    {
      "name": "regular_polygon",
      "category": "多角形",
+     "isFunc": true,
      "signature": "regular_polygon(cx, cy, r, n, rotation = 0)",
+     "call": "regular_polygon(cx, cy, r, n, rotation = 0)",
      "summary": "正多角形の頂点",
      "params": [
-      [
-       "cx",
-       "中心の x"
-      ],
-      [
-       "cy",
-       "中心の y"
-      ],
-      [
-       "r",
-       "中心から頂点までの距離"
-      ],
-      [
-       "n",
-       "頂点の数 (3 以上)"
-      ],
-      [
-       "rotation",
-       "回転 (度。既定 0 で最初の頂点が真上)"
-      ]
+      {
+       "name": "cx",
+       "type": "Number",
+       "doc": "中心の x",
+       "default": ""
+      },
+      {
+       "name": "cy",
+       "type": "Number",
+       "doc": "中心の y",
+       "default": ""
+      },
+      {
+       "name": "r",
+       "type": "Number",
+       "doc": "中心から頂点までの距離",
+       "default": ""
+      },
+      {
+       "name": "n",
+       "type": "Number",
+       "doc": "頂点の数 (3 以上)",
+       "default": ""
+      },
+      {
+       "name": "rotation",
+       "type": "Number",
+       "doc": "時計回りの回転 (度。既定 0 で最初の頂点が真上)",
+       "default": "0"
+      }
      ],
-     "returns": "Vector の List。new Polygon { points: ... } に入れる"
+     "returns": {
+      "type": "List<Vector>",
+      "doc": "new Polygon { points: ... } に入れる"
+     }
     },
     {
      "name": "star",
      "category": "多角形",
+     "isFunc": true,
      "signature": "star(cx, cy, outer, inner, n = 5, rotation = 0)",
+     "call": "star(cx, cy, outer, inner, n = 5, rotation = 0)",
      "summary": "星の頂点。外側と内側の半径を交互に",
      "params": [
-      [
-       "cx",
-       "中心の x"
-      ],
-      [
-       "cy",
-       "中心の y"
-      ],
-      [
-       "outer",
-       "外側の半径 (とがった先)"
-      ],
-      [
-       "inner",
-       "内側の半径 (くぼみ)"
-      ],
-      [
-       "n",
-       "とがった先の数 (既定 5)"
-      ],
-      [
-       "rotation",
-       "回転 (度。既定 0 で最初の先が真上)"
-      ]
+      {
+       "name": "cx",
+       "type": "Number",
+       "doc": "中心の x",
+       "default": ""
+      },
+      {
+       "name": "cy",
+       "type": "Number",
+       "doc": "中心の y",
+       "default": ""
+      },
+      {
+       "name": "outer",
+       "type": "Number",
+       "doc": "外側の半径 (とがった先)",
+       "default": ""
+      },
+      {
+       "name": "inner",
+       "type": "Number",
+       "doc": "内側の半径 (くぼみ)",
+       "default": ""
+      },
+      {
+       "name": "n",
+       "type": "Number",
+       "doc": "とがった先の数 (既定 5)",
+       "default": "5"
+      },
+      {
+       "name": "rotation",
+       "type": "Number",
+       "doc": "時計回りの回転 (度。既定 0 で最初の先が真上)",
+       "default": "0"
+      }
      ],
-     "returns": "Vector の List"
+     "returns": {
+      "type": "List<Vector>",
+      "doc": ""
+     }
     },
     {
      "name": "arrow",
      "category": "矢印",
+     "isFunc": true,
      "signature": "arrow(from, to, width, head, head_width = 0)",
+     "call": "arrow(from, to, width, head, head_width = 0)",
      "summary": "矢印の輪郭 (7 点)。from から to へ向く",
      "params": [
-      [
-       "from",
-       "始点 (Vector)"
-      ],
-      [
-       "to",
-       "終点 (Vector。矢じりの先)"
-      ],
-      [
-       "width",
-       "軸の太さ"
-      ],
-      [
-       "head",
-       "矢じりの長さ"
-      ],
-      [
-       "head_width",
-       "矢じりの幅 (既定は width の 3 倍)"
-      ]
+      {
+       "name": "from",
+       "type": "Vector",
+       "doc": "始点 (Vector)",
+       "default": ""
+      },
+      {
+       "name": "to",
+       "type": "Vector",
+       "doc": "終点 (Vector。矢じりの先)",
+       "default": ""
+      },
+      {
+       "name": "width",
+       "type": "Number",
+       "doc": "軸の太さ",
+       "default": ""
+      },
+      {
+       "name": "head",
+       "type": "Number",
+       "doc": "矢じりの長さ",
+       "default": ""
+      },
+      {
+       "name": "head_width",
+       "type": "Number",
+       "doc": "矢じりの幅 (既定は width の 3 倍)",
+       "default": "0"
+      }
      ],
-     "returns": "Vector の List"
+     "returns": {
+      "type": "List<Vector>",
+      "doc": ""
+     }
     }
    ]
   },
@@ -983,106 +1587,160 @@
     {
      "name": "grid",
      "category": "並べる",
+     "isFunc": true,
      "signature": "grid(x, y, w, h, cols, rows)",
+     "call": "grid(x, y, w, h, cols, rows)",
      "summary": "格子の各マスの中心。左上 (x, y) から幅 w、高さ h を cols 列 rows 行に分け、左上から行ごとに",
      "params": [
-      [
-       "x",
-       "左上の x"
-      ],
-      [
-       "y",
-       "左上の y"
-      ],
-      [
-       "w",
-       "全体の幅"
-      ],
-      [
-       "h",
-       "全体の高さ"
-      ],
-      [
-       "cols",
-       "列の数"
-      ],
-      [
-       "rows",
-       "行の数"
-      ]
+      {
+       "name": "x",
+       "type": "Number",
+       "doc": "左上の x",
+       "default": ""
+      },
+      {
+       "name": "y",
+       "type": "Number",
+       "doc": "左上の y",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "全体の幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "全体の高さ",
+       "default": ""
+      },
+      {
+       "name": "cols",
+       "type": "Number",
+       "doc": "列の数",
+       "default": ""
+      },
+      {
+       "name": "rows",
+       "type": "Number",
+       "doc": "行の数",
+       "default": ""
+      }
      ],
-     "returns": "Vector の List (cols * rows 個)"
+     "returns": {
+      "type": "List<Vector>",
+      "doc": "cols * rows 個"
+     }
     },
     {
      "name": "cell",
      "category": "並べる",
+     "isFunc": true,
      "signature": "cell(w, h, cols, rows)",
+     "call": "cell(w, h, cols, rows)",
      "summary": "格子の 1 マスの大きさ",
      "params": [
-      [
-       "w",
-       "全体の幅"
-      ],
-      [
-       "h",
-       "全体の高さ"
-      ],
-      [
-       "cols",
-       "列の数"
-      ],
-      [
-       "rows",
-       "行の数"
-      ]
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "全体の幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "全体の高さ",
+       "default": ""
+      },
+      {
+       "name": "cols",
+       "type": "Number",
+       "doc": "列の数",
+       "default": ""
+      },
+      {
+       "name": "rows",
+       "type": "Number",
+       "doc": "行の数",
+       "default": ""
+      }
      ],
-     "returns": "Vector (幅, 高さ)"
+     "returns": {
+      "type": "Vector",
+      "doc": "幅と高さ"
+     }
     },
     {
      "name": "along",
      "category": "並べる",
+     "isFunc": true,
      "signature": "along(from, to, n)",
+     "call": "along(from, to, n)",
      "summary": "from から to まで、両端を含めて n 個の点",
      "params": [
-      [
-       "from",
-       "始点 (Vector)"
-      ],
-      [
-       "to",
-       "終点 (Vector)"
-      ],
-      [
-       "n",
-       "点の数 (2 以上)"
-      ]
+      {
+       "name": "from",
+       "type": "Vector",
+       "doc": "始点 (Vector)",
+       "default": ""
+      },
+      {
+       "name": "to",
+       "type": "Vector",
+       "doc": "終点 (Vector)",
+       "default": ""
+      },
+      {
+       "name": "n",
+       "type": "Number",
+       "doc": "点の数 (2 以上)",
+       "default": ""
+      }
      ],
-     "returns": "Vector の List"
+     "returns": {
+      "type": "List<Vector>",
+      "doc": ""
+     }
     },
     {
      "name": "fit",
      "category": "収める",
+     "isFunc": true,
      "signature": "fit(w, h, box_w, box_h)",
+     "call": "fit(w, h, box_w, box_h)",
      "summary": "幅 w、高さ h のものを、比率を保って box_w x box_h に収めたときの大きさ",
      "params": [
-      [
-       "w",
-       "元の幅"
-      ],
-      [
-       "h",
-       "元の高さ"
-      ],
-      [
-       "box_w",
-       "収める幅"
-      ],
-      [
-       "box_h",
-       "収める高さ"
-      ]
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "元の幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "元の高さ",
+       "default": ""
+      },
+      {
+       "name": "box_w",
+       "type": "Number",
+       "doc": "収める幅",
+       "default": ""
+      },
+      {
+       "name": "box_h",
+       "type": "Number",
+       "doc": "収める高さ",
+       "default": ""
+      }
      ],
-     "returns": "Vector (幅, 高さ)"
+     "returns": {
+      "type": "Vector",
+      "doc": "幅と高さ"
+     }
     }
    ]
   },
@@ -1094,169 +1752,288 @@
     {
      "name": "fade_to",
      "category": "現れる・消える",
-     "signature": "fade_to(o, from, to, duration = 0.5s)",
-     "summary": "不透明度を from から to へ変える",
+     "isFunc": true,
+     "signature": "fade_to(target, from, to, duration = 0.5s)",
+     "call": "fade_to(target, from, to, duration = 0.5s)",
+     "summary": "target の不透明度を from から to へ変える Timeline を返す。 0 → 1 と 1 → 0 は fade_in / fade_out があるので、途中の値を使うときに呼ぶ",
      "params": [
-      [
-       "o",
-       "図形か View"
-      ],
-      [
-       "from",
-       "最初の不透明度 0..1"
-      ],
-      [
-       "to",
-       "最後の不透明度 0..1"
-      ],
-      [
-       "duration",
-       "長さ (既定 0.5s)"
-      ]
+      {
+       "name": "target",
+       "type": "Placeable",
+       "doc": "動かす図形か View",
+       "default": ""
+      },
+      {
+       "name": "from",
+       "type": "Number",
+       "doc": "始まりの不透明度 0..1",
+       "default": ""
+      },
+      {
+       "name": "to",
+       "type": "Number",
+       "doc": "終わりの不透明度 0..1",
+       "default": ""
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "変わりきるまでの長さ",
+       "default": "0.5s"
+      }
      ],
-     "returns": "Timeline"
+     "returns": {
+      "type": "Timeline",
+      "doc": "track.place(tl, at: 時刻) で置く"
+     }
     },
     {
      "name": "fade_in",
      "category": "現れる・消える",
-     "signature": "fade_in(o, duration = 0.5s)",
-     "summary": "透明から現れる (不透明度 0 → 1)",
+     "isFunc": true,
+     "signature": "fade_in(target, duration = 0.5s)",
+     "call": "fade_in(target, duration = 0.5s)",
+     "summary": "target が透明な状態から現れる Timeline を返す (不透明度 0 → 1)。 置いた時刻に現れてほしいものに使う",
      "params": [
-      [
-       "o",
-       "図形か View"
-      ],
-      [
-       "duration",
-       "長さ (既定 0.5s)"
-      ]
+      {
+       "name": "target",
+       "type": "Placeable",
+       "doc": "動かす図形か View",
+       "default": ""
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "現れきるまでの長さ",
+       "default": "0.5s"
+      }
      ],
-     "returns": "Timeline"
+     "returns": {
+      "type": "Timeline",
+      "doc": "track.place(tl, at: 時刻) で置く"
+     }
     },
     {
      "name": "fade_out",
      "category": "現れる・消える",
-     "signature": "fade_out(o, duration = 0.5s)",
-     "summary": "消える (不透明度 1 → 0)",
+     "isFunc": true,
+     "signature": "fade_out(target, duration = 0.5s)",
+     "call": "fade_out(target, duration = 0.5s)",
+     "summary": "target が消える Timeline を返す (不透明度 1 → 0)。 消え終わってほしい時刻から duration だけ手前に置く",
      "params": [
-      [
-       "o",
-       "図形か View"
-      ],
-      [
-       "duration",
-       "長さ (既定 0.5s)"
-      ]
+      {
+       "name": "target",
+       "type": "Placeable",
+       "doc": "動かす図形か View",
+       "default": ""
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "消えきるまでの長さ",
+       "default": "0.5s"
+      }
      ],
-     "returns": "Timeline"
+     "returns": {
+      "type": "Timeline",
+      "doc": "track.place(tl, at: 時刻) で置く"
+     }
     },
     {
      "name": "slide_in",
      "category": "滑る",
-     "signature": "slide_in(o, dx, dy, duration = 0.5s)",
-     "summary": "今の位置から (dx, dy) だけずれた所から、現れながら滑り込む。減速して止まる",
+     "isFunc": true,
+     "signature": "slide_in(target, dx, dy, duration = 0.5s)",
+     "call": "slide_in(target, dx, dy, duration = 0.5s)",
+     "summary": "target が (dx, dy) だけずれた所に現れ、今いる場所へ滑り込む Timeline を返す。 終わりに向かって減速する",
      "params": [
-      [
-       "o",
-       "position を持つ図形か View"
-      ],
-      [
-       "dx",
-       "x のずれ (箱の座標)"
-      ],
-      [
-       "dy",
-       "y のずれ"
-      ],
-      [
-       "duration",
-       "長さ (既定 0.5s)"
-      ]
+      {
+       "name": "target",
+       "type": "Placeable",
+       "doc": "position を持つ図形か View",
+       "default": ""
+      },
+      {
+       "name": "dx",
+       "type": "Number",
+       "doc": "どれだけ右からずれて始まるか (箱の座標。負なら左)",
+       "default": ""
+      },
+      {
+       "name": "dy",
+       "type": "Number",
+       "doc": "どれだけ下からずれて始まるか (負なら上)",
+       "default": ""
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "着くまでの長さ",
+       "default": "0.5s"
+      }
      ],
-     "returns": "Timeline"
+     "returns": {
+      "type": "Timeline",
+      "doc": "track.place(tl, at: 時刻) で置く"
+     }
     },
     {
      "name": "slide_out",
      "category": "滑る",
-     "signature": "slide_out(o, dx, dy, duration = 0.5s)",
-     "summary": "今の位置から (dx, dy) の方へ、消えながら滑り出す。加速して去る",
+     "isFunc": true,
+     "signature": "slide_out(target, dx, dy, duration = 0.5s)",
+     "call": "slide_out(target, dx, dy, duration = 0.5s)",
+     "summary": "target が今いる場所から (dx, dy) の方へ、消えながら去る Timeline を返す。 進むほど加速する",
      "params": [
-      [
-       "o",
-       "position を持つ図形か View"
-      ],
-      [
-       "dx",
-       "x のずれ (箱の座標)"
-      ],
-      [
-       "dy",
-       "y のずれ"
-      ],
-      [
-       "duration",
-       "長さ (既定 0.5s)"
-      ]
+      {
+       "name": "target",
+       "type": "Placeable",
+       "doc": "position を持つ図形か View",
+       "default": ""
+      },
+      {
+       "name": "dx",
+       "type": "Number",
+       "doc": "どれだけ右へ去るか (箱の座標。負なら左)",
+       "default": ""
+      },
+      {
+       "name": "dy",
+       "type": "Number",
+       "doc": "どれだけ下へ去るか (負なら上)",
+       "default": ""
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "消えきるまでの長さ",
+       "default": "0.5s"
+      }
      ],
-     "returns": "Timeline"
+     "returns": {
+      "type": "Timeline",
+      "doc": "track.place(tl, at: 時刻) で置く"
+     }
     },
     {
      "name": "move_by",
      "category": "滑る",
-     "signature": "move_by(o, dx, dy, duration = 0.5s)",
-     "summary": "今の位置から (dx, dy) だけ動く。加速して減速する",
+     "isFunc": true,
+     "signature": "move_by(target, dx, dy, duration = 0.5s)",
+     "call": "move_by(target, dx, dy, duration = 0.5s)",
+     "summary": "target が今いる場所から (dx, dy) だけ動く Timeline を返す。 動き出しと止まり際がなめらかになる",
      "params": [
-      [
-       "o",
-       "position を持つ図形か View"
-      ],
-      [
-       "dx",
-       "x の移動量 (箱の座標)"
-      ],
-      [
-       "dy",
-       "y の移動量"
-      ],
-      [
-       "duration",
-       "長さ (既定 0.5s)"
-      ]
+      {
+       "name": "target",
+       "type": "Placeable",
+       "doc": "position を持つ図形か View",
+       "default": ""
+      },
+      {
+       "name": "dx",
+       "type": "Number",
+       "doc": "右への移動量 (箱の座標。負なら左)",
+       "default": ""
+      },
+      {
+       "name": "dy",
+       "type": "Number",
+       "doc": "下への移動量 (負なら上)",
+       "default": ""
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "動ききるまでの長さ",
+       "default": "0.5s"
+      }
      ],
-     "returns": "Timeline"
+     "returns": {
+      "type": "Timeline",
+      "doc": "track.place(tl, at: 時刻) で置く"
+     }
+    },
+    {
+     "name": "spin",
+     "category": "回す",
+     "isFunc": true,
+     "signature": "spin(target, turns, duration = 1s)",
+     "call": "spin(target, turns, duration = 1s)",
+     "summary": "target が時計回りに turns 周まわる Timeline を返す。速さは一定",
+     "params": [
+      {
+       "name": "target",
+       "type": "Placeable",
+       "doc": "rotation を持つ図形",
+       "default": ""
+      },
+      {
+       "name": "turns",
+       "type": "Number",
+       "doc": "回る数。1 で 1 周、0.5 で半周、負なら反時計回り",
+       "default": ""
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "回りきるまでの長さ",
+       "default": "1s"
+      }
+     ],
+     "returns": {
+      "type": "Timeline",
+      "doc": "track.place(tl, at: 時刻) で置く"
+     }
     },
     {
      "name": "show",
      "category": "まとめて",
-     "signature": "show(track, objs, at, end, duration = 0.5s, stagger = 0s)",
-     "summary": "まとめて見せる。objs が at から順に現れ (stagger ずつ遅れて)、end で消え終わる",
+     "isFunc": true,
+     "signature": "show(track, targets, at, end, duration = 0.5s, stagger = 0s)",
+     "call": "show(track, targets, at, end, duration = 0.5s, stagger = 0s)",
+     "summary": "at に現れて end に消え終わるまでを、track に直接置く。 場面の出し入れをまとめて書くためのもので、戻り値は無い",
      "params": [
-      [
-       "track",
-       "置く先の Timeline"
-      ],
-      [
-       "objs",
-       "図形か View の List"
-      ],
-      [
-       "at",
-       "現れ始める時刻"
-      ],
-      [
-       "end",
-       "消え終わる時刻"
-      ],
-      [
-       "duration",
-       "1 つの fade の長さ (既定 0.5s)"
-      ],
-      [
-       "stagger",
-       "次の要素が現れるまでの遅れ (既定 0s)"
-      ]
+      {
+       "name": "track",
+       "type": "Timeline",
+       "doc": "置き先の Timeline",
+       "default": ""
+      },
+      {
+       "name": "targets",
+       "type": "List<Placeable>",
+       "doc": "出し入れする図形か View",
+       "default": ""
+      },
+      {
+       "name": "at",
+       "type": "Duration",
+       "doc": "最初のひとつが現れ始める時刻",
+       "default": ""
+      },
+      {
+       "name": "end",
+       "type": "Duration",
+       "doc": "全部が消え終わる時刻",
+       "default": ""
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "1 つの現れ方と消え方の長さ",
+       "default": "0.5s"
+      },
+      {
+       "name": "stagger",
+       "type": "Duration",
+       "doc": "次のひとつが現れるまでの遅れ",
+       "default": "0s"
+      }
      ],
-     "returns": ""
+     "returns": {
+      "type": "Nothing",
+      "doc": "track に直接置くので返り値は無い"
+     }
     }
    ]
   },
@@ -1268,172 +2045,264 @@
     {
      "name": "escape_time",
      "category": "描く",
+     "isFunc": true,
      "signature": "escape_time(formula, coloring, center, span, precision = :perturbation, zoom = func (t) { 1 }, max_iter = func (zoom) { 200 }, samples = 1, at = vector!(0, 0), box = vector!(16, 9), flip = false, bailout = 256, ref_iter = 8000)",
+     "call": "escape_time(\n  formula,\n  coloring,\n  center,\n  span,\n  precision = :perturbation,\n  zoom = func (t) { 1 },\n  max_iter = func (zoom) { 200 },\n  samples = 1,\n  at = vector!(0, 0),\n  box = vector!(16, 9),\n  flip = false,\n  bailout = 256,\n  ref_iter = 8000,\n)",
      "summary": "エスケープタイム系フラクタルの Shader を作る。図形の fill に入れる",
      "params": [
-      [
-       "formula",
-       "反復式 (mandelbrot / julia(c) / burning_ship / multibrot(n))"
-      ],
-      [
-       "coloring",
-       "色付け。func (mu, z) -> Color (smooth など)"
-      ],
-      [
-       "center",
-       "複素平面の中心 (Vector)"
-      ],
-      [
-       "span",
-       "最初に見える横幅 (複素平面の単位)"
-      ],
-      [
-       "precision",
-       "plain か perturbation"
-      ],
-      [
-       "zoom",
-       "倍率の時間変化。func (t) -> Number"
-      ],
-      [
-       "max_iter",
-       "反復の上限。func (zoom) -> Number"
-      ],
-      [
-       "samples",
-       "1 ピクセルあたりの評価点の数 (4 で 2x2 のアンチエイリアス)"
-      ],
-      [
-       "at",
-       "塗る図形の左上 (箱の座標)"
-      ],
-      [
-       "box",
-       "塗る図形の大きさ (箱の座標)"
-      ],
-      [
-       "flip",
-       "true で虚軸を下向きにする"
-      ],
-      [
-       "bailout",
-       "脱出とみなす |z|² の閾値"
-      ],
-      [
-       "ref_iter",
-       "基準軌道の長さの上限"
-      ]
+      {
+       "name": "formula",
+       "type": "Dict",
+       "doc": "反復式 (mandelbrot / julia(c) / burning_ship / multibrot(n))",
+       "default": ""
+      },
+      {
+       "name": "coloring",
+       "type": "Func<Number, Vector -> Color>",
+       "doc": "色付け。func (mu, z) -> Color (smooth など)",
+       "default": ""
+      },
+      {
+       "name": "center",
+       "type": "Vector",
+       "doc": "複素平面の中心 (Vector)",
+       "default": ""
+      },
+      {
+       "name": "span",
+       "type": "Number",
+       "doc": "最初に見える横幅 (複素平面の単位)",
+       "default": ""
+      },
+      {
+       "name": "precision",
+       "type": "Symbol",
+       "doc": "plain か perturbation",
+       "default": ":perturbation"
+      },
+      {
+       "name": "zoom",
+       "type": "Func<Number -> Number>",
+       "doc": "倍率の時間変化。func (t) -> Number",
+       "default": "func (t) { 1 }"
+      },
+      {
+       "name": "max_iter",
+       "type": "Func<Number -> Number>",
+       "doc": "反復の上限。func (zoom) -> Number",
+       "default": "func (zoom) { 200 }"
+      },
+      {
+       "name": "samples",
+       "type": "Number",
+       "doc": "1 ピクセルあたりの評価点の数 (4 で 2x2 のアンチエイリアス)",
+       "default": "1"
+      },
+      {
+       "name": "at",
+       "type": "Vector",
+       "doc": "塗る図形の左上 (箱の座標)",
+       "default": "vector!(0, 0)"
+      },
+      {
+       "name": "box",
+       "type": "Vector",
+       "doc": "塗る図形の大きさ (箱の座標)",
+       "default": "vector!(16, 9)"
+      },
+      {
+       "name": "flip",
+       "type": "Bool",
+       "doc": "true で虚軸を下向きにする",
+       "default": "false"
+      },
+      {
+       "name": "bailout",
+       "type": "Number",
+       "doc": "脱出とみなす |z|² の閾値",
+       "default": "256"
+      },
+      {
+       "name": "ref_iter",
+       "type": "Number",
+       "doc": "基準軌道の長さの上限",
+       "default": "8000"
+      }
      ],
-     "returns": "Shader"
+     "returns": {
+      "type": "Shader",
+      "doc": "図形の fill に入れる"
+     }
     },
     {
      "name": "mandelbrot",
      "category": "反復式",
+     "isFunc": false,
      "signature": "mandelbrot",
-     "summary": "Mandelbrot 集合の反復式 z' = z² + p。摂動法の delta を持つ",
+     "call": "mandelbrot",
+     "summary": "Mandelbrot 集合の反復式 z' = z² + p。z は 0 から始まり、p がピクセルの複素座標。 escape_time の formula に渡す。摂動法にも対応している",
      "params": [],
-     "returns": ""
+     "returns": {
+      "type": "Dict",
+      "doc": "反復式"
+     }
     },
     {
      "name": "julia",
      "category": "反復式",
+     "isFunc": true,
      "signature": "julia(c)",
-     "summary": "Julia 集合の反復式 z' = z² + c。z の初期値がピクセルの座標",
+     "call": "julia(c)",
+     "summary": "Julia 集合の反復式 z' = z² + c を作る。z はピクセルの複素座標から始まり、c は全ピクセルで共通。 escape_time の formula に渡す",
      "params": [
-      [
-       "c",
-       "定数。Vector か、時刻から Vector を返す func (t)。摂動法は c が一定のときだけ正しい"
-      ]
+      {
+       "name": "c",
+       "type": "Vector | Func<Number -> Vector>",
+       "doc": "定数。Vector か、時刻から Vector を返す func (t)。摂動法は c が一定のときだけ正しい",
+       "default": ""
+      }
      ],
-     "returns": "反復式 (Dict)"
+     "returns": {
+      "type": "Dict",
+      "doc": "反復式"
+     }
     },
     {
      "name": "burning_ship",
      "category": "反復式",
+     "isFunc": false,
      "signature": "burning_ship",
-     "summary": "Burning Ship の反復式。z の実部と虚部の絶対値を取ってから 2 乗する。flip: true で慣習どおりの向きになる",
+     "call": "burning_ship",
+     "summary": "Burning Ship の反復式 z' = (|Re z| + i|Im z|)² + p。実部と虚部の絶対値を取ってから 2 乗する。 escape_time の formula に渡す。escape_time に flip: true を付けると、慣習どおり船が上を向く",
      "params": [],
-     "returns": ""
+     "returns": {
+      "type": "Dict",
+      "doc": "反復式"
+     }
     },
     {
      "name": "multibrot",
      "category": "反復式",
+     "isFunc": true,
      "signature": "multibrot(n)",
-     "summary": "Multibrot の反復式 z' = z^n + p",
+     "call": "multibrot(n)",
+     "summary": "Multibrot の反復式 z' = z^n + p を作る。n が 2 なら Mandelbrot と同じで、大きいほど腕の数が増える。 escape_time の formula に渡す",
      "params": [
-      [
-       "n",
-       "次数。2 以上の整数"
-      ]
+      {
+       "name": "n",
+       "type": "Number",
+       "doc": "次数。2 以上の整数",
+       "default": ""
+      }
      ],
-     "returns": "反復式 (Dict)"
+     "returns": {
+      "type": "Dict",
+      "doc": "反復式"
+     }
     },
     {
      "name": "plain",
      "category": "精度",
+     "isFunc": false,
      "signature": "plain",
-     "summary": "精度: 32 bit のまま GPU で反復する。数万倍までの拡大向き",
+     "call": "plain",
+     "summary": "GPU の 32 bit のまま反復する。escape_time の precision に渡す。 数万倍あたりまでなら、これで足りる",
      "params": [],
-     "returns": ""
+     "returns": {
+      "type": "Symbol",
+      "doc": "精度の選び方"
+     }
     },
     {
      "name": "perturbation",
      "category": "精度",
+     "isFunc": false,
      "signature": "perturbation",
-     "summary": "精度: 基準軌道をスクリプト側の 64 bit で計算し、GPU は差分だけ反復する (摂動法)。10 兆倍あたりまで",
+     "call": "perturbation",
+     "summary": "中心の点の軌道をスクリプト側の 64 bit で計算し、GPU はそこからの差分だけ反復する (摂動法)。 escape_time の precision に渡す。10 兆倍あたりまで寄れる",
      "params": [],
-     "returns": ""
+     "returns": {
+      "type": "Symbol",
+      "doc": "精度の選び方"
+     }
     },
     {
      "name": "smooth",
      "category": "色付け",
+     "isFunc": true,
      "signature": "smooth(stops, period, inside = #000000)",
-     "summary": "色付け: 滑らかな脱出回数で stops を period ごとに 1 周させる",
+     "call": "smooth(stops, period, inside = #000000)",
+     "summary": "脱出の速さから色を決める関数を作る。stops を period 回の反復ごとに 1 周する。 escape_time の coloring に渡す",
      "params": [
-      [
-       "stops",
-       "Color の List。最初と最後を同じ色にすると継ぎ目が出ない"
-      ],
-      [
-       "period",
-       "何回の反復で 1 周するか"
-      ],
-      [
-       "inside",
-       "集合の中の色 (既定は黒)"
-      ]
+      {
+       "name": "stops",
+       "type": "List<Color>",
+       "doc": "Color の List。最初と最後を同じ色にすると継ぎ目が出ない",
+       "default": ""
+      },
+      {
+       "name": "period",
+       "type": "Number",
+       "doc": "何回の反復で 1 周するか",
+       "default": ""
+      },
+      {
+       "name": "inside",
+       "type": "Color",
+       "doc": "集合の中の色 (既定は黒)",
+       "default": "#000000"
+      }
      ],
-     "returns": "func (mu, z) -> Color"
+     "returns": {
+      "type": "Func<Number, Vector -> Color>",
+      "doc": "色付け"
+     }
     },
     {
      "name": "cmul",
      "category": "複素数",
+     "isFunc": true,
      "signature": "cmul(a, b)",
+     "call": "cmul(a, b)",
      "summary": "複素数の積。複素数は Vector (x が実部、y が虚部)",
      "params": [
-      [
-       "a",
-       "Vector"
-      ],
-      [
-       "b",
-       "Vector"
-      ]
+      {
+       "name": "a",
+       "type": "Vector",
+       "doc": "複素数 (x が実部、y が虚部)",
+       "default": ""
+      },
+      {
+       "name": "b",
+       "type": "Vector",
+       "doc": "複素数",
+       "default": ""
+      }
      ],
-     "returns": "Vector"
+     "returns": {
+      "type": "Vector",
+      "doc": "積"
+     }
     },
     {
      "name": "cabs2",
      "category": "複素数",
+     "isFunc": true,
      "signature": "cabs2(z)",
+     "call": "cabs2(z)",
      "summary": "複素数の絶対値の 2 乗",
      "params": [
-      [
-       "z",
-       "Vector"
-      ]
+      {
+       "name": "z",
+       "type": "Vector",
+       "doc": "複素数",
+       "default": ""
+      }
      ],
-     "returns": "Number"
+     "returns": {
+      "type": "Number",
+      "doc": "|z|²"
+     }
     }
    ]
   }
@@ -1450,72 +2319,22 @@
     "fps": 30.0,
     "seconds": 4.0
    },
-   "trim": ""
+   "trim": "",
+   "listed": false
   },
   {
-   "name": "passerby",
-   "desc": "育つ木 (fractal.moph) の前を、歩く人 (walker.moph) が通り過ぎる",
-   "code": "# passerby.moph — 育つ木 (fractal.moph) の前を、歩く人 (walker.moph) が通り過ぎる\n# 2 つのサンプルを import して置くだけで 1 つの絵になる。README の GIF はこれ。\n# docs/readme.gif の作り方:\n#   mophila render samples/passerby.moph -o r.mp4 --size 400x225 --fps 10 --codec libx264rgb --pix-fmt rgb24\n#   ffmpeg -i r.mp4 -vf \"palettegen=max_colors=64:stats_mode=diff\" pal.png\n#   ffmpeg -i r.mp4 -i pal.png -lavfi \"paletteuse=dither=none:diff_mode=rectangle\" docs/readme.gif\n\nimport { make, speed, floor } from .walker\nimport .fractal\n\nlet v = new View { box: (16, 9) }\nlet track = new Timeline {}\nlet total = 8s\n\n# 木は fractal.moph の View をそのまま置く (背景も木のもの)。木の Timeline は 14 秒あるので total で切る\nv.place(fractal.output, at: apos!(:topLeft, 0, 0), w: 16)\nlet tree = new Timeline { duration: total }\ntree.place(fractal.output, at: 0s)\ntrack.place(tree, at: 0s)\n\n# 人は左から右へ。幅 5 で置くので、足が滑らない速さは speed * 5 / 6\nlet w = 5\nlet person = make(#e8ecf7, #8b93a7, total)\nv.place(person, at: apos!(:bottomLeft, -w, 8.6 + (6 - floor) * w / 6), w: w)\nlet cross = context person as p {\n  motion (t) {\n    0s: p.position.x = -w\n    8s: p.position.x = -w + speed * w / 6 * 8\n  }\n}\ntrack.place(person, at: 0s)\ntrack.place(cross, at: 0s)\n\nlet clock = new Timeline { duration: total }\nv.addTrack(clock)\nv.addTrack(track)\noutput v\n",
-   "length": 8.0,
+   "name": "shapes",
+   "desc": "丸は動きながら大きさが変わり、四角は回り、五角形は頂点そのものが波打つ",
+   "code": "# shapes.moph — 丸は動きながら大きさが変わり、四角は回り、五角形は頂点そのものが波打つ\n\nimport math\nimport { regular_polygon } from shape\n\nlet v = new View { box: (16, 9) }\nv.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 9, fill: #f5f4f0 })\n\nlet total = 6s\nlet cx = 8\nlet swing = 3.2\nlet track = new Timeline {}\n\n# 丸。止まる、動く、止まる。行末の :ease で動き出しと止まり際がなめらかになる\nlet ball = new Circle { position: apos!(:center, cx - swing, 2.5), radius: 0.65, fill: #e0604a }\nv.place(ball)\nlet roll = context ball as c {\n  motion (t) {\n    0:    c.position.x = cx - swing, c.radius = 0.65\n    0.15: c.position.x = cx - swing, c.radius = 0.65\n    0.5:  c.position.x = cx + swing, c.radius = 1.25 :ease\n    0.65: c.position.x = cx + swing, c.radius = 1.25\n    1:    c.position.x = cx - swing, c.radius = 0.65 :ease\n  }\n}\nroll.duration = total\ntrack.place(roll, at: 0s)\n\n# 四角。rotation は時計回りの角度。Polygon は頂点の重心を中心に回る\nlet square = new Polygon { points: regular_polygon(cx, 4.6, 0.95, 4), fill: #3a6fb0 }\nv.place(square)\nlet spin = context square as s {\n  motion (t) {\n    0: s.rotation = 0\n    1: s.rotation = 360\n  }\n}\nspin.duration = total\ntrack.place(spin, at: 0s)\n\n# 五角形。頂点ごとに中心からの距離を変えて、うねらせる。0..1 の行は毎フレーム評価される\nlet py = 6.7\nlet penta = new Polygon { points: regular_polygon(cx, py, 0.95, 5), fill: #3f9b6d }\nv.place(penta)\nlet wobble = context penta as p {\n  motion (t) {\n    0..1: p.points = (0..5).to_list().map(func (i) {\n      let a = (i * 72 - 90) * math.PI / 180\n      let r = 0.95 + 0.3 * math.sin(math.TAU * t * 2 + i * 1.5)\n      vector!(cx + r * math.cos(a), py + r * math.sin(a))\n    })\n  }\n}\nwobble.duration = total\ntrack.place(wobble, at: 0s)\n\nv.addTrack(track)\noutput v\n",
+   "length": 6.0,
    "media": {
     "width": 1280,
     "height": 720,
     "fps": 30.0,
-    "seconds": 8.0
+    "seconds": 6.0
    },
-   "trim": ""
-  },
-  {
-   "name": "walker",
-   "desc": "歩く人。関節ごとの図形が、親の先端を毎フレーム読んでつながる (腰 → 腿 → 脛 → 足、肩 → 上腕 → 前腕)。",
-   "code": "# walker.moph — 歩く人。関節ごとの図形が、親の先端を毎フレーム読んでつながる (腰 → 腿 → 脛 → 足、肩 → 上腕 → 前腕)。\n# 歩行の周期は sin で作る。脚が前に振れるとき膝が曲がり、着いているときは伸びる。腕は同じ側の脚と逆に振る。\n# make(near, far, long) が「その場で long の間歩く人」の View (箱 6 x 6、足元は y 5.6) を返す。import して並べられる。\n# 進むのは置いた側の仕事で、箱の幅 6 のとき 1 秒に speed 進めると足が滑らない\n\nimport math\n\n# ---------- 体の寸法と歩き方 ----------\nexport let period = 1.2    # 1 周期 (左右 1 歩ずつ) の秒数\nexport let speed  = 3.1    # 歩幅に合う進む速さ (箱の単位 / 秒)\nexport let floor  = 5.6    # 箱の中の足元の高さ\nlet thigh   = 1.4\nlet shin    = 1.3\nlet torso   = 1.6\nlet upper   = 1.1\nlet fore    = 1.0\nlet swing   = 0.35         # 腿の振れ幅 (rad)\nlet width   = 0.13\n\n# 角度 0 が真下、正が前 (x が増える向き)\nfunc direction(a) { vector!(math.sin(a), math.cos(a)) }\n# 歩行の位相。side は 0 (手前) か 1 (奥) で半周期ずれる\nfunc phase(t, side, long) { math.TAU * t * (long / 1s) / period + side * math.PI }\nfunc hip_at(t, long) { vector!(3, floor - thigh - shin + 0.15 - 0.07 * math.cos(2 * phase(t, 0, long))) }\nfunc thigh_angle(p) { swing * math.sin(p) }\n# 前に振れている間 (cos > 0) だけ膝を曲げる\nfunc shin_angle(p) { thigh_angle(p) - 0.1 - 0.9 * math.max(0, math.cos(p)) }\nfunc upper_angle(p) { -0.6 * math.sin(p) }\nfunc fore_angle(p) { upper_angle(p) + 0.55 }\n\nfunc limb(box, color) {\n  let l = new Line { from: (0, 0), to: (0, 0), stroke: color, strokeWidth: width }\n  box.place(l)\n  l\n}\nfunc joint(box, color, r) {\n  let c = new Circle { position: apos!(:center, 0, 0), radius: r, fill: color }\n  box.place(c)\n  c\n}\n\n# 片側の脚と腕。親の先端を読む行でつなぐ。戻り値は Timeline\nfunc side_of(box, side, color, long) {\n  let th = limb(box, color)\n  let sh = limb(box, color)\n  let ft = limb(box, color)\n  let ua = limb(box, color)\n  let fa = limb(box, color)\n  let knee = joint(box, color, width / 2)\n  let ankle = joint(box, color, width / 2)\n  let elbow = joint(box, color, width / 2)\n  let hand = joint(box, color, width * 0.7)\n  let tl = context th as a, sh as b, ft as c, ua as d, fa as e, knee as k, ankle as n, elbow as m, hand as h {\n    motion (t) {\n      0..1: a.from = hip_at(t, long)\n      0..1: a.to = a.from + direction(thigh_angle(phase(t, side, long))) * thigh\n      0..1: b.from = a.to\n      0..1: b.to = b.from + direction(shin_angle(phase(t, side, long))) * shin\n      0..1: c.from = b.to\n      0..1: c.to = c.from + direction(shin_angle(phase(t, side, long)) + math.PI / 2) * 0.35\n      0..1: k.position = apos!(:center, a.to)\n      0..1: n.position = apos!(:center, b.to)\n      0..1: d.from = hip_at(t, long) + vector!(0.12, -torso)\n      0..1: d.to = d.from + direction(upper_angle(phase(t, side, long))) * upper\n      0..1: e.from = d.to\n      0..1: e.to = e.from + direction(fore_angle(phase(t, side, long))) * fore\n      0..1: m.position = apos!(:center, d.to)\n      0..1: h.position = apos!(:center, e.to)\n    }\n  }\n  tl.duration = long\n  tl\n}\n\n# その場で long の間歩く人。near は手前の手足と胴の色、far は奥の手足の色\nexport func make(near, far, long) {\n  let box = new View { box: (6, 6) }\n  let tl = new Timeline {}\n  # 奥 → 胴 → 手前 の順に置き、同じ順に当てる (親の値を読む行は、親の行が先に当たっている必要がある)\n  tl.place(side_of(box, 1, far, long), at: 0s)\n  let body = limb(box, near)\n  let hip = joint(box, near, width * 0.8)\n  let neck = joint(box, near, width / 2)\n  let head = joint(box, near, 0.36)\n  let trunk = context body as b, hip as p, neck as n, head as h {\n    motion (t) {\n      0..1: b.from = hip_at(t, long)\n      0..1: b.to = b.from + vector!(0.12, -torso)\n      0..1: p.position = apos!(:center, b.from)\n      0..1: n.position = apos!(:center, b.to)\n      0..1: h.position = apos!(:center, b.to + vector!(0.08, -0.5))\n    }\n  }\n  trunk.duration = long\n  tl.place(trunk, at: 0s)\n  tl.place(side_of(box, 0, near, long), at: 0s)\n  box.addTrack(tl)\n  box\n}\n\n# ---------- 単体で見るとき: 1 人が左から右へ横切る ----------\nlet v = new View { box: (16, 9) }\nlet track = new Timeline {}\nv.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 9, fill: #14161c })\nlet ground_y = 8\nv.place(new Line { from: (0, ground_y), to: (16, ground_y), stroke: #3a4560, strokeWidth: 0.04 })\nlet total = 7s\nlet one = make(#e8ecf7, #8b93a7, total)\nv.place(one, at: apos!(:bottomLeft, -5, ground_y + 6 - floor), w: 6)\nlet travel = context one as o {\n  motion (t) {\n    0s: o.position.x = -5\n    7s: o.position.x = -5 + speed * 7\n  }\n}\ntrack.place(one, at: 0s)\ntrack.place(travel, at: 0s)\nv.addTrack(track)\noutput v\n",
-   "length": 7.0,
-   "media": {
-    "width": 1280,
-    "height": 720,
-    "fps": 30.0,
-    "seconds": 7.0
-   },
-   "trim": ""
-  },
-  {
-   "name": "crowd",
-   "desc": "夕暮れの通り。walker.moph の make() で作った人たちが、奥行きの違う位置を歩いていく。",
-   "code": "# crowd.moph — 夕暮れの通り。walker.moph の make() で作った人たちが、奥行きの違う位置を歩いていく。\n# 奥の人ほど小さく、薄く、ゆっくり (幅に比例した速さなので足は滑らない)。空は Shader のグラデーション。\n# 日が暮れると街灯が点き、遠くの窓に灯りが入り、星が出て、最後に全体が暗転する\n\nimport math\nimport { fade_to } from transition\nimport { make, speed, floor } from .walker\n\nlet v = new View { box: (16, 9) }\nlet track = new Timeline {}\nlet total = 26s\nlet seconds = total / 1s\nlet dusk_end = 4        # ここから暗くなり始める (秒)\nlet night_at = 18       # 完全に夜になる (秒)\n\n# すべてをこの箱に入れ、最後に箱ごとフェードアウトする (下は黒)\nv.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 9, fill: #000000 })\nlet stage = new View { box: (16, 9) }\nv.place(stage, at: apos!(:topLeft, 0, 0), w: 16)\n\n# 空: 上は群青、地平線は橙。dusk_end から night_at にかけて夜になる\nlet dusk = new Shader {\n  color: func (x, y, t) {\n    let k = y / 6.2\n    let night = math.min(1, math.max(0, (t - dusk_end) / (night_at - dusk_end)))\n    let top = #1c2452 * (1 - night) + #05070f * night\n    let horizon = #f0965a * (1 - night) + #2a2236 * night\n    top * (1 - k * k) + horizon * (k * k)\n  },\n}\nstage.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 6.2, fill: dusk })\n# 星: 夜になってから出る\nlet stars = []\nfor i in 0..30 {\n  let s = new Circle { position: apos!(:center, (math.sin(i * 12.9898) * 43758.5453) % 1 * 16, (math.sin(i * 78.233) * 43758.5453) % 1 * 3.5), radius: 0.03, fill: #ffffff, opacity: 0 }\n  stage.place(s)\n  stars.push(s)\n}\nstage.place(new Rect { position: apos!(:topLeft, 0, 6.2), w: 16, h: 2.8, fill: #1a1d2a })\n# 遠くの街並みと、その窓 (夜に順に点く)\nlet windows = []\nfor i in 0..14 {\n  let h = 0.4 + 0.9 * (0.5 + 0.5 * math.sin(i * 2.3))\n  let x = i * 1.2 - 0.3\n  stage.place(new Rect { position: apos!(:bottomLeft, x, 6.2), w: 1.0, h: h, fill: #232a45 })\n  for j in 0..math.floor(h / 0.3) {\n    for k in 0..3 {\n      if (math.sin((i * 7 + j * 3 + k) * 12.9898) * 43758.5453) % 1 > 0.45 {\n        let w = new Rect { position: apos!(:bottomLeft, x + 0.15 + k * 0.3, 6.05 - j * 0.3), w: 0.14, h: 0.16, fill: #f6d27a, opacity: 0 }\n        stage.place(w)\n        windows.push(w)\n      }\n    }\n  }\n}\n\n# 人: (足元の高さ, 箱の幅, 手前の色, 奥の色, 出る時刻)。奥から順に置く\nlet people = [\n  (6.9, 2.4, #8d93a8, #5c6278, 0.5s),\n  (7.2, 3.0, #9aa1b8, #666d86, 4s),\n  (7.6, 3.8, #c2c8dc, #7f8699, 2s),\n  (8.2, 4.8, #e2b46a, #9c7a45, 6.5s),\n  (8.7, 6.0, #e8ecf7, #8b93a7, 0s),\n  (8.7, 6.0, #d9645a, #8a3f3a, 11s),\n]\nfor (ground, w, near, far, start) in people {\n  let scale = w / 6\n  let x0 = -w\n  let x1 = 16 + 0.5\n  let cross = (x1 - x0) / (speed * scale)\n  let p = make(near, far, cross * 1s)\n  stage.place(p, at: apos!(:bottomLeft, x0, ground + (6 - floor) * scale), w: w)\n  let walk = context p as o {\n    motion (t) {\n      0: o.position.x = x0\n      1: o.position.x = x1\n    }\n  }\n  walk.duration = cross * 1s\n  # 横切り終わったら 3 秒後にまた左から。動画の中で渡り切れる分だけ\n  let n = math.ceil((seconds - start / 1s) / (cross + 3))\n  for i in 0..n {\n    let at = start + i * (cross + 3) * 1s\n    if at + cross * 1s <= total {\n      track.place(p, at: at)\n      track.place(walk, at: at)\n    }\n  }\n}\n\n# 手前の街灯。夜になると点く (光の玉と、足元の光だまり)\nlet lamps = []\nfor x in [3.5, 11.5] {\n  stage.place(new Rect { position: apos!(:bottomLeft, x, 8.8), w: 0.12, h: 4.1, fill: #2b3150 })\n  let cx = x + 0.06\n  let bulb = new Circle { position: apos!(:center, cx, 4.7), radius: 0.22, fill: #ffe6a8, opacity: 0.25 }\n  # 光の玉と光だまりは、中心から外へ薄くなる Shader で塗る\n  let glow = new Shader { color: func (px, py, t) {\n    let d2 = (px - cx) * (px - cx) + (py - 4.7) * (py - 4.7)\n    rgba!(255, 230, 168, math.exp(-d2 / 0.3) * 0.8)\n  } }\n  let spread = new Shader { color: func (px, py, t) {\n    let dx = (px - cx) / 1.8\n    let dy = (py - 8.75) / 0.3\n    rgba!(255, 230, 168, math.exp(-(dx * dx + dy * dy)) * 0.6)\n  } }\n  let halo = new Circle { position: apos!(:center, cx, 4.7), radius: 1.3, fill: glow, opacity: 0 }\n  let pool = new Rect { position: apos!(:center, cx, 8.75), w: 4.5, h: 0.7, fill: spread, opacity: 0 }\n  stage.place(pool)\n  stage.place(halo)\n  stage.place(bulb)\n  let on = context bulb as b, halo as h, pool as g {\n    motion (t) {\n      0s: b.opacity = 0.25, h.opacity = 0, g.opacity = 0\n      0.1s: b.opacity = 1, h.opacity = 1, g.opacity = 1\n      0.25s: b.opacity = 0.4, h.opacity = 0.3, g.opacity = 0.3\n      0.6s: b.opacity = 1, h.opacity = 1, g.opacity = 1\n    }\n  }\n  lamps.push(on)\n}\nlet lamp_at = 12s\ntrack.place(lamps[0], at: lamp_at)\ntrack.place(lamps[1], at: lamp_at + 0.7s)\n\n# 遠くの窓が順に点く\nfor (i, w) in windows.enumerate() {\n  track.place(fade_to(w, 0, 0.9, 0.4s), at: 13s + (math.sin(i * 3.7) * 0.5 + 0.5) * 6s)\n}\n\n# 星が出て、瞬く\nfor (i, s) in stars.enumerate() {\n  let twinkle = context s as o {\n    motion (t) {\n      0..1: o.opacity = math.min(1, math.max(0, (t * seconds - 15 - i * 0.1) / 3)) * (0.5 + 0.5 * math.sin(math.TAU * t * seconds / 2 + i))\n    }\n  }\n  twinkle.duration = total\n  track.place(twinkle, at: 0s)\n}\n\n# 最後に全体をフェードアウト\nlet fade_out = context stage as s {\n  motion (t) {\n    0s: s.opacity = 1\n    2.5s: s.opacity = 0 :ease_in\n  }\n}\ntrack.place(fade_out, at: total - 2.5s)\n\nv.addTrack(track)\noutput v\n",
-   "length": 26.0,
-   "media": {
-    "width": 1280,
-    "height": 720,
-    "fps": 30.0,
-    "seconds": 20.0
-   },
-   "trim": ""
-  },
-  {
-   "name": "fractal",
-   "desc": "枝分かれする木。各枝は親の先端から生え、親が動けば子も動く",
-   "code": "# fractal.moph — 枝分かれする木。各枝は親の先端から生え、親が動けば子も動く\n# 部品が互いに依存する形: 枝の行は毎フレーム親の to を読む (0..1 の範囲行)。木は根から順に伸び、伸び切ったら風に揺れる\n\nimport math\n\nlet v = new View { box: (16, 9) }\nlet track = new Timeline {}\nv.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 9, fill: #0d1117 })\n\n# ---------- 形と時間の決まり ----------\nlet levels     = 8            # 枝分かれの回数 (枝は 2^(levels+1) - 1 本)\nlet total      = 14s          # 動画の長さ\nlet trunk_len  = 2.1\nlet shrink     = 0.72         # 1 段ごとの長さの比\nlet spread     = 0.46         # 枝の開き (rad)\nlet grow_time  = 0.9          # 1 段が伸びる秒数\nlet grow_gap   = 0.5          # 次の段が伸び始めるまでの秒数\nlet sway_amp   = 0.035        # 揺れの角度 (rad)。先端ほど大きい\nlet sway_period = 4.5         # 揺れの周期 (秒)\nlet colors = [#7a4f33, #8a5c3a, #97693f, #8c7a42, #7c8c45, #62984c, #4aa25a, #46ad78, #6cc496]\n\nlet seconds = total / 1s      # t は 0..1 なので、秒に直すときに掛ける\n\nfunc smooth(k) { k * k * (3 - 2 * k) }\n\n# level 段目の枝が t (0..1) の時点でどこまで伸びているか (0..1)\nfunc growth(t, level) {\n  let k = (t * seconds - level * grow_gap) / grow_time\n  smooth(math.min(1, math.max(0, k)))\n}\n\n# 揺れ。段が深いほど大きく、phase で枝ごとにずらす\nfunc sway(t, level, phase) {\n  sway_amp * level * math.sin(t * seconds / sway_period * math.TAU + phase)\n}\n\nfunc direction(angle) { vector!(math.cos(angle), -math.sin(angle)) }\n\n# 親の先端から角度 angle に伸びる枝を作り、その先にさらに 2 本作る\nfunc branch(parent, angle, len, level, phase) {\n  let line = new Line { from: (0, 0), to: (0, 0), stroke: colors[level], strokeWidth: 0.18 * shrink ^ level, opacity: 0.95 }\n  v.place(line)\n  let tl = context line as b, parent as p {\n    motion (t) {\n      0..1: b.from = p.to\n      0..1: b.to = p.to + direction(angle + sway(t, level, phase)) * (len * growth(t, level))\n    }\n  }\n  tl.duration = total\n  track.place(tl)\n  if level < levels {\n    branch(line, angle + spread, len * shrink, level + 1, phase + 0.4)\n    branch(line, angle - spread, len * shrink, level + 1, phase - 0.4)\n  } else {\n    # 先端の葉。枝が伸び切ってから出る\n    let leaf = new Circle { position: apos!(:center, 0, 0), radius: 0.06, fill: #b9e88a, opacity: 0 }\n    v.place(leaf)\n    let ltl = context leaf as f, line as b {\n      motion (t) {\n        0..1: f.position = apos!(:center, b.to)\n        0..1: f.opacity = growth(t, level + 1) * 0.9\n      }\n    }\n    ltl.duration = total\n    track.place(ltl)\n  }\n}\n\n# 幹は地面から。先端は伸びるだけで揺れない\nlet root = (8, 8.6)\nlet trunk = new Line { from: root, to: root, stroke: colors[0], strokeWidth: 0.18, opacity: 0.95 }\nv.place(trunk)\nlet trunk_tl = context trunk as b {\n  motion (t) {\n    0..1: b.to = root + direction(math.PI / 2) * (trunk_len * growth(t, 0))\n  }\n}\ntrunk_tl.duration = total\ntrack.place(trunk_tl)\nbranch(trunk, math.PI / 2 + spread, trunk_len * shrink, 1, 0.4)\nbranch(trunk, math.PI / 2 - spread, trunk_len * shrink, 1, -0.4)\n\nv.addTrack(track)\noutput v\n",
-   "length": 14.0,
-   "media": {
-    "width": 1280,
-    "height": 720,
-    "fps": 30.0,
-    "seconds": 14.0
-   },
-   "trim": ""
-  },
-  {
-   "name": "orbit",
-   "desc": "太陽系。惑星が異なる半径・周期で公転し、月が地球を回る",
-   "code": "# orbit.moph — 太陽系。惑星が異なる半径・周期で公転し、月が地球を回る\n\nimport math\n\nlet v = new View { box: (16, 9) }\nv.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 9, fill: #101020 })\n\nlet cx = 8\nlet cy = 4.5\n\n# 太陽。脈動は 3 つのキーフレーム\nlet sun = new Circle { position: apos!(:center, cx, cy), radius: 0.9, fill: #f0c040 }\nv.place(sun)\nlet pulse = context sun as s {\n  motion (t) {\n    0:   s.radius = 0.9\n    0.5: s.radius = 1.05 :ease\n    1:   s.radius = 0.9  :ease\n  }\n}\npulse.duration = 4s\n\n# 円軌道。0..1 の区間で式を毎フレーム評価するので、t が 0→1 で 1 周する。period で速さを決める\nfunc orbit(body, r, period) {\n  let tl = context body as b {\n    motion (t) {\n      0..1: b.position = apos!(:center, cx + r * math.cos(math.TAU * t), cy + r * math.sin(math.TAU * t))\n    }\n  }\n  tl.duration = period\n  tl\n}\n\nlet planets = [\n  { \"r\": 1.6, \"size\": 0.16, \"period\": 3s,  \"color\": #c0c0c0 },\n  { \"r\": 2.5, \"size\": 0.26, \"period\": 5s,  \"color\": #e0a060 },\n  { \"r\": 3.4, \"size\": 0.28, \"period\": 8s,  \"color\": #4080e0 },\n  { \"r\": 4.2, \"size\": 0.20, \"period\": 12s, \"color\": #e05040 },\n]\n\n# 軌道の線 (fill なし、stroke だけの Circle)\nfor p in planets {\n  v.place(new Circle { position: apos!(:center, cx, cy), radius: p[\"r\"], stroke: #303050, strokeWidth: 0.02 })\n}\n\nlet total = 15s\nlet track = new Timeline { duration: total }\nfor i in 0..4 {\n  track.place(pulse, at: i * 4s)\n}\n\nfor p in planets {\n  let body = new Circle { position: apos!(:center, cx + p[\"r\"], cy), radius: p[\"size\"], fill: p[\"color\"] }\n  v.place(body)\n  # 公転を total の間繰り返す\n  let tl = orbit(body, p[\"r\"], p[\"period\"])\n  let n = total / p[\"period\"]\n  for i in 0..math.ceil(n) {\n    track.place(tl, at: i * p[\"period\"])\n  }\n}\n\n# 地球 (r = 3.4, 8 秒で 1 周) の月。地球の位置に、6 倍速の小さな円運動を足す\nlet moon = new Circle { position: apos!(:center, cx + 3.4 + 0.5, cy), radius: 0.08, fill: #d0d0d0 }\nv.place(moon)\nlet moon_tl = context moon as m {\n  motion (t) {\n    0..1: m.position = apos!(:center,\n      cx + 3.4 * math.cos(math.TAU * t) + 0.5 * math.cos(math.TAU * t * 6),\n      cy + 3.4 * math.sin(math.TAU * t) + 0.5 * math.sin(math.TAU * t * 6))\n  }\n}\nmoon_tl.duration = 8s\ntrack.place(moon_tl, at: 0s)\ntrack.place(moon_tl, at: 8s)\ntrack.place(moon_tl, at: 16s)\n\nlet title = new TextArea { text: \"orbit\", position: apos!(:topLeft, 0.4, 0.3), fontSize: 0.6, fill: #e0e0f0 }\nv.place(title)\ntrack.place(context title as o {\n  motion (t) {\n    0s:   o.opacity = 0\n    1.5s: o.opacity = 1 :fade\n  }\n}, at: 0s)\n\nv.addTrack(track)\noutput v\n",
-   "length": 15.0,
-   "media": {
-    "width": 1280,
-    "height": 720,
-    "fps": 30.0,
-    "seconds": 15.0
-   },
-   "trim": ""
+   "trim": "",
+   "listed": true
   },
   {
    "name": "bounce",
@@ -1528,7 +2347,8 @@
     "fps": 30.0,
     "seconds": 12.7
    },
-   "trim": ""
+   "trim": "",
+   "listed": true
   },
   {
    "name": "bars",
@@ -1541,12 +2361,13 @@
     "fps": 30.0,
     "seconds": 11.3
    },
-   "trim": ""
+   "trim": "",
+   "listed": true
   },
   {
    "name": "clock",
    "desc": "アナログ時計。16 秒で秒針が 2 周し、分針と時針もわずかに進む",
-   "code": "# clock.moph — アナログ時計。16 秒で秒針が 2 周し、分針と時針もわずかに進む\n\nimport math\n\nlet v = new View { box: (16, 9) }\nv.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 9, fill: #e8e4d8 })\n\n# 文字盤\nv.place(new Circle { position: apos!(:center, 8, 4.5), radius: 4, fill: #fffdf5, stroke: #303030, strokeWidth: 0.08 })\n\n# 目盛り。12 個の太い線と 48 個の細い線\nfor i in 0..60 {\n  let a = 6.2832 * i / 60\n  let outer = 3.8\n  let inner = if i % 5 == 0 { 3.3 } else { 3.6 }\n  let w = if i % 5 == 0 { 0.08 } else { 0.03 }\n  v.place(new Line {\n    from: (8 + inner * math.sin(a), 4.5 - inner * math.cos(a)),\n    to:   (8 + outer * math.sin(a), 4.5 - outer * math.cos(a)),\n    stroke: #303030, strokeWidth: w,\n  })\n}\n\n# 数字\nfor (i, n) in [\"12\", \"3\", \"6\", \"9\"].enumerate() {\n  let a = 6.2832 * i / 4\n  v.place(new TextArea { text: n, position: apos!(:center, 8 + 2.8 * math.sin(a), 4.5 - 2.8 * math.cos(a)), fontSize: 0.55, fill: #303030, align: :center })\n}\n\n# 針。秒針は 8 秒で 1 周、分針は 480 秒、時針は 28800 秒で 1 周する (実時間の 7.5 倍速)\nlet hour   = new Line { from: (8, 4.5), to: (8, 2.5), stroke: #303030, strokeWidth: 0.16 }\nlet minute = new Line { from: (8, 4.5), to: (8, 1.2), stroke: #303030, strokeWidth: 0.1 }\nlet second = new Line { from: (8, 4.5), to: (8, 1.0), stroke: #d03030, strokeWidth: 0.04 }\nv.place(hour)\nv.place(minute)\nv.place(second)\nv.place(new Circle { position: apos!(:center, 8, 4.5), radius: 0.15, fill: #d03030 })\n\n# 針は 0..1 の区間で式を毎フレーム評価する。t が 0→1 の 16 秒間に、秒針は 2 周、分針は 2/60 周、時針は 2/720 周\nfunc turn(hand, length, turns) {\n  context hand as h {\n    motion (t) {\n      0..1: h.to = (8 + length * math.sin(math.TAU * t * turns), 4.5 - length * math.cos(math.TAU * t * turns))\n    }\n  }\n}\nlet total = 16s\nlet track = new Timeline { duration: total }\nfor (hand, length, turns) in [(second, 3.5, 2), (minute, 3.3, 2/60), (hour, 2.0, 2/720)] {\n  let tl = turn(hand, length, turns)\n  tl.duration = total\n  track.place(tl, at: 0s)\n}\nv.addTrack(track)\n\noutput v\n",
+   "code": "# clock.moph — アナログ時計。16 秒で秒針が 2 周し、分針と時針もわずかに進む\n\nimport { polar } from shape\nimport { spin } from transition\n\nlet v = new View { box: (16, 9) }\nv.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 9, fill: #e8e4d8 })\n\nlet cx = 8\nlet cy = 4.5\nlet ink = #303030\nlet red = #d03030\n\n# 文字盤\nv.place(new Circle { position: apos!(:center, cx, cy), radius: 4, fill: #fffdf5, stroke: ink, strokeWidth: 0.08 })\n\n# 目盛り。5 の倍数だけ太く長い。polar は中心から距離と角度で点を出す (0 が真上、時計回り)\nfor i in 0..60 {\n  let big = i % 5 == 0\n  v.place(new Line {\n    from: polar(cx, cy, if big { 3.3 } else { 3.6 }, i * 6),\n    to: polar(cx, cy, 3.8, i * 6),\n    stroke: ink,\n    strokeWidth: if big { 0.08 } else { 0.03 },\n  })\n}\n\n# 数字\nfor (i, n) in [\"12\", \"3\", \"6\", \"9\"].enumerate() {\n  v.place(new TextArea { text: n, position: apos!(:center, polar(cx, cy, 2.8, i * 90)), fontSize: 0.55, fill: ink, align: :center })\n}\n\n# 針。真上を向けて置き、spin で回す。中心は Line の from なので、from を文字盤の中心にする。\n# 16 秒で秒針は 2 周、分針はその 60 分の 1、時針は 720 分の 1 だけ進む\nlet total = 16s\nlet track = new Timeline { duration: total }\nfor (length, width, color, turns) in [(2.0, 0.16, ink, 2/720), (3.3, 0.1, ink, 2/60), (3.5, 0.04, red, 2)] {\n  let hand = new Line { from: (cx, cy), to: (cx, cy - length), stroke: color, strokeWidth: width }\n  v.place(hand)\n  track.place(spin(hand, turns, total), at: 0s)\n}\nv.place(new Circle { position: apos!(:center, cx, cy), radius: 0.15, fill: red })\n\nv.addTrack(track)\noutput v\n",
    "length": 16.0,
    "media": {
     "width": 1280,
@@ -1554,7 +2375,78 @@
     "fps": 30.0,
     "seconds": 16.0
    },
-   "trim": ""
+   "trim": "",
+   "listed": true
+  },
+  {
+   "name": "orbit",
+   "desc": "太陽系。惑星が異なる半径・周期で公転し、月が地球を回る",
+   "code": "# orbit.moph — 太陽系。惑星が異なる半径・周期で公転し、月が地球を回る\n\nimport math\n\nlet v = new View { box: (16, 9) }\nv.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 9, fill: #101020 })\n\nlet cx = 8\nlet cy = 4.5\n\n# 太陽。脈動は 3 つのキーフレーム\nlet sun = new Circle { position: apos!(:center, cx, cy), radius: 0.9, fill: #f0c040 }\nv.place(sun)\nlet pulse = context sun as s {\n  motion (t) {\n    0:   s.radius = 0.9\n    0.5: s.radius = 1.05 :ease\n    1:   s.radius = 0.9  :ease\n  }\n}\npulse.duration = 4s\n\n# 円軌道。0..1 の区間で式を毎フレーム評価するので、t が 0→1 で 1 周する。period で速さを決める\nfunc orbit(body, r, period) {\n  let tl = context body as b {\n    motion (t) {\n      0..1: b.position = apos!(:center, cx + r * math.cos(math.TAU * t), cy + r * math.sin(math.TAU * t))\n    }\n  }\n  tl.duration = period\n  tl\n}\n\nlet planets = [\n  { \"r\": 1.6, \"size\": 0.16, \"period\": 3s,  \"color\": #c0c0c0 },\n  { \"r\": 2.5, \"size\": 0.26, \"period\": 5s,  \"color\": #e0a060 },\n  { \"r\": 3.4, \"size\": 0.28, \"period\": 8s,  \"color\": #4080e0 },\n  { \"r\": 4.2, \"size\": 0.20, \"period\": 12s, \"color\": #e05040 },\n]\n\n# 軌道の線 (fill なし、stroke だけの Circle)\nfor p in planets {\n  v.place(new Circle { position: apos!(:center, cx, cy), radius: p[\"r\"], stroke: #303050, strokeWidth: 0.02 })\n}\n\nlet total = 15s\nlet track = new Timeline { duration: total }\nfor i in 0..4 {\n  track.place(pulse, at: i * 4s)\n}\n\nfor p in planets {\n  let body = new Circle { position: apos!(:center, cx + p[\"r\"], cy), radius: p[\"size\"], fill: p[\"color\"] }\n  v.place(body)\n  # 公転を total の間繰り返す\n  let tl = orbit(body, p[\"r\"], p[\"period\"])\n  let n = total / p[\"period\"]\n  for i in 0..math.ceil(n) {\n    track.place(tl, at: i * p[\"period\"])\n  }\n}\n\n# 地球 (r = 3.4, 8 秒で 1 周) の月。地球の位置に、6 倍速の小さな円運動を足す\nlet moon = new Circle { position: apos!(:center, cx + 3.4 + 0.5, cy), radius: 0.08, fill: #d0d0d0 }\nv.place(moon)\nlet moon_tl = context moon as m {\n  motion (t) {\n    0..1: m.position = apos!(:center,\n      cx + 3.4 * math.cos(math.TAU * t) + 0.5 * math.cos(math.TAU * t * 6),\n      cy + 3.4 * math.sin(math.TAU * t) + 0.5 * math.sin(math.TAU * t * 6))\n  }\n}\nmoon_tl.duration = 8s\ntrack.place(moon_tl, at: 0s)\ntrack.place(moon_tl, at: 8s)\ntrack.place(moon_tl, at: 16s)\n\nlet title = new TextArea { text: \"orbit\", position: apos!(:topLeft, 0.4, 0.3), fontSize: 0.6, fill: #e0e0f0 }\nv.place(title)\ntrack.place(context title as o {\n  motion (t) {\n    0s:   o.opacity = 0\n    1.5s: o.opacity = 1 :fade\n  }\n}, at: 0s)\n\nv.addTrack(track)\noutput v\n",
+   "length": 15.0,
+   "media": {
+    "width": 1280,
+    "height": 720,
+    "fps": 30.0,
+    "seconds": 15.0
+   },
+   "trim": "",
+   "listed": true
+  },
+  {
+   "name": "fractal",
+   "desc": "枝分かれする木。各枝は親の先端から生え、親が動けば子も動く",
+   "code": "# fractal.moph — 枝分かれする木。各枝は親の先端から生え、親が動けば子も動く\n# 部品が互いに依存する形: 枝の行は毎フレーム親の to を読む (0..1 の範囲行)。木は根から順に伸び、伸び切ったら風に揺れる\n\nimport math\n\nlet v = new View { box: (16, 9) }\nlet track = new Timeline {}\nv.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 9, fill: #0d1117 })\n\n# ---------- 形と時間の決まり ----------\nlet levels     = 8            # 枝分かれの回数 (枝は 2^(levels+1) - 1 本)\nlet total      = 14s          # 動画の長さ\nlet trunk_len  = 2.1\nlet shrink     = 0.72         # 1 段ごとの長さの比\nlet spread     = 0.46         # 枝の開き (rad)\nlet grow_time  = 0.9          # 1 段が伸びる秒数\nlet grow_gap   = 0.5          # 次の段が伸び始めるまでの秒数\nlet sway_amp   = 0.035        # 揺れの角度 (rad)。先端ほど大きい\nlet sway_period = 4.5         # 揺れの周期 (秒)\nlet colors = [#7a4f33, #8a5c3a, #97693f, #8c7a42, #7c8c45, #62984c, #4aa25a, #46ad78, #6cc496]\n\nlet seconds = total / 1s      # t は 0..1 なので、秒に直すときに掛ける\n\nfunc smooth(k) { k * k * (3 - 2 * k) }\n\n# level 段目の枝が t (0..1) の時点でどこまで伸びているか (0..1)\nfunc growth(t, level) {\n  let k = (t * seconds - level * grow_gap) / grow_time\n  smooth(math.min(1, math.max(0, k)))\n}\n\n# 揺れ。段が深いほど大きく、phase で枝ごとにずらす\nfunc sway(t, level, phase) {\n  sway_amp * level * math.sin(t * seconds / sway_period * math.TAU + phase)\n}\n\nfunc direction(angle) { vector!(math.cos(angle), -math.sin(angle)) }\n\n# 親の先端から角度 angle に伸びる枝を作り、その先にさらに 2 本作る\nfunc branch(parent, angle, len, level, phase) {\n  let line = new Line { from: (0, 0), to: (0, 0), stroke: colors[level], strokeWidth: 0.18 * shrink ^ level, opacity: 0.95 }\n  v.place(line)\n  let tl = context line as b, parent as p {\n    motion (t) {\n      0..1: b.from = p.to\n      0..1: b.to = p.to + direction(angle + sway(t, level, phase)) * (len * growth(t, level))\n    }\n  }\n  tl.duration = total\n  track.place(tl)\n  if level < levels {\n    branch(line, angle + spread, len * shrink, level + 1, phase + 0.4)\n    branch(line, angle - spread, len * shrink, level + 1, phase - 0.4)\n  } else {\n    # 先端の葉。枝が伸び切ってから出る\n    let leaf = new Circle { position: apos!(:center, 0, 0), radius: 0.06, fill: #b9e88a, opacity: 0 }\n    v.place(leaf)\n    let ltl = context leaf as f, line as b {\n      motion (t) {\n        0..1: f.position = apos!(:center, b.to)\n        0..1: f.opacity = growth(t, level + 1) * 0.9\n      }\n    }\n    ltl.duration = total\n    track.place(ltl)\n  }\n}\n\n# 幹は地面から。先端は伸びるだけで揺れない\nlet root = (8, 8.6)\nlet trunk = new Line { from: root, to: root, stroke: colors[0], strokeWidth: 0.18, opacity: 0.95 }\nv.place(trunk)\nlet trunk_tl = context trunk as b {\n  motion (t) {\n    0..1: b.to = root + direction(math.PI / 2) * (trunk_len * growth(t, 0))\n  }\n}\ntrunk_tl.duration = total\ntrack.place(trunk_tl)\nbranch(trunk, math.PI / 2 + spread, trunk_len * shrink, 1, 0.4)\nbranch(trunk, math.PI / 2 - spread, trunk_len * shrink, 1, -0.4)\n\nv.addTrack(track)\noutput v\n",
+   "length": 14.0,
+   "media": {
+    "width": 1280,
+    "height": 720,
+    "fps": 30.0,
+    "seconds": 14.0
+   },
+   "trim": "",
+   "listed": true
+  },
+  {
+   "name": "walker",
+   "desc": "歩く人。関節ごとの図形が、親の先端を毎フレーム読んでつながる (腰 → 腿 → 脛 → 足、肩 → 上腕 → 前腕)。",
+   "code": "# walker.moph — 歩く人。関節ごとの図形が、親の先端を毎フレーム読んでつながる (腰 → 腿 → 脛 → 足、肩 → 上腕 → 前腕)。\n# 歩行の周期は sin で作る。脚が前に振れるとき膝が曲がり、着いているときは伸びる。腕は同じ側の脚と逆に振る。\n# make(near, far, long) が「その場で long の間歩く人」の View (箱 6 x 6、足元は y 5.6) を返す。import して並べられる。\n# 進むのは置いた側の仕事で、箱の幅 6 のとき 1 秒に speed 進めると足が滑らない\n\nimport math\n\n# ---------- 体の寸法と歩き方 ----------\nexport let period = 1.2    # 1 周期 (左右 1 歩ずつ) の秒数\nexport let speed  = 3.1    # 歩幅に合う進む速さ (箱の単位 / 秒)\nexport let floor  = 5.6    # 箱の中の足元の高さ\nlet thigh   = 1.4\nlet shin    = 1.3\nlet torso   = 1.6\nlet upper   = 1.1\nlet fore    = 1.0\nlet swing   = 0.35         # 腿の振れ幅 (rad)\nlet width   = 0.13\n\n# 角度 0 が真下、正が前 (x が増える向き)\nfunc direction(a) { vector!(math.sin(a), math.cos(a)) }\n# 歩行の位相。side は 0 (手前) か 1 (奥) で半周期ずれる\nfunc phase(t, side, long) { math.TAU * t * (long / 1s) / period + side * math.PI }\nfunc hip_at(t, long) { vector!(3, floor - thigh - shin + 0.15 - 0.07 * math.cos(2 * phase(t, 0, long))) }\nfunc thigh_angle(p) { swing * math.sin(p) }\n# 前に振れている間 (cos > 0) だけ膝を曲げる\nfunc shin_angle(p) { thigh_angle(p) - 0.1 - 0.9 * math.max(0, math.cos(p)) }\nfunc upper_angle(p) { -0.6 * math.sin(p) }\nfunc fore_angle(p) { upper_angle(p) + 0.55 }\n\nfunc limb(box, color) {\n  let l = new Line { from: (0, 0), to: (0, 0), stroke: color, strokeWidth: width }\n  box.place(l)\n  l\n}\nfunc joint(box, color, r) {\n  let c = new Circle { position: apos!(:center, 0, 0), radius: r, fill: color }\n  box.place(c)\n  c\n}\n\n# 片側の脚と腕。親の先端を読む行でつなぐ。戻り値は Timeline\nfunc side_of(box, side, color, long) {\n  let th = limb(box, color)\n  let sh = limb(box, color)\n  let ft = limb(box, color)\n  let ua = limb(box, color)\n  let fa = limb(box, color)\n  let knee = joint(box, color, width / 2)\n  let ankle = joint(box, color, width / 2)\n  let elbow = joint(box, color, width / 2)\n  let hand = joint(box, color, width * 0.7)\n  let tl = context th as a, sh as b, ft as c, ua as d, fa as e, knee as k, ankle as n, elbow as m, hand as h {\n    motion (t) {\n      0..1: a.from = hip_at(t, long)\n      0..1: a.to = a.from + direction(thigh_angle(phase(t, side, long))) * thigh\n      0..1: b.from = a.to\n      0..1: b.to = b.from + direction(shin_angle(phase(t, side, long))) * shin\n      0..1: c.from = b.to\n      0..1: c.to = c.from + direction(shin_angle(phase(t, side, long)) + math.PI / 2) * 0.35\n      0..1: k.position = apos!(:center, a.to)\n      0..1: n.position = apos!(:center, b.to)\n      0..1: d.from = hip_at(t, long) + vector!(0.12, -torso)\n      0..1: d.to = d.from + direction(upper_angle(phase(t, side, long))) * upper\n      0..1: e.from = d.to\n      0..1: e.to = e.from + direction(fore_angle(phase(t, side, long))) * fore\n      0..1: m.position = apos!(:center, d.to)\n      0..1: h.position = apos!(:center, e.to)\n    }\n  }\n  tl.duration = long\n  tl\n}\n\n# その場で long の間歩く人。near は手前の手足と胴の色、far は奥の手足の色\nexport func make(near, far, long) {\n  let box = new View { box: (6, 6) }\n  let tl = new Timeline {}\n  # 奥 → 胴 → 手前 の順に置き、同じ順に当てる (親の値を読む行は、親の行が先に当たっている必要がある)\n  tl.place(side_of(box, 1, far, long), at: 0s)\n  let body = limb(box, near)\n  let hip = joint(box, near, width * 0.8)\n  let neck = joint(box, near, width / 2)\n  let head = joint(box, near, 0.36)\n  let trunk = context body as b, hip as p, neck as n, head as h {\n    motion (t) {\n      0..1: b.from = hip_at(t, long)\n      0..1: b.to = b.from + vector!(0.12, -torso)\n      0..1: p.position = apos!(:center, b.from)\n      0..1: n.position = apos!(:center, b.to)\n      0..1: h.position = apos!(:center, b.to + vector!(0.08, -0.5))\n    }\n  }\n  trunk.duration = long\n  tl.place(trunk, at: 0s)\n  tl.place(side_of(box, 0, near, long), at: 0s)\n  box.addTrack(tl)\n  box\n}\n\n# ---------- 単体で見るとき: 1 人が左から右へ横切る ----------\nlet v = new View { box: (16, 9) }\nlet track = new Timeline {}\nv.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 9, fill: #14161c })\nlet ground_y = 8\nv.place(new Line { from: (0, ground_y), to: (16, ground_y), stroke: #3a4560, strokeWidth: 0.04 })\nlet total = 7s\nlet one = make(#e8ecf7, #8b93a7, total)\nv.place(one, at: apos!(:bottomLeft, -5, ground_y + 6 - floor), w: 6)\nlet travel = context one as o {\n  motion (t) {\n    0s: o.position.x = -5\n    7s: o.position.x = -5 + speed * 7\n  }\n}\ntrack.place(one, at: 0s)\ntrack.place(travel, at: 0s)\nv.addTrack(track)\noutput v\n",
+   "length": 7.0,
+   "media": {
+    "width": 1280,
+    "height": 720,
+    "fps": 30.0,
+    "seconds": 7.0
+   },
+   "trim": "",
+   "listed": true
+  },
+  {
+   "name": "passerby",
+   "desc": "育つ木 (fractal.moph) の前を、歩く人 (walker.moph) が通り過ぎる",
+   "code": "# passerby.moph — 育つ木 (fractal.moph) の前を、歩く人 (walker.moph) が通り過ぎる\n# 2 つのサンプルを import して置くだけで 1 つの絵になる。README の GIF はこれ。\n# docs/readme.gif の作り方:\n#   mophila render samples/passerby.moph -o r.mp4 --size 400x225 --fps 10 --codec libx264rgb --pix-fmt rgb24\n#   ffmpeg -i r.mp4 -vf \"palettegen=max_colors=64:stats_mode=diff\" pal.png\n#   ffmpeg -i r.mp4 -i pal.png -lavfi \"paletteuse=dither=none:diff_mode=rectangle\" docs/readme.gif\n\nimport { make, speed, floor } from .walker\nimport .fractal\n\nlet v = new View { box: (16, 9) }\nlet track = new Timeline {}\nlet total = 8s\n\n# 木は fractal.moph の View をそのまま置く (背景も木のもの)。木の Timeline は 14 秒あるので total で切る\nv.place(fractal.output, at: apos!(:topLeft, 0, 0), w: 16)\nlet tree = new Timeline { duration: total }\ntree.place(fractal.output, at: 0s)\ntrack.place(tree, at: 0s)\n\n# 人は左から右へ。幅 5 で置くので、足が滑らない速さは speed * 5 / 6\nlet w = 5\nlet person = make(#e8ecf7, #8b93a7, total)\nv.place(person, at: apos!(:bottomLeft, -w, 8.6 + (6 - floor) * w / 6), w: w)\nlet cross = context person as p {\n  motion (t) {\n    0s: p.position.x = -w\n    8s: p.position.x = -w + speed * w / 6 * 8\n  }\n}\ntrack.place(person, at: 0s)\ntrack.place(cross, at: 0s)\n\nlet clock = new Timeline { duration: total }\nv.addTrack(clock)\nv.addTrack(track)\noutput v\n",
+   "length": 8.0,
+   "media": {
+    "width": 1280,
+    "height": 720,
+    "fps": 30.0,
+    "seconds": 8.0
+   },
+   "trim": "",
+   "listed": true
+  },
+  {
+   "name": "crowd",
+   "desc": "夕暮れの通り。walker.moph の make() で作った人たちが、奥行きの違う位置を歩いていく。",
+   "code": "# crowd.moph — 夕暮れの通り。walker.moph の make() で作った人たちが、奥行きの違う位置を歩いていく。\n# 奥の人ほど小さく、薄く、ゆっくり (幅に比例した速さなので足は滑らない)。空は Shader のグラデーション。\n# 日が暮れると街灯が点き、遠くの窓に灯りが入り、星が出て、最後に全体が暗転する\n\nimport math\nimport { fade_to } from transition\nimport { make, speed, floor } from .walker\n\nlet v = new View { box: (16, 9) }\nlet track = new Timeline {}\nlet total = 26s\nlet seconds = total / 1s\nlet dusk_end = 4        # ここから暗くなり始める (秒)\nlet night_at = 18       # 完全に夜になる (秒)\n\n# すべてをこの箱に入れ、最後に箱ごとフェードアウトする (下は黒)\nv.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 9, fill: #000000 })\nlet stage = new View { box: (16, 9) }\nv.place(stage, at: apos!(:topLeft, 0, 0), w: 16)\n\n# 空: 上は群青、地平線は橙。dusk_end から night_at にかけて夜になる\nlet dusk = new Shader {\n  color: func (x, y, t) {\n    let k = y / 6.2\n    let night = math.min(1, math.max(0, (t - dusk_end) / (night_at - dusk_end)))\n    let top = #1c2452 * (1 - night) + #05070f * night\n    let horizon = #f0965a * (1 - night) + #2a2236 * night\n    top * (1 - k * k) + horizon * (k * k)\n  },\n}\nstage.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 6.2, fill: dusk })\n# 星: 夜になってから出る\nlet stars = []\nfor i in 0..30 {\n  let s = new Circle { position: apos!(:center, (math.sin(i * 12.9898) * 43758.5453) % 1 * 16, (math.sin(i * 78.233) * 43758.5453) % 1 * 3.5), radius: 0.03, fill: #ffffff, opacity: 0 }\n  stage.place(s)\n  stars.push(s)\n}\nstage.place(new Rect { position: apos!(:topLeft, 0, 6.2), w: 16, h: 2.8, fill: #1a1d2a })\n# 遠くの街並みと、その窓 (夜に順に点く)\nlet windows = []\nfor i in 0..14 {\n  let h = 0.4 + 0.9 * (0.5 + 0.5 * math.sin(i * 2.3))\n  let x = i * 1.2 - 0.3\n  stage.place(new Rect { position: apos!(:bottomLeft, x, 6.2), w: 1.0, h: h, fill: #232a45 })\n  for j in 0..math.floor(h / 0.3) {\n    for k in 0..3 {\n      if (math.sin((i * 7 + j * 3 + k) * 12.9898) * 43758.5453) % 1 > 0.45 {\n        let w = new Rect { position: apos!(:bottomLeft, x + 0.15 + k * 0.3, 6.05 - j * 0.3), w: 0.14, h: 0.16, fill: #f6d27a, opacity: 0 }\n        stage.place(w)\n        windows.push(w)\n      }\n    }\n  }\n}\n\n# 人: (足元の高さ, 箱の幅, 手前の色, 奥の色, 出る時刻)。奥から順に置く\nlet people = [\n  (6.9, 2.4, #8d93a8, #5c6278, 0.5s),\n  (7.2, 3.0, #9aa1b8, #666d86, 4s),\n  (7.6, 3.8, #c2c8dc, #7f8699, 2s),\n  (8.2, 4.8, #e2b46a, #9c7a45, 6.5s),\n  (8.7, 6.0, #e8ecf7, #8b93a7, 0s),\n  (8.7, 6.0, #d9645a, #8a3f3a, 11s),\n]\nfor (ground, w, near, far, start) in people {\n  let scale = w / 6\n  let x0 = -w\n  let x1 = 16 + 0.5\n  let cross = (x1 - x0) / (speed * scale)\n  let p = make(near, far, cross * 1s)\n  stage.place(p, at: apos!(:bottomLeft, x0, ground + (6 - floor) * scale), w: w)\n  let walk = context p as o {\n    motion (t) {\n      0: o.position.x = x0\n      1: o.position.x = x1\n    }\n  }\n  walk.duration = cross * 1s\n  # 横切り終わったら 3 秒後にまた左から。動画の中で渡り切れる分だけ\n  let n = math.ceil((seconds - start / 1s) / (cross + 3))\n  for i in 0..n {\n    let at = start + i * (cross + 3) * 1s\n    if at + cross * 1s <= total {\n      track.place(p, at: at)\n      track.place(walk, at: at)\n    }\n  }\n}\n\n# 手前の街灯。夜になると点く (光の玉と、足元の光だまり)\nlet lamps = []\nfor x in [3.5, 11.5] {\n  stage.place(new Rect { position: apos!(:bottomLeft, x, 8.8), w: 0.12, h: 4.1, fill: #2b3150 })\n  let cx = x + 0.06\n  let bulb = new Circle { position: apos!(:center, cx, 4.7), radius: 0.22, fill: #ffe6a8, opacity: 0.25 }\n  # 光の玉と光だまりは、中心から外へ薄くなる Shader で塗る\n  let glow = new Shader { color: func (px, py, t) {\n    let d2 = (px - cx) * (px - cx) + (py - 4.7) * (py - 4.7)\n    rgba!(255, 230, 168, math.exp(-d2 / 0.3) * 0.8)\n  } }\n  let spread = new Shader { color: func (px, py, t) {\n    let dx = (px - cx) / 1.8\n    let dy = (py - 8.75) / 0.3\n    rgba!(255, 230, 168, math.exp(-(dx * dx + dy * dy)) * 0.6)\n  } }\n  let halo = new Circle { position: apos!(:center, cx, 4.7), radius: 1.3, fill: glow, opacity: 0 }\n  let pool = new Rect { position: apos!(:center, cx, 8.75), w: 4.5, h: 0.7, fill: spread, opacity: 0 }\n  stage.place(pool)\n  stage.place(halo)\n  stage.place(bulb)\n  let on = context bulb as b, halo as h, pool as g {\n    motion (t) {\n      0s: b.opacity = 0.25, h.opacity = 0, g.opacity = 0\n      0.1s: b.opacity = 1, h.opacity = 1, g.opacity = 1\n      0.25s: b.opacity = 0.4, h.opacity = 0.3, g.opacity = 0.3\n      0.6s: b.opacity = 1, h.opacity = 1, g.opacity = 1\n    }\n  }\n  lamps.push(on)\n}\nlet lamp_at = 12s\ntrack.place(lamps[0], at: lamp_at)\ntrack.place(lamps[1], at: lamp_at + 0.7s)\n\n# 遠くの窓が順に点く\nfor (i, w) in windows.enumerate() {\n  track.place(fade_to(w, 0, 0.9, 0.4s), at: 13s + (math.sin(i * 3.7) * 0.5 + 0.5) * 6s)\n}\n\n# 星が出て、瞬く\nfor (i, s) in stars.enumerate() {\n  let twinkle = context s as o {\n    motion (t) {\n      0..1: o.opacity = math.min(1, math.max(0, (t * seconds - 15 - i * 0.1) / 3)) * (0.5 + 0.5 * math.sin(math.TAU * t * seconds / 2 + i))\n    }\n  }\n  twinkle.duration = total\n  track.place(twinkle, at: 0s)\n}\n\n# 最後に全体をフェードアウト\nlet fade_out = context stage as s {\n  motion (t) {\n    0s: s.opacity = 1\n    2.5s: s.opacity = 0 :ease_in\n  }\n}\ntrack.place(fade_out, at: total - 2.5s)\n\nv.addTrack(track)\noutput v\n",
+   "length": 26.0,
+   "media": {
+    "width": 1280,
+    "height": 720,
+    "fps": 30.0,
+    "seconds": 20.0
+   },
+   "trim": "",
+   "listed": true
   },
   {
    "name": "grid",
@@ -1567,7 +2459,8 @@
     "fps": 30.0,
     "seconds": 16.0
    },
-   "trim": ""
+   "trim": "",
+   "listed": true
   },
   {
    "name": "julia",
@@ -1580,7 +2473,8 @@
     "fps": 30.0,
     "seconds": 5.0
    },
-   "trim": "00:12..00:17"
+   "trim": "00:12..00:17",
+   "listed": true
   },
   {
    "name": "burning_ship",
@@ -1593,7 +2487,8 @@
     "fps": 30.0,
     "seconds": 5.0
    },
-   "trim": "00:22..00:27"
+   "trim": "00:22..00:27",
+   "listed": true
   },
   {
    "name": "mandelbrot",
@@ -1606,7 +2501,8 @@
     "fps": 30.0,
     "seconds": 5.0
    },
-   "trim": "00:48..00:53"
+   "trim": "00:48..00:53",
+   "listed": true
   }
  ],
  "docs": [
@@ -1614,7 +2510,7 @@
    "path": "docs/mophila-spec.md",
    "key": "spec",
    "title": "言語仕様",
-   "text": "# mophila 言語仕様 (整理中)\n\n決定済みの方針と examples/ を整理したもの。言語はできるだけ少ない部品の組み合わせで構成する。\n\n実装はインタプリタ。ソースを字句解析 → 構文解析し、構文木を評価して View と Timeline を作り、毎フレーム、キーフレームの式を構文木のまま評価して描く。コード生成は行わない。`bundle` はソースと import 先のファイルを実行ファイルに埋め込むもので、コンパイルではない。構文の見本は examples/ を正とし、ここには意味と規則を書く。未決事項は mophila-draft.md。\n\n## 1. 字句\n\n- `# ` (井桁と空白) から行末までがコメント。`##` で始まる行もコメントで、`export` の直前に置くとその項目の説明 (ドキュメントコメント) として `scripts/docgen.py` が拾う。1 行目が要約、`@param name 説明` と `@returns 説明` が引数と戻り値\n\n- コメント: `# ` (# の後に空白) から行末。`#` の直後に文字が続けば Color リテラル\n- 識別子: 英字・数字・`_`。先頭は英字か `_`\n- 列挙値: `:name` (例 `:center`)\n- リテラル: 下記「型」を参照\n- 文の区切り: 改行。`{ }` の中も同じ\n\n## 2. 演算子と優先順位\n\n高い順。同じ行は同じ優先順位。`expr` は式、`name` は識別子、`args` は `expr, ...` (名前付きは `name: expr`)。\n\n| 優先 | 形 | 結合 | 意味 |\n|---|---|---|---|\n| 1 | `expr . name` | 左 | 属性参照 |\n| 1 | `expr [ expr ]` | 左 | 添字 |\n| 1 | `expr ( args )` | 左 | 呼び出し |\n| 1 | `name ! ( args )` | — | specific tuple 生成 |\n| 2 | `- expr` | 右 | 符号反転 |\n| 2 | `not expr` | 右 | 否定 |\n| 3 | `expr ^ expr` | 右 | べき |\n| 4 | `expr * expr`, `expr / expr`, `expr % expr` | 左 | 乗除、剰余 |\n| 5 | `expr + expr`, `expr - expr` | 左 | 加減 |\n| 6 | `expr .. expr`, `expr ..= expr` | なし | 範囲 |\n| 7 | `expr < expr`, `expr <= expr`, `expr > expr`, `expr >= expr` | なし | 比較 |\n| 8 | `expr == expr`, `expr != expr` | なし | 等価 |\n| 9 | `expr and expr` | 左 | 論理積 |\n| 10 | `expr or expr` | 左 | 論理和 |\n\n優先順位に属さないもの:\n\n| 形 | 意味 |\n|---|---|\n| `( expr )` | 括弧。優先順位を変える |\n| `( expr , expr , ... )` | Tuple。要素が 1 つなら括弧 |\n| `[ expr , ... ]` | List |\n| `{ expr : expr , ... }` | Dict |\n| `func ( params ) { ... }` | 無名関数 |\n| `if expr { ... } else { ... }` | 条件式。値を持つ |\n\n文 (値を持たない):\n\n| 形 | 意味 |\n|---|---|\n| `let name = expr` | 束縛 |\n| `let name : Type = expr` | 型注釈付き束縛 |\n| `name = expr`, `expr . name = expr` | 代入 |\n| `expr` | 式文 |\n\n`- expr` は優先 2、`expr - expr` は優先 5。`-2 ^ 2` は `- expr` が先に結合するので `(-2) ^ 2 = 4`。`a - b` は `a` の後に `-` が来るので優先 5。改行は文の区切りなので、行頭の `- x` は新しい文 (`- expr`)。\n\n## 3. 型\n\n### 3.1 基本型\n\n| 型 | リテラル | 備考 |\n|---|---|---|\n| Number | `1` `1.5` `1/3` `25%` | 整数と実数を区別しない。`1/3` は分数のまま保持。`100%` = 1.0 |\n| Duration | `83s` `1m23s` `500ms` `01:23` `01:23:45.678` | 単位は ms / s / m / h。コロン形式は mm:ss と hh:mm:ss、小数秒可 |\n| Color | `#rgb` `#rgba` `#rrggbb` `#rrggbbaa` `rgb!(r, g, b)` `rgba!(r, g, b, a)` `new Color(r=, g=, b=, a=)` | r/g/b は 0..255、a は 0..1。3/4 桁は各桁を重ねて 6/8 桁に広げる |\n| String | `\"hello\"` `\"say \\\\\"hi\\\\\"\"` | エスケープは `\\\\\"` `\\\\\\\\` `\\\\n` `\\\\t`。`+` で連結。埋め込みはしない。`\"n = {n}\".format(n)` で `{...}` を順に置き換える (名前は説明用)。Dict を渡せば `\"{x} {y}\".format({x, y})` のように名前で置き換える |\n| Bool | `true` `false` | |\n| Tuple | `(1, 1.5)` | 要素ごとに型を持つ |\n| List | `[1, 2, 3]` | 要素は同じ型 |\n| Dict | `{ \"k\": v }` `{ x, y }` | キーは String。`{ x, y }` は `{ \"x\": x, \"y\": y }` の省略形 |\n| Range | `0..5` `0..=5` | `..` は末尾を含まない |\n| Func | `func (x) { x }` | 型表記は `Func<引数 -> 戻り値>` |\n| Nothing | | 戻り値のない関数の戻り値 |\n\n### 3.2 Func の型表記\n\n`Func<Number, Number -> Number>`。引数なしは `Func<-> Number>`。可変長は `Func<Number... -> Number>`。どの型でも受け取る組み込み (`log`, `type_of`) は `Func<Any>` と書く。`Any` はこの表記の中だけの記号で、型としては存在しない。\n\n### 3.3 Union 型\n\n`type Shape = Circle | Rect | Line | Polygon | TextArea` のように既存の型を `|` で結んで定義する。\n\n### 3.4 specific tuple\n\n名前と要素の型を持つ Tuple。定義は `tuple name(field: Type, ...)`、生成は `name!(...)`。\n\n- 同じ名前で複数の signature を定義できる。型は 1 つ、コンストラクタが複数\n- signature の選択は引数の数と型で行い、できるだけ細かい型に一致させる。判定は実行時\n- 素の Tuple は specific tuple ではない。`(1, 1.5)` は Tuple、`vector!(1, 1.5)` が Vector\n- ただし specific tuple が要る場所 (属性、specific tuple の引数、`place` の `at:`、motion の行) に signature に合う素の Tuple を書くと、その型に変換される: `box: (4, 3)`、`position: (:center, 1, 2)`、`apos!(:center, (1, 2))`、`size!((1, 2))`。合わなければ `TypeError`。変換は型の決まった場所だけで、Tuple の値そのものは変わらない\n- Vector の演算は実数 2 つの Tuple と同じ: `Vector ± Vector`、`Vector ± (x, y)`、`Vector × Number`、`Vector ÷ Number`、`-Vector`。結果は Vector\n\n組み込みの specific tuple:\n\n| 名前 | signature | 型 |\n|---|---|---|\n| `vector` | `(x: Number, y: Number)` | Vector |\n| `apos` | `(anchor: Anchor, vector: Vector)` / `(anchor: Anchor, x: Number, y: Number)` | AnchoredPosition |\n| `rgb` | `(r, g, b)` | Color |\n| `rgba` | `(r, g, b, a)` | Color |\n\n### 3.5 列挙\n\n| 型 | 値 |\n|---|---|\n| Anchor | `:center` `:topLeft` `:topRight` `:bottomLeft` `:bottomRight` `:top` `:bottom` `:left` `:right` |\n| Align | `:left` `:center` `:right` |\n| Ease | `:linear` `:ease_in` `:ease_out` `:ease` |\n| Effect | `:fade` |\n\n### 3.6 位置\n\n- Vector: 2 要素。`.x` `.y`\n- AnchoredPosition: Anchor + Vector。`.anchor` `.vector` `.x` `.y` (`.x` `.y` は vector の成分。書くのも読むのも可)。基準点の違うもの同士の変換には図形のサイズが要るので、place された後にしか行えない\n\n### 3.7 図形と箱\n\n| 型 | 属性 |\n|---|---|\n| Circle | position: AnchoredPosition, radius: Number |\n| Rect | position: AnchoredPosition, w, h: Number, radius: Number (角の丸み、省略なら 0) |\n| Line | from, to: Vector |\n| Polygon | points: List<Vector> |\n| TextArea | text: String, position: AnchoredPosition, w: Number, font: String, fontSize: Number, align: Align |\n| View | box: Vector (座標系の幅と高さ。`vector!(4, 3)` なら 0..4 × 0..3。ピクセルは持たない), opacity: Number (中身をまとめて 1 枚として掛ける。中の図形が重なっても二重に薄くならない)。別の View に置かれたときは position / w / h も持つ |\n| Subtitle | text: String, duration: Duration。画面には描かず、Timeline に置くと動画の字幕トラックになる |\n| Shader | color: `Func<Number, Number, Number -> Color>` (引数は箱の座標 x, y と動画の時刻 t 秒), args: List<Number> (省略可。4 つ目の引数として渡る), samples: Number (1 ピクセルあたりの評価点の数。平方数に切り上げ、4 なら 2x2 の平均。省略は 1)。図形の `fill` に入れる塗りで、図形の中の各ピクセルの色をこの関数で決める |\n\n図形の共通属性: fill: Paint (`type Paint = Color | Shader`), stroke: Color, strokeWidth, opacity: Number。Line 以外は position (AnchoredPosition) で置く。`type Placeable = Shape | View`。\n\nShader の関数は描画のたびに GPU で全ピクセル分走るので、書けるのは数値の部分だけ: Number / Bool / Color / Vector (`vector!`、`.x` `.y`、`+ -`、Number との `* /`)、四則・`%`・`^`・比較・論理、`if`、範囲の `for`、`return`、`math.*`、`rgb!` `rgba!`、外側の Number / Color / Bool / Vector / List (どれか 1 種類だけのもの) と関数 (再帰は不可)。文字列、Duration、図形、Dict、素の Tuple は使えない。`args` は毎フレーム読むので、motion の行で変えれば動く。`run` では実行されず、`render` / `preview` / `sheet` で走る。GPU の実数は 32 bit\n\n### 3.8 時間\n\n| 型 | 中身 | 作り方 | duration |\n|---|---|---|---|\n| Motion | 値の時間変化。対象なし | `motion (t, a, b) { 時刻: 値, ... }` | 既定は最後の時刻。`m.duration = 10s` で上書き |\n| Timeline | 対象 + 属性への割り当て。入れ物にもなり、Timeline の中に Timeline を置ける | `m.apply(target, f)` (f は `func (target, t, [cols]) { }`) / `context target as o { motion (t) { 時刻: o.attr = ... } }` / `new Timeline { duration: }` | 同上 |\n| Audio | 音声ファイル。`duration` (ファイルの長さ) と `file` を持つ | `import \"bgm.m4a\" as bgm` (.moph 以外のファイルの import。長さは ffprobe で読む) | ファイルの長さ |\n\n- 行の時刻は Duration (`2s`) か 0..1 の実数 (`0.5`、`50%`)。1 つの motion で混ぜられない。実数のときは `duration` の設定が必須\n- `duration` を設定すると、全キーフレームの時刻がそれに合わせて比例して伸縮する\n- Motion の行では `t` = その行に書いた時刻 (伸縮前)、以降の名前 = 同じ行の左の列の値\n- 行末に Ease / Effect を書ける\n- Timeline を Timeline に置く: `place(tl, at: Duration, fadeIn:, fadeOut:)`。duration を指定した入れ子は、はみ出した分を切る\n- 音声を置く: `place(bgm, at:, duration:, fadeIn:, fadeOut:, volume:, loop:)`。duration で切る (繰り返さなければファイルより長くはならない)、volume は 1 がそのまま、`loop: true` は duration か動画の終わりまで繰り返す (動画を延ばさない)。同じ音声を何度でも置け、重なれば混ざる。duration を指定した Timeline の中では、はみ出した分を切る。render が ffmpeg で動画の音声トラックにし、preview は ffmpeg で PCM にして鳴らす\n- 字幕を置く: `place(new Subtitle { text:, duration: }, at:)`。render が SRT にして動画の字幕トラックに入れる (mp4/mov は mov_text、webm は webvtt、mkv は srt)。プレイヤー側で表示を切り替える。preview と sheet では画面の下に重ねて出す\n- 動画の長さは、置いたものすべての終わりの最大 (音声・字幕も含む)\n- Motion は単独では place できない\n- 各フレームの状態は「スクリプト実行直後の状態 + その時刻までに始まった Timeline を置いた順に当てたもの」で決まり、前のフレームに依存しない。preview で時間を戻しても同じ画になる\n\n## 4. 文\n\n- `let name = 式` — 束縛。再代入は `name = 式` (let なしの初回代入はエラー)\n- `if 条件 { } else if { } else { }` — 式でもあり、最後の式が値\n- `for x in List | Range | Dict { }`、`for (i, x) in xs.enumerate() { }`\n- `func name(引数) { }` — 最後の式が戻り値。`return` も可 (`if` や `for` の中から関数を抜ける)。既定値・名前付き引数あり\n- `context expr as name, ... { }` — ブロック内で `expr` を `name` として参照する。複数可\n- `tuple name(field: Type, ...)` — specific tuple の定義\n- `type Name = A | B` — Union 型の定義\n- `output view` — 動画全体の指定\n- `import name` — 標準ライブラリのモジュールを `name` に束縛する (Module 型)。import せずに使うと `NameError.UndefinedVariable` に `add \"import name\"` のヒントが付く\n- `import math` / `import fractal` — 名前だけなら標準ライブラリ (本体に入っているもの。6 を参照)\n- `import .orbit` — 同じ場所の `orbit.moph` を別のスコープで実行し、`export` した名前と `output` した View (`orbit.output`) を持つ Module を `orbit` に束縛する。`import .lib.shapes` は `./lib/shapes.moph`、`import ..parent` は 1 つ上 (文法上は通るが避ける)。`as name` で別名。`import \"path/file.moph\"` の形も可 (既定の名前はファイル名)\n- `import { a, b } from .slides` — export した名前を直接この場所に持ち込む。`from math` も可\n- `import \"bgm.m4a\" as bgm` — .moph 以外のファイルは音声として読み、Audio を束縛する (`as` が無ければファイル名)。`bundle` はこのファイルも埋め込む\n- 同じファイルは 1 度だけ実行され、以後の import は同じ実体を返す。循環 import はエラー\n- `export let ...` / `export func ...` — import した側に公開する。トップレベルのみ\n\n## 5. 空間\n\n- 箱 (View) は `box: vector!(w, h)` で座標系を宣言する。中の座標はその単位\n- `view.place(shape)`。図形の位置は図形の `position` で決まる\n- `view.place(other_view, at: AnchoredPosition, w:, h:)` で View を入れ子にする。w か h の片方だけなら縦横比を保ち、両方なら比率を保ったまま収める。子の座標は子の box で解釈される\n- `timeline.place(view, at:)` / `view.addTrack(view)` で、子 View の Timeline を親の時間軸で動かす\n- クロージャと Timeline はスコープを共有する (複製しない)。定義後に変数を変えれば、その値が見える\n\n## 6. 組み込みと標準ライブラリ\n\nimport なしで使える組み込み:\n\n| 名前 | 型 | 内容 |\n|---|---|---|\n| log | `Func<Any...>` | 引数を空白区切りで stderr へ出力。動画には出ない |\n| type_of | `Func<Any>` | 型名を String で返す |\n| `vector!` `apos!` `rgb!` `rgba!` | specific tuple | 3.4 を参照 |\n| String.format / len / replace、List / Dict のメソッド (join など) | | examples/collection.moph を参照 |\n\n`import` で使う標準ライブラリ:\n\n| モジュール | 内容 |\n|---|---|\n| math | `PI` `TAU` `E` (Number)、`sin` `cos` `floor` `ceil` `abs` `sqrt` `ln` `exp` (`Func<Number -> Number>`)、`atan2(y, x)`、`max` `min` (`Func<Number... -> Number>`) |\n| color | 色を作る、混ぜる: `mix(a, b, k)` `lighten(c, k)` `darken(c, k)` `alpha(c, a)` `hsl(h, s, l)` `gray(v)`。Color は `c.r` `c.g` `c.b` (0..255) `c.a` (0..1) が読める |\n| shape | Polygon の points を作る: `regular_polygon(cx, cy, r, n, rotation)` `star(cx, cy, outer, inner, n, rotation)` `arrow(from, to, width, head, head_width)` |\n| layout | 並べる位置: `grid(x, y, w, h, cols, rows)` (各マスの中心) `cell(w, h, cols, rows)` `along(from, to, n)` `fit(w, h, box_w, box_h)` |\n| transition | 図形や View に当てる Timeline: `fade_in(o, duration)` `fade_out` `fade_to(o, from, to, duration)` `slide_in(o, dx, dy, duration)` `slide_out` `move_by` `show(track, objs, at, end, duration, stagger)` |\n| fractal | エスケープタイム系フラクタル。`escape_time(formula, coloring, center, span, ...)` が Shader を返す。反復式 `mandelbrot` `julia(c)` `burning_ship` `multibrot(n)`、精度 `plain` `perturbation`、色付け `smooth(stops, period)`。本体に埋め込んだ .moph (src/stdlib/fractal.moph) で、説明はそのドキュメントコメントから |\n\n## 7. エラー\n\n種別のツリーと例は examples/error.moph。メッセージは英語で `種別.細目: message`。\n"
+   "text": "# mophila 言語仕様 (整理中)\n\n決定済みの方針と examples/ を整理したもの。言語はできるだけ少ない部品の組み合わせで構成する。\n\n実装はインタプリタ。ソースを字句解析 → 構文解析し、構文木を評価して View と Timeline を作り、毎フレーム、キーフレームの式を構文木のまま評価して描く。コード生成は行わない。`bundle` はソースと import 先のファイルを実行ファイルに埋め込むもので、コンパイルではない。構文の見本は examples/ を正とし、ここには意味と規則を書く。未決事項は mophila-draft.md。\n\n## 1. 字句\n\n- `# ` (井桁と空白) から行末までがコメント。`##` で始まる行もコメントで、`export` の直前に置くとその項目の説明 (ドキュメントコメント) として `scripts/docgen.py` が拾う。1 行目が要約、`@param name 説明` と `@returns 説明` が引数と戻り値\n\n- コメント: `# ` (# の後に空白) から行末。`#` の直後に文字が続けば Color リテラル\n- 識別子: 英字・数字・`_`。先頭は英字か `_`\n- 列挙値: `:name` (例 `:center`)\n- リテラル: 下記「型」を参照\n- 文の区切り: 改行。`{ }` の中も同じ\n\n## 2. 演算子と優先順位\n\n高い順。同じ行は同じ優先順位。`expr` は式、`name` は識別子、`args` は `expr, ...` (名前付きは `name: expr`)。\n\n| 優先 | 形 | 結合 | 意味 |\n|---|---|---|---|\n| 1 | `expr . name` | 左 | 属性参照 |\n| 1 | `expr [ expr ]` | 左 | 添字 |\n| 1 | `expr ( args )` | 左 | 呼び出し |\n| 1 | `name ! ( args )` | — | record 生成 |\n| 2 | `- expr` | 右 | 符号反転 |\n| 2 | `not expr` | 右 | 否定 |\n| 3 | `expr ^ expr` | 右 | べき |\n| 4 | `expr * expr`, `expr / expr`, `expr % expr` | 左 | 乗除、剰余 |\n| 5 | `expr + expr`, `expr - expr` | 左 | 加減 |\n| 6 | `expr .. expr`, `expr ..= expr` | なし | 範囲 |\n| 7 | `expr < expr`, `expr <= expr`, `expr > expr`, `expr >= expr` | なし | 比較 |\n| 8 | `expr == expr`, `expr != expr` | なし | 等価 |\n| 9 | `expr and expr` | 左 | 論理積 |\n| 10 | `expr or expr` | 左 | 論理和 |\n\n優先順位に属さないもの:\n\n| 形 | 意味 |\n|---|---|\n| `( expr )` | 括弧。優先順位を変える |\n| `( expr , expr , ... )` | Tuple。要素が 1 つなら括弧 |\n| `[ expr , ... ]` | List |\n| `{ expr : expr , ... }` | Dict |\n| `func ( params ) { ... }` | 無名関数 |\n| `if expr { ... } else { ... }` | 条件式。値を持つ |\n\n文 (値を持たない):\n\n| 形 | 意味 |\n|---|---|\n| `let name = expr` | 束縛 |\n| `let name : Type = expr` | 型注釈付き束縛 |\n| `name = expr`, `expr . name = expr` | 代入 |\n| `expr` | 式文 |\n\n`- expr` は優先 2、`expr - expr` は優先 5。`-2 ^ 2` は `- expr` が先に結合するので `(-2) ^ 2 = 4`。`a - b` は `a` の後に `-` が来るので優先 5。改行は文の区切りなので、行頭の `- x` は新しい文 (`- expr`)。\n\n## 3. 型\n\n### 3.1 基本型\n\n| 型 | リテラル | 備考 |\n|---|---|---|\n| Number | `1` `1.5` `1/3` `25%` | 整数と実数を区別しない。`1/3` は分数のまま保持。`100%` = 1.0 |\n| Duration | `83s` `1m23s` `500ms` `01:23` `01:23:45.678` | 単位は ms / s / m / h。コロン形式は mm:ss と hh:mm:ss、小数秒可 |\n| Color | `#rgb` `#rgba` `#rrggbb` `#rrggbbaa` `rgb!(r, g, b)` `rgba!(r, g, b, a)` `new Color(r=, g=, b=, a=)` | r/g/b は 0..255、a は 0..1。3/4 桁は各桁を重ねて 6/8 桁に広げる |\n| String | `\"hello\"` `\"say \\\\\"hi\\\\\"\"` | エスケープは `\\\\\"` `\\\\\\\\` `\\\\n` `\\\\t`。`+` で連結。埋め込みはしない。`\"n = {n}\".format(n)` で `{...}` を順に置き換える (名前は説明用)。Dict を渡せば `\"{x} {y}\".format({x, y})` のように名前で置き換える |\n| Bool | `true` `false` | |\n| Tuple | `(1, 1.5)` | 要素ごとに型を持つ |\n| List | `[1, 2, 3]` | 要素は同じ型 |\n| Dict | `{ \"k\": v }` `{ x, y }` | キーは String。`{ x, y }` は `{ \"x\": x, \"y\": y }` の省略形 |\n| Range | `0..5` `0..=5` | `..` は末尾を含まない |\n| Func | `func (x) { x }` | 型表記は `Func<引数 -> 戻り値>` |\n| Nothing | | 戻り値のない関数の戻り値 |\n\n### 3.2 Func の型表記\n\n`Func<Number, Number -> Number>`。引数なしは `Func<-> Number>`。可変長は `Func<Number... -> Number>`。どの型でも受け取る組み込み (`log`, `type_of`) は `Func<Any>` と書く。`Any` はこの表記の中だけの記号で、型としては存在しない。\n\n### 3.3 Union 型\n\n`type Shape = Circle | Ellipse | Rect | Line | Polygon | Path | TextArea` のように既存の型を `|` で結んで定義する。\n\n### 3.4 record\n\n名前と、型の付いたフィールドを持つ値。定義は `record name(field: Type, ...)`、生成は `name!(...)`。フィールドは名前で読む (`v.x`)。値なので中身は変えられない。\n\n- 同じ名前で複数の signature を定義できる。型は 1 つ、コンストラクタが複数\n- signature の選択は引数の数と型で行い、できるだけ細かい型に一致させる。判定は実行時\n- 素の Tuple は record ではない。`(1, 1.5)` は Tuple、`vector!(1, 1.5)` が Vector\n- ただし record が要る場所 (属性、record の引数、`place` の `at:`、motion の行) に signature に合う素の Tuple を書くと、その型に変換される: `box: (4, 3)`、`position: (:center, 1, 2)`、`apos!(:center, (1, 2))`、`size!((1, 2))`。合わなければ `TypeError`。変換は型の決まった場所だけで、Tuple の値そのものは変わらない\n- Vector の演算は実数 2 つの Tuple と同じ: `Vector ± Vector`、`Vector ± (x, y)`、`Vector × Number`、`Vector ÷ Number`、`-Vector`。結果は Vector\n\n組み込みの record:\n\n| 名前 | signature | 型 |\n|---|---|---|\n| `vector` | `(x: Number, y: Number)` | Vector |\n| `apos` | `(anchor: Anchor, vector: Vector)` / `(anchor: Anchor, x: Number, y: Number)` | AnchoredPosition |\n| `rgb` | `(r, g, b)` | Color |\n| `rgba` | `(r, g, b, a)` | Color |\n\n### 3.5 列挙\n\n| 型 | 値 |\n|---|---|\n| Anchor | `:center` `:topLeft` `:topRight` `:bottomLeft` `:bottomRight` `:top` `:bottom` `:left` `:right` |\n| StrokeCap | `:butt` `:round` `:square` |\n| StrokeJoin | `:miter` `:round` `:bevel` |\n| Blend | `:normal` `:multiply` `:screen` `:overlay` `:darken` `:lighten` `:difference` `:add` |\n| GradientKind | `:linear` `:radial` `:sweep` |\n| Align | `:left` `:center` `:right` |\n| Ease | `:linear` `:ease_in` `:ease_out` `:ease` |\n| Effect | `:fade` |\n\n### 3.6 位置\n\n- Vector: 2 要素。`.x` `.y`\n- AnchoredPosition: Anchor + Vector。`.anchor` `.vector` `.x` `.y` (`.x` `.y` は vector の成分。書くのも読むのも可)。基準点の違うもの同士の変換には図形のサイズが要るので、place された後にしか行えない\n\n### 3.7 図形と箱\n\n| 型 | 属性 |\n|---|---|\n| Circle | position: AnchoredPosition, radius: Number |\n| Ellipse | position: AnchoredPosition, rx: Number (横の半径), ry: Number (縦の半径) |\n| Rect | position: AnchoredPosition, w, h: Number, radius: Number (角の丸み、省略なら 0) |\n| Line | from, to: Vector |\n| Polygon | points: List<Vector> |\n| Path | from: Vector (始点), segments: List<Tuple> (`(:move \\| :line \\| :quad \\| :curve, 点...)`。:quad は制御点 1 つ、:curve は 2 つを先に書く), closed: Bool (true で始点に戻って閉じる) |\n| TextArea | text: String, position: AnchoredPosition, w: Number, font: String, fontSize: Number, align: Align |\n| View | box: Vector (座標系の幅と高さ。`vector!(4, 3)` なら 0..4 × 0..3。ピクセルは持たない), opacity: Number (中身をまとめて 1 枚として掛ける。中の図形が重なっても二重に薄くならない)。別の View に置かれたときは position / w / h も持つ |\n| Subtitle | text: String, duration: Duration。画面には描かず、Timeline に置くと動画の字幕トラックになる |\n| Gradient | kind: Symbol (`:linear` 既定 / `:radial` / `:sweep`), from: Vector (linear の始点、radial と sweep の中心), to: Vector (linear の終点), radius: Number (radial の半径), stops: List<Color> (2 つ以上。等間隔に並ぶ)。図形の `fill` に入れる |\n| Shader | color: `Func<Number, Number, Number -> Color>` (引数は箱の座標 x, y と動画の時刻 t 秒), args: List<Number> (省略可。4 つ目の引数として渡る), samples: Number (1 ピクセルあたりの評価点の数。平方数に切り上げ、4 なら 2x2 の平均。省略は 1)。図形の `fill` に入れる塗りで、図形の中の各ピクセルの色をこの関数で決める |\n\n図形の共通属性: fill: Paint (`type Paint = Color | Gradient | Shader`), stroke: Color, strokeWidth: Number, strokeCap: Symbol (`:butt` `:round` `:square`), strokeJoin (`:miter` `:round` `:bevel`), dash: List<Number> (線と間の長さ。`dashOffset` でずらす), opacity: Number, rotation: Number (時計回りの回転。単位は度。中心は position、Line は from、Polygon は頂点の重心), blend (`:normal` `:multiply` `:screen` `:overlay` `:darken` `:lighten` `:difference` `:add`)。Line 以外は position (AnchoredPosition) で置く。`type Placeable = Shape | View`。\n\nShader の関数は描画のたびに GPU で全ピクセル分走るので、書けるのは数値の部分だけ: Number / Bool / Color / Vector (`vector!`、`.x` `.y`、`+ -`、Number との `* /`)、四則・`%`・`^`・比較・論理、`if`、範囲の `for`、`return`、`math.*`、`rgb!` `rgba!`、外側の Number / Color / Bool / Vector / List (どれか 1 種類だけのもの) と関数 (再帰は不可)。文字列、Duration、図形、Dict、素の Tuple は使えない。`args` は毎フレーム読むので、motion の行で変えれば動く。`run` では実行されず、`render` / `preview` / `sheet` で走る。GPU の実数は 32 bit\n\n### 3.8 時間\n\n| 型 | 中身 | 作り方 | duration |\n|---|---|---|---|\n| Motion | 値の時間変化。対象なし | `motion (t, a, b) { 時刻: 値, ... }` | 既定は最後の時刻。`m.duration = 10s` で上書き |\n| Timeline | どの対象のどの属性が、いつ、どの値になるかの並び。入れ物にもなり、Timeline の中に Timeline を置ける | `motion (t) { 時刻: obj.attr = ... }` (行が属性への代入なら Timeline) / `m.apply(target, f)` (f は `func (target, t, [cols]) { }`) / `new Timeline { duration: }` | 同上 |\n| Audio | 音声ファイル。`duration` (ファイルの長さ) と `file` を持つ | `import \"bgm.m4a\" as bgm` (.moph 以外のファイルの import。長さは ffprobe で読む) | ファイルの長さ |\n\n- 行の時刻は Duration (`2s`) か 0..1 の実数 (`0.5`、`50%`)。1 つの motion で混ぜられない。実数のときは `duration` の設定が必須\n- `duration` を設定すると、全キーフレームの時刻がそれに合わせて比例して伸縮する\n- Motion の行では `t` = その行に書いた時刻 (伸縮前)、以降の名前 = 同じ行の左の列の値\n- 行末に Ease / Effect を書ける\n- Timeline を Timeline に置く: `place(tl, at: Duration, fadeIn:, fadeOut:)`。duration を指定した入れ子は、はみ出した分を切る\n- 音声を置く: `place(bgm, at:, duration:, fadeIn:, fadeOut:, volume:, loop:)`。duration で切る (繰り返さなければファイルより長くはならない)、volume は 1 がそのまま、`loop: true` は duration か動画の終わりまで繰り返す (動画を延ばさない)。同じ音声を何度でも置け、重なれば混ざる。duration を指定した Timeline の中では、はみ出した分を切る。render が ffmpeg で動画の音声トラックにし、preview は ffmpeg で PCM にして鳴らす\n- 字幕を置く: `place(new Subtitle { text:, duration: }, at:)`。render が SRT にして動画の字幕トラックに入れる (mp4/mov は mov_text、webm は webvtt、mkv は srt)。プレイヤー側で表示を切り替える。preview と sheet では画面の下に重ねて出す\n- 動画の長さは、置いたものすべての終わりの最大 (音声・字幕も含む)\n- Motion は単独では place できない\n- 各フレームの状態は「スクリプト実行直後の状態 + その時刻までに始まった Timeline を置いた順に適用したもの」で決まり、前のフレームに依存しない。preview で時間を戻しても同じ画になる\n\n## 4. 文\n\n- `let name = 式` — 束縛。再代入は `name = 式` (let なしの初回代入はエラー)\n- `if 条件 { } else if { } else { }` — 式でもあり、最後の式が値\n- `for x in List | Range | Dict { }`、`for (i, x) in xs.enumerate() { }`\n- `func name(引数) { }` — 最後の式が戻り値。`return` も可 (`if` や `for` の中から関数を抜ける)。既定値・名前付き引数あり\n- `context expr as name, ... { }` — ブロック内で `expr` を `name` として参照する。複数可。長い名前を短く書くためのもので、式なので最後の式が値になる\n- `record name(field: Type, ...)` — record の定義\n- `type Name = A | B` — Union 型の定義\n- `output view` — 動画全体の指定\n- `import name` — 標準ライブラリのモジュールを `name` に束縛する (Module 型)。import せずに使うと `NameError.UndefinedVariable` に `add \"import name\"` のヒントが付く\n- `import math` / `import fractal` — 名前だけなら標準ライブラリ (本体に入っているもの。6 を参照)\n- `import .orbit` — 同じ場所の `orbit.moph` を別のスコープで実行し、`export` した名前と `output` した View (`orbit.output`) を持つ Module を `orbit` に束縛する。`import .lib.shapes` は `./lib/shapes.moph`、`import ..parent` は 1 つ上 (文法上は通るが避ける)。`as name` で別名。`import \"path/file.moph\"` の形も可 (既定の名前はファイル名)\n- `import { a, b } from .slides` — export した名前を直接この場所に持ち込む。`from math` も可\n- `import \"bgm.m4a\" as bgm` — .moph 以外のファイルは音声として読み、Audio を束縛する (`as` が無ければファイル名)。`bundle` はこのファイルも埋め込む\n- 同じファイルは 1 度だけ実行され、以後の import は同じ実体を返す。循環 import はエラー\n- `export let ...` / `export func ...` — import した側に公開する。トップレベルのみ\n\n## 5. 空間\n\n- 箱 (View) は `box: vector!(w, h)` で座標系を宣言する。中の座標はその単位\n- `view.place(shape)`。図形の位置は図形の `position` で決まる\n- `view.place(other_view, at: AnchoredPosition, w:, h:)` で View を入れ子にする。w か h の片方だけなら縦横比を保ち、両方なら比率を保ったまま収める。子の座標は子の box で解釈される\n- `timeline.place(view, at:)` / `view.addTrack(view)` で、子 View の Timeline を親の時間軸で動かす\n- クロージャと Timeline はスコープを共有する (複製しない)。定義後に変数を変えれば、その値が見える\n\n## 6. 組み込みと標準ライブラリ\n\nimport なしで使える組み込み:\n\n| 名前 | 型 | 内容 |\n|---|---|---|\n| log | `Func<Any...>` | 引数を空白区切りで stderr へ出力。動画には出ない |\n| type_of | `Func<Any>` | 型名を String で返す |\n| `vector!` `apos!` `rgb!` `rgba!` | record | 3.4 を参照 |\n| String.format / len / replace、List / Dict のメソッド (join など) | | examples/collection.moph を参照 |\n\n`import` で使う標準ライブラリ:\n\n| モジュール | 内容 |\n|---|---|\n| math | `PI` `TAU` `E` (Number)、`sin` `cos` `floor` `ceil` `abs` `sqrt` `ln` `exp` (`Func<Number -> Number>`)、`atan2(y, x)`、`max` `min` (`Func<Number... -> Number>`) |\n| color | 色を作る、混ぜる: `mix(a, b, k)` `lighten(c, k)` `darken(c, k)` `alpha(c, a)` `hsl(h, s, l)` `gray(v)`。Color は `c.r` `c.g` `c.b` (0..255) `c.a` (0..1) が読める |\n| shape | Polygon の points を作る: `regular_polygon(cx, cy, r, n, rotation)` `star(cx, cy, outer, inner, n, rotation)` `arrow(from, to, width, head, head_width)` |\n| layout | 並べる位置: `grid(x, y, w, h, cols, rows)` (各マスの中心) `cell(w, h, cols, rows)` `along(from, to, n)` `fit(w, h, box_w, box_h)` |\n| transition | 図形や View の属性を動かす Timeline: `fade_in(o, duration)` `fade_out` `fade_to(o, from, to, duration)` `slide_in(o, dx, dy, duration)` `slide_out` `move_by` `show(track, objs, at, end, duration, stagger)` |\n| fractal | エスケープタイム系フラクタル。`escape_time(formula, coloring, center, span, ...)` が Shader を返す。反復式 `mandelbrot` `julia(c)` `burning_ship` `multibrot(n)`、精度 `plain` `perturbation`、色付け `smooth(stops, period)`。本体に埋め込んだ .moph (src/stdlib/fractal.moph) で、説明はそのドキュメントコメントから |\n\n## 7. エラー\n\n種別のツリーと例は examples/error.moph。メッセージは英語で `種別.細目: message`。\n"
   },
   {
    "path": "editors/vscode/README.md",
@@ -1634,7 +2530,7 @@
   },
   {
    "name": "basic.moph",
-   "code": "# basic.moph — 束縛、リテラル、型 (すべて仮)\n\n# 束縛は let。再代入は = のみ\nlet n = 3\nn = n + 1\n\n# 数値。整数と実数を区別しない\nlet a = 1\nlet b = 1.5\nlet c = 1/3          # 分数。0.333... ではなく 1/3 として保持する\n\n# Duration\nlet d1 = 83s\nlet d2 = 1m23s\nlet d3 = 01:23           # mm:ss\nlet d4 = 01:23:45.678    # hh:mm:ss.fff\nlet d5 = 500ms\n\n# Color\nlet red   = #e04040\nlet half  = #e04040cc            # 8 桁目までで不透明度\nlet short = #e44                 # 3 桁 = #ee4444。4 桁なら不透明度付き\nlet named = red\nlet plain = new Color(r=224, g=64, b=64, a=1)   # 糖衣なしの形\nlet t1 = rgb!(224, 64, 64)                     # specific tuple。Color を返す\nlet t2 = rgba!(224, 64, 64, 1)\n\n# パーセント。100% は 1.0\nlet full = 100%\nlet q    = 25%                   # 0.25\n\n# 文字列\nlet s = \"hello\"\nlet t = \"n = {n}\".format(n)     # {name} を順に置き換える。名前は説明用\n\n# 真偽値\nlet ok = true\n\n# タプルとリスト\nlet p  = (1, 1.5)        # 座標などに使う\nlet xs = [1, 2, 3]\n\n# オブジェクト生成\nlet c = new Circle { fill: red, radius: 0.5 }\n\n# 属性の参照と更新\nlet r = c.radius\nc.radius = 1\n\n# ログ出力 (stderr)。動画には出ない\nlog(\"radius = \", r)\nlog(\"radius = {r}\".format(r))\nlog(c)                           # オブジェクトはそのまま表示\n"
+   "code": "# basic.moph — 束縛、リテラル、型 (すべて仮)\n\n# 束縛は let。再代入は = のみ\nlet n = 3\nn = n + 1\n\n# 数値。整数と実数を区別しない\nlet a = 1\nlet b = 1.5\nlet c = 1/3          # 分数。0.333... ではなく 1/3 として保持する\n\n# Duration\nlet d1 = 83s\nlet d2 = 1m23s\nlet d3 = 01:23           # mm:ss\nlet d4 = 01:23:45.678    # hh:mm:ss.fff\nlet d5 = 500ms\n\n# Color\nlet red   = #e04040\nlet half  = #e04040cc            # 8 桁目までで不透明度\nlet short = #e44                 # 3 桁 = #ee4444。4 桁なら不透明度付き\nlet named = red\nlet plain = new Color(r=224, g=64, b=64, a=1)   # 糖衣なしの形\nlet t1 = rgb!(224, 64, 64)                     # record。Color を返す\nlet t2 = rgba!(224, 64, 64, 1)\n\n# パーセント。100% は 1.0\nlet full = 100%\nlet q    = 25%                   # 0.25\n\n# 文字列\nlet s = \"hello\"\nlet t = \"n = {n}\".format(n)     # {name} を順に置き換える。名前は説明用\n\n# 真偽値\nlet ok = true\n\n# タプルとリスト\nlet p  = (1, 1.5)        # 座標などに使う\nlet xs = [1, 2, 3]\n\n# オブジェクト生成\nlet c = new Circle { fill: red, radius: 0.5 }\n\n# 属性の参照と更新\nlet r = c.radius\nc.radius = 1\n\n# ログ出力 (stderr)。動画には出ない\nlog(\"radius = \", r)\nlog(\"radius = {r}\".format(r))\nlog(c)                           # オブジェクトはそのまま表示\n"
   },
   {
    "name": "collection.moph",
@@ -1662,7 +2558,7 @@
   },
   {
    "name": "type.moph",
-   "code": "# type.moph — 型の一覧 (すべて仮)。examples/ に登場する型をすべて載せる\n\n# ---- 基本型 ----\n# Number    1, 1.5, 1/3, 25% (= 0.25)。整数と実数を区別しない\n# Duration  83s, 1m23s, 500ms, 01:23, 01:23:45.678\n# Color     #e04040, #e04040cc, #e44 (= #ee4444), #e448, rgb!(224, 64, 64), rgba!(224, 64, 64, 1), new Color(r=224, g=64, b=64, a=1)\n#           r/g/b 0..255, a 0..1\n# String    \"hello\", \"n = {n}\"\n# Bool      true, false\n# Tuple     (1, 1.5)         要素ごとに型を持つ\n# List      [1, 2, 3]        要素は同じ型\n# Range     0..5, 0..=5      for の対象\n# Dict      { \"red\": #e04040 }  キーは String\n# Func      func (x) { x }   下記\n\n# ---- Func ----\n# 型の表記: Func<引数の型... -> 戻り値の型>\nlet double: Func<Number -> Number> = func (x) { x * 2 }\nlet add:    Func<Number, Number -> Number> = func (a, b) { a + b }\nlet mk:     Func<AnchoredPosition -> Circle> = func (p) { new Circle { position: p } }\nlet noret:  Func<String -> Nothing> = func (s) { log(s) }\n# 組み込み関数も Func\n# log:      Func<Any>                どの型でも受け取る。Any は型ではなくこの表記だけの記号\n# type_of:  Func<Any>\n\n# ---- Module ----\n# import で束縛される。標準ライブラリは math のみ\nimport math\n# math:       Module\n# math.PI / math.TAU / math.E:  Number\n# math.sin:   Func<Number -> Number>   (cos, floor, ceil, abs, sqrt も同じ)\n# math.max:   Func<Number... -> Number> (min も)\n\n# ---- specific tuple (ユーザー定義) ----\n# 同じ名前で複数の signature を定義できる。呼び出し時に引数の数と型で選ぶ\ntuple size(w: Number, h: Number)\ntuple size(w: Number, h: Duration)\nlet s1 = size!(1, 2)          # 1 つ目\nlet s2 = size!(1, 2s)         # 2 つ目\ns1.w                          # 1\nlog(s1, s2, type_of(s1))      # size!(1, 2) size!(1, 2s) size\n\n# ---- Union 型 ----\ntype Shape = Circle | Rect | Line | Polygon | TextArea\ntype Placeable = Shape | View\n\n# ---- 列挙 ----\n# Ease      :linear :ease_in :ease_out :ease  キーフレーム行末に書く\n# Effect    :fade :fade                       同上\n# Align     :left :center :right                     TextArea.align\n# Anchor    :center :topLeft :topRight :bottomLeft :bottomRight :top :bottom :left :right\n#           基準点の種類。列挙値は :name で書く\n\n# ---- 位置 ----\n# Vector            vector!(1, 1.5)               .x .y で参照できる。(1, 1.5) は Tuple であって Vector ではない\n# AnchoredPosition  apos!(:center, 1, 1.5)     Anchor + Vector。apos!(:center, vector!(1, 1.5)) も同じ\n#\n# ただし「Vector と決まっている場所」(属性、specific tuple の引数) に signature に合う素の Tuple を書くと、その型に変換される\n#   new Line { from: (0, 0), to: (4, 3) }            # from / to は Vector\n#   new Circle { position: (:center, 1, 2) }         # position は AnchoredPosition\n#   apos!(:center, (1, 2))                           # apos! の Vector 引数\n#   size!((1, 2))                                    # signature 全体に合う Tuple\n# 合わなければ TypeError。変換は型の決まった場所だけで、(1, 2) そのものは Tuple のまま\nlet pos = apos!(:center, 1, 1.5)\npos.anchor                                 # :center\npos.vector                                 # vector!(1, 1.5)\n# 基準点の違う AnchoredPosition 同士の変換には図形のサイズが要るので、place された後にしかできない\n\n# ---- 図形 (Shape) ----\n# 共通属性: fill: Color, stroke: Color, strokeWidth: Number, opacity: Number\nlet c = new Circle {\n  position: apos!(:center, 1, 1.5),   # AnchoredPosition\n  radius: 0.5,          # Number\n  fill:   #e04040,\n}\n\nlet r = new Rect {\n  position: apos!(:topLeft, 0, 0),\n  w: 1,                 # Number\n  h: 1/2,               # Number\n  radius: 0.1,          # Number。角の丸み。省略なら 0\n  fill: #40a040,\n  stroke: #000000,\n  strokeWidth: 0.02,\n}\n\nlet l = new Line {\n  from: vector!(0, 0),     # Vector\n  to:   vector!(4, 3),     # Vector\n  stroke: #000000,\n  strokeWidth: 0.05,\n}\n\nlet p = new Polygon {\n  points: [vector!(0, 0), vector!(1, 0), vector!(0.5, 1)],   # List<Vector>\n  fill: #4040e0,\n}\n\nlet t = new TextArea {\n  text: \"hello\",        # String\n  position: apos!(:topLeft, 0, 0),\n  w: 2,                 # Number。幅に合わせて折り返す\n  font: \"Noto Sans JP\", # String。フォントの指定方法は未決\n  fontSize: 0.3,        # Number。箱の座標単位\n  fill: #000000,\n  align: :left,         # Align\n}\n\n# ---- 箱 ----\nlet v = new View { box: vector!(4, 3) }  # box: Vector。座標系 0..4 × 0..3。ピクセルは持たない\n# v.place(target: Placeable) -> Nothing   (位置は target の position。w / h の扱いは未決)\n# v.addTrack(t: Timeline) -> Nothing\n\n# ---- 時間 ----\nlet m  = motion { 0s: 0, 1s: 1 }             # Motion。値の時間変化。対象なし\n#   m.duration: Duration\n#   m.apply(target: Shape, f: Func<Shape, Duration, List -> Nothing>) -> Timeline\nlet tl = m.apply(c, func (c, t, [x]) { c.radius = x })   # Timeline。対象 + 割り当て\nlet tr = new Timeline { duration: 10s }      # Timeline。入れ物にもなる\n#   tr.duration: Duration\n#   tr.place(t: Timeline, at: Duration, fadeIn: Duration, fadeOut: Duration) -> Nothing\n\n# ---- その他 ----\n# Nothing   戻り値のない関数の戻り値\n\n# ---- 型の確認 ----\ntype_of(c)        # \"Circle\"\ntype_of(1s)       # \"Duration\"\ntype_of(1/3)      # \"Number\"\ntype_of(double)   # \"Func<Number -> Number>\"\n\nlog(type_of(add), type_of(m), type_of(tl), type_of(tr), type_of(v), type_of(t))\n"
+   "code": "# type.moph — 型の一覧 (すべて仮)。examples/ に登場する型をすべて載せる\n\n# ---- 基本型 ----\n# Number    1, 1.5, 1/3, 25% (= 0.25)。整数と実数を区別しない\n# Duration  83s, 1m23s, 500ms, 01:23, 01:23:45.678\n# Color     #e04040, #e04040cc, #e44 (= #ee4444), #e448, rgb!(224, 64, 64), rgba!(224, 64, 64, 1), new Color(r=224, g=64, b=64, a=1)\n#           r/g/b 0..255, a 0..1\n# String    \"hello\", \"n = {n}\"\n# Bool      true, false\n# Tuple     (1, 1.5)         要素ごとに型を持つ\n# List      [1, 2, 3]        要素は同じ型\n# Range     0..5, 0..=5      for の対象\n# Dict      { \"red\": #e04040 }  キーは String\n# Func      func (x) { x }   下記\n\n# ---- Func ----\n# 型の表記: Func<引数の型... -> 戻り値の型>\nlet double: Func<Number -> Number> = func (x) { x * 2 }\nlet add:    Func<Number, Number -> Number> = func (a, b) { a + b }\nlet mk:     Func<AnchoredPosition -> Circle> = func (p) { new Circle { position: p } }\nlet noret:  Func<String -> Nothing> = func (s) { log(s) }\n# 組み込み関数も Func\n# log:      Func<Any>                どの型でも受け取る。Any は型ではなくこの表記だけの記号\n# type_of:  Func<Any>\n\n# ---- Module ----\n# import で束縛される。標準ライブラリは math のみ\nimport math\n# math:       Module\n# math.PI / math.TAU / math.E:  Number\n# math.sin:   Func<Number -> Number>   (cos, floor, ceil, abs, sqrt も同じ)\n# math.max:   Func<Number... -> Number> (min も)\n\n# ---- record (ユーザー定義) ----\n# 同じ名前で複数の signature を定義できる。呼び出し時に引数の数と型で選ぶ\nrecord size(w: Number, h: Number)\nrecord size(w: Number, h: Duration)\nlet s1 = size!(1, 2)          # 1 つ目\nlet s2 = size!(1, 2s)         # 2 つ目\ns1.w                          # 1\nlog(s1, s2, type_of(s1))      # size!(1, 2) size!(1, 2s) size\n\n# ---- Union 型 ----\ntype Shape = Circle | Rect | Line | Polygon | TextArea\ntype Placeable = Shape | View\n\n# ---- 列挙 ----\n# Ease      :linear :ease_in :ease_out :ease  キーフレーム行末に書く\n# Effect    :fade :fade                       同上\n# Align     :left :center :right                     TextArea.align\n# Anchor    :center :topLeft :topRight :bottomLeft :bottomRight :top :bottom :left :right\n#           基準点の種類。列挙値は :name で書く\n\n# ---- 位置 ----\n# Vector            vector!(1, 1.5)               .x .y で参照できる。(1, 1.5) は Tuple であって Vector ではない\n# AnchoredPosition  apos!(:center, 1, 1.5)     Anchor + Vector。apos!(:center, vector!(1, 1.5)) も同じ\n#\n# ただし「Vector と決まっている場所」(属性、record の引数) に signature に合う素の Tuple を書くと、その型に変換される\n#   new Line { from: (0, 0), to: (4, 3) }            # from / to は Vector\n#   new Circle { position: (:center, 1, 2) }         # position は AnchoredPosition\n#   apos!(:center, (1, 2))                           # apos! の Vector 引数\n#   size!((1, 2))                                    # signature 全体に合う Tuple\n# 合わなければ TypeError。変換は型の決まった場所だけで、(1, 2) そのものは Tuple のまま\nlet pos = apos!(:center, 1, 1.5)\npos.anchor                                 # :center\npos.vector                                 # vector!(1, 1.5)\n# 基準点の違う AnchoredPosition 同士の変換には図形のサイズが要るので、place された後にしかできない\n\n# ---- 図形 (Shape) ----\n# 共通属性: fill: Color, stroke: Color, strokeWidth: Number, opacity: Number\nlet c = new Circle {\n  position: apos!(:center, 1, 1.5),   # AnchoredPosition\n  radius: 0.5,          # Number\n  fill:   #e04040,\n}\n\nlet r = new Rect {\n  position: apos!(:topLeft, 0, 0),\n  w: 1,                 # Number\n  h: 1/2,               # Number\n  radius: 0.1,          # Number。角の丸み。省略なら 0\n  fill: #40a040,\n  stroke: #000000,\n  strokeWidth: 0.02,\n}\n\nlet l = new Line {\n  from: vector!(0, 0),     # Vector\n  to:   vector!(4, 3),     # Vector\n  stroke: #000000,\n  strokeWidth: 0.05,\n}\n\nlet p = new Polygon {\n  points: [vector!(0, 0), vector!(1, 0), vector!(0.5, 1)],   # List<Vector>\n  fill: #4040e0,\n}\n\nlet t = new TextArea {\n  text: \"hello\",        # String\n  position: apos!(:topLeft, 0, 0),\n  w: 2,                 # Number。幅に合わせて折り返す\n  font: \"Noto Sans JP\", # String。フォントの指定方法は未決\n  fontSize: 0.3,        # Number。箱の座標単位\n  fill: #000000,\n  align: :left,         # Align\n}\n\n# ---- 箱 ----\nlet v = new View { box: vector!(4, 3) }  # box: Vector。座標系 0..4 × 0..3。ピクセルは持たない\n# v.place(target: Placeable) -> Nothing   (位置は target の position。w / h の扱いは未決)\n# v.addTrack(t: Timeline) -> Nothing\n\n# ---- 時間 ----\nlet m  = motion { 0s: 0, 1s: 1 }             # Motion。値の時間変化。対象なし\n#   m.duration: Duration\n#   m.apply(target: Shape, f: Func<Shape, Duration, List -> Nothing>) -> Timeline\nlet tl = m.apply(c, func (c, t, [x]) { c.radius = x })   # Timeline。対象 + 割り当て\nlet tr = new Timeline { duration: 10s }      # Timeline。入れ物にもなる\n#   tr.duration: Duration\n#   tr.place(t: Timeline, at: Duration, fadeIn: Duration, fadeOut: Duration) -> Nothing\n\n# ---- その他 ----\n# Nothing   戻り値のない関数の戻り値\n\n# ---- 型の確認 ----\ntype_of(c)        # \"Circle\"\ntype_of(1s)       # \"Duration\"\ntype_of(1/3)      # \"Number\"\ntype_of(double)   # \"Func<Number -> Number>\"\n\nlog(type_of(add), type_of(m), type_of(tl), type_of(tr), type_of(v), type_of(t))\n"
   }
  ]
 }

@@ -160,7 +160,7 @@ impl Parser {
                 let alias = self.import_alias(default)?;
                 Ok(StmtKind::Import(ImportKind::Module { source, alias }))
             }
-            Tok::TupleKw => {
+            Tok::RecordKw => {
                 self.next();
                 let name = self.ident()?;
                 self.expect(Tok::LParen)?;

@@ -10,7 +10,7 @@ root        ::= (ws stmt)* ws
 stmt        ::= let-stmt
               | func-decl
               | type-def
-              | tuple-def
+              | record-def
               | import-stmt
               | export-stmt
               | output-stmt
@@ -22,7 +22,7 @@ stmt        ::= let-stmt
 let-stmt    ::= "let" sp pattern (ws ":" ws type-ann)? ws "=" ws expr
 func-decl   ::= "func" sp ident ws "(" params ")" ws block
 type-def    ::= "type" sp ident ws "=" ws ident (ws "|" ws ident)*
-tuple-def   ::= "tuple" sp ident ws "(" (ws ident ws ":" ws type-ann (ws "," ws ident ws ":" ws type-ann)*)? ws ")"
+record-def  ::= "record" sp ident ws "(" (ws ident ws ":" ws type-ann (ws "," ws ident ws ":" ws type-ann)*)? ws ")"
 import-stmt ::= "import" sp import-src (sp "as" sp ident)?
               | "import" ws "{" ws ident (ws "," ws ident)* ws "}" sp "from" sp import-src
 import-src  ::= ident | ("." | "..")+ ident ("." ident)* | string
@@ -65,7 +65,7 @@ postfix     ::= "." ident
               | "[" ws expr ws "]"
 
 primary     ::= number | duration | color | string | symbol | bool
-              | specific-tuple
+              | record-lit
               | ident
               | "(" ws expr ws ")"
               | "(" ws expr (ws "," ws expr)+ ws ")"
@@ -80,7 +80,7 @@ primary     ::= number | duration | color | string | symbol | bool
 args        ::= (ws arg (ws "," ws arg)*)? ws
 arg         ::= (ident ws ":" ws)? expr
 
-specific-tuple ::= ident "!(" args ")"
+record-lit  ::= ident "!(" args ")"
 
 dict        ::= "{" (ws dict-entry (ws "," ws dict-entry)*)? ws "}"
 dict-entry  ::= string ws ":" ws expr | ident

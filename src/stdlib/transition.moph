@@ -1,49 +1,53 @@
-# transition.moph — 現れる、消える、滑り込む。図形や View に当てる Timeline を返す。
-# 返った Timeline を track.place(tl, at: 時刻) で置く
+# transition.moph — 現れる、消える、滑り込む、回る。
+# どの関数も Timeline を返すだけで、そのままでは何も起きない。track.place(tl, at: 時刻) で置いた時刻から動く
 
-## 不透明度を from から to へ変える
+## target の不透明度を from から to へ変える Timeline を返す。
+## 0 → 1 と 1 → 0 は fade_in / fade_out があるので、途中の値を使うときに呼ぶ
 ## @category 現れる・消える
-## @param o 図形か View
-## @param from 最初の不透明度 0..1
-## @param to 最後の不透明度 0..1
-## @param duration 長さ (既定 0.5s)
-## @returns Timeline
-export func fade_to(o, from, to, duration = 0.5s) {
-  let tl = context o as x {
+## @param {Placeable} target 動かす図形か View
+## @param {Number} from 始まりの不透明度 0..1
+## @param {Number} to 終わりの不透明度 0..1
+## @param {Duration} duration 変わりきるまでの長さ
+## @returns {Timeline} track.place(tl, at: 時刻) で置く
+export func fade_to(target, from, to, duration = 0.5s) {
+  let tl = context target as s {
     motion (t) {
-      0: x.opacity = from
-      1: x.opacity = to
+      0: s.opacity = from
+      1: s.opacity = to
     }
   }
   tl.duration = duration
   tl
 }
 
-## 透明から現れる (不透明度 0 → 1)
+## target が透明な状態から現れる Timeline を返す (不透明度 0 → 1)。
+## 置いた時刻に現れてほしいものに使う
 ## @category 現れる・消える
-## @param o 図形か View
-## @param duration 長さ (既定 0.5s)
-## @returns Timeline
-export func fade_in(o, duration = 0.5s) { fade_to(o, 0, 1, duration) }
+## @param {Placeable} target 動かす図形か View
+## @param {Duration} duration 現れきるまでの長さ
+## @returns {Timeline} track.place(tl, at: 時刻) で置く
+export func fade_in(target, duration = 0.5s) { fade_to(target, 0, 1, duration) }
 
-## 消える (不透明度 1 → 0)
+## target が消える Timeline を返す (不透明度 1 → 0)。
+## 消え終わってほしい時刻から duration だけ手前に置く
 ## @category 現れる・消える
-## @param o 図形か View
-## @param duration 長さ (既定 0.5s)
-## @returns Timeline
-export func fade_out(o, duration = 0.5s) { fade_to(o, 1, 0, duration) }
+## @param {Placeable} target 動かす図形か View
+## @param {Duration} duration 消えきるまでの長さ
+## @returns {Timeline} track.place(tl, at: 時刻) で置く
+export func fade_out(target, duration = 0.5s) { fade_to(target, 1, 0, duration) }
 
-## 今の位置から (dx, dy) だけずれた所から、現れながら滑り込む。減速して止まる
+## target が (dx, dy) だけずれた所に現れ、今いる場所へ滑り込む Timeline を返す。
+## 終わりに向かって減速する
 ## @category 滑る
-## @param o position を持つ図形か View
-## @param dx x のずれ (箱の座標)
-## @param dy y のずれ
-## @param duration 長さ (既定 0.5s)
-## @returns Timeline
-export func slide_in(o, dx, dy, duration = 0.5s) {
-  let x = o.position.x
-  let y = o.position.y
-  let tl = context o as s {
+## @param {Placeable} target position を持つ図形か View
+## @param {Number} dx どれだけ右からずれて始まるか (箱の座標。負なら左)
+## @param {Number} dy どれだけ下からずれて始まるか (負なら上)
+## @param {Duration} duration 着くまでの長さ
+## @returns {Timeline} track.place(tl, at: 時刻) で置く
+export func slide_in(target, dx, dy, duration = 0.5s) {
+  let x = target.position.x
+  let y = target.position.y
+  let tl = context target as s {
     motion (t) {
       0: s.position.x = x + dx, s.position.y = y + dy, s.opacity = 0
       1: s.position.x = x, s.position.y = y, s.opacity = 1 :ease_out
@@ -53,17 +57,18 @@ export func slide_in(o, dx, dy, duration = 0.5s) {
   tl
 }
 
-## 今の位置から (dx, dy) の方へ、消えながら滑り出す。加速して去る
+## target が今いる場所から (dx, dy) の方へ、消えながら去る Timeline を返す。
+## 進むほど加速する
 ## @category 滑る
-## @param o position を持つ図形か View
-## @param dx x のずれ (箱の座標)
-## @param dy y のずれ
-## @param duration 長さ (既定 0.5s)
-## @returns Timeline
-export func slide_out(o, dx, dy, duration = 0.5s) {
-  let x = o.position.x
-  let y = o.position.y
-  let tl = context o as s {
+## @param {Placeable} target position を持つ図形か View
+## @param {Number} dx どれだけ右へ去るか (箱の座標。負なら左)
+## @param {Number} dy どれだけ下へ去るか (負なら上)
+## @param {Duration} duration 消えきるまでの長さ
+## @returns {Timeline} track.place(tl, at: 時刻) で置く
+export func slide_out(target, dx, dy, duration = 0.5s) {
+  let x = target.position.x
+  let y = target.position.y
+  let tl = context target as s {
     motion (t) {
       0: s.position.x = x, s.position.y = y, s.opacity = 1
       1: s.position.x = x + dx, s.position.y = y + dy, s.opacity = 0 :ease_in
@@ -73,17 +78,18 @@ export func slide_out(o, dx, dy, duration = 0.5s) {
   tl
 }
 
-## 今の位置から (dx, dy) だけ動く。加速して減速する
+## target が今いる場所から (dx, dy) だけ動く Timeline を返す。
+## 動き出しと止まり際がなめらかになる
 ## @category 滑る
-## @param o position を持つ図形か View
-## @param dx x の移動量 (箱の座標)
-## @param dy y の移動量
-## @param duration 長さ (既定 0.5s)
-## @returns Timeline
-export func move_by(o, dx, dy, duration = 0.5s) {
-  let x = o.position.x
-  let y = o.position.y
-  let tl = context o as s {
+## @param {Placeable} target position を持つ図形か View
+## @param {Number} dx 右への移動量 (箱の座標。負なら左)
+## @param {Number} dy 下への移動量 (負なら上)
+## @param {Duration} duration 動ききるまでの長さ
+## @returns {Timeline} track.place(tl, at: 時刻) で置く
+export func move_by(target, dx, dy, duration = 0.5s) {
+  let x = target.position.x
+  let y = target.position.y
+  let tl = context target as s {
     motion (t) {
       0: s.position.x = x, s.position.y = y
       1: s.position.x = x + dx, s.position.y = y + dy :ease
@@ -93,17 +99,36 @@ export func move_by(o, dx, dy, duration = 0.5s) {
   tl
 }
 
-## まとめて見せる。objs が at から順に現れ (stagger ずつ遅れて)、end で消え終わる
+## target が時計回りに turns 周まわる Timeline を返す。速さは一定
+## @category 回す
+## @param {Placeable} target rotation を持つ図形
+## @param {Number} turns 回る数。1 で 1 周、0.5 で半周、負なら反時計回り
+## @param {Duration} duration 回りきるまでの長さ
+## @returns {Timeline} track.place(tl, at: 時刻) で置く
+export func spin(target, turns, duration = 1s) {
+  let tl = context target as s {
+    motion (t) {
+      0: s.rotation = 0
+      1: s.rotation = 360 * turns
+    }
+  }
+  tl.duration = duration
+  tl
+}
+
+## at に現れて end に消え終わるまでを、track に直接置く。
+## 場面の出し入れをまとめて書くためのもので、戻り値は無い
 ## @category まとめて
-## @param track 置く先の Timeline
-## @param objs 図形か View の List
-## @param at 現れ始める時刻
-## @param end 消え終わる時刻
-## @param duration 1 つの fade の長さ (既定 0.5s)
-## @param stagger 次の要素が現れるまでの遅れ (既定 0s)
-export func show(track, objs, at, end, duration = 0.5s, stagger = 0s) {
-  for (i, o) in objs.enumerate() {
-    track.place(fade_in(o, duration), at: at + stagger * i)
-    track.place(fade_out(o, duration), at: end - duration)
+## @param {Timeline} track 置き先の Timeline
+## @param {List<Placeable>} targets 出し入れする図形か View
+## @param {Duration} at 最初のひとつが現れ始める時刻
+## @param {Duration} end 全部が消え終わる時刻
+## @param {Duration} duration 1 つの現れ方と消え方の長さ
+## @param {Duration} stagger 次のひとつが現れるまでの遅れ
+## @returns {Nothing} track に直接置くので返り値は無い
+export func show(track, targets, at, end, duration = 0.5s, stagger = 0s) {
+  for (i, target) in targets.enumerate() {
+    track.place(fade_in(target, duration), at: at + stagger * i)
+    track.place(fade_out(target, duration), at: end - duration)
   }
 }

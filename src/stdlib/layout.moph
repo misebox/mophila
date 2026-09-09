@@ -2,13 +2,13 @@
 
 ## 格子の各マスの中心。左上 (x, y) から幅 w、高さ h を cols 列 rows 行に分け、左上から行ごとに
 ## @category 並べる
-## @param x 左上の x
-## @param y 左上の y
-## @param w 全体の幅
-## @param h 全体の高さ
-## @param cols 列の数
-## @param rows 行の数
-## @returns Vector の List (cols * rows 個)
+## @param {Number} x 左上の x
+## @param {Number} y 左上の y
+## @param {Number} w 全体の幅
+## @param {Number} h 全体の高さ
+## @param {Number} cols 列の数
+## @param {Number} rows 行の数
+## @returns {List<Vector>} cols * rows 個
 export func grid(x, y, w, h, cols, rows) {
   let cw = w / cols
   let ch = h / rows
@@ -23,30 +23,30 @@ export func grid(x, y, w, h, cols, rows) {
 
 ## 格子の 1 マスの大きさ
 ## @category 並べる
-## @param w 全体の幅
-## @param h 全体の高さ
-## @param cols 列の数
-## @param rows 行の数
-## @returns Vector (幅, 高さ)
+## @param {Number} w 全体の幅
+## @param {Number} h 全体の高さ
+## @param {Number} cols 列の数
+## @param {Number} rows 行の数
+## @returns {Vector} 幅と高さ
 export func cell(w, h, cols, rows) { vector!(w / cols, h / rows) }
 
 ## from から to まで、両端を含めて n 個の点
 ## @category 並べる
-## @param from 始点 (Vector)
-## @param to 終点 (Vector)
-## @param n 点の数 (2 以上)
-## @returns Vector の List
+## @param {Vector} from 始点 (Vector)
+## @param {Vector} to 終点 (Vector)
+## @param {Number} n 点の数 (2 以上)
+## @returns {List<Vector>}
 export func along(from, to, n) {
   (0..=1).steps(n - 1).map(func (k) { from + (to - from) * k })
 }
 
 ## 幅 w、高さ h のものを、比率を保って box_w x box_h に収めたときの大きさ
 ## @category 収める
-## @param w 元の幅
-## @param h 元の高さ
-## @param box_w 収める幅
-## @param box_h 収める高さ
-## @returns Vector (幅, 高さ)
+## @param {Number} w 元の幅
+## @param {Number} h 元の高さ
+## @param {Number} box_w 収める幅
+## @param {Number} box_h 収める高さ
+## @returns {Vector} 幅と高さ
 export func fit(w, h, box_w, box_h) {
   let k = if box_w / w < box_h / h { box_w / w } else { box_h / h }
   vector!(w * k, h * k)

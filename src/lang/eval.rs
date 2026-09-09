@@ -29,8 +29,8 @@ pub struct Interp {
     pub output: Option<ObjRef>,
     /// type Name = A | B の定義
     types: HashMap<String, Vec<String>>,
-    /// tuple name(...) の定義。名前ごとに signature の列
-    tuples: HashMap<String, Vec<Vec<(String, String)>>>,
+    /// record name(...) の定義。名前ごとに signature の列
+    records: HashMap<String, Vec<Vec<(String, String)>>>,
     /// フォント検索、テキストレイアウト、描画命令のキャッシュ。初回に必要になったときに作る
     cache: Option<crate::render::text::RenderCache>,
     /// 終わった Timeline の最後の値。キーは (Timeline のポインタ, 絶対開始時刻のビット)
@@ -45,7 +45,7 @@ pub struct Interp {
     pub sources: HashMap<String, String>,
     /// 埋め込みバイナリのとき、音声などのファイルの取り出し先 (正規化したパス → 実際のファイル)
     pub assets: HashMap<String, PathBuf>,
-    /// スクリプト実行直後の全オブジェクトの属性。毎フレームここに戻してから Timeline を当てる
+    /// スクリプト実行直後の全オブジェクトの属性。毎フレームここに戻してから Timeline を適用する
     initial: Vec<(ObjRef, HashMap<String, Value>)>,
     /// 読み込み済みのモジュールと音声 (正規化したパス → 実体)。同じファイルは 1 度しか読まない
     modules: HashMap<String, Value>,
@@ -57,13 +57,17 @@ pub struct Interp {
 
 impl Interp {
     pub fn new() -> Self {
-        let shapes: Vec<String> = ["Circle", "Rect", "Line", "Polygon", "TextArea"].iter().map(|s| s.to_string()).collect();
-        let types = HashMap::from([
+        let shapes: Vec<String> = ["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea"].iter().map(|s| s.to_string()).collect();
+        let mut types = HashMap::from([
             ("Shape".to_string(), shapes),
             ("Placeable".to_string(), vec!["Shape".to_string(), "View".to_string()]),
-            ("Paint".to_string(), vec!["Color".to_string(), "Shader".to_string()]),
+            ("Paint".to_string(), vec!["Color".to_string(), "Shader".to_string(), "Gradient".to_string()]),
         ]);
-        Self { scopes: vec![new_scope()], output: None, types, tuples: HashMap::new(), cache: None, finished: HashMap::new(), last_t: f64::NEG_INFINITY, base_dir: PathBuf::from("."), exports: Vec::new(), sources: HashMap::new(), assets: HashMap::new(), initial: Vec::new(), modules: HashMap::new(), loading: Vec::new(), returning: None }
+        // 決まった Symbol しか取らない属性の型。値そのものは描くときに確かめる
+        for name in ["Anchor", "Align", "Ease", "Effect", "StrokeCap", "StrokeJoin", "Blend", "GradientKind", "Precision"] {
+            types.insert(name.to_string(), vec!["Symbol".to_string()]);
+        }
+        Self { scopes: vec![new_scope()], output: None, types, records: HashMap::new(), cache: None, finished: HashMap::new(), last_t: f64::NEG_INFINITY, base_dir: PathBuf::from("."), exports: Vec::new(), sources: HashMap::new(), assets: HashMap::new(), initial: Vec::new(), modules: HashMap::new(), loading: Vec::new(), returning: None }
     }
 
     /// トップレベルの束縛 (LSP のホバー用)
@@ -154,10 +158,10 @@ impl Interp {
                 Ok(result)
             }
             StmtKind::TupleDef(name, fields) => {
-                let sigs = self.tuples.entry(name.clone()).or_default();
+                let sigs = self.records.entry(name.clone()).or_default();
                 let same = |sig: &Vec<(String, String)>| sig.len() == fields.len() && sig.iter().zip(fields).all(|(a, b)| a.1 == b.1);
                 if sigs.iter().any(same) {
-                    return err("TypeError.ArityMismatch", format!("tuple {name} already has a signature with these types"));
+                    return err("TypeError.ArityMismatch", format!("record {name} already has a signature with these types"));
                 }
                 sigs.push(fields.clone());
                 Ok(Flow::Next(Value::Nothing))
@@ -272,7 +276,7 @@ impl Interp {
                 },
                 _ => v,
             },
-            name => match self.tuples.get(name) {
+            name => match self.records.get(name) {
                 Some(sigs) => self.make_record(name, sigs.clone(), items.clone()).unwrap_or(v),
                 None => v,
             },
@@ -553,7 +557,7 @@ impl Interp {
                 if name == "apos" {
                     args = args.into_iter().map(|a| self.coerce(a, "Vector")).collect();
                 }
-                match self.tuples.get(name) {
+                match self.records.get(name) {
                     Some(sigs) => {
                         // size!((1, 2)) のように signature 全体に合う Tuple 1 つを渡した形も受ける
                         let args = match args.as_slice() {
@@ -563,7 +567,7 @@ impl Interp {
                         let coerced = args.iter().map(|a| self.coerce_for_sigs(a.clone(), sigs)).collect();
                         self.make_record(name, sigs.clone(), coerced)
                     }
-                    None => specific_tuple(name, args),
+                    None => builtin_record(name, args),
                 }
             }
             Expr::New(kind, attrs) if kind == "Color" => {
@@ -1475,31 +1479,45 @@ fn set_attr(obj: &ObjRef, attr: &str, value: Value) -> Result<()> {
 /// 属性の型に値が合うか。組み込みの Union (Paint = Color | Shader) もここで見る
 fn accepts(expected: &str, value: &Value) -> bool {
     let actual = value.type_name();
-    actual == expected || (expected == "Paint" && matches!(actual.as_str(), "Color" | "Shader"))
+    actual == expected || (expected == "Paint" && matches!(actual.as_str(), "Color" | "Shader" | "Gradient"))
 }
 
 /// 組み込み型の名前 (補完用)
-pub const KINDS: &[&str] = &["Circle", "Rect", "Line", "Polygon", "TextArea", "View", "Timeline", "Subtitle", "Shader", "Color"];
+pub const KINDS: &[&str] = &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "View", "Timeline", "Subtitle", "Shader", "Gradient", "Color"];
 
 /// 組み込み型の属性と型
 pub fn schema(kind: &str) -> Option<&'static [(&'static str, &'static str)]> {
-    const SHAPE: [(&str, &str); 4] = [("fill", "Paint"), ("stroke", "Color"), ("strokeWidth", "Number"), ("opacity", "Number")];
+    const SHAPE: [(&str, &str); 10] = [
+        ("fill", "Paint"),
+        ("stroke", "Color"),
+        ("strokeWidth", "Number"),
+        ("strokeCap", "StrokeCap"),
+        ("strokeJoin", "StrokeJoin"),
+        ("dash", "List"),
+        ("dashOffset", "Number"),
+        ("opacity", "Number"),
+        ("rotation", "Number"),
+        ("blend", "Blend"),
+    ];
     macro_rules! with_shape {
         ($($extra:expr),*) => {{
-            const ATTRS: &[(&str, &str)] = &[$($extra,)* SHAPE[0], SHAPE[1], SHAPE[2], SHAPE[3]];
+            const ATTRS: &[(&str, &str)] = &[$($extra,)* SHAPE[0], SHAPE[1], SHAPE[2], SHAPE[3], SHAPE[4], SHAPE[5], SHAPE[6], SHAPE[7], SHAPE[8], SHAPE[9]];
             ATTRS
         }};
     }
     Some(match kind {
         "Circle" => with_shape!(("position", "AnchoredPosition"), ("radius", "Number")),
+        "Ellipse" => with_shape!(("position", "AnchoredPosition"), ("rx", "Number"), ("ry", "Number")),
         "Rect" => with_shape!(("position", "AnchoredPosition"), ("w", "Number"), ("h", "Number"), ("radius", "Number")),
         "Line" => with_shape!(("from", "Vector"), ("to", "Vector")),
         "Polygon" => with_shape!(("points", "List")),
-        "TextArea" => with_shape!(("position", "AnchoredPosition"), ("text", "String"), ("w", "Number"), ("font", "String"), ("fontSize", "Number"), ("align", "Symbol")),
-        "View" => &[("box", "Vector"), ("position", "AnchoredPosition"), ("w", "Number"), ("h", "Number"), ("opacity", "Number")],
+        "Path" => with_shape!(("from", "Vector"), ("segments", "List"), ("closed", "Bool")),
+        "TextArea" => with_shape!(("position", "AnchoredPosition"), ("text", "String"), ("w", "Number"), ("font", "String"), ("fontSize", "Number"), ("align", "Align")),
+        "View" => &[("box", "Vector"), ("position", "AnchoredPosition"), ("w", "Number"), ("h", "Number"), ("opacity", "Number"), ("blend", "Blend")],
         "Timeline" => &[("duration", "Duration")],
         "Subtitle" => &[("text", "String"), ("duration", "Duration")],
         "Shader" => &[("color", "Func"), ("args", "List"), ("samples", "Number")],
+        "Gradient" => &[("kind", "GradientKind"), ("from", "Vector"), ("to", "Vector"), ("radius", "Number"), ("stops", "List")],
         _ => return None,
     })
 }
@@ -1518,7 +1536,7 @@ fn interpolate(a: &Value, b: &Value, k: f64) -> Value {
     }
 }
 
-fn specific_tuple(name: &str, args: Vec<Value>) -> Result<Value> {
+fn builtin_record(name: &str, args: Vec<Value>) -> Result<Value> {
     match (name, args.as_slice()) {
         ("vector", [Value::Number(x), Value::Number(y)]) => Ok(Value::Vector(*x, *y)),
         ("apos", [Value::Symbol(a), Value::Number(x), Value::Number(y)]) => Ok(Value::Apos(a.clone(), *x, *y)),
@@ -1531,7 +1549,7 @@ fn specific_tuple(name: &str, args: Vec<Value>) -> Result<Value> {
             let types: Vec<_> = args.iter().map(Value::type_name).collect();
             err("TypeError.ArgumentType", format!("no signature of {name}! matches ({})", types.join(", ")))
         }
-        _ => err("NameError.UndefinedVariable", format!("tuple \"{name}\" is not defined")),
+        _ => err("NameError.UndefinedVariable", format!("record \"{name}\" is not defined")),
     }
 }
 

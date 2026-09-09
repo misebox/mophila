@@ -7,20 +7,20 @@ use crate::lang::error::{Result, err};
 use crate::lang::value::{Module, Value};
 
 pub const DOCS: &[Entry] = &[
-    Entry { name: "PI", signature: "math.PI", doc: "円周率" },
-    Entry { name: "TAU", signature: "math.TAU", doc: "2π" },
-    Entry { name: "E", signature: "math.E", doc: "自然対数の底" },
-    Entry { name: "sin", signature: "math.sin(x)", doc: "正弦 (ラジアン)" },
-    Entry { name: "cos", signature: "math.cos(x)", doc: "余弦 (ラジアン)" },
-    Entry { name: "floor", signature: "math.floor(x)", doc: "切り捨て" },
-    Entry { name: "ceil", signature: "math.ceil(x)", doc: "切り上げ" },
-    Entry { name: "abs", signature: "math.abs(x)", doc: "絶対値" },
-    Entry { name: "sqrt", signature: "math.sqrt(x)", doc: "平方根" },
-    Entry { name: "ln", signature: "math.ln(x)", doc: "自然対数" },
-    Entry { name: "exp", signature: "math.exp(x)", doc: "e の x 乗" },
-    Entry { name: "atan2", signature: "math.atan2(y, x)", doc: "(x, y) の角度 (ラジアン)" },
-    Entry { name: "max", signature: "math.max(a, b, ...)", doc: "最大" },
-    Entry { name: "min", signature: "math.min(a, b, ...)", doc: "最小" },
+    Entry { name: "PI", signature: "math.PI", returns: "Number", doc: "円周率" },
+    Entry { name: "TAU", signature: "math.TAU", returns: "Number", doc: "2π" },
+    Entry { name: "E", signature: "math.E", returns: "Number", doc: "自然対数の底" },
+    Entry { name: "sin", signature: "math.sin(x: Number)", returns: "Number", doc: "正弦 (ラジアン)" },
+    Entry { name: "cos", signature: "math.cos(x: Number)", returns: "Number", doc: "余弦 (ラジアン)" },
+    Entry { name: "floor", signature: "math.floor(x: Number)", returns: "Number", doc: "切り捨て" },
+    Entry { name: "ceil", signature: "math.ceil(x: Number)", returns: "Number", doc: "切り上げ" },
+    Entry { name: "abs", signature: "math.abs(x: Number)", returns: "Number", doc: "絶対値" },
+    Entry { name: "sqrt", signature: "math.sqrt(x: Number)", returns: "Number", doc: "平方根" },
+    Entry { name: "ln", signature: "math.ln(x: Number)", returns: "Number", doc: "自然対数" },
+    Entry { name: "exp", signature: "math.exp(x: Number)", returns: "Number", doc: "e の x 乗" },
+    Entry { name: "atan2", signature: "math.atan2(y: Number, x: Number)", returns: "Number", doc: "(x, y) の角度 (ラジアン)" },
+    Entry { name: "max", signature: "math.max(a: Number, b: Number, ...)", returns: "Number", doc: "最大" },
+    Entry { name: "min", signature: "math.min(a: Number, b: Number, ...)", returns: "Number", doc: "最小" },
 ];
 
 pub fn module() -> Module {

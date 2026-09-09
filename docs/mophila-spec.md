@@ -23,7 +23,7 @@
 | 1 | `expr . name` | 左 | 属性参照 |
 | 1 | `expr [ expr ]` | 左 | 添字 |
 | 1 | `expr ( args )` | 左 | 呼び出し |
-| 1 | `name ! ( args )` | — | specific tuple 生成 |
+| 1 | `name ! ( args )` | — | record 生成 |
 | 2 | `- expr` | 右 | 符号反転 |
 | 2 | `not expr` | 右 | 否定 |
 | 3 | `expr ^ expr` | 右 | べき |
@@ -81,19 +81,19 @@
 
 ### 3.3 Union 型
 
-`type Shape = Circle | Rect | Line | Polygon | TextArea` のように既存の型を `|` で結んで定義する。
+`type Shape = Circle | Ellipse | Rect | Line | Polygon | Path | TextArea` のように既存の型を `|` で結んで定義する。
 
-### 3.4 specific tuple
+### 3.4 record
 
-名前と要素の型を持つ Tuple。定義は `tuple name(field: Type, ...)`、生成は `name!(...)`。
+名前と、型の付いたフィールドを持つ値。定義は `record name(field: Type, ...)`、生成は `name!(...)`。フィールドは名前で読む (`v.x`)。値なので中身は変えられない。
 
 - 同じ名前で複数の signature を定義できる。型は 1 つ、コンストラクタが複数
 - signature の選択は引数の数と型で行い、できるだけ細かい型に一致させる。判定は実行時
-- 素の Tuple は specific tuple ではない。`(1, 1.5)` は Tuple、`vector!(1, 1.5)` が Vector
-- ただし specific tuple が要る場所 (属性、specific tuple の引数、`place` の `at:`、motion の行) に signature に合う素の Tuple を書くと、その型に変換される: `box: (4, 3)`、`position: (:center, 1, 2)`、`apos!(:center, (1, 2))`、`size!((1, 2))`。合わなければ `TypeError`。変換は型の決まった場所だけで、Tuple の値そのものは変わらない
+- 素の Tuple は record ではない。`(1, 1.5)` は Tuple、`vector!(1, 1.5)` が Vector
+- ただし record が要る場所 (属性、record の引数、`place` の `at:`、motion の行) に signature に合う素の Tuple を書くと、その型に変換される: `box: (4, 3)`、`position: (:center, 1, 2)`、`apos!(:center, (1, 2))`、`size!((1, 2))`。合わなければ `TypeError`。変換は型の決まった場所だけで、Tuple の値そのものは変わらない
 - Vector の演算は実数 2 つの Tuple と同じ: `Vector ± Vector`、`Vector ± (x, y)`、`Vector × Number`、`Vector ÷ Number`、`-Vector`。結果は Vector
 
-組み込みの specific tuple:
+組み込みの record:
 
 | 名前 | signature | 型 |
 |---|---|---|
@@ -107,6 +107,10 @@
 | 型 | 値 |
 |---|---|
 | Anchor | `:center` `:topLeft` `:topRight` `:bottomLeft` `:bottomRight` `:top` `:bottom` `:left` `:right` |
+| StrokeCap | `:butt` `:round` `:square` |
+| StrokeJoin | `:miter` `:round` `:bevel` |
+| Blend | `:normal` `:multiply` `:screen` `:overlay` `:darken` `:lighten` `:difference` `:add` |
+| GradientKind | `:linear` `:radial` `:sweep` |
 | Align | `:left` `:center` `:right` |
 | Ease | `:linear` `:ease_in` `:ease_out` `:ease` |
 | Effect | `:fade` |
@@ -121,15 +125,18 @@
 | 型 | 属性 |
 |---|---|
 | Circle | position: AnchoredPosition, radius: Number |
+| Ellipse | position: AnchoredPosition, rx: Number (横の半径), ry: Number (縦の半径) |
 | Rect | position: AnchoredPosition, w, h: Number, radius: Number (角の丸み、省略なら 0) |
 | Line | from, to: Vector |
 | Polygon | points: List<Vector> |
+| Path | from: Vector (始点), segments: List<Tuple> (`(:move \| :line \| :quad \| :curve, 点...)`。:quad は制御点 1 つ、:curve は 2 つを先に書く), closed: Bool (true で始点に戻って閉じる) |
 | TextArea | text: String, position: AnchoredPosition, w: Number, font: String, fontSize: Number, align: Align |
 | View | box: Vector (座標系の幅と高さ。`vector!(4, 3)` なら 0..4 × 0..3。ピクセルは持たない), opacity: Number (中身をまとめて 1 枚として掛ける。中の図形が重なっても二重に薄くならない)。別の View に置かれたときは position / w / h も持つ |
 | Subtitle | text: String, duration: Duration。画面には描かず、Timeline に置くと動画の字幕トラックになる |
+| Gradient | kind: Symbol (`:linear` 既定 / `:radial` / `:sweep`), from: Vector (linear の始点、radial と sweep の中心), to: Vector (linear の終点), radius: Number (radial の半径), stops: List<Color> (2 つ以上。等間隔に並ぶ)。図形の `fill` に入れる |
 | Shader | color: `Func<Number, Number, Number -> Color>` (引数は箱の座標 x, y と動画の時刻 t 秒), args: List<Number> (省略可。4 つ目の引数として渡る), samples: Number (1 ピクセルあたりの評価点の数。平方数に切り上げ、4 なら 2x2 の平均。省略は 1)。図形の `fill` に入れる塗りで、図形の中の各ピクセルの色をこの関数で決める |
 
-図形の共通属性: fill: Paint (`type Paint = Color | Shader`), stroke: Color, strokeWidth, opacity: Number。Line 以外は position (AnchoredPosition) で置く。`type Placeable = Shape | View`。
+図形の共通属性: fill: Paint (`type Paint = Color | Gradient | Shader`), stroke: Color, strokeWidth: Number, strokeCap: Symbol (`:butt` `:round` `:square`), strokeJoin (`:miter` `:round` `:bevel`), dash: List<Number> (線と間の長さ。`dashOffset` でずらす), opacity: Number, rotation: Number (時計回りの回転。単位は度。中心は position、Line は from、Polygon は頂点の重心), blend (`:normal` `:multiply` `:screen` `:overlay` `:darken` `:lighten` `:difference` `:add`)。Line 以外は position (AnchoredPosition) で置く。`type Placeable = Shape | View`。
 
 Shader の関数は描画のたびに GPU で全ピクセル分走るので、書けるのは数値の部分だけ: Number / Bool / Color / Vector (`vector!`、`.x` `.y`、`+ -`、Number との `* /`)、四則・`%`・`^`・比較・論理、`if`、範囲の `for`、`return`、`math.*`、`rgb!` `rgba!`、外側の Number / Color / Bool / Vector / List (どれか 1 種類だけのもの) と関数 (再帰は不可)。文字列、Duration、図形、Dict、素の Tuple は使えない。`args` は毎フレーム読むので、motion の行で変えれば動く。`run` では実行されず、`render` / `preview` / `sheet` で走る。GPU の実数は 32 bit
 
@@ -138,7 +145,7 @@ Shader の関数は描画のたびに GPU で全ピクセル分走るので、�
 | 型 | 中身 | 作り方 | duration |
 |---|---|---|---|
 | Motion | 値の時間変化。対象なし | `motion (t, a, b) { 時刻: 値, ... }` | 既定は最後の時刻。`m.duration = 10s` で上書き |
-| Timeline | 対象 + 属性への割り当て。入れ物にもなり、Timeline の中に Timeline を置ける | `m.apply(target, f)` (f は `func (target, t, [cols]) { }`) / `context target as o { motion (t) { 時刻: o.attr = ... } }` / `new Timeline { duration: }` | 同上 |
+| Timeline | どの対象のどの属性が、いつ、どの値になるかの並び。入れ物にもなり、Timeline の中に Timeline を置ける | `motion (t) { 時刻: obj.attr = ... }` (行が属性への代入なら Timeline) / `m.apply(target, f)` (f は `func (target, t, [cols]) { }`) / `new Timeline { duration: }` | 同上 |
 | Audio | 音声ファイル。`duration` (ファイルの長さ) と `file` を持つ | `import "bgm.m4a" as bgm` (.moph 以外のファイルの import。長さは ffprobe で読む) | ファイルの長さ |
 
 - 行の時刻は Duration (`2s`) か 0..1 の実数 (`0.5`、`50%`)。1 つの motion で混ぜられない。実数のときは `duration` の設定が必須
@@ -150,7 +157,7 @@ Shader の関数は描画のたびに GPU で全ピクセル分走るので、�
 - 字幕を置く: `place(new Subtitle { text:, duration: }, at:)`。render が SRT にして動画の字幕トラックに入れる (mp4/mov は mov_text、webm は webvtt、mkv は srt)。プレイヤー側で表示を切り替える。preview と sheet では画面の下に重ねて出す
 - 動画の長さは、置いたものすべての終わりの最大 (音声・字幕も含む)
 - Motion は単独では place できない
-- 各フレームの状態は「スクリプト実行直後の状態 + その時刻までに始まった Timeline を置いた順に当てたもの」で決まり、前のフレームに依存しない。preview で時間を戻しても同じ画になる
+- 各フレームの状態は「スクリプト実行直後の状態 + その時刻までに始まった Timeline を置いた順に適用したもの」で決まり、前のフレームに依存しない。preview で時間を戻しても同じ画になる
 
 ## 4. 文
 
@@ -158,8 +165,8 @@ Shader の関数は描画のたびに GPU で全ピクセル分走るので、�
 - `if 条件 { } else if { } else { }` — 式でもあり、最後の式が値
 - `for x in List | Range | Dict { }`、`for (i, x) in xs.enumerate() { }`
 - `func name(引数) { }` — 最後の式が戻り値。`return` も可 (`if` や `for` の中から関数を抜ける)。既定値・名前付き引数あり
-- `context expr as name, ... { }` — ブロック内で `expr` を `name` として参照する。複数可
-- `tuple name(field: Type, ...)` — specific tuple の定義
+- `context expr as name, ... { }` — ブロック内で `expr` を `name` として参照する。複数可。長い名前を短く書くためのもので、式なので最後の式が値になる
+- `record name(field: Type, ...)` — record の定義
 - `type Name = A | B` — Union 型の定義
 - `output view` — 動画全体の指定
 - `import name` — 標準ライブラリのモジュールを `name` に束縛する (Module 型)。import せずに使うと `NameError.UndefinedVariable` に `add "import name"` のヒントが付く
@@ -186,7 +193,7 @@ import なしで使える組み込み:
 |---|---|---|
 | log | `Func<Any...>` | 引数を空白区切りで stderr へ出力。動画には出ない |
 | type_of | `Func<Any>` | 型名を String で返す |
-| `vector!` `apos!` `rgb!` `rgba!` | specific tuple | 3.4 を参照 |
+| `vector!` `apos!` `rgb!` `rgba!` | record | 3.4 を参照 |
 | String.format / len / replace、List / Dict のメソッド (join など) | | examples/collection.moph を参照 |
 
 `import` で使う標準ライブラリ:
@@ -197,7 +204,7 @@ import なしで使える組み込み:
 | color | 色を作る、混ぜる: `mix(a, b, k)` `lighten(c, k)` `darken(c, k)` `alpha(c, a)` `hsl(h, s, l)` `gray(v)`。Color は `c.r` `c.g` `c.b` (0..255) `c.a` (0..1) が読める |
 | shape | Polygon の points を作る: `regular_polygon(cx, cy, r, n, rotation)` `star(cx, cy, outer, inner, n, rotation)` `arrow(from, to, width, head, head_width)` |
 | layout | 並べる位置: `grid(x, y, w, h, cols, rows)` (各マスの中心) `cell(w, h, cols, rows)` `along(from, to, n)` `fit(w, h, box_w, box_h)` |
-| transition | 図形や View に当てる Timeline: `fade_in(o, duration)` `fade_out` `fade_to(o, from, to, duration)` `slide_in(o, dx, dy, duration)` `slide_out` `move_by` `show(track, objs, at, end, duration, stagger)` |
+| transition | 図形や View の属性を動かす Timeline: `fade_in(o, duration)` `fade_out` `fade_to(o, from, to, duration)` `slide_in(o, dx, dy, duration)` `slide_out` `move_by` `show(track, objs, at, end, duration, stagger)` |
 | fractal | エスケープタイム系フラクタル。`escape_time(formula, coloring, center, span, ...)` が Shader を返す。反復式 `mandelbrot` `julia(c)` `burning_ship` `multibrot(n)`、精度 `plain` `perturbation`、色付け `smooth(stops, period)`。本体に埋め込んだ .moph (src/stdlib/fractal.moph) で、説明はそのドキュメントコメントから |
 
 ## 7. エラー

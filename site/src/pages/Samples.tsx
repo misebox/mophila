@@ -20,9 +20,10 @@ const Meta: Component<{ sample: Sample }> = (props) => (
 );
 
 export const Samples: Component = () => {
-  const current = (): Sample => data.samples.find((s) => s.name === route().sub) ?? data.samples[0];
+  const listed = (): Sample[] => data.samples.filter((s) => s.listed);
+const current = (): Sample => data.samples.find((s) => s.name === route().sub) ?? listed()[0];
   return (
-    <WithSide current={current().name + ".moph"} side={<SideIndex groups={[{ items: data.samples.map((s) => ({ label: s.name, href: href("samples", s.name), active: s.name === current().name })) }]} />}>
+    <WithSide current={current().name + ".moph"} side={<SideIndex groups={[{ items: listed().map((s) => ({ label: s.name, href: href("samples", s.name), active: s.name === current().name })) }]} />}>
       <Faded key={current().name}>
         {(name) => {
           const s = data.samples.find((x) => x.name === name) ?? data.samples[0];

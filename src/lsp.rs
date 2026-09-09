@@ -22,7 +22,7 @@ use crate::lang::value::Value;
 
 const KEYWORDS: &[&str] = &[
     "let", "func", "if", "else", "for", "in", "and", "or", "not", "true", "false", "return", "new", "context", "as", "motion", "output",
-    "import", "export", "from", "type", "tuple",
+    "import", "export", "from", "type", "record",
 ];
 const SYMBOLS: &[&str] = &[
     "center", "topLeft", "topRight", "bottomLeft", "bottomRight", "top", "bottom", "left", "right", "linear", "ease", "ease_in", "ease_out",
@@ -429,7 +429,7 @@ fn token_range(t: &Token, len: usize) -> Range {
     Range { start: Position::new(t.line as u32 - 1, t.col as u32 - 1), end: Position::new(t.line as u32 - 1, (t.col + len) as u32 - 1) }
 }
 
-/// アウトライン: let / func / type / tuple の定義
+/// アウトライン: let / func / type / record の定義
 fn symbols(text: &str) -> Vec<DocumentSymbol> {
     let Ok(tokens) = lex(text) else { return vec![] };
     let mut out = Vec::new();
@@ -438,7 +438,7 @@ fn symbols(text: &str) -> Vec<DocumentSymbol> {
             (Tok::Let, Tok::Ident(_)) => (SymbolKind::VARIABLE, "let"),
             (Tok::Func, Tok::Ident(_)) => (SymbolKind::FUNCTION, "func"),
             (Tok::Type, Tok::Ident(_)) => (SymbolKind::CLASS, "type"),
-            (Tok::TupleKw, Tok::Ident(_)) => (SymbolKind::STRUCT, "tuple"),
+            (Tok::RecordKw, Tok::Ident(_)) => (SymbolKind::STRUCT, "record"),
             _ => continue,
         };
         let Tok::Ident(name) = &w[1].tok else { continue };
@@ -519,10 +519,10 @@ fn point((line, col): (usize, usize)) -> Range {
     Range { start: p, end: p }
 }
 
-/// let / export let / func / type / tuple の直後にある name の位置
+/// let / export let / func / type / record の直後にある name の位置
 fn find_definition(tokens: &[Token], name: &str) -> Option<(usize, usize)> {
     tokens.windows(2).find_map(|w| match (&w[0].tok, &w[1].tok) {
-        (Tok::Let | Tok::Func | Tok::Type | Tok::TupleKw, Tok::Ident(n)) if n == name => Some((w[1].line, w[1].col)),
+        (Tok::Let | Tok::Func | Tok::Type | Tok::RecordKw, Tok::Ident(n)) if n == name => Some((w[1].line, w[1].col)),
         _ => None,
     })
 }

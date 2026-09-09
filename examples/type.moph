@@ -31,10 +31,10 @@ import math
 # math.sin:   Func<Number -> Number>   (cos, floor, ceil, abs, sqrt も同じ)
 # math.max:   Func<Number... -> Number> (min も)
 
-# ---- specific tuple (ユーザー定義) ----
+# ---- record (ユーザー定義) ----
 # 同じ名前で複数の signature を定義できる。呼び出し時に引数の数と型で選ぶ
-tuple size(w: Number, h: Number)
-tuple size(w: Number, h: Duration)
+record size(w: Number, h: Number)
+record size(w: Number, h: Duration)
 let s1 = size!(1, 2)          # 1 つ目
 let s2 = size!(1, 2s)         # 2 つ目
 s1.w                          # 1
@@ -55,7 +55,7 @@ type Placeable = Shape | View
 # Vector            vector!(1, 1.5)               .x .y で参照できる。(1, 1.5) は Tuple であって Vector ではない
 # AnchoredPosition  apos!(:center, 1, 1.5)     Anchor + Vector。apos!(:center, vector!(1, 1.5)) も同じ
 #
-# ただし「Vector と決まっている場所」(属性、specific tuple の引数) に signature に合う素の Tuple を書くと、その型に変換される
+# ただし「Vector と決まっている場所」(属性、record の引数) に signature に合う素の Tuple を書くと、その型に変換される
 #   new Line { from: (0, 0), to: (4, 3) }            # from / to は Vector
 #   new Circle { position: (:center, 1, 2) }         # position は AnchoredPosition
 #   apos!(:center, (1, 2))                           # apos! の Vector 引数

@@ -35,7 +35,7 @@ pub enum Value {
     Timeline(Rc<Timeline>),
     Motion(Rc<Motion>),
     Func(Rc<Closure>),
-    /// ユーザー定義の specific tuple
+    /// record (name!(...) が作る値)
     Record(Rc<Record>),
     /// import で束縛されるモジュール
     Module(Rc<Module>),

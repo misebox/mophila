@@ -3,7 +3,7 @@
 
 元にするもの:
 - `mophila doc` の JSON (組み込み、math、メソッド、型)
-- src/stdlib/*.moph の `##` ドキュメントコメント (export の直前の行。1 行目が要約、@category / @param / @returns)
+- src/stdlib/*.moph の `##` ドキュメントコメント (export の直前の行。1 行目が要約、@category / @param {型} 名前 説明 / @returns {型} 説明 (値なら @type {型} 説明))
 - samples/*.moph (先頭のコメントが説明。--media を付けると site/public/media/<name>.mp4 を render する)
 - 言語仕様と editors/ の README (本文をそのまま入れる)
 
@@ -16,8 +16,11 @@ ROOT = Path(__file__).resolve().parent.parent
 BIN = ROOT / "target/debug/mophila"
 SITE = ROOT / "site"
 MEDIA = SITE / "public" / "media"
+# サンプルのページに出さないもの (使い方のページで扱う)
+ONLY_START = {"first"}
 # サンプルの表示順。intro は長いので動画は付けない
-SAMPLES = ["first", "passerby", "walker", "crowd", "fractal", "orbit", "bounce", "bars", "clock", "grid", "julia", "burning_ship", "mandelbrot"]
+# 並び順。あとのものが前のものを import するように並べる (grid は orbit / bars / clock / bounce を使う)
+SAMPLES = ["first", "shapes", "bounce", "bars", "clock", "orbit", "fractal", "walker", "passerby", "crowd", "grid", "julia", "burning_ship", "mandelbrot"]
 
 
 def builtin_docs() -> dict:
@@ -41,6 +44,52 @@ def signature_of(line: str) -> str:
     return body[:end]
 
 
+TAG = re.compile(r"^\{([^}]*)\}\s*")
+
+
+def tagged(rest: str, named: bool) -> dict:
+    """`{型} 名前 説明` (@param) と `{型} 説明` (@returns) を分ける。型は省略できる"""
+    kind = ""
+    if m := TAG.match(rest):
+        kind, rest = m.group(1), rest[m.end():]
+    if named:
+        name, _, doc = rest.partition(" ")
+        return {"name": name, "type": kind, "doc": doc.strip()}
+    return {"type": kind, "doc": rest.strip()}
+
+
+def split_args(head: str) -> tuple[str, list[str]]:
+    """`name(a, b = f(1), c)` を名前と引数の並びに分ける。入れ子の括弧と波括弧は数える"""
+    name, _, rest = head.partition("(")
+    if not rest:
+        return head, []
+    body = rest[:-1] if rest.endswith(")") else rest
+    args, depth, start = [], 0, 0
+    for i, c in enumerate(body):
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        elif c == "," and depth == 0:
+            args.append(body[start:i].strip())
+            start = i + 1
+    last = body[start:].strip()
+    if last:
+        args.append(last)
+    return name, args
+
+
+def call_form(head: str) -> str:
+    """長い呼び出しは 1 引数 1 行にする"""
+    if len(head) <= 60:
+        return head
+    name, args = split_args(head)
+    if not args:
+        return head
+    lines = ",\n".join(f"  {a}" for a in args)
+    return f"{name}(\n{lines},\n)"
+
+
 def library_docs(path: Path) -> list[dict]:
     """`##` のブロックと、その直後の export をまとめる。category は @category (無ければ空)"""
     items, block = [], []
@@ -51,18 +100,21 @@ def library_docs(path: Path) -> list[dict]:
         if block and line.startswith("export "):
             head = signature_of(line)
             name = re.match(r"[A-Za-z_][A-Za-z0-9_]*", head).group(0)
-            params, returns, category, summary = [], "", "", []
+            params, returns, category, summary = [], {"type": "", "doc": ""}, "", []
             for b in block:
                 if b.startswith("@param "):
-                    _, pname, *desc = b.split(" ", 2)
-                    params.append((pname, desc[0] if desc else ""))
-                elif b.startswith("@returns "):
-                    returns = b[len("@returns "):]
+                    params.append(tagged(b[len("@param "):], named=True))
+                elif b.startswith("@returns ") or b.startswith("@type "):
+                    tag = "@returns " if b.startswith("@returns ") else "@type "
+                    returns = tagged(b[len(tag):], named=False)
                 elif b.startswith("@category "):
                     category = b[len("@category "):]
                 else:
                     summary.append(b)
-            items.append({"name": name, "category": category, "signature": head, "summary": " ".join(summary), "params": params, "returns": returns})
+            defaults = {a.split("=")[0].strip(): a.split("=", 1)[1].strip() for _, args in [split_args(head)] for a in args if "=" in a}
+            for prm in params:
+                prm["default"] = defaults.get(prm["name"], "")
+            items.append({"name": name, "category": category, "isFunc": "(" in head, "signature": head, "call": call_form(head), "summary": " ".join(summary), "params": params, "returns": returns})
         block = []
     return items
 
@@ -136,6 +188,7 @@ def main() -> None:
         mp4 = MEDIA / f"{s['name']}.mp4"
         s["media"] = media_info(mp4) if mp4.exists() else None
         s["trim"] = TRIM.get(s["name"], "")
+        s["listed"] = s["name"] not in ONLY_START
     docs = [{"path": path, "key": key, "title": title, "text": (ROOT / path).read_text()} for path, key, title in DOCS]
     examples = [{"name": p.name, "code": p.read_text()} for p in sorted((ROOT / "examples").glob("*.moph"))]
     data = {"builtins": d["builtins"], "types": d["types"], "libs": libs, "samples": samples, "docs": docs, "examples": examples}

@@ -48,17 +48,18 @@ const Caret: Component<{ open: boolean }> = (props) => (
   <span class="side-caret" classList={{ open: props.open }} aria-hidden="true">▸</span>
 );
 
-// 題のある group は畳める。中の項目が選ばれたら開く。
-// 題がページでもある (ライブラリの module) ときは、題を押すとそのページ、右の三角で開閉する
+// 開いている group を題で覚える。既定は閉じていて、今いる項目を含む group だけ開く
+const [opened, setOpened] = createSignal<Record<string, boolean>>({});
+
+// 題のある group は畳める。題がページでもある (ライブラリの module) ときは、
+// 題を押すとそのページ、右の三角で開閉する
 const SideGroup: Component<{ group: IndexGroup }> = (props) => {
-  const [open, setOpen] = createSignal(true);
+  const key = (): string => props.group.title ?? "";
   const hasActive = (): boolean => props.group.items.some((it) => it.active === true);
+  const open = (): boolean => hasActive() || opened()[key()] === true;
   const toggle = (): void => {
-    setOpen(!open());
+    setOpened({ ...opened(), [key()]: !open() });
   };
-  createEffect(() => {
-    if (hasActive()) setOpen(true);
-  });
   return (
     <div class="side-group">
       <Show when={props.group.title}>

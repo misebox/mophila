@@ -11,7 +11,7 @@ Phase 1 の検討メモ。すべて仮。
 | 型 | 中身 | 作り方 | duration |
 |---|---|---|---|
 | Motion | 値の時間変化だけ。対象なし | `motion (t, a, b) { ... }` | 既定は最後の時刻。`m1.duration = 10s` で上書き可 |
-| Timeline | 対象オブジェクト + 属性への割り当て。Timeline の中に Timeline を置ける | `m1.apply(c1, f)` / `context c1 as o { motion (t) { 時刻: o.attr = ... } }` | 同上 |
+| Timeline | どの対象のどの属性が、いつ、どの値になるかの並び。Timeline の中に Timeline を置ける | `m1.apply(c1, f)` / `context c1 as o { motion (t) { 時刻: o.attr = ... } }` | 同上 |
 
 Timeline は `track.place(tl, at: 3s)` で置ける。Motion は単独では置けない。
 
@@ -38,7 +38,7 @@ let m1 = motion (t, a, b) {
 
 let c1 = new Circle { fill: #a0a0a0 }
 
-# Timeline: Motion を対象に当てる。apply は組み込みメソッド、列を受け取る関数を渡す
+# Timeline: apply は行ごとに関数を呼び、そこで属性に代入された値を時刻ごとの値にする
 let calc = func (c1, t, [x, r, _]) {
   context c1 as o {
     o.center, o.radius = vector!(x, 1.5), r / 10

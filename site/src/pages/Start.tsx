@@ -27,9 +27,27 @@ export const Start: Component = () => {
         <h2>必要なもの</h2>
         <ul class="plain">
           <li>Rust (edition 2024)</li>
-          <li>ffmpeg と ffprobe (動画の出力、音声の読み込み)</li>
-          <li>GPU (wgpu が使えるもの)</li>
+          <li>ffmpeg と ffprobe。動画の書き出しと音声の読み込みに使います</li>
+          <li>GPU (wgpu が動くもの)</li>
         </ul>
+        <details class="fold">
+          <summary>ffmpeg のインストール</summary>
+          <p>ffprobe は ffmpeg に付いてきます。入っているかは <code>ffmpeg -version</code> で分かります。</p>
+          <dl class="commands">
+            <div>
+              <dt>brew install ffmpeg</dt>
+              <dd>macOS (Homebrew)</dd>
+            </div>
+            <div>
+              <dt>sudo apt install ffmpeg</dt>
+              <dd>Debian / Ubuntu</dd>
+            </div>
+            <div>
+              <dt>winget install Gyan.FFmpeg</dt>
+              <dd>Windows</dd>
+            </div>
+          </dl>
+        </details>
       </section>
 
       <section>

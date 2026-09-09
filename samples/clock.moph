@@ -1,56 +1,45 @@
 # clock.moph — アナログ時計。16 秒で秒針が 2 周し、分針と時針もわずかに進む
 
-import math
+import { polar } from shape
+import { spin } from transition
 
 let v = new View { box: (16, 9) }
 v.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 9, fill: #e8e4d8 })
 
-# 文字盤
-v.place(new Circle { position: apos!(:center, 8, 4.5), radius: 4, fill: #fffdf5, stroke: #303030, strokeWidth: 0.08 })
+let cx = 8
+let cy = 4.5
+let ink = #303030
+let red = #d03030
 
-# 目盛り。12 個の太い線と 48 個の細い線
+# 文字盤
+v.place(new Circle { position: apos!(:center, cx, cy), radius: 4, fill: #fffdf5, stroke: ink, strokeWidth: 0.08 })
+
+# 目盛り。5 の倍数だけ太く長い。polar は中心から距離と角度で点を出す (0 が真上、時計回り)
 for i in 0..60 {
-  let a = 6.2832 * i / 60
-  let outer = 3.8
-  let inner = if i % 5 == 0 { 3.3 } else { 3.6 }
-  let w = if i % 5 == 0 { 0.08 } else { 0.03 }
+  let big = i % 5 == 0
   v.place(new Line {
-    from: (8 + inner * math.sin(a), 4.5 - inner * math.cos(a)),
-    to:   (8 + outer * math.sin(a), 4.5 - outer * math.cos(a)),
-    stroke: #303030, strokeWidth: w,
+    from: polar(cx, cy, if big { 3.3 } else { 3.6 }, i * 6),
+    to: polar(cx, cy, 3.8, i * 6),
+    stroke: ink,
+    strokeWidth: if big { 0.08 } else { 0.03 },
   })
 }
 
 # 数字
 for (i, n) in ["12", "3", "6", "9"].enumerate() {
-  let a = 6.2832 * i / 4
-  v.place(new TextArea { text: n, position: apos!(:center, 8 + 2.8 * math.sin(a), 4.5 - 2.8 * math.cos(a)), fontSize: 0.55, fill: #303030, align: :center })
+  v.place(new TextArea { text: n, position: apos!(:center, polar(cx, cy, 2.8, i * 90)), fontSize: 0.55, fill: ink, align: :center })
 }
 
-# 針。秒針は 8 秒で 1 周、分針は 480 秒、時針は 28800 秒で 1 周する (実時間の 7.5 倍速)
-let hour   = new Line { from: (8, 4.5), to: (8, 2.5), stroke: #303030, strokeWidth: 0.16 }
-let minute = new Line { from: (8, 4.5), to: (8, 1.2), stroke: #303030, strokeWidth: 0.1 }
-let second = new Line { from: (8, 4.5), to: (8, 1.0), stroke: #d03030, strokeWidth: 0.04 }
-v.place(hour)
-v.place(minute)
-v.place(second)
-v.place(new Circle { position: apos!(:center, 8, 4.5), radius: 0.15, fill: #d03030 })
-
-# 針は 0..1 の区間で式を毎フレーム評価する。t が 0→1 の 16 秒間に、秒針は 2 周、分針は 2/60 周、時針は 2/720 周
-func turn(hand, length, turns) {
-  context hand as h {
-    motion (t) {
-      0..1: h.to = (8 + length * math.sin(math.TAU * t * turns), 4.5 - length * math.cos(math.TAU * t * turns))
-    }
-  }
-}
+# 針。真上を向けて置き、spin で回す。中心は Line の from なので、from を文字盤の中心にする。
+# 16 秒で秒針は 2 周、分針はその 60 分の 1、時針は 720 分の 1 だけ進む
 let total = 16s
 let track = new Timeline { duration: total }
-for (hand, length, turns) in [(second, 3.5, 2), (minute, 3.3, 2/60), (hour, 2.0, 2/720)] {
-  let tl = turn(hand, length, turns)
-  tl.duration = total
-  track.place(tl, at: 0s)
+for (length, width, color, turns) in [(2.0, 0.16, ink, 2/720), (3.3, 0.1, ink, 2/60), (3.5, 0.04, red, 2)] {
+  let hand = new Line { from: (cx, cy), to: (cx, cy - length), stroke: color, strokeWidth: width }
+  v.place(hand)
+  track.place(spin(hand, turns, total), at: 0s)
 }
-v.addTrack(track)
+v.place(new Circle { position: apos!(:center, cx, cy), radius: 0.15, fill: red })
 
+v.addTrack(track)
 output v

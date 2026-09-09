@@ -20,12 +20,12 @@ use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
-use crate::audio;
-use crate::eval::Interp;
-use crate::shader::{self, ShaderRunner};
-use crate::media::{Cue, Media};
-use crate::scene;
-use crate::value::ObjRef;
+use crate::render::audio;
+use crate::lang::eval::Interp;
+use crate::render::shader::{self, ShaderRunner};
+use crate::render::media::{Cue, Media};
+use crate::render::scene;
+use crate::lang::value::ObjRef;
 
 pub fn run(name: String, interp: Interp, view: ObjRef, duration: f64, size: (u32, u32), looping: bool, start: Option<f64>, media: &Media) -> Result<(), Box<dyn Error>> {
     // 音が出せなくても再生はする

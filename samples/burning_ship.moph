@@ -2,7 +2,7 @@
 # 船全体から、左の水平線に浮かぶ小さな船に 50 倍まで寄る。虚軸は慣習どおり下向き (flip)
 
 import math
-import { escape_time, burning_ship, perturbation, smooth } from ..lib.fractal
+import { escape_time, burning_ship, perturbation, smooth } from fractal
 
 let v = new View { box: (16, 9) }
 let total = 40s

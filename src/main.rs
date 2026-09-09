@@ -1,23 +1,11 @@
-mod ast;
-mod audio;
 mod bundle;
 mod docs;
-mod encode;
-mod error;
-mod eval;
-mod gpu;
-mod lexer;
+mod lang;
 mod lsp;
-mod media;
-mod parser;
-mod preview;
-mod progress;
+mod render;
 mod report;
-mod scene;
-mod shader;
-mod text;
+mod stdlib;
 mod timing;
-mod value;
 
 use std::error::Error;
 
@@ -230,16 +218,16 @@ fn run() -> Result<(), Box<dyn Error>> {
             render(&std::fs::read_to_string(&script)?, base_dir(&script), None, file_name(&script), out)
         }
         Command::Run { script } => {
-            let stmts = parser::parse(&std::fs::read_to_string(&script)?)?;
-            let mut interp = eval::Interp::new();
+            let stmts = lang::parser::parse(&std::fs::read_to_string(&script)?)?;
+            let mut interp = lang::eval::Interp::new();
             interp.base_dir = base_dir(&script);
             interp.run(&stmts)?;
             Ok(())
         }
         Command::Preview { script, size, r#loop, at } => {
             let (interp, view, duration) = load(&std::fs::read_to_string(&script)?, base_dir(&script), None)?;
-            let media = media::collect(&view, duration);
-            preview::run(file_name(&script), interp, view, duration, size, r#loop, at, &media)
+            let media = render::media::collect(&view, duration);
+            render::preview::run(file_name(&script), interp, view, duration, size, r#loop, at, &media)
         }
         Command::Timeline { script, filter } => {
             let (mut interp, view, duration) = load(&std::fs::read_to_string(&script)?, base_dir(&script), None)?;
@@ -248,7 +236,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             println!("duration: {duration:.2}s\n");
             println!("# events: start  length  object  attribute  change\n{}", report::format_events(&events, &filter));
             println!("\n# text visibility: from – to  length  text\n{}", report::text_visibility(&events, &filter));
-            let media = media::collect(&view, duration);
+            let media = render::media::collect(&view, duration);
             if !media.is_empty() {
                 println!("\n# subtitles and audio: from – to  length  content\n{}", report::media_report(&media, &filter));
             }
@@ -275,9 +263,9 @@ fn base_dir(script: &str) -> std::path::PathBuf {
 }
 
 /// スクリプトを実行し、出力する View と動画の長さを返す
-fn load(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sources>) -> Result<(eval::Interp, value::ObjRef, f64), Box<dyn Error>> {
-    let stmts = parser::parse(src)?;
-    let mut interp = eval::Interp::new();
+fn load(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sources>) -> Result<(lang::eval::Interp, lang::value::ObjRef, f64), Box<dyn Error>> {
+    let stmts = lang::parser::parse(src)?;
+    let mut interp = lang::eval::Interp::new();
     interp.base_dir = base_dir;
     if let Some(s) = sources {
         interp.sources = s.files.clone();
@@ -293,13 +281,13 @@ fn load(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Source
 fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sources>, name: String, args: OutputArgs) -> Result<(), Box<dyn Error>> {
     let (width, height) = args.size;
     let (mut interp, view, duration) = load(src, base_dir, sources)?;
-    let media = media::collect(&view, duration);
+    let media = render::media::collect(&view, duration);
     let Some(output) = args.output else {
-        return preview::run(name, interp, view, duration, args.size, args.r#loop, args.at, &media);
+        return render::preview::run(name, interp, view, duration, args.size, args.r#loop, args.at, &media);
     };
 
     let mut timing = timing::Timing::from_env();
-    let mut renderer = timing.measure("startup", || gpu::HeadlessRenderer::new(width, height))?;
+    let mut renderer = timing.measure("startup", || render::gpu::HeadlessRenderer::new(width, height))?;
     interp.cache_mut().shaders = Some(renderer.shader_runner());
     let is_image = std::path::Path::new(&output).extension().is_some_and(|e| e == "png");
     // --trim の区間。映像はこの時刻から描き、音声と字幕もこの区間に合わせてずらして切る
@@ -310,9 +298,9 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
         return Err(format!("--trim starts at {from}s but the video ends at {duration}s").into());
     }
     let media = media.window(from, to);
-    let mut ffmpeg = encode::Ffmpeg::spawn(
+    let mut ffmpeg = render::encode::Ffmpeg::spawn(
         &output,
-        encode::Settings {
+        render::encode::Settings {
             width,
             height,
             fps: args.fps,
@@ -332,7 +320,7 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
     // フレーム N を GPU に投入したら、その完了を待つ前にフレーム N+1 の eval と scene を進める。
     // N の読み戻しは N+1 を投入した後に行う (GPU が N を描いている間に CPU が N+1 を組み立てる)
     let mut pending: Option<usize> = None;
-    let mut progress = progress::Progress::new(&name, times.len());
+    let mut progress = render::progress::Progress::new(&name, times.len());
     for (i, t) in times.into_iter().enumerate() {
         timing.measure("eval", || -> Result<(), Box<dyn Error>> {
             interp.begin_frame(t);
@@ -342,7 +330,7 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
             }
             Ok(())
         })?;
-        let scene = timing.measure("scene", || scene::build(&view, f64::from(width), f64::from(height), t, interp.cache_mut()))?;
+        let scene = timing.measure("scene", || render::scene::build(&view, f64::from(width), f64::from(height), t, interp.cache_mut()))?;
         if let Some(prev) = pending.take() {
             timing.measure("readback", || renderer.read_pixels(prev, &mut pixels))?;
             timing.measure("encode", || ffmpeg.write_frame(&pixels))?;
@@ -364,7 +352,7 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
 /// 指定の時刻でフレームを描き、格子に並べて PNG に書く。各コマの左上に時刻を入れる
 fn sheet(src: &str, base_dir: std::path::PathBuf, output: &str, every: f64, times: Vec<f64>, cell: (u32, u32), cols: u32) -> Result<(), Box<dyn Error>> {
     let (mut interp, view, duration) = load(src, base_dir, None)?;
-    let media = media::collect(&view, duration);
+    let media = render::media::collect(&view, duration);
     let times: Vec<f64> = if times.is_empty() {
         let n = (duration / every).floor() as u32 + 1;
         (0..n).map(|i| f64::from(i) * every).collect()
@@ -376,25 +364,25 @@ fn sheet(src: &str, base_dir: std::path::PathBuf, output: &str, every: f64, time
     let rows = (times.len() as u32).div_ceil(cols);
     let (width, height) = (cw * cols, ch * rows);
 
-    let mut renderer = gpu::HeadlessRenderer::new(cw, ch)?;
+    let mut renderer = render::gpu::HeadlessRenderer::new(cw, ch)?;
     interp.cache_mut().shaders = Some(renderer.shader_runner());
     let mut pixels = Vec::new();
     let mut canvas = vec![0u8; (width * height * 4) as usize];
-    let mut progress = progress::Progress::new("sheet", times.len());
+    let mut progress = render::progress::Progress::new("sheet", times.len());
     for (i, &t) in times.iter().enumerate() {
         interp.begin_frame(t);
         let tracks = view.borrow().tracks.clone();
         for placed in &tracks {
             interp.apply_track(placed, t)?;
         }
-        let mut scene = scene::build(&view, f64::from(cw), f64::from(ch), t, interp.cache_mut())?;
-        scene::overlay_subtitles(&mut scene, interp.cache_mut(), &media.cues, t, f64::from(cw), f64::from(ch));
+        let mut scene = render::scene::build(&view, f64::from(cw), f64::from(ch), t, interp.cache_mut())?;
+        render::scene::overlay_subtitles(&mut scene, interp.cache_mut(), &media.cues, t, f64::from(cw), f64::from(ch));
         // 時刻のラベル
         let label = format!("{t:.1}s");
-        let layout = interp.cache_mut().layout(&label, None, (f64::from(ch) * 0.09) as f32, None, text::alignment(None));
+        let layout = interp.cache_mut().layout(&label, None, (f64::from(ch) * 0.09) as f32, None, render::text::alignment(None));
         let (lw, lh) = (f64::from(layout.width()) + 8.0, f64::from(layout.height()) + 4.0);
         scene.fill(vello::peniko::Fill::NonZero, vello::kurbo::Affine::IDENTITY, vello::peniko::Color::from_rgba8(0, 0, 0, 160), None, &vello::kurbo::Rect::new(0.0, 0.0, lw, lh));
-        text::draw(&mut scene, layout, vello::kurbo::Affine::translate((4.0, 2.0)), vello::peniko::Color::WHITE);
+        render::text::draw(&mut scene, layout, vello::kurbo::Affine::translate((4.0, 2.0)), vello::peniko::Color::WHITE);
         let slot = renderer.render(&scene, interp.cache_mut().shaders.as_mut())?;
         renderer.read_pixels(slot, &mut pixels)?;
         let (col, row) = (i as u32 % cols, i as u32 / cols);
@@ -406,7 +394,7 @@ fn sheet(src: &str, base_dir: std::path::PathBuf, output: &str, every: f64, time
         progress.step(i + 1);
     }
     progress.finish();
-    let mut ffmpeg = encode::Ffmpeg::spawn(output, encode::Settings { width, height, fps: 1, codec: "png", pix_fmt: "rgba", media: None })?;
+    let mut ffmpeg = render::encode::Ffmpeg::spawn(output, render::encode::Settings { width, height, fps: 1, codec: "png", pix_fmt: "rgba", media: None })?;
     ffmpeg.write_frame(&canvas)?;
     ffmpeg.finish()?;
     Ok(())

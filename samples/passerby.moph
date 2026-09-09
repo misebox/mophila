@@ -1,4 +1,4 @@
-# passerby.moph — 育つ木 (fractal.moph) の前を、歩く人 (walker.moph) が通り過ぎる。8 秒
+# passerby.moph — 育つ木 (fractal.moph) の前を、歩く人 (walker.moph) が通り過ぎる
 # 2 つのサンプルを import して置くだけで 1 つの絵になる。README の GIF はこれ。
 # docs/readme.gif の作り方:
 #   mophila render samples/passerby.moph -o r.mp4 --size 400x225 --fps 10 --codec libx264rgb --pix-fmt rgb24

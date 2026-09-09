@@ -71,7 +71,7 @@ VS Code 拡張と Neovim の設定は `editors/vscode/README.md`。構文ハイ�
 - `docs/skills/mophila/SKILL.md` — 書き方の知恵 (LLM に書かせるときに渡す)
 - `examples/` — 構文ごとの短い例
 - `samples/` — 動画の例。`samples/mophila_intro/main.moph` がこの言語の紹介動画
-- `lib/` — `.moph` のライブラリ (エスケープタイム系フラクタルなど)
+- `src/stdlib/` — 標準ライブラリ。`import math` (Rust) と、本体に埋め込んだ .moph の `color` `shape` `layout` `transition` `fractal`
 
 ## 確認
 

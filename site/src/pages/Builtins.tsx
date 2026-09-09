@@ -1,7 +1,7 @@
-import { For, Show, type Component } from "solid-js";
+import { For, Show, Switch, Match, type Component } from "solid-js";
 import { Heading, Stack, Table, Text } from "@/components/ui";
-import { data, type Entry, type Method, type TypeDoc } from "@/data";
-import { Section, SideIndex, WithSide, type IndexItem } from "@/parts";
+import { data, type Entry, type TypeDoc } from "@/data";
+import { Faded, SideIndex, WithSide } from "@/parts";
 import { href, route } from "@/route";
 
 const EntryTable: Component<{ rows: Entry[] }> = (props) => (
@@ -16,73 +16,95 @@ const EntryTable: Component<{ rows: Entry[] }> = (props) => (
 );
 
 const isConstructor = (b: Entry): boolean => b.name.endsWith("!");
-const typeId = (name: string): string => `type-${name}`;
-const receiverId = (name: string): string => `method-${name.replace(/[^A-Za-z]+/g, "-")}`;
+const current = (): string => route().sub || "functions";
+const typeOf = (name: string): TypeDoc | undefined => data.types.find((t) => t.name === name);
+// 分類は言語が定義している union (Shape / Paint) だけ。属さない型はまとめて「型」
+const unions = (): string[] => [...new Set(data.types.map((t) => t.union).filter((u) => u !== ""))];
+const typeLinks = (match: (t: TypeDoc) => boolean) =>
+  data.types.filter(match).map((t) => ({ label: t.name, href: href("builtins", t.name), active: current() === t.name }));
 
-const TypeBlock: Component<{ type: TypeDoc }> = (props) => (
-  <Stack gap={2} id={typeId(props.type.name)} class="entry">
-    <Heading level={3} size="md"><code>{props.type.name}</code></Heading>
-    <Text size="sm" tone="muted">{props.type.doc}</Text>
+const currentLabel = (): string => (current() === "functions" ? "関数" : current() === "constructors" ? "コンストラクタ" : current());
+
+const Functions: Component = () => (
+  <Stack gap={3}>
+    <Heading level={1} size="xl">関数</Heading>
+    <Text tone="muted">import なしで使えるもの。</Text>
+    <EntryTable rows={data.builtins.filter((b) => !isConstructor(b))} />
+  </Stack>
+);
+
+const Constructors: Component = () => (
+  <Stack gap={3}>
+    <Heading level={1} size="xl">コンストラクタ</Heading>
+    <Text tone="muted">値を作る書き方。関数ではなく specific tuple (名前と要素の型を持つ Tuple) を作る。型の決まった場所では素の Tuple からも変換される (<a href={href("docs", "spec/3-4-specific-tuple")}>仕様 3.4</a>)。</Text>
+    <EntryTable rows={data.builtins.filter(isConstructor)} />
+  </Stack>
+);
+
+// 1 つの型: 作り方、属性 (new で渡すもの)、メソッドと属性 (. で読むもの)
+const TypePage: Component<{ type: TypeDoc }> = (props) => (
+  <Stack gap={3}>
+    <Show when={props.type.union}>
+      <Text size="sm" tone="muted"><code>{props.type.union}</code> の 1 つ</Text>
+    </Show>
+    <Heading level={1} size="xl">{props.type.name}</Heading>
+    <Text>{props.type.doc}</Text>
+    <pre class="code"><code>{props.type.make}</code></pre>
     <Show when={props.type.attrs.length > 0}>
-      <Table
-        columns={[
-          { key: "name", header: "属性", render: (v) => <code>{String(v)}</code> },
-          { key: "type", header: "型" },
-          { key: "doc", header: "説明" },
-        ]}
-        data={props.type.attrs}
-        rowKey={(r) => r.name}
-      />
+      <Stack gap={1}>
+        <Heading level={2} size="sm" class="sub">属性</Heading>
+        <Table
+          columns={[
+            { key: "name", header: "名前", render: (v) => <code>{String(v)}</code> },
+            { key: "type", header: "型" },
+            { key: "doc", header: "説明" },
+          ]}
+          data={props.type.attrs}
+          rowKey={(r) => r.name}
+        />
+      </Stack>
+    </Show>
+    <Show when={props.type.methods.length > 0}>
+      <Stack gap={1}>
+        <Heading level={2} size="sm" class="sub">メソッド</Heading>
+        <Table
+          columns={[
+            { key: "signature", header: "書き方", render: (v) => <code>{String(v)}</code> },
+            { key: "doc", header: "説明" },
+          ]}
+          data={props.type.methods}
+          rowKey={(m) => m.signature}
+        />
+      </Stack>
     </Show>
   </Stack>
 );
 
-const link = (label: string, id: string): IndexItem => ({ label, href: href("builtins", id), active: route().sub === id });
-
-const receivers = (): string[] => [...new Set(data.methods.map((m) => m.receiver))];
+const Content: Component<{ id: string }> = (props) => (
+  <Switch fallback={<Functions />}>
+    <Match when={props.id === "constructors"}><Constructors /></Match>
+    <Match when={typeOf(props.id)}>{(t) => <TypePage type={t()} />}</Match>
+  </Switch>
+);
 
 export const Builtins: Component = () => (
   <WithSide
+    current={currentLabel()}
     side={
       <SideIndex
         groups={[
-          { items: [link("関数", "functions"), link("コンストラクタ", "constructors")] },
-          { title: "型", items: data.types.map((t) => link(t.name, typeId(t.name))) },
-          { title: "メソッドと属性", items: receivers().map((r) => link(r, receiverId(r))) },
+          {
+            items: [
+              { label: "関数", href: href("builtins", "functions"), active: current() === "functions" },
+              { label: "コンストラクタ", href: href("builtins", "constructors"), active: current() === "constructors" },
+            ],
+          },
+          { title: "型", items: typeLinks((t) => t.union === "") },
+          ...unions().map((u) => ({ title: u, items: typeLinks((t) => t.union === u) })),
         ]}
       />
     }
   >
-    <Stack gap={6}>
-      <Section id="functions" title="関数">
-        <Text size="sm" tone="muted">import なしで使えるもの。</Text>
-        <EntryTable rows={data.builtins.filter((b) => !isConstructor(b))} />
-      </Section>
-      <Section id="constructors" title="コンストラクタ">
-        <Text size="sm" tone="muted">関数ではなく specific tuple (名前と要素の型を持つ Tuple) を作る書き方。型の決まった場所では素の Tuple からも変換される (<a href={href("docs", "spec/3-4-specific-tuple")}>仕様 3.4</a>)。</Text>
-        <EntryTable rows={data.builtins.filter(isConstructor)} />
-      </Section>
-      <Section id="types" title="型と属性">
-        <For each={data.types}>{(t) => <TypeBlock type={t} />}</For>
-      </Section>
-      <Section id="methods" title="メソッドと属性">
-        <Text size="sm" tone="muted">値に対して <code>.</code> で呼ぶもの。Motion は <code>motion (t) {"{ ... }"}</code> の式が返す値で、motion 自体は構文。</Text>
-        <For each={receivers()}>
-          {(r) => (
-            <Stack gap={2} id={receiverId(r)} class="entry">
-              <Heading level={3} size="md"><code>{r}</code></Heading>
-              <Table
-                columns={[
-                  { key: "signature", header: "書き方", render: (v) => <code>{String(v)}</code> },
-                  { key: "doc", header: "説明" },
-                ]}
-                data={data.methods.filter((m) => m.receiver === r)}
-                rowKey={(m: Method) => m.signature}
-              />
-            </Stack>
-          )}
-        </For>
-      </Section>
-    </Stack>
+    <Faded key={current()}>{(id) => <Content id={id} />}</Faded>
   </WithSide>
 );

@@ -1,4 +1,4 @@
-use crate::error::{Result, err};
+use crate::lang::error::{Result, err};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Tok {
@@ -235,7 +235,7 @@ fn parse_color(hex: &str) -> [f32; 4] {
 fn lex_number(chars: &[char], start: usize, line: usize, col: usize) -> Result<(Tok, usize)> {
     let invalid = |end: usize| {
         let text: String = chars[start..end].iter().collect();
-        crate::error::MophError::new("SyntaxError.InvalidLiteral", format!("line {line}:{col}: invalid literal {text}"))
+        crate::lang::error::MophError::new("SyntaxError.InvalidLiteral", format!("line {line}:{col}: invalid literal {text}"))
     };
     let (value, mut i) = read_number(chars, start).ok_or_else(|| invalid(start + 1))?;
 

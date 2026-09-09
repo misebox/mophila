@@ -1,0 +1,109 @@
+# transition.moph — 現れる、消える、滑り込む。図形や View に当てる Timeline を返す。
+# 返った Timeline を track.place(tl, at: 時刻) で置く
+
+## 不透明度を from から to へ変える
+## @category 現れる・消える
+## @param o 図形か View
+## @param from 最初の不透明度 0..1
+## @param to 最後の不透明度 0..1
+## @param duration 長さ (既定 0.5s)
+## @returns Timeline
+export func fade_to(o, from, to, duration = 0.5s) {
+  let tl = context o as x {
+    motion (t) {
+      0: x.opacity = from
+      1: x.opacity = to
+    }
+  }
+  tl.duration = duration
+  tl
+}
+
+## 透明から現れる (不透明度 0 → 1)
+## @category 現れる・消える
+## @param o 図形か View
+## @param duration 長さ (既定 0.5s)
+## @returns Timeline
+export func fade_in(o, duration = 0.5s) { fade_to(o, 0, 1, duration) }
+
+## 消える (不透明度 1 → 0)
+## @category 現れる・消える
+## @param o 図形か View
+## @param duration 長さ (既定 0.5s)
+## @returns Timeline
+export func fade_out(o, duration = 0.5s) { fade_to(o, 1, 0, duration) }
+
+## 今の位置から (dx, dy) だけずれた所から、現れながら滑り込む。減速して止まる
+## @category 滑る
+## @param o position を持つ図形か View
+## @param dx x のずれ (箱の座標)
+## @param dy y のずれ
+## @param duration 長さ (既定 0.5s)
+## @returns Timeline
+export func slide_in(o, dx, dy, duration = 0.5s) {
+  let x = o.position.x
+  let y = o.position.y
+  let tl = context o as s {
+    motion (t) {
+      0: s.position.x = x + dx, s.position.y = y + dy, s.opacity = 0
+      1: s.position.x = x, s.position.y = y, s.opacity = 1 :ease_out
+    }
+  }
+  tl.duration = duration
+  tl
+}
+
+## 今の位置から (dx, dy) の方へ、消えながら滑り出す。加速して去る
+## @category 滑る
+## @param o position を持つ図形か View
+## @param dx x のずれ (箱の座標)
+## @param dy y のずれ
+## @param duration 長さ (既定 0.5s)
+## @returns Timeline
+export func slide_out(o, dx, dy, duration = 0.5s) {
+  let x = o.position.x
+  let y = o.position.y
+  let tl = context o as s {
+    motion (t) {
+      0: s.position.x = x, s.position.y = y, s.opacity = 1
+      1: s.position.x = x + dx, s.position.y = y + dy, s.opacity = 0 :ease_in
+    }
+  }
+  tl.duration = duration
+  tl
+}
+
+## 今の位置から (dx, dy) だけ動く。加速して減速する
+## @category 滑る
+## @param o position を持つ図形か View
+## @param dx x の移動量 (箱の座標)
+## @param dy y の移動量
+## @param duration 長さ (既定 0.5s)
+## @returns Timeline
+export func move_by(o, dx, dy, duration = 0.5s) {
+  let x = o.position.x
+  let y = o.position.y
+  let tl = context o as s {
+    motion (t) {
+      0: s.position.x = x, s.position.y = y
+      1: s.position.x = x + dx, s.position.y = y + dy :ease
+    }
+  }
+  tl.duration = duration
+  tl
+}
+
+## まとめて見せる。objs が at から順に現れ (stagger ずつ遅れて)、end で消え終わる
+## @category まとめて
+## @param track 置く先の Timeline
+## @param objs 図形か View の List
+## @param at 現れ始める時刻
+## @param end 消え終わる時刻
+## @param duration 1 つの fade の長さ (既定 0.5s)
+## @param stagger 次の要素が現れるまでの遅れ (既定 0s)
+export func show(track, objs, at, end, duration = 0.5s, stagger = 0s) {
+  for (i, o) in objs.enumerate() {
+    track.place(fade_in(o, duration), at: at + stagger * i)
+    track.place(fade_out(o, duration), at: end - duration)
+  }
+}

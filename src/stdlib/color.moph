@@ -1,0 +1,58 @@
+# color.moph — 色を作る、混ぜる。Color は c.r c.g c.b (0..255) と c.a (0..1) が読める
+
+import math
+
+func lerp(a, b, k) { a + (b - a) * k }
+
+## 2 色を混ぜる。k が 0 なら a、1 なら b
+## @category 混ぜる
+## @param a Color
+## @param b Color
+## @param k 0..1
+## @returns Color
+export func mix(a, b, k) {
+  rgba!(lerp(a.r, b.r, k), lerp(a.g, b.g, k), lerp(a.b, b.b, k), lerp(a.a, b.a, k))
+}
+
+## 白に近づける。k が 1 なら白
+## @category 混ぜる
+## @param c Color
+## @param k 0..1
+## @returns Color (不透明度は c のまま)
+export func lighten(c, k) { rgba!(lerp(c.r, 255, k), lerp(c.g, 255, k), lerp(c.b, 255, k), c.a) }
+
+## 黒に近づける。k が 1 なら黒
+## @category 混ぜる
+## @param c Color
+## @param k 0..1
+## @returns Color (不透明度は c のまま)
+export func darken(c, k) { rgba!(lerp(c.r, 0, k), lerp(c.g, 0, k), lerp(c.b, 0, k), c.a) }
+
+## 不透明度だけ変えた色
+## @category 作る
+## @param c Color
+## @param a 0..1
+## @returns Color
+export func alpha(c, a) { rgba!(c.r, c.g, c.b, a) }
+
+## 色相・彩度・明度から作る
+## @category 作る
+## @param h 色相 0..360 (0 が赤、120 が緑、240 が青)
+## @param s 彩度 0..1
+## @param l 明度 0..1
+## @returns Color
+export func hsl(h, s, l) {
+  let c = (1 - math.abs(2 * l - 1)) * s
+  let hh = (h % 360 + 360) % 360 / 60
+  let x = c * (1 - math.abs(hh % 2 - 1))
+  let m = l - c / 2
+  let rgb = if hh < 1 { (c, x, 0) } else if hh < 2 { (x, c, 0) } else if hh < 3 { (0, c, x) } else if hh < 4 { (0, x, c) } else if hh < 5 { (x, 0, c) } else { (c, 0, x) }
+  let (r, g, b) = rgb
+  rgb!((r + m) * 255, (g + m) * 255, (b + m) * 255)
+}
+
+## 灰色。0 が黒、255 が白
+## @category 作る
+## @param v 0..255
+## @returns Color
+export func gray(v) { rgb!(v, v, v) }

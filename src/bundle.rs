@@ -8,7 +8,7 @@ use std::error::Error;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use crate::lexer::{Tok, lex};
+use crate::lang::lexer::{Tok, lex};
 
 const MAGIC: &[u8] = b"MOPHILA-BUNDLE-2";
 

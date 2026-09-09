@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 
-use crate::ast::{Expr, FuncDef};
+use crate::lang::ast::{Expr, FuncDef};
 
 pub type ObjRef = Rc<RefCell<Object>>;
 /// スコープの列。内側ほど後ろ。クロージャや Timeline は同じスコープを共有する (複製しない)

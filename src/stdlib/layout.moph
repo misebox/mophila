@@ -1,0 +1,53 @@
+# layout.moph — 並べる位置を出す。座標は箱の座標
+
+## 格子の各マスの中心。左上 (x, y) から幅 w、高さ h を cols 列 rows 行に分け、左上から行ごとに
+## @category 並べる
+## @param x 左上の x
+## @param y 左上の y
+## @param w 全体の幅
+## @param h 全体の高さ
+## @param cols 列の数
+## @param rows 行の数
+## @returns Vector の List (cols * rows 個)
+export func grid(x, y, w, h, cols, rows) {
+  let cw = w / cols
+  let ch = h / rows
+  let cells = []
+  for r in 0..rows {
+    for c in 0..cols {
+      cells.push(vector!(x + cw * (c + 0.5), y + ch * (r + 0.5)))
+    }
+  }
+  cells
+}
+
+## 格子の 1 マスの大きさ
+## @category 並べる
+## @param w 全体の幅
+## @param h 全体の高さ
+## @param cols 列の数
+## @param rows 行の数
+## @returns Vector (幅, 高さ)
+export func cell(w, h, cols, rows) { vector!(w / cols, h / rows) }
+
+## from から to まで、両端を含めて n 個の点
+## @category 並べる
+## @param from 始点 (Vector)
+## @param to 終点 (Vector)
+## @param n 点の数 (2 以上)
+## @returns Vector の List
+export func along(from, to, n) {
+  (0..=1).steps(n - 1).map(func (k) { from + (to - from) * k })
+}
+
+## 幅 w、高さ h のものを、比率を保って box_w x box_h に収めたときの大きさ
+## @category 収める
+## @param w 元の幅
+## @param h 元の高さ
+## @param box_w 収める幅
+## @param box_h 収める高さ
+## @returns Vector (幅, 高さ)
+export func fit(w, h, box_w, box_h) {
+  let k = if box_w / w < box_h / h { box_w / w } else { box_h / h }
+  vector!(w * k, h * k)
+}

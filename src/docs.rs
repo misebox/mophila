@@ -2,7 +2,7 @@
 
 use serde_json::{Value as Json, json};
 
-use crate::eval::{KINDS, schema};
+use crate::lang::eval::schema;
 
 /// 名前、呼び方、説明
 pub struct Entry {
@@ -19,24 +19,6 @@ pub const BUILTINS: &[Entry] = &[
     Entry { name: "apos!", signature: "apos!(:anchor, x, y) / apos!(:anchor, vector)", doc: "AnchoredPosition。基準点付きの位置。anchor は :center :topLeft :topRight :bottomLeft :bottomRight :top :bottom :left :right" },
     Entry { name: "rgb!", signature: "rgb!(r, g, b)", doc: "Color。各 0..255" },
     Entry { name: "rgba!", signature: "rgba!(r, g, b, a)", doc: "Color。r g b は 0..255、a は 0..1" },
-];
-
-/// `import math` で使えるもの
-pub const MATH: &[Entry] = &[
-    Entry { name: "PI", signature: "math.PI", doc: "円周率" },
-    Entry { name: "TAU", signature: "math.TAU", doc: "2π" },
-    Entry { name: "E", signature: "math.E", doc: "自然対数の底" },
-    Entry { name: "sin", signature: "math.sin(x)", doc: "正弦 (ラジアン)" },
-    Entry { name: "cos", signature: "math.cos(x)", doc: "余弦 (ラジアン)" },
-    Entry { name: "floor", signature: "math.floor(x)", doc: "切り捨て" },
-    Entry { name: "ceil", signature: "math.ceil(x)", doc: "切り上げ" },
-    Entry { name: "abs", signature: "math.abs(x)", doc: "絶対値" },
-    Entry { name: "sqrt", signature: "math.sqrt(x)", doc: "平方根" },
-    Entry { name: "ln", signature: "math.ln(x)", doc: "自然対数" },
-    Entry { name: "exp", signature: "math.exp(x)", doc: "e の x 乗" },
-    Entry { name: "atan2", signature: "math.atan2(y, x)", doc: "(x, y) の角度 (ラジアン)" },
-    Entry { name: "max", signature: "math.max(a, b, ...)", doc: "最大" },
-    Entry { name: "min", signature: "math.min(a, b, ...)", doc: "最小" },
 ];
 
 /// 値のメソッドと属性。receiver は型名
@@ -84,23 +66,48 @@ pub const METHODS: &[Method] = &[
     Method { receiver: "AnchoredPosition", name: "y", signature: "p.y", doc: "y 成分。書き換えも可" },
     Method { receiver: "Audio", name: "duration", signature: "bgm.duration", doc: "ファイルの長さ (Duration)" },
     Method { receiver: "Audio", name: "file", signature: "bgm.file", doc: "import に書いたパス" },
+    Method { receiver: "Color", name: "r", signature: "c.r / c.g / c.b", doc: "成分 0..255" },
+    Method { receiver: "Color", name: "a", signature: "c.a", doc: "不透明度 0..1" },
     Method { receiver: "Module", name: "output", signature: "mod.output", doc: "そのファイルが output した View" },
+    Method { receiver: "Module", name: "name", signature: "mod.name", doc: "そのファイルが export した名前" },
     Method { receiver: "Motion", name: "duration", signature: "m.duration = 8s", doc: "全体の長さ。0..1 で書いた表はこれに合わせて伸縮する" },
     Method { receiver: "Timeline", name: "duration", signature: "tl.duration = 8s", doc: "全体の長さ。0..1 で書いた表はこれに合わせて伸縮する" },
 ];
 
-/// 型の説明。属性は eval::schema から
-pub const TYPES: &[(&str, &str)] = &[
-    ("Circle", "円"),
-    ("Rect", "矩形"),
-    ("Line", "線分"),
-    ("Polygon", "多角形"),
-    ("TextArea", "文字"),
-    ("View", "箱。中に図形や View を置き、Timeline を付ける。output した View が動画になる"),
-    ("Timeline", "時刻に置かれたものの集まり。motion を当てたもの、別の Timeline、音声、字幕を置く"),
-    ("Subtitle", "字幕。画面には描かず、動画の字幕トラックになる"),
-    ("Shader", "位置と時刻から色を決める塗り。図形の fill に入れる"),
-    ("Color", "色。#rrggbb / #rrggbbaa / #rgb、rgb!() rgba!()、new Color { r, g, b, a }"),
+/// 型。union は言語が定義している union の名前 (Shape / Paint) で、属さない型は空。
+/// 属性は eval::schema から、メソッドは METHODS から付ける
+pub struct Type {
+    pub name: &'static str,
+    pub union: &'static str,
+    pub make: &'static str,
+    pub doc: &'static str,
+}
+
+pub const TYPES: &[Type] = &[
+    Type { name: "Number", union: "", make: "1  1.5  1/3  25%", doc: "数。整数と実数を区別しない。1/3 は分数のまま持ち、100% は 1 になる" },
+    Type { name: "Duration", union: "", make: "2s  500ms  1m23s  01:23", doc: "時間の長さ。単位は ms / s / m / h。01:23 は mm:ss、01:23:45 は hh:mm:ss" },
+    Type { name: "Bool", union: "", make: "true  false", doc: "真か偽。if と論理演算で使う" },
+    Type { name: "String", union: "", make: "\"hello\"", doc: "文字列。+ でつなぐ。\"{n}\".format(n) で {} の所へ値を入れる" },
+    Type { name: "Tuple", union: "", make: "(1, 1.5)", doc: "要素ごとに型を持つ組。型の決まった所に書くと、その型 (Vector や AnchoredPosition) に変換される" },
+    Type { name: "Range", union: "", make: "0..5  0..=5", doc: "整数の範囲。.. は末尾を含まず、..= は含む。for i in 0..n のように回す" },
+    Type { name: "Func", union: "", make: "func (x) { x * 2 }", doc: "関数。変数に入れて渡せる。型は Func<引数 -> 戻り値> と書く" },
+    Type { name: "List", union: "", make: "[1, 2, 3]", doc: "同じ型の要素を順に並べたもの。for で回し、map や filter で作り直す" },
+    Type { name: "Dict", union: "", make: "{ \"k\": v }  { x, y }", doc: "String のキーから値を引く。{ x, y } は { \"x\": x, \"y\": y } の省略形" },
+    Type { name: "Vector", union: "", make: "vector!(x, y)", doc: "実数 2 つの組。座標や複素数に使う。Vector 同士を + -、Number と * / できる" },
+    Type { name: "AnchoredPosition", union: "", make: "apos!(:center, x, y)", doc: "位置と、その位置がものの どこ を指すか (:center や :topLeft)。図形や View の position に入れる" },
+    Type { name: "View", union: "", make: "new View { box: (16, 9) }", doc: "座標系を持つ入れ物。中に図形や View を place し、addTrack で Timeline を付ける。output した View が動画になる" },
+    Type { name: "Timeline", union: "", make: "new Timeline {}  context o as x { motion (t) { ... } }", doc: "何を、いつ動かすか。motion を対象に当てたもの、別の Timeline、Audio、Subtitle を place で時刻に置く" },
+    Type { name: "Motion", union: "", make: "motion (t) { 0s: 1  2s: 3 }", doc: "時刻と値の表。対象を持たないので、apply か context で対象に当てて Timeline にする" },
+    Type { name: "Subtitle", union: "", make: "new Subtitle { text:, duration: }", doc: "字幕。画面には描かず、Timeline に置くと動画の字幕トラックになる" },
+    Type { name: "Audio", union: "", make: "import \"bgm.m4a\" as bgm", doc: "読み込んだ音声ファイル。Timeline に置くと動画の音になる" },
+    Type { name: "Module", union: "", make: "import .file  import { name } from math", doc: "import が返すもの。そのファイルが export した名前と、output した View を持つ" },
+    Type { name: "Circle", union: "Shape", make: "new Circle { position:, radius:, fill: }", doc: "position を中心に、radius の半径で描く円" },
+    Type { name: "Rect", union: "Shape", make: "new Rect { position:, w:, h:, fill: }", doc: "幅 w、高さ h の四角形。radius を付けると角が丸くなる" },
+    Type { name: "Line", union: "Shape", make: "new Line { from:, to:, stroke:, strokeWidth: }", doc: "from から to へ引く 1 本の線。太さは strokeWidth、色は stroke" },
+    Type { name: "Polygon", union: "Shape", make: "new Polygon { points:, fill: }", doc: "points の頂点を順に結んで閉じた図形。points は Vector の List" },
+    Type { name: "TextArea", union: "Shape", make: "new TextArea { text:, position:, fontSize:, fill: }", doc: "text を描く。w を付けるとその幅で折り返し、align で行の寄せ方を決める" },
+    Type { name: "Color", union: "Paint", make: "#4080e0  #4080e080  rgb!(r, g, b)  rgba!(r, g, b, a)", doc: "1 つの色。r g b は 0..255、a は 0..1。c.r や c.a で成分を読める" },
+    Type { name: "Shader", union: "Paint", make: "new Shader { color: func (x, y, t) { ... } }", doc: "位置 (x, y) と時刻 t から、そのピクセルの色を返す関数。図形の fill に入れると GPU で走る" },
 ];
 
 /// 属性の説明。(型, 属性, 説明)。型が "*" なら図形に共通
@@ -142,20 +149,13 @@ pub fn attr_doc(kind: &str, attr: &str) -> &'static str {
 
 pub fn json() -> Json {
     let entries = |list: &[Entry]| -> Vec<Json> { list.iter().map(|e| json!({ "name": e.name, "signature": e.signature, "doc": e.doc })).collect() };
-    let methods: Vec<Json> = METHODS.iter().map(|m| json!({ "receiver": m.receiver, "name": m.name, "signature": m.signature, "doc": m.doc })).collect();
-    let types: Vec<Json> = KINDS
+    let types: Vec<Json> = TYPES
         .iter()
-        .map(|k| {
-            let doc = TYPES.iter().find(|(n, _)| n == k).map_or("", |(_, d)| *d);
-            let attrs: Vec<Json> = schema(k)
-                .unwrap_or(&[])
-                .iter()
-                .map(|(a, t)| {
-                    json!({ "name": a, "type": t, "doc": attr_doc(k, a) })
-                })
-                .collect();
-            json!({ "name": k, "doc": doc, "attrs": attrs })
+        .map(|t| {
+            let attrs: Vec<Json> = schema(t.name).unwrap_or(&[]).iter().map(|(a, ty)| json!({ "name": a, "type": ty, "doc": attr_doc(t.name, a) })).collect();
+            let methods: Vec<Json> = METHODS.iter().filter(|m| m.receiver == t.name).map(|m| json!({ "name": m.name, "signature": m.signature, "doc": m.doc })).collect();
+            json!({ "name": t.name, "union": t.union, "make": t.make, "doc": t.doc, "attrs": attrs, "methods": methods })
         })
         .collect();
-    json!({ "builtins": entries(BUILTINS), "math": entries(MATH), "methods": methods, "types": types })
+    json!({ "builtins": entries(BUILTINS), "math": entries(crate::stdlib::math::DOCS), "types": types })
 }

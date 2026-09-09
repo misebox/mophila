@@ -1,6 +1,6 @@
 //! 動画に付ける音声と字幕。View に置かれた Timeline を辿り、絶対時刻で集める
 
-use crate::value::{ObjRef, Placed, Track, Value};
+use crate::lang::value::{ObjRef, Placed, Track, Value};
 
 /// 音声ファイルの 1 区間
 pub struct AudioClip {

@@ -1,6 +1,7 @@
 # slides.moph — intro の場面を組む部品。基本形は「左にコード、右にそれが動く箱、下にナレーションの字幕」
 
 import math
+import { fade_to } from transition
 import { W, H, v, track, ink, dim, panel, line, accent, mono, fade_time, stagger, chapter_time, review, pause, dwell, longer } from .theme
 
 export func place(o) {
@@ -9,14 +10,7 @@ export func place(o) {
 }
 
 export func fade(o, at, from, to) {
-  let tl = context o as x {
-    motion (t) {
-      0: x.opacity = from
-      1: x.opacity = to
-    }
-  }
-  tl.duration = fade_time
-  track.place(tl, at: at)
+  track.place(fade_to(o, from, to, fade_time), at: at)
 }
 
 # at から end まで見せる。end の時点で消え終わる

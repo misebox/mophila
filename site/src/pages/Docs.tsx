@@ -11,6 +11,7 @@ const exampleId = (name: string): string => name.replace(/\.moph$/, "");
 // #/docs/<鍵>/<見出し>
 const currentKey = (): string => route().sub.split("/")[0] || data.docs[0].key;
 const anchor = (): string => route().sub.split("/").slice(1).join("/");
+const currentTitle = (): string => (currentKey() === EXAMPLES ? "構文の例" : currentDoc()?.title ?? "");
 const currentDoc = (): Doc | undefined => data.docs.find((d) => d.key === currentKey());
 
 const groups = (): IndexGroup[] => {
@@ -43,7 +44,7 @@ const Examples: Component = () => (
   <Stack gap={5}>
     <Stack gap={1}>
       <Heading level={1} size="xl">構文の例</Heading>
-      <Text size="sm" tone="muted">構文ごとの短いスクリプト。</Text>
+      <Text size="sm" tone="muted" class="intro">構文ごとの短いスクリプト。</Text>
     </Stack>
     <For each={data.examples}>
       {(e) => (
@@ -58,7 +59,7 @@ const Examples: Component = () => (
 );
 
 export const Docs: Component = () => (
-  <WithSide side={<SideIndex groups={groups()} />}>
+  <WithSide current={currentTitle()} side={<SideIndex groups={groups()} />}>
     <Show when={currentKey() === EXAMPLES} fallback={<Show when={currentDoc()} fallback={<Text tone="muted">文書がありません</Text>}>{(d) => <DocBody doc={d()} />}</Show>}>
       <Examples />
     </Show>

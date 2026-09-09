@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
-use crate::ast::{Arg, BinOp, DictKey, Expr, FuncDef, ImportKind, ImportSource, MotionDef, MotionRow, Param, Pattern, RowItem, Stmt, StmtKind, TypeAnn};
-use crate::error::{Result, err};
-use crate::lexer::{Tok, Token, lex};
+use crate::lang::ast::{Arg, BinOp, DictKey, Expr, FuncDef, ImportKind, ImportSource, MotionDef, MotionRow, Param, Pattern, RowItem, Stmt, StmtKind, TypeAnn};
+use crate::lang::error::{Result, err};
+use crate::lang::lexer::{Tok, Token, lex};
 
 pub fn parse(src: &str) -> Result<Vec<Stmt>> {
     let mut p = Parser { tokens: lex(src)?, pos: 0 };
@@ -765,7 +765,7 @@ impl Parser {
                 self.next();
                 let value = self.expr(0)?;
                 let (obj, path) = split_path(e).ok_or_else(|| {
-                    crate::error::MophError::new("SyntaxError.UnexpectedToken", format!("line {}:{}: keyframe must assign to an attribute", self.line(), self.col()))
+                    crate::lang::error::MophError::new("SyntaxError.UnexpectedToken", format!("line {}:{}: keyframe must assign to an attribute", self.line(), self.col()))
                 })?;
                 items.push(RowItem::Assign(obj, path, value));
             } else {

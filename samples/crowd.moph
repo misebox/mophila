@@ -3,6 +3,7 @@
 # 日が暮れると街灯が点き、遠くの窓に灯りが入り、星が出て、最後に全体が暗転する
 
 import math
+import { fade_to } from transition
 import { make, speed, floor } from .walker
 
 let v = new View { box: (16, 9) }
@@ -124,13 +125,7 @@ track.place(lamps[1], at: lamp_at + 0.7s)
 
 # 遠くの窓が順に点く
 for (i, w) in windows.enumerate() {
-  let lit = context w as o {
-    motion (t) {
-      0s: o.opacity = 0
-      0.4s: o.opacity = 0.9
-    }
-  }
-  track.place(lit, at: 13s + (math.sin(i * 3.7) * 0.5 + 0.5) * 6s)
+  track.place(fade_to(w, 0, 0.9, 0.4s), at: 13s + (math.sin(i * 3.7) * 0.5 + 0.5) * 6s)
 }
 
 # 星が出て、瞬く

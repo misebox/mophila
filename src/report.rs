@@ -3,9 +3,9 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::eval::Interp;
-use crate::media::Media;
-use crate::value::{ObjRef, Placed, Timeline, Track, Value};
+use crate::lang::eval::Interp;
+use crate::render::media::Media;
+use crate::lang::value::{ObjRef, Placed, Timeline, Track, Value};
 
 /// 1 つの変化。区間 (from..to) で attr が v0 から v1 に変わる
 pub struct Event {

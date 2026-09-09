@@ -163,6 +163,7 @@ Shader の関数は描画のたびに GPU で全ピクセル分走るので、�
 - `type Name = A | B` — Union 型の定義
 - `output view` — 動画全体の指定
 - `import name` — 標準ライブラリのモジュールを `name` に束縛する (Module 型)。import せずに使うと `NameError.UndefinedVariable` に `add "import name"` のヒントが付く
+- `import math` / `import fractal` — 名前だけなら標準ライブラリ (本体に入っているもの。6 を参照)
 - `import .orbit` — 同じ場所の `orbit.moph` を別のスコープで実行し、`export` した名前と `output` した View (`orbit.output`) を持つ Module を `orbit` に束縛する。`import .lib.shapes` は `./lib/shapes.moph`、`import ..parent` は 1 つ上 (文法上は通るが避ける)。`as name` で別名。`import "path/file.moph"` の形も可 (既定の名前はファイル名)
 - `import { a, b } from .slides` — export した名前を直接この場所に持ち込む。`from math` も可
 - `import "bgm.m4a" as bgm` — .moph 以外のファイルは音声として読み、Audio を束縛する (`as` が無ければファイル名)。`bundle` はこのファイルも埋め込む
@@ -193,6 +194,11 @@ import なしで使える組み込み:
 | モジュール | 内容 |
 |---|---|
 | math | `PI` `TAU` `E` (Number)、`sin` `cos` `floor` `ceil` `abs` `sqrt` `ln` `exp` (`Func<Number -> Number>`)、`atan2(y, x)`、`max` `min` (`Func<Number... -> Number>`) |
+| color | 色を作る、混ぜる: `mix(a, b, k)` `lighten(c, k)` `darken(c, k)` `alpha(c, a)` `hsl(h, s, l)` `gray(v)`。Color は `c.r` `c.g` `c.b` (0..255) `c.a` (0..1) が読める |
+| shape | Polygon の points を作る: `regular_polygon(cx, cy, r, n, rotation)` `star(cx, cy, outer, inner, n, rotation)` `arrow(from, to, width, head, head_width)` |
+| layout | 並べる位置: `grid(x, y, w, h, cols, rows)` (各マスの中心) `cell(w, h, cols, rows)` `along(from, to, n)` `fit(w, h, box_w, box_h)` |
+| transition | 図形や View に当てる Timeline: `fade_in(o, duration)` `fade_out` `fade_to(o, from, to, duration)` `slide_in(o, dx, dy, duration)` `slide_out` `move_by` `show(track, objs, at, end, duration, stagger)` |
+| fractal | エスケープタイム系フラクタル。`escape_time(formula, coloring, center, span, ...)` が Shader を返す。反復式 `mandelbrot` `julia(c)` `burning_ship` `multibrot(n)`、精度 `plain` `perturbation`、色付け `smooth(stops, period)`。本体に埋め込んだ .moph (src/stdlib/fractal.moph) で、説明はそのドキュメントコメントから |
 
 ## 7. エラー
 

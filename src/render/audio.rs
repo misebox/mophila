@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use cpal::SampleFormat;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
-use crate::media::Media;
+use crate::render::media::Media;
 
 pub struct Output {
     _stream: cpal::Stream,

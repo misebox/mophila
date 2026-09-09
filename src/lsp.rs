@@ -14,10 +14,11 @@ use lsp_types::{
     ServerCapabilities, SymbolKind, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Uri, WorkspaceEdit,
 };
 
-use crate::docs::{BUILTINS, MATH, METHODS};
-use crate::eval::{Interp, KINDS, schema};
-use crate::lexer::{Tok, Token, lex};
-use crate::value::Value;
+use crate::docs::{BUILTINS, METHODS};
+use crate::stdlib::math::DOCS as MATH;
+use crate::lang::eval::{Interp, KINDS, schema};
+use crate::lang::lexer::{Tok, Token, lex};
+use crate::lang::value::Value;
 
 const KEYWORDS: &[&str] = &[
     "let", "func", "if", "else", "for", "in", "and", "or", "not", "true", "false", "return", "new", "context", "as", "motion", "output",
@@ -113,7 +114,7 @@ fn document_update(note: &Notification) -> Option<(Uri, String, bool)> {
 
 /// 構文解析し、保存時は実行もする。戻り値は (診断の宛先 uri と診断, 実行できたときのトップレベルの値)
 fn diagnose(uri: &Uri, text: &str, run: bool) -> (Vec<(Uri, Diagnostic)>, Option<Vec<(String, Value)>>) {
-    let stmts = match crate::parser::parse(text) {
+    let stmts = match crate::lang::parser::parse(text) {
         Ok(s) => s,
         Err(e) => return (vec![(uri.clone(), diagnostic(text, &e.kind, &e.message))], None),
     };
@@ -314,9 +315,10 @@ fn complete(uri: &Uri, text: &str, pos: Position) -> Vec<CompletionItem> {
     // それ以外: キーワード、型名、ファイル内の識別子
     let mut items: Vec<CompletionItem> = KEYWORDS.iter().map(|k| item(k, CompletionItemKind::KEYWORD, "")).collect();
     items.extend(KINDS.iter().map(|k| item(k, CompletionItemKind::CLASS, &attrs_doc(k))));
-    for b in ["log", "type_of", "vector!", "apos!", "rgb!", "rgba!", "math"] {
+    for b in ["log", "type_of", "vector!", "apos!", "rgb!", "rgba!"] {
         items.push(item(b, CompletionItemKind::FUNCTION, ""));
     }
+    items.extend(crate::stdlib::names().into_iter().map(|n| item(n, CompletionItemKind::MODULE, "標準ライブラリ")));
     let mut seen = std::collections::HashSet::new();
     for t in &tokens {
         if let Tok::Ident(name) = &t.tok {
@@ -352,10 +354,23 @@ fn enclosing_new(text: &str, pos: Position) -> Option<String> {
     kind
 }
 
-/// import 先のファイルの export と output
+/// import 先のソース。ファイルか、本体に埋め込んだ標準ライブラリの .moph
+fn module_source(uri: &Uri, path: &str) -> Option<String> {
+    if !path.ends_with(".moph") {
+        return match crate::stdlib::find(path)? {
+            crate::stdlib::Lib::Script(src) => Some(src.to_string()),
+            crate::stdlib::Lib::Native(_) => None,
+        };
+    }
+    std::fs::read_to_string(resolve(uri, path)?).ok()
+}
+
+/// import 先の export と output
 fn exports_of(uri: &Uri, path: &str) -> Option<Vec<(String, CompletionItemKind)>> {
-    let target = resolve(uri, path)?;
-    let src = std::fs::read_to_string(target).ok()?;
+    if path == "math" {
+        return Some(MATH.iter().map(|e| (e.name.to_string(), if e.signature.contains('(') { CompletionItemKind::FUNCTION } else { CompletionItemKind::CONSTANT })).collect());
+    }
+    let src = module_source(uri, path)?;
     let tokens = lex(&src).ok()?;
     let mut out = Vec::new();
     for w in tokens.windows(3) {
@@ -475,6 +490,9 @@ fn definition(uri: &Uri, text: &str, pos: Position) -> Option<Location> {
     if before.ends_with('.') {
         let module: String = before.trim_end_matches('.').chars().rev().take_while(|c| c.is_alphanumeric() || *c == '_').collect::<String>().chars().rev().collect();
         if let Some(path) = import_path_for(&tokens, &module) {
+            if !path.ends_with(".moph") {
+                return None;
+            }
             let target = resolve(uri, &path)?;
             let src = std::fs::read_to_string(&target).ok()?;
             let def = find_definition(&lex(&src).ok()?, &word).or_else(|| if word == "output" { Some((1, 1)) } else { None })?;
@@ -539,6 +557,11 @@ fn import_path_for(tokens: &[Token], name: &str) -> Option<String> {
             }
         }
         let (path, default) = match tokens.get(i).map(|t| &t.tok) {
+            // 名前だけなら標準ライブラリ。path はその名前のまま
+            Some(Tok::Ident(n)) if n != "from" => {
+                i += 1;
+                (n.clone(), n.clone())
+            }
             Some(Tok::Str(p)) => {
                 i += 1;
                 let stem = std::path::Path::new(p).file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();

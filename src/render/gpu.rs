@@ -4,7 +4,7 @@ use std::num::NonZeroUsize;
 use vello::peniko::Color;
 use vello::{AaConfig, AaSupport, RenderParams, Renderer, RendererOptions, Scene, wgpu};
 
-use crate::shader::{self, ShaderRunner};
+use crate::render::shader::{self, ShaderRunner};
 
 /// ウィンドウなしで Scene を描画し、ピクセルを CPU に読み戻す。
 /// 読み戻し用バッファを 2 つ持ち、フレーム N の読み戻しを待つ間にフレーム N+1 を描画できる

@@ -1,7 +1,7 @@
 # julia.moph — Julia 集合。定数 c を円周上でゆっくり動かすと、形が移り変わる
 
 import math
-import { escape_time, julia, plain, smooth } from ..lib.fractal
+import { escape_time, julia, plain, smooth } from fractal
 
 let v = new View { box: (16, 9) }
 let total = 40s

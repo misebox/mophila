@@ -1,0 +1,65 @@
+# shape.moph — Polygon の points を作る。角度は度で、0 が真上、時計回り
+
+import math
+
+# 10 桁で丸める (0 のところに 1e-17 が出ないように)
+func tidy(x) { math.floor(x * 1e10 + 0.5) / 1e10 }
+
+func on_circle(cx, cy, r, degrees) {
+  let a = (degrees - 90) * math.PI / 180
+  vector!(tidy(cx + r * math.cos(a)), tidy(cy + r * math.sin(a)))
+}
+
+## 正多角形の頂点
+## @category 多角形
+## @param cx 中心の x
+## @param cy 中心の y
+## @param r 中心から頂点までの距離
+## @param n 頂点の数 (3 以上)
+## @param rotation 回転 (度。既定 0 で最初の頂点が真上)
+## @returns Vector の List。new Polygon { points: ... } に入れる
+export func regular_polygon(cx, cy, r, n, rotation = 0) {
+  (0..n).to_list().map(func (i) { on_circle(cx, cy, r, rotation + i * 360 / n) })
+}
+
+## 星の頂点。外側と内側の半径を交互に
+## @category 多角形
+## @param cx 中心の x
+## @param cy 中心の y
+## @param outer 外側の半径 (とがった先)
+## @param inner 内側の半径 (くぼみ)
+## @param n とがった先の数 (既定 5)
+## @param rotation 回転 (度。既定 0 で最初の先が真上)
+## @returns Vector の List
+export func star(cx, cy, outer, inner, n = 5, rotation = 0) {
+  (0..(n * 2)).to_list().map(func (i) {
+    let r = if i % 2 == 0 { outer } else { inner }
+    on_circle(cx, cy, r, rotation + i * 180 / n)
+  })
+}
+
+## 矢印の輪郭 (7 点)。from から to へ向く
+## @category 矢印
+## @param from 始点 (Vector)
+## @param to 終点 (Vector。矢じりの先)
+## @param width 軸の太さ
+## @param head 矢じりの長さ
+## @param head_width 矢じりの幅 (既定は width の 3 倍)
+## @returns Vector の List
+export func arrow(from, to, width, head, head_width = 0) {
+  let hw = if head_width == 0 { width * 3 } else { head_width }
+  let d = to - from
+  let len = math.sqrt(d.x * d.x + d.y * d.y)
+  let u = d / len
+  let n = vector!(-u.y, u.x)
+  let neck = to - u * head
+  [
+    from + n * (width / 2),
+    neck + n * (width / 2),
+    neck + n * (hw / 2),
+    to,
+    neck - n * (hw / 2),
+    neck - n * (width / 2),
+    from - n * (width / 2),
+  ]
+}

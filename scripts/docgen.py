@@ -3,7 +3,7 @@
 
 元にするもの:
 - `mophila doc` の JSON (組み込み、math、メソッド、型)
-- lib/*.moph の `##` ドキュメントコメント (export の直前の行。1 行目が要約、@param / @returns)
+- src/stdlib/*.moph の `##` ドキュメントコメント (export の直前の行。1 行目が要約、@category / @param / @returns)
 - samples/*.moph (先頭のコメントが説明。--media を付けると site/public/media/<name>.mp4 を render する)
 - 言語仕様と editors/ の README (本文をそのまま入れる)
 
@@ -41,38 +41,30 @@ def signature_of(line: str) -> str:
     return body[:end]
 
 
-SECTION = re.compile(r"^# -{10} (.+) -{10}$")
-
-
 def library_docs(path: Path) -> list[dict]:
-    """`##` のブロックと、その直後の export をまとめる。`# ---------- 名前 ----------` の行で節に分ける"""
-    sections, block = [], []
-    items = []
+    """`##` のブロックと、その直後の export をまとめる。category は @category (無ければ空)"""
+    items, block = [], []
     for line in path.read_text().splitlines():
-        if m := SECTION.match(line):
-            items = []
-            sections.append({"title": m.group(1), "items": items})
-            continue
         if line.startswith("##"):
             block.append(line[2:].strip())
             continue
         if block and line.startswith("export "):
             head = signature_of(line)
             name = re.match(r"[A-Za-z_][A-Za-z0-9_]*", head).group(0)
-            params, returns, summary = [], "", []
+            params, returns, category, summary = [], "", "", []
             for b in block:
                 if b.startswith("@param "):
                     _, pname, *desc = b.split(" ", 2)
                     params.append((pname, desc[0] if desc else ""))
                 elif b.startswith("@returns "):
                     returns = b[len("@returns "):]
+                elif b.startswith("@category "):
+                    category = b[len("@category "):]
                 else:
                     summary.append(b)
-            if not sections:
-                sections.append({"title": "", "items": items})
-            items.append({"name": name, "signature": head, "summary": " ".join(summary), "params": params, "returns": returns})
+            items.append({"name": name, "category": category, "signature": head, "summary": " ".join(summary), "params": params, "returns": returns})
         block = []
-    return sections
+    return items
 
 
 def script_length(path: Path) -> float:
@@ -131,7 +123,11 @@ DOCS = [
 def main() -> None:
     media = "--media" in sys.argv
     d = builtin_docs()
-    libs = [{"file": p.name, "sections": library_docs(p)} for p in sorted((ROOT / "lib").glob("*.moph"))]
+    # 標準ライブラリ。math は本体の表から、.moph は src/stdlib から。基本的なものが先
+    libs = [{"name": "math", "path": "src/stdlib/math.rs", "entries": d["math"], "items": []}]
+    # .moph の順は本体 (src/stdlib/mod.rs の SCRIPTS) と同じ
+    order = re.findall(r'\("(\w+)", include_str!', (ROOT / "src" / "stdlib" / "mod.rs").read_text())
+    libs += [{"name": n, "path": f"src/stdlib/{n}.moph", "entries": [], "items": library_docs(ROOT / "src" / "stdlib" / f"{n}.moph")} for n in order]
     samples = [sample_info(ROOT / "samples" / f"{n}.moph") for n in SAMPLES]
     if media:
         for s in samples:
@@ -142,11 +138,11 @@ def main() -> None:
         s["trim"] = TRIM.get(s["name"], "")
     docs = [{"path": path, "key": key, "title": title, "text": (ROOT / path).read_text()} for path, key, title in DOCS]
     examples = [{"name": p.name, "code": p.read_text()} for p in sorted((ROOT / "examples").glob("*.moph"))]
-    data = {"builtins": d["builtins"], "math": d["math"], "methods": d["methods"], "types": d["types"], "libs": libs, "samples": samples, "docs": docs, "examples": examples}
+    data = {"builtins": d["builtins"], "types": d["types"], "libs": libs, "samples": samples, "docs": docs, "examples": examples}
     out = SITE / "src" / "data.json"
     out.write_text(json.dumps(data, ensure_ascii=False, indent=1))
     have = sum(1 for s in samples if s["media"])
-    print(f"{out.relative_to(ROOT)}: {len(samples)} samples, {sum(len(s['items']) for l in libs for s in l['sections'])} library items, media {have}")
+    print(f"{out.relative_to(ROOT)}: {len(samples)} samples, {sum(len(l['items']) for l in libs)} library items, media {have}")
 
 
 if __name__ == "__main__":

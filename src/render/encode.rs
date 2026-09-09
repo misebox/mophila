@@ -3,7 +3,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
 
-use crate::media::Media;
+use crate::render::media::Media;
 
 pub struct Settings<'a> {
     pub width: u32,
@@ -96,7 +96,7 @@ fn add_media(cmd: &mut Command, output: &str, media: &Media, duration: f64) -> R
         (true, _) => None,
         (false, Some(codec)) => {
             let path = std::env::temp_dir().join(format!("mophila-{}.srt", std::process::id()));
-            std::fs::write(&path, crate::media::srt(&media.cues))?;
+            std::fs::write(&path, crate::render::media::srt(&media.cues))?;
             cmd.args(["-f", "srt", "-i"]).arg(&path);
             temp_files.push(path);
             Some(((media.clips.len() + 1).to_string(), codec))

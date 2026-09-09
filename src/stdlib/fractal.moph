@@ -8,8 +8,8 @@
 
 import math
 
-# ---------- 本体 ----------
 ## エスケープタイム系フラクタルの Shader を作る。図形の fill に入れる
+## @category 描く
 ## @param formula 反復式 (mandelbrot / julia(c) / burning_ship / multibrot(n))
 ## @param coloring 色付け。func (mu, z) -> Color (smooth など)
 ## @param center 複素平面の中心 (Vector)
@@ -110,10 +110,10 @@ export func escape_time(formula, coloring, center, span, precision = :perturbati
   }
 }
 
-# ---------- 反復式 ----------
 # Dict で表す。p はピクセルの複素座標、k は param(t) (Julia の c など)、Z は基準軌道、d は差分、dp は中心からの差
 #   seed(p, k): 最初の z / step(z, p, k): 次の z / start(dp): 差分の初期値 / delta(Z, d, dp, k): 差分の次の値 / degree: 次数
 ## Mandelbrot 集合の反復式 z' = z² + p。摂動法の delta を持つ
+## @category 反復式
 export let mandelbrot = {
   "seed": func (p, k) { vector!(0, 0) },
   "step": func (z, p, k) { cmul(z, z) + p },
@@ -123,6 +123,7 @@ export let mandelbrot = {
 }
 
 ## Julia 集合の反復式 z' = z² + c。z の初期値がピクセルの座標
+## @category 反復式
 ## @param c 定数。Vector か、時刻から Vector を返す func (t)。摂動法は c が一定のときだけ正しい
 ## @returns 反復式 (Dict)
 export func julia(c) {
@@ -138,6 +139,7 @@ export func julia(c) {
 }
 
 ## Burning Ship の反復式。z の実部と虚部の絶対値を取ってから 2 乗する。flip: true で慣習どおりの向きになる
+## @category 反復式
 export let burning_ship = {
   "seed": func (p, k) { vector!(0, 0) },
   "step": func (z, p, k) {
@@ -154,6 +156,7 @@ export let burning_ship = {
 }
 
 ## Multibrot の反復式 z' = z^n + p
+## @category 反復式
 ## @param n 次数。2 以上の整数
 ## @returns 反復式 (Dict)
 export func multibrot(n) {
@@ -171,14 +174,15 @@ export func multibrot(n) {
   }
 }
 
-# ---------- 精度 ----------
 ## 精度: 32 bit のまま GPU で反復する。数万倍までの拡大向き
+## @category 精度
 export let plain = :plain
 ## 精度: 基準軌道をスクリプト側の 64 bit で計算し、GPU は差分だけ反復する (摂動法)。10 兆倍あたりまで
+## @category 精度
 export let perturbation = :perturbation
 
-# ---------- 色付け ----------
 ## 色付け: 滑らかな脱出回数で stops を period ごとに 1 周させる
+## @category 色付け
 ## @param stops Color の List。最初と最後を同じ色にすると継ぎ目が出ない
 ## @param period 何回の反復で 1 周するか
 ## @param inside 集合の中の色 (既定は黒)
@@ -194,13 +198,14 @@ export func smooth(stops, period, inside = #000000) {
   }
 }
 
-# ---------- 複素数 ----------
 ## 複素数の積。複素数は Vector (x が実部、y が虚部)
+## @category 複素数
 ## @param a Vector
 ## @param b Vector
 ## @returns Vector
 export func cmul(a, b) { vector!(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x) }
 ## 複素数の絶対値の 2 乗
+## @category 複素数
 ## @param z Vector
 ## @returns Number
 export func cabs2(z) { z.x * z.x + z.y * z.y }

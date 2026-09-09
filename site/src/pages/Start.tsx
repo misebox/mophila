@@ -1,7 +1,6 @@
 import { Show, type Component } from "solid-js";
-import { Heading, Stack, Text } from "@/components/ui";
 import { data } from "@/data";
-import { Code, GitHubLink, Lead } from "@/parts";
+import { Code, GitHubLink } from "@/parts";
 import { blob, repo, repoName } from "@/repo";
 
 const INSTALL = `git clone ${repo}.git
@@ -18,36 +17,36 @@ const COMMANDS = [
 export const Start: Component = () => {
   const first = data.samples.find((s) => s.name === "first");
   return (
-    <Stack gap={6} class="narrow">
-      <Stack gap={2}>
-        <Heading level={1} size="2xl">使い方</Heading>
-        <Lead>インストールして、最初の 1 本を動かすまで。</Lead>
-      </Stack>
+    <div class="reading">
+      <section>
+        <h1>使い方</h1>
+        <p class="lead">インストールして、最初の 1 本を動かすまで。</p>
+      </section>
 
-      <Stack gap={2}>
-        <Heading level={2} size="lg">必要なもの</Heading>
+      <section>
+        <h2>必要なもの</h2>
         <ul class="plain">
           <li>Rust (edition 2024)</li>
           <li>ffmpeg と ffprobe (動画の出力、音声の読み込み)</li>
           <li>GPU (wgpu が使えるもの)</li>
         </ul>
-      </Stack>
+      </section>
 
-      <Stack gap={2}>
-        <Heading level={2} size="lg">インストール</Heading>
-        <Text>リポジトリを clone して cargo でビルドすると、mophila コマンドが入ります。</Text>
+      <section>
+        <h2>インストール</h2>
+        <p>リポジトリを clone して cargo でビルドすると、mophila コマンドが入ります。</p>
         <Code text={INSTALL} />
-      </Stack>
+      </section>
 
       <Show when={first}>
         {(s) => (
-          <Stack gap={3}>
-            <Heading level={2} size="lg">最初の 1 本</Heading>
-            <Text>丸が右へ動き、四角が横に広がり、文字が現れる 4 秒。3 つの図形が、それぞれ別の motion で別の時刻に変わります。</Text>
+          <section>
+            <h2>最初の 1 本</h2>
+            <p>丸が右へ動き、四角が横に広がり、文字が現れる 4 秒。3 つの図形が、それぞれ別の motion で別の時刻に変わります。</p>
             <Show when={s().media}>
               <video class="sample" src={`media/${s().name}.mp4`} autoplay muted loop playsinline preload="metadata" />
             </Show>
-            <Text>次の内容を first.moph という名前で保存します。</Text>
+            <p>次の内容を first.moph という名前で保存します。</p>
             <Code text={s().code} />
             <ul class="plain">
               <li>View は 16 x 9 の箱。座標はこの箱の中の値で、ピクセルは出力のときに決める</li>
@@ -56,21 +55,21 @@ export const Start: Component = () => {
               <li>Timeline に motion を置く時刻 (at) をずらすと、それぞれ別のタイミングで動き出す</li>
             </ul>
             <GitHubLink href={blob(`samples/${s().name}.moph`)} />
-          </Stack>
+          </section>
         )}
       </Show>
 
-      <Stack gap={2}>
-        <Heading level={2} size="lg">動かす</Heading>
+      <section>
+        <h2>動かす</h2>
         <dl class="commands">
           {COMMANDS.map(([cmd, doc]) => (
-            <>
-              <dt><code>{cmd}</code></dt>
-              <dd><Text size="sm" tone="muted">{doc}</Text></dd>
-            </>
+            <div>
+              <dt>{cmd}</dt>
+              <dd>{doc}</dd>
+            </div>
           ))}
         </dl>
-      </Stack>
-    </Stack>
+      </section>
+    </div>
   );
 };

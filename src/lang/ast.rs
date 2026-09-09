@@ -164,8 +164,8 @@ pub enum Pattern {
 
 impl Expr {
     /// 評価済みの値を、評価すると同じ値になる式にする。Motion.apply が記録するキーフレーム用
-    pub fn from_value(v: &crate::value::Value) -> Expr {
-        use crate::value::Value;
+    pub fn from_value(v: &crate::lang::value::Value) -> Expr {
+        use crate::lang::value::Value;
         match v {
             Value::Number(n) => Expr::Number(*n),
             Value::Duration(d) => Expr::Duration(*d),

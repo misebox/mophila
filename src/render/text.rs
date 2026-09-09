@@ -19,7 +19,7 @@ pub struct RenderCache {
     /// 図形のポインタ → (属性の指紋, 描画命令)。指紋が同じならそのまま使う
     pub fragments: HashMap<usize, (u64, Scene)>,
     /// Shader を GPU で走らせるもの。描画する側 (render / preview) が装置を作ってから入れる
-    pub shaders: Option<crate::shader::ShaderRunner>,
+    pub shaders: Option<crate::render::shader::ShaderRunner>,
 }
 
 #[derive(Hash, PartialEq, Eq)]

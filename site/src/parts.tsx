@@ -1,6 +1,7 @@
-import { For, Show, type Component, type JSX } from "solid-js";
+import { For, Show, createEffect, createSignal, on, untrack, type Component, type JSX } from "solid-js";
 import { marked, type Tokens } from "marked";
-import { Heading, Link, Text } from "@/components/ui";
+import { Heading, Link } from "@/components/ui";
+import { route } from "@/route";
 
 export const Code: Component<{ text: string }> = (props) => (
   <pre class="code"><code>{props.text}</code></pre>
@@ -27,33 +28,109 @@ export const Markdown: Component<{ text: string }> = (props) => {
   return <div class="md" innerHTML={html()} />;
 };
 
-export interface IndexItem { label: string; href: string; active?: boolean; depth?: number }
-export interface IndexGroup { title?: string; items: IndexItem[] }
+/** 鍵ごとにまとめる。鍵は最初に現れた順 */
+export const groupBy = <T,>(items: T[], key: (item: T) => string): [string, T[]][] => {
+  const groups: [string, T[]][] = [];
+  for (const it of items) {
+    const k = key(it);
+    const found = groups.find(([g]) => g === k);
+    if (found) found[1].push(it);
+    else groups.push([k, [it]]);
+  }
+  return groups;
+};
 
-// 左に置く目次
-export const SideIndex: Component<{ groups: IndexGroup[] }> = (props) => (
-  <nav class="side" aria-label="目次">
-    <For each={props.groups}>
-      {(g) => (
-        <div class="side-group">
-          <Show when={g.title}><div class="side-title">{g.title}</div></Show>
-          <For each={g.items}>
+export interface IndexItem { label: string; href: string; active?: boolean; depth?: number }
+export interface IndexGroup { title?: string; href?: string; active?: boolean; items: IndexItem[] }
+
+// 題のある group は畳める。中の項目が選ばれたら開く
+const Caret: Component<{ open: boolean }> = (props) => (
+  <span class="side-caret" classList={{ open: props.open }} aria-hidden="true">▸</span>
+);
+
+// 題のある group は畳める。中の項目が選ばれたら開く。
+// 題がページでもある (ライブラリの module) ときは、題を押すとそのページ、右の三角で開閉する
+const SideGroup: Component<{ group: IndexGroup }> = (props) => {
+  const [open, setOpen] = createSignal(true);
+  const hasActive = (): boolean => props.group.items.some((it) => it.active === true);
+  const toggle = (): void => {
+    setOpen(!open());
+  };
+  createEffect(() => {
+    if (hasActive()) setOpen(true);
+  });
+  return (
+    <div class="side-group">
+      <Show when={props.group.title}>
+        <Show
+          when={props.group.href}
+          fallback={
+            <Show when={props.group.items.length > 0} fallback={<div class="side-head"><span class="side-title">{props.group.title}</span></div>}>
+              <button type="button" class="side-head side-head-btn" aria-expanded={open()} onClick={toggle}>
+                <span class="side-title">{props.group.title}</span>
+                <Caret open={open()} />
+              </button>
+            </Show>
+          }
+        >
+          {(h) => (
+            <div class="side-head">
+              <a href={h()} class="side-title side-title-link" classList={{ active: props.group.active === true }}>{props.group.title}</a>
+              <Show when={props.group.items.length > 0}>
+                <button type="button" class="side-caret-btn" aria-expanded={open()} aria-label={`${props.group.title} の中身を開閉`} onClick={toggle}>
+                  <Caret open={open()} />
+                </button>
+              </Show>
+            </div>
+          )}
+        </Show>
+      </Show>
+      <Show when={open() || !props.group.title}>
+        <div class="side-items" classList={{ nested: !!props.group.title }}>
+          <For each={props.group.items}>
             {(it) => (
               <a href={it.href} class="side-link" classList={{ active: it.active === true, deep: (it.depth ?? 0) > 2 }}>{it.label}</a>
             )}
           </For>
         </div>
-      )}
-    </For>
+      </Show>
+    </div>
+  );
+};
+
+// 左に置く目次
+export const SideIndex: Component<{ groups: IndexGroup[] }> = (props) => (
+  <nav aria-label="目次">
+    <For each={props.groups}>{(g) => <SideGroup group={g} />}</For>
   </nav>
 );
 
-export const WithSide: Component<{ side: JSX.Element; children: JSX.Element }> = (props) => (
-  <div class="with-side">
-    {props.side}
-    <div class="main">{props.children}</div>
-  </div>
-);
+// 狭い画面では目次を画面いっぱいのパネルにし、選んだら閉じる。上のバーに今の選択を出す
+export const WithSide: Component<{ side: JSX.Element; current: string; children: JSX.Element }> = (props) => {
+  const [open, setOpen] = createSignal(false);
+  createEffect(on(route, () => setOpen(false), { defer: true }));
+  createEffect(() => {
+    document.body.classList.toggle("index-open", open());
+  });
+  return (
+    <div class="with-side">
+      <div class="side-bar">
+        <button type="button" class="side-toggle" aria-expanded={open()} onClick={() => setOpen(true)}>
+          <span class="side-current">{props.current}</span>
+          <span class="side-open-label">目次</span>
+        </button>
+      </div>
+      <div class="side" classList={{ open: open() }}>
+        <div class="side-sheet-bar">
+          <span>目次</span>
+          <button type="button" class="side-close" onClick={() => setOpen(false)}>閉じる</button>
+        </div>
+        <div class="side-scroll">{props.side}</div>
+      </div>
+      <div class="main">{props.children}</div>
+    </div>
+  );
+};
 
 export const Section: Component<{ id: string; title: string; children: JSX.Element }> = (props) => (
   <section id={props.id} class="section">
@@ -66,6 +143,19 @@ export const GitHubLink: Component<{ href: string; label?: string }> = (props) =
   <Link href={props.href} external underline="hover" tone="neutral" class="gh">{props.label ?? "GitHub で見る"}</Link>
 );
 
-export const Lead: Component<{ children: JSX.Element }> = (props) => (
-  <Text tone="muted" class="lead">{props.children}</Text>
-);
+
+
+/** key が変わったら一度消してから、新しい中身を出す */
+export const Faded: Component<{ key: string; children: (key: string) => JSX.Element }> = (props) => {
+  const [shown, setShown] = createSignal(props.key);
+  const [out, setOut] = createSignal(false);
+  createEffect(on(() => props.key, (next) => {
+    if (next === untrack(shown)) return;
+    setOut(true);
+    setTimeout(() => {
+      setShown(next);
+      setOut(false);
+    }, 150);
+  }, { defer: true }));
+  return <div class="fade" classList={{ out: out() }}>{props.children(shown())}</div>;
+};

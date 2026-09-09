@@ -1,12 +1,14 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use std::cell::Cell;
 
-use crate::ast::{Arg, BinOp, DictKey, Expr, ImportKind, ImportSource, MotionDef, Pattern, RowItem, Stmt, StmtKind};
-use crate::error::{MophError, Result, err};
-use crate::value::{Audio, Clip, Closure, Module, Motion, MotionRowVal, ObjRef, Object, Placed, Record, Scopes, Timeline, TlAssign, TlKeyframe, Track, Value, new_scope};
+use crate::lang::ast::{Arg, BinOp, DictKey, Expr, ImportKind, ImportSource, MotionDef, Pattern, RowItem, Stmt, StmtKind};
+use crate::lang::error::{MophError, Result, err};
+use crate::lang::value::{Audio, Clip, Closure, Module, Motion, MotionRowVal, ObjRef, Object, Placed, Record, Scopes, Timeline, TlAssign, TlKeyframe, Track, Value, new_scope};
+use crate::stdlib;
 
 /// 文の実行結果。return で関数を抜けるときに伝える
 enum Flow {
@@ -30,19 +32,19 @@ pub struct Interp {
     /// tuple name(...) の定義。名前ごとに signature の列
     tuples: HashMap<String, Vec<Vec<(String, String)>>>,
     /// フォント検索、テキストレイアウト、描画命令のキャッシュ。初回に必要になったときに作る
-    cache: Option<crate::text::RenderCache>,
+    cache: Option<crate::render::text::RenderCache>,
     /// 終わった Timeline の最後の値。キーは (Timeline のポインタ, 絶対開始時刻のビット)
     finished: HashMap<(usize, u64), Vec<(ObjRef, Vec<String>, Value)>>,
     /// 前回描いた時刻。戻ったら finished を捨てる
     last_t: f64,
     /// 実行中のファイルのディレクトリ。import "file" の相対パスの基準
-    pub base_dir: std::path::PathBuf,
+    pub base_dir: PathBuf,
     /// 実行中のファイルが export した名前
     exports: Vec<String>,
     /// 埋め込みバイナリのとき、import はディスクではなくここから読む (正規化したパス → 本文)
     pub sources: HashMap<String, String>,
     /// 埋め込みバイナリのとき、音声などのファイルの取り出し先 (正規化したパス → 実際のファイル)
-    pub assets: HashMap<String, std::path::PathBuf>,
+    pub assets: HashMap<String, PathBuf>,
     /// スクリプト実行直後の全オブジェクトの属性。毎フレームここに戻してから Timeline を当てる
     initial: Vec<(ObjRef, HashMap<String, Value>)>,
     /// 読み込み済みのモジュールと音声 (正規化したパス → 実体)。同じファイルは 1 度しか読まない
@@ -61,7 +63,7 @@ impl Interp {
             ("Placeable".to_string(), vec!["Shape".to_string(), "View".to_string()]),
             ("Paint".to_string(), vec!["Color".to_string(), "Shader".to_string()]),
         ]);
-        Self { scopes: vec![new_scope()], output: None, types, tuples: HashMap::new(), cache: None, finished: HashMap::new(), last_t: f64::NEG_INFINITY, base_dir: std::path::PathBuf::from("."), exports: Vec::new(), sources: HashMap::new(), assets: HashMap::new(), initial: Vec::new(), modules: HashMap::new(), loading: Vec::new(), returning: None }
+        Self { scopes: vec![new_scope()], output: None, types, tuples: HashMap::new(), cache: None, finished: HashMap::new(), last_t: f64::NEG_INFINITY, base_dir: PathBuf::from("."), exports: Vec::new(), sources: HashMap::new(), assets: HashMap::new(), initial: Vec::new(), modules: HashMap::new(), loading: Vec::new(), returning: None }
     }
 
     /// トップレベルの束縛 (LSP のホバー用)
@@ -69,8 +71,8 @@ impl Interp {
         self.scopes.first().map(|s| s.borrow().iter().map(|(k, v)| (k.clone(), v.clone())).collect()).unwrap_or_default()
     }
 
-    pub fn cache_mut(&mut self) -> &mut crate::text::RenderCache {
-        self.cache.get_or_insert_with(crate::text::RenderCache::new)
+    pub fn cache_mut(&mut self) -> &mut crate::render::text::RenderCache {
+        self.cache.get_or_insert_with(crate::render::text::RenderCache::new)
     }
 
     /// トップレベルの実行。return があればエラー
@@ -296,15 +298,20 @@ impl Interp {
         self.types.get(name).is_some_and(|members| members.iter().any(|m| self.matches_type(v, m)))
     }
 
+    /// 名前だけの import は標準ライブラリ (本体に入っているもの)、. や "" で始まるものはファイル
     fn load_module(&mut self, source: &ImportSource) -> Result<Value> {
         match source {
-            ImportSource::Std(name) => Ok(Value::Module(Rc::new(stdlib(name)?))),
+            ImportSource::Std(name) => match stdlib::find(name) {
+                Some(stdlib::Lib::Native(module)) => Ok(Value::Module(Rc::new(module))),
+                Some(stdlib::Lib::Script(src)) => self.run_module(format!("std:{name}"), name, src, self.base_dir.clone()),
+                None => err("NameError.UndefinedVariable", format!("no module named \"{name}\"")),
+            },
             ImportSource::File(path) => self.import_file(path),
         }
     }
 
     /// .moph ならファイルを別のスコープで実行し、export した束縛と output した View をモジュールにする。
-    /// それ以外は音声ファイルとして読む。同じファイルは 1 度だけ読み、以後は同じ実体を返す
+    /// それ以外は音声ファイルとして読む
     fn import_file(&mut self, path: &str) -> Result<Value> {
         let full = self.base_dir.join(path);
         let key = crate::bundle::normalize(&full);
@@ -317,19 +324,29 @@ impl Interp {
             self.modules.insert(key, audio.clone());
             return Ok(audio);
         }
-        if self.loading.contains(&key) {
-            return err("NameError.UndefinedVariable", format!("circular import of \"{path}\""));
-        }
-        self.loading.push(key.clone());
         let src = match self.sources.get(&key) {
             Some(src) => src.clone(),
             None => std::fs::read_to_string(&full)
                 .map_err(|e| MophError::new("NameError.UndefinedVariable", format!("cannot read \"{}\": {e}", full.display())))?,
         };
-        let stmts = crate::parser::parse(&src)?;
+        let dir = full.parent().map(|d| d.to_path_buf()).unwrap_or_default();
+        self.run_module(key, path, &src, dir)
+    }
+
+    /// モジュールのソースを別のスコープで実行する。同じ key は 1 度だけ実行し、以後は同じ実体を返す。
+    /// dir はその中の相対 import の基準
+    fn run_module(&mut self, key: String, label: &str, src: &str, dir: PathBuf) -> Result<Value> {
+        if let Some(m) = self.modules.get(&key) {
+            return Ok(m.clone());
+        }
+        if self.loading.contains(&key) {
+            return err("NameError.UndefinedVariable", format!("circular import of \"{label}\""));
+        }
+        self.loading.push(key.clone());
+        let stmts = crate::lang::parser::parse(src)?;
         let saved_scopes = std::mem::replace(&mut self.scopes, vec![new_scope()]);
         let saved_output = self.output.take();
-        let saved_dir = std::mem::replace(&mut self.base_dir, full.parent().map(|d| d.to_path_buf()).unwrap_or_default());
+        let saved_dir = std::mem::replace(&mut self.base_dir, dir);
         let saved_exports = std::mem::take(&mut self.exports);
         let result = self.run(&stmts);
         let scope = std::mem::replace(&mut self.scopes, saved_scopes);
@@ -337,14 +354,14 @@ impl Interp {
         let exports = std::mem::replace(&mut self.exports, saved_exports);
         self.base_dir = saved_dir;
         self.loading.pop();
-        result.map_err(|e| MophError::new(e.kind, format!("in {path}: {}", e.message)))?;
+        result.map_err(|e| MophError::new(e.kind, format!("in {label}: {}", e.message)))?;
         // 公開するのは export した名前と output だけ
         let scope = scope[0].borrow();
         let mut items: HashMap<String, Value> = exports.iter().filter_map(|n| scope.get(n).map(|v| (n.clone(), v.clone()))).collect();
         if let Some(view) = output {
             items.insert("output".into(), Value::Object(view));
         }
-        let module = Value::Module(Rc::new(Module { name: path.to_string(), items }));
+        let module = Value::Module(Rc::new(Module { name: label.to_string(), items }));
         self.modules.insert(key, module.clone());
         Ok(module)
     }
@@ -430,7 +447,7 @@ impl Interp {
             .rev()
             .find_map(|s| s.borrow().get(name).cloned())
             .ok_or_else(|| {
-                let hint = if stdlib(name).is_ok() { format!("; add \"import {name}\"") } else { String::new() };
+                let hint = if stdlib::find(name).is_some() { format!("; add \"import {name}\"") } else { String::new() };
                 MophError::new("NameError.UndefinedVariable", format!("\"{name}\" is not defined{hint}"))
             })
     }
@@ -510,6 +527,13 @@ impl Interp {
                 Value::Object(obj) => self.attr_of(&obj, attr),
                 Value::Audio(a) if attr == "duration" => Ok(Value::Duration(a.length)),
                 Value::Audio(a) if attr == "file" => Ok(Value::Str(a.name.clone())),
+                // 色の成分。r g b は 0..255、a は 0..1 (new Color { } と同じ単位)
+                Value::Color([r, g, b, a]) if matches!(attr.as_str(), "r" | "g" | "b" | "a") => Ok(Value::Number(match attr.as_str() {
+                    "r" => (r as f64 * 255.0 * 1000.0).round() / 1000.0,
+                    "g" => (g as f64 * 255.0 * 1000.0).round() / 1000.0,
+                    "b" => (b as f64 * 255.0 * 1000.0).round() / 1000.0,
+                    _ => (a as f64 * 1000.0).round() / 1000.0,
+                })),
                 Value::Module(m) => m
                     .items
                     .get(attr)
@@ -636,7 +660,7 @@ impl Interp {
                     };
                     let values = args.iter().map(|a| self.eval(&a.value)).collect::<Result<Vec<_>>>()?;
                     return match item {
-                        Value::Builtin(name) => math(name, &values),
+                        Value::Builtin(name) => stdlib::math::call(name, &values),
                         Value::Func(closure) => self.apply(&closure, values.into_iter().map(|v| (None, v)).collect()),
                         v => err("TypeError.ArgumentType", format!("{} is not callable", v.type_name())),
                     };
@@ -657,7 +681,7 @@ impl Interp {
                 }
                 Value::Builtin(name) => {
                     let values = args.iter().map(|a| self.eval(&a.value)).collect::<Result<Vec<_>>>()?;
-                    math(name, &values)
+                    stdlib::math::call(name, &values)
                 }
                 v => err("TypeError.ArgumentType", format!("{} is not callable", v.type_name())),
             },
@@ -677,7 +701,7 @@ impl Interp {
         if relative && def.rows.iter().any(|r| !(0.0..=1.0).contains(&r.time)) {
             return err("ValueError.OutOfRange", "relative keyframe time must be within 0..1");
         }
-        let fade_ok = |rows: &[crate::ast::MotionRow]| {
+        let fade_ok = |rows: &[crate::lang::ast::MotionRow]| {
             let n = rows.len();
             rows.iter().enumerate().all(|(i, r)| r.effect.as_deref() != Some("fade") || i <= 1 || i == n - 1)
         };
@@ -1162,54 +1186,6 @@ fn load_audio(name: &str, path: std::path::PathBuf) -> Result<Audio> {
         return err("RuntimeError.AudioUnreadable", format!("\"{name}\" has no audio stream ffprobe can read {}", String::from_utf8_lossy(&output.stderr).trim()));
     };
     Ok(Audio { name: name.to_string(), path, length })
-}
-
-fn stdlib(name: &str) -> Result<Module> {
-    match name {
-        "math" => {
-            let mut items = HashMap::new();
-            items.insert("PI".into(), Value::Number(std::f64::consts::PI));
-            items.insert("TAU".into(), Value::Number(std::f64::consts::TAU));
-            items.insert("E".into(), Value::Number(std::f64::consts::E));
-            for f in ["sin", "cos", "floor", "ceil", "abs", "sqrt", "ln", "exp", "atan2", "max", "min"] {
-                items.insert(f.into(), Value::Builtin(f));
-            }
-            Ok(Module { name: name.into(), items })
-        }
-        _ => err("NameError.UndefinedVariable", format!("no module named \"{name}\"")),
-    }
-}
-
-fn math(name: &str, values: &[Value]) -> Result<Value> {
-    let nums = values
-        .iter()
-        .map(|v| match v {
-            Value::Number(n) => Ok(*n),
-            v => err("TypeError.ArgumentType", format!("{name} expects Number, found {}", v.type_name())),
-        })
-        .collect::<Result<Vec<f64>>>()?;
-    let unary = |f: fn(f64) -> f64| match nums.as_slice() {
-        [x] => Ok(Value::Number(f(*x))),
-        _ => err("TypeError.ArityMismatch", format!("{name} takes 1 argument, {} given", nums.len())),
-    };
-    match name {
-        "sin" => unary(f64::sin),
-        "cos" => unary(f64::cos),
-        "floor" => unary(f64::floor),
-        "ceil" => unary(f64::ceil),
-        "abs" => unary(f64::abs),
-        "sqrt" => unary(f64::sqrt),
-        "ln" => unary(f64::ln),
-        "exp" => unary(f64::exp),
-        "atan2" => match nums.as_slice() {
-            [y, x] => Ok(Value::Number(y.atan2(*x))),
-            _ => err("TypeError.ArityMismatch", format!("atan2 takes 2 arguments (y, x), {} given", nums.len())),
-        },
-        "max" | "min" if nums.is_empty() => err("TypeError.ArityMismatch", format!("{name} needs at least 1 argument")),
-        "max" => Ok(Value::Number(nums.iter().cloned().fold(f64::NEG_INFINITY, f64::max))),
-        "min" => Ok(Value::Number(nums.iter().cloned().fold(f64::INFINITY, f64::min))),
-        _ => err("NameError.UndefinedAttribute", format!("no builtin \"{name}\"")),
-    }
 }
 
 fn index_value(target: &Value, index: &Value) -> Result<Value> {

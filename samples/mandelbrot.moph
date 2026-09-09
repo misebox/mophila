@@ -1,8 +1,8 @@
-# mandelbrot.moph — マンデルブロ集合に 1 兆倍まで寄っていく。lib/fractal.moph の escape_time を使う。
+# mandelbrot.moph — マンデルブロ集合に 1 兆倍まで寄っていく。標準ライブラリ fractal の escape_time を使う。
 # GPU の実数は 32 bit なので、寄る先の点の軌道 (基準軌道) だけをスクリプトの 64 bit で計算し、GPU は差分を反復する (摂動法)
 
 import math
-import { escape_time, mandelbrot, perturbation, smooth } from ..lib.fractal
+import { escape_time, mandelbrot, perturbation, smooth } from fractal
 
 let v = new View { box: (16, 9) }
 let total = 2m

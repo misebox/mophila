@@ -10,9 +10,9 @@ use std::sync::Arc;
 use vello::peniko::{Blob, ImageAlphaType, ImageData, ImageFormat};
 use vello::wgpu;
 
-use crate::ast::{BinOp, Expr, Pattern, Stmt, StmtKind};
-use crate::error::{MophError, Result, err};
-use crate::value::{Closure, Value};
+use crate::lang::ast::{BinOp, Expr, Pattern, Stmt, StmtKind};
+use crate::lang::error::{MophError, Result, err};
+use crate::lang::value::{Closure, Value};
 
 const KIND: &str = "RuntimeError.ShaderCompile";
 
@@ -484,7 +484,7 @@ fn color_lit(c: &[f32; 4]) -> String {
 
 fn binary(op: BinOp, lv: &str, lt: Ty, rv: &str, rt: Ty) -> Result<(String, Ty)> {
     use Ty::{Bool, Color, Num, Vec};
-    let bad = || MophError::new("TypeError.OperandType", format!("cannot {} {} and {} in a shader", crate::eval::verb(op), lt.name(), rt.name()));
+    let bad = || MophError::new("TypeError.OperandType", format!("cannot {} {} and {} in a shader", crate::lang::eval::verb(op), lt.name(), rt.name()));
     Ok(match op {
         BinOp::Add | BinOp::Sub => match (lt, rt) {
             (Num, Num) => (format!("({lv} {} {rv})", sym(op)), Num),

@@ -1,5 +1,4 @@
 import { Switch, Match, createEffect, on, type Component, type JSX } from "solid-js";
-import { Container } from "@/components/ui";
 import { href, route } from "@/route";
 import { repo } from "@/repo";
 import { Overview } from "@/pages/Overview";
@@ -18,12 +17,10 @@ const PAGES: [string, string][] = [
   ["docs", "仕様と文書"],
 ];
 
-// 見出しの id。文書は #/docs/<鍵>/<見出し>、それ以外は sub がそのまま id
+// 見出しへ飛ぶのは文書 (#/docs/<鍵>/<見出し>) だけ。他のページは sub で表示する中身を選ぶ
 const anchorOf = (): string => {
   const r = route();
-  if (r.page === "samples") return "";
-  if (r.page === "docs") return r.sub.split("/").slice(1).join("/");
-  return r.sub;
+  return r.page === "docs" ? r.sub.split("/").slice(1).join("/") : "";
 };
 
 export const App: Component = (): JSX.Element => {
@@ -38,20 +35,18 @@ export const App: Component = (): JSX.Element => {
   return (
     <>
       <header class="top">
-        <Container size="xl" padded>
-          <div class="top-row">
-            <a href={href("")} class="brand">mophila</a>
-            <nav class="top-nav" aria-label="ページ">
-              {PAGES.map(([page, label]) => (
-                <a href={href(page)} classList={{ active: route().page === page }}>{label}</a>
-              ))}
-            </nav>
-            <a href={repo} class="top-gh" target="_blank" rel="noopener noreferrer">GitHub</a>
-          </div>
-        </Container>
+        <div class="wrap top-row">
+          <a href={href("")} class="brand">mophila</a>
+          <nav class="top-nav" aria-label="ページ">
+            {PAGES.map(([page, label]) => (
+              <a href={href(page)} classList={{ active: route().page === page }}>{label}</a>
+            ))}
+          </nav>
+          <a href={repo} class="top-gh" target="_blank" rel="noopener noreferrer">GitHub</a>
+        </div>
       </header>
       <main>
-        <Container size="xl" padded>
+        <div class="wrap">
           <Switch fallback={<Overview />}>
             <Match when={route().page === "start"}><Start /></Match>
             <Match when={route().page === "samples"}><Samples /></Match>
@@ -59,7 +54,7 @@ export const App: Component = (): JSX.Element => {
             <Match when={route().page === "lib"}><Library /></Match>
             <Match when={route().page === "docs"}><Docs /></Match>
           </Switch>
-        </Container>
+        </div>
       </main>
     </>
   );

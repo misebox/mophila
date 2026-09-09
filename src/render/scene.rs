@@ -6,9 +6,9 @@ use vello::Scene;
 use vello::kurbo::{Affine, BezPath, Circle, Line, Point, Rect, RoundedRect, Shape, Stroke};
 use vello::peniko::{Brush, Color, Fill, ImageBrush, Mix};
 
-use crate::error::{Result, err};
-use crate::text::{self, RenderCache};
-use crate::value::{ObjRef, Value};
+use crate::lang::error::{Result, err};
+use crate::render::text::{self, RenderCache};
+use crate::lang::value::{ObjRef, Value};
 
 type Attrs = HashMap<String, Value>;
 
@@ -103,7 +103,7 @@ fn sub_transform(child: &ObjRef, parent: Affine) -> Result<Affine> {
 }
 
 /// fill が Shader ならその実体
-fn shader_fill(c: &crate::value::Object) -> Option<ObjRef> {
+fn shader_fill(c: &crate::lang::value::Object) -> Option<ObjRef> {
     match c.attrs.get("fill") {
         Some(Value::Object(o)) if o.borrow().kind == "Shader" => Some(o.clone()),
         _ => None,
@@ -111,7 +111,7 @@ fn shader_fill(c: &crate::value::Object) -> Option<ObjRef> {
 }
 
 /// 図形 1 つを描く。transform は箱の座標から出力座標への変換。shader は fill が Shader のときその実体
-fn draw_object(scene: &mut Scene, c: &crate::value::Object, transform: Affine, frame: &Frame, key: usize, shader: Option<&ObjRef>, cache: &mut RenderCache) -> Result<()> {
+fn draw_object(scene: &mut Scene, c: &crate::lang::value::Object, transform: Affine, frame: &Frame, key: usize, shader: Option<&ObjRef>, cache: &mut RenderCache) -> Result<()> {
     let kind = c.kind.as_str();
     let scale = transform.as_coeffs()[0].hypot(transform.as_coeffs()[1]);
     let opacity = match c.attrs.get("opacity") {
@@ -175,7 +175,7 @@ fn draw_object(scene: &mut Scene, c: &crate::value::Object, transform: Affine, f
 }
 
 /// 描画に関わる属性の指紋。変換と親の不透明度も含める
-fn fingerprint(c: &crate::value::Object, transform: Affine) -> u64 {
+fn fingerprint(c: &crate::lang::value::Object, transform: Affine) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     c.kind.hash(&mut h);
     transform.as_coeffs().iter().for_each(|x| x.to_bits().hash(&mut h));
@@ -277,7 +277,7 @@ fn anchored_center(attrs: &Attrs, w: f64, h: f64, kind: &str) -> Result<(f64, f6
 }
 
 /// preview と sheet で、その時刻に出ている字幕を画面の下に重ねる (プレイヤーの表示に似せる)。動画には入らない
-pub fn overlay_subtitles(scene: &mut Scene, cache: &mut RenderCache, cues: &[crate::media::Cue], t: f64, width: f64, height: f64) {
+pub fn overlay_subtitles(scene: &mut Scene, cache: &mut RenderCache, cues: &[crate::render::media::Cue], t: f64, width: f64, height: f64) {
     let size = (height * 0.045) as f32;
     let box_w = (width * 0.9) as f32;
     let pad = f64::from(size) * 0.35;
@@ -330,7 +330,7 @@ fn draw_shader_fill(scene: &mut Scene, path: &BezPath, transform: Affine, opacit
     let height = (bounds.y1.ceil() - y0).max(1.0) as u32;
     // 箱 → ピクセルは拡大と平行移動だけなので、逆は 1 次式
     let [s, _, _, _, tx, ty] = transform.as_coeffs();
-    let request = crate::shader::Request {
+    let request = crate::render::shader::Request {
         shape: key,
         closure,
         args: &args,

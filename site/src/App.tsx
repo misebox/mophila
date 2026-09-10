@@ -4,16 +4,14 @@ import { repo } from "@/repo";
 import { Overview } from "@/pages/Overview";
 import { Start } from "@/pages/Start";
 import { Samples } from "@/pages/Samples";
-import { Builtins } from "@/pages/Builtins";
-import { Library } from "@/pages/Library";
+import { Reference } from "@/pages/Reference";
 import { Docs } from "@/pages/Docs";
 
 const PAGES: [string, string][] = [
   ["", "概要"],
   ["start", "使い方"],
   ["samples", "サンプル"],
-  ["builtins", "組み込み"],
-  ["lib", "ライブラリ"],
+  ["builtins", "リファレンス"],
   ["docs", "仕様"],
 ];
 
@@ -39,7 +37,7 @@ export const App: Component = (): JSX.Element => {
           <a href={href("")} class="brand">mophila</a>
           <nav class="top-nav" aria-label="ページ">
             {PAGES.map(([page, label]) => (
-              <a href={href(page)} classList={{ active: route().page === page }}>{label}</a>
+              <a href={href(page)} classList={{ active: route().page === page || (page === "builtins" && route().page === "lib") }}>{label}</a>
             ))}
           </nav>
           <a href={repo} class="top-gh" target="_blank" rel="noopener noreferrer">GitHub</a>
@@ -50,8 +48,7 @@ export const App: Component = (): JSX.Element => {
           <Switch fallback={<Overview />}>
             <Match when={route().page === "start"}><Start /></Match>
             <Match when={route().page === "samples"}><Samples /></Match>
-            <Match when={route().page === "builtins"}><Builtins /></Match>
-            <Match when={route().page === "lib"}><Library /></Match>
+            <Match when={route().page === "builtins" || route().page === "lib"}><Reference /></Match>
             <Match when={route().page === "docs"}><Docs /></Match>
           </Switch>
         </div>

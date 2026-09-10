@@ -1,7 +1,7 @@
 import { For, Show, Switch, Match, type Component, type JSX } from "solid-js";
 import { Heading, Stack, Table, Text } from "@/components/ui";
 import { data, type Entry, type TypeDoc } from "@/data";
-import { Faded, SideIndex, TypeText, WithSide } from "@/parts";
+import { TypeText, type IndexGroup, type IndexItem } from "@/parts";
 import { href, route } from "@/route";
 
 const current = (): string => route().sub || "functions";
@@ -98,27 +98,20 @@ const TypePage: Component<{ type: TypeDoc }> = (props) => (
   </Stack>
 );
 
-const Content: Component<{ id: string }> = (props) => (
+export const BuiltinContent: Component<{ id: string }> = (props) => (
   <Switch fallback={<Functions />}>
     <Match when={typeOf(props.id)}>{(t) => <TypePage type={t()} />}</Match>
   </Switch>
 );
 
-const typeLinks = (category: string) =>
+const typeLinks = (category: string): IndexItem[] =>
   data.types.filter((t) => t.category === category).map((t) => ({ label: t.name, href: href("builtins", t.name), active: current() === t.name }));
 
-export const Builtins: Component = () => (
-  <WithSide
-    current={currentLabel()}
-    side={
-      <SideIndex
-        groups={[
-          { items: [{ label: "Function", href: href("builtins", "functions"), active: current() === "functions" }] },
-          ...data.categories.map((c) => ({ title: c, items: typeLinks(c) })),
-        ]}
-      />
-    }
-  >
-    <Faded key={current()}>{(id) => <Content id={id} />}</Faded>
-  </WithSide>
-);
+/** 組み込みの目次: 関数と、分類ごとの型 */
+export const builtinGroups = (): IndexGroup[] => [
+  { title: "組み込み", items: [] },
+  { items: [{ label: "Function", href: href("builtins", "functions"), active: current() === "functions" }] },
+  ...data.categories.map((c) => ({ title: c, items: typeLinks(c) })),
+];
+
+export const builtinLabel = currentLabel;

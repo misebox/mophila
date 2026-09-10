@@ -1,13 +1,14 @@
 import { For, Show, type Component, type JSX } from "solid-js";
 import { Heading, Stack, Table, Text } from "@/components/ui";
 import { data, type Lib, type LibItem } from "@/data";
-import { Faded, GitHubLink, SideIndex, TypeText, WithSide, groupBy, type IndexGroup } from "@/parts";
+import { GitHubLink, TypeText, groupBy, type IndexGroup } from "@/parts";
 import { href, route } from "@/route";
 import { blob } from "@/repo";
 
 const itemId = (lib: Lib, name: string): string => `${lib.name}.${name}`;
 const namesOf = (lib: Lib): string[] => [...lib.entries.map((e) => e.name), ...lib.items.map((it) => it.name)];
-const current = (): string => route().sub || data.libs[0].name;
+// ライブラリのページを見ているときだけ、どれかが選ばれている
+const current = (): string => (route().page === "lib" ? route().sub || data.libs[0].name : "");
 
 // 目次: module ごとに export。module 名を選ぶとその一覧
 const groups = (): IndexGroup[] =>
@@ -114,7 +115,7 @@ const ItemPage: Component<{ lib: Lib; item: LibItem }> = (props) => (
   </Stack>
 );
 
-const Content: Component<{ id: string }> = (props) => {
+export const LibraryContent: Component<{ id: string }> = (props) => {
   const lib = (): Lib | undefined => data.libs.find((l) => l.name === props.id || props.id.startsWith(`${l.name}.`));
   const item = (): LibItem | undefined => lib()?.items.find((it) => itemId(lib() as Lib, it.name) === props.id);
   return (
@@ -128,8 +129,7 @@ const Content: Component<{ id: string }> = (props) => {
   );
 };
 
-export const Library: Component = () => (
-  <WithSide current={current()} side={<SideIndex groups={groups()} />}>
-    <Faded key={current()}>{(id) => <Content id={id} />}</Faded>
-  </WithSide>
-);
+/** ライブラリの目次: module ごと */
+export const libraryGroups = (): IndexGroup[] => [{ title: "ライブラリ", items: [] }, ...groups()];
+
+export const libraryLabel = current;

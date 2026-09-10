@@ -4,8 +4,8 @@ let v = View(box = Vector(4, 3))
 let track = Timeline()
 
 # ---- 音声。.moph 以外のファイルを import すると Audio になる (長さは ffprobe で読む) ----
-import "../samples/mophila_intro/QuietSignal.m4a" as bgm
-log(type_of(bgm), bgm.duration, bgm.file)         # Audio 152.52s ../samples/mophila_intro/QuietSignal.m4a
+import "../gallery/mophila_intro/QuietSignal.m4a" as bgm
+log(type_of(bgm), bgm.duration, bgm.file)         # Audio 152.52s ../gallery/mophila_intro/QuietSignal.m4a
 
 track.place(bgm, at = 0s, fadeIn = 1s, duration=5s, fadeOut = 2s)   # 動画の終わりまで繰り返す (動画は延びない)
 track.place(bgm, at = 0.5s, duration = 5s, volume = 0.6)                                        # 3 秒から 5 秒分だけ (重ねて鳴る)

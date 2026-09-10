@@ -1,6 +1,6 @@
 # mophila 言語仕様 (整理中)
 
-決定済みの方針と examples/ を整理したもの。言語はできるだけ少ない部品の組み合わせで構成する。
+決定済みの方針と examples/syntax/ を整理したもの。言語はできるだけ少ない部品の組み合わせで構成する。
 
 実装はインタプリタ。ソースを字句解析 → 構文解析し、構文木を評価して View と Timeline を作り、毎フレーム、キーフレームの式を構文木のまま評価して描く。コード生成は行わない。`bundle` はソースと import 先のファイルを実行ファイルに埋め込むもので、コンパイルではない。構文の見本は examples/ を正とし、ここには意味と規則を書く。未決事項は mophila-draft.md。
 
@@ -512,7 +512,7 @@ output v      # この View が動画になる。1 つのファイルに 1 つ
 | `log(値, ...)` | 引数を空白区切りで stderr へ出す。どの型でも受け取る。動画には出ない |
 | `type_of(値)` | その値の型の名前を String で返す |
 
-String / List / Dict / Range のメソッドは組み込みで、`import` は要らない。一覧は「組み込み」のページと examples/collection.moph。
+String / List / Dict / Range のメソッドは組み込みで、`import` は要らない。一覧は「組み込み」のページと examples/syntax/collection.moph。
 
 `import` で使う標準ライブラリ。関数の一覧と説明は「ライブラリ」のページを正とする (ドキュメントコメントから作っている)。
 
@@ -529,7 +529,7 @@ math だけ Rust で書かれていて、ほかは本体に埋め込んだ `.mop
 
 ## 7. エラー
 
-`種別.細目: line N: message` の形で、message は英語。行ごとの例は examples/error.moph。
+`種別.細目: line N: message` の形で、message は英語。行ごとの例は examples/syntax/error.moph。
 
 | 種別 | 細目 |
 |---|---|

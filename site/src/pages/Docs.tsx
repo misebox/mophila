@@ -58,7 +58,7 @@ const Examples: Component = () => (
         <Stack gap={2} id={exampleId(e.name)} class="entry">
           <Heading level={2} size="md">{exampleId(e.name)}</Heading>
           <Code text={e.code} />
-          <GitHubLink href={blob(`examples/${e.name}`)} />
+          <GitHubLink href={blob(`examples/syntax/${e.name}`)} />
         </Stack>
       )}
     </For>

@@ -36,7 +36,7 @@ const current = (): Sample => data.samples.find((s) => s.name === route().sub) ?
               </Show>
               <Meta sample={s} />
               <Code text={s.code} />
-              <GitHubLink href={blob(`samples/${s.name}.moph`)} />
+              <GitHubLink href={blob(`examples/gallery/${s.name}.moph`)} />
             </Stack>
           );
         }}

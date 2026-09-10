@@ -74,7 +74,7 @@ export const Start: Component = () => {
               <li>context ... motion で「何秒にどの属性がいくつになるか」を書く。行末の :ease は値の変わり方</li>
               <li>Timeline に置いた時刻 (at) から、その動きが始まる</li>
             </ul>
-            <GitHubLink href={blob(`samples/${s().name}.moph`)} />
+            <GitHubLink href={blob(`examples/gallery/${s().name}.moph`)} />
           </section>
         )}
       </Show>
@@ -94,7 +94,7 @@ export const Start: Component = () => {
               <li>動かす 3 つは 1 つの View にまとめてある。View の opacity は中身をまとめて 1 枚として掛かる</li>
               <li>fade_out はその View を薄くする Timeline を返す。図形を 1 つずつ消さなくてよい</li>
             </ul>
-            <GitHubLink href={blob(`samples/${s().name}.moph`)} />
+            <GitHubLink href={blob(`examples/gallery/${s().name}.moph`)} />
           </section>
         )}
       </Show>

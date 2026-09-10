@@ -4,7 +4,7 @@
 
 ![育つ木の前を人が歩く](docs/readme.gif)
 
-上の 8 秒は `samples/passerby.moph`。木 (`samples/fractal.moph`) と歩く人 (`samples/walker.moph`) を import して置いただけ。
+上の 8 秒は `examples/gallery/passerby.moph`。木 (`fractal.moph`) と歩く人 (`walker.moph`) を import して置いただけ。
 
 ```
 let v = View(box = (16, 9))
@@ -69,8 +69,8 @@ VS Code 拡張と Neovim の設定は `editors/vscode/README.md`。構文ハイ�
 - `docs/mophila-spec.md` — 言語仕様
 - `docs/mophila.gbnf` — 文法 (GBNF)
 - `docs/skills/mophila/SKILL.md` — 見やすい動画にするための書き方 (LLM に渡す)
-- `examples/` — 構文ごとの短い例
-- `samples/` — 動画の例。`samples/mophila_intro/main.moph` がこの言語の紹介動画
+- `examples/syntax/` — 構文ごとの短い例
+- `examples/gallery/` — 動画の例。`examples/gallery/mophila_intro/main.moph` がこの言語の紹介動画
 - `src/stdlib/` — 標準ライブラリ。`import math` (Rust) と、本体に埋め込んだ .moph の `color` `shape` `layout` `animation` `fractal`
 
 ## 確認

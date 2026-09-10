@@ -5,7 +5,7 @@
 - `mophila doc` の JSON (組み込み、math、メソッド、型)
 - src/stdlib/*.moph の `##` ドキュメントコメント (export の直前の行。1 行目が要約、@category / @param 名前 説明 / @returns 説明)。
   引数と戻り値の型は署名から読む。値の export だけ @type {型} で書く
-- samples/*.moph (先頭のコメントが説明。--media を付けると site/public/media/<name>.mp4 を render する)
+- examples/gallery/*.moph (先頭のコメントが説明。--media を付けると site/public/media/<name>.mp4 を render する)
 - 言語仕様と editors/ の README (本文をそのまま入れる)
 
 使い方: scripts/docgen.py [--media]   (先に cargo build)
@@ -211,17 +211,17 @@ def main() -> None:
     # .moph の順は本体 (src/stdlib/mod.rs の SCRIPTS) と同じ
     order = re.findall(r'\("(\w+)", include_str!', (ROOT / "src" / "stdlib" / "mod.rs").read_text())
     libs += [{"name": n, "path": f"src/stdlib/{n}.moph", "entries": [], "items": library_docs(ROOT / "src" / "stdlib" / f"{n}.moph")} for n in order]
-    samples = [sample_info(ROOT / "samples" / f"{n}.moph") for n in SAMPLES]
+    samples = [sample_info(ROOT / "examples/gallery" / f"{n}.moph") for n in SAMPLES]
     if media:
         for s in samples:
-            render_media(s["name"], ROOT / "samples" / f"{s['name']}.moph")
+            render_media(s["name"], ROOT / "examples/gallery" / f"{s['name']}.moph")
     for s in samples:
         mp4 = MEDIA / f"{s['name']}.mp4"
         s["media"] = media_info(mp4) if mp4.exists() else None
         s["trim"] = TRIM.get(s["name"], "")
         s["listed"] = s["name"] not in ONLY_START
     docs = [{"path": path, "key": key, "title": title, "text": (ROOT / path).read_text()} for path, key, title in DOCS]
-    examples = [{"name": p.name, "code": p.read_text()} for p in sorted((ROOT / "examples").glob("*.moph"))]
+    examples = [{"name": p.name, "code": p.read_text()} for p in sorted((ROOT / "examples/syntax").glob("*.moph"))]
     data = {"builtins": d["builtins"], "types": d["types"], "categories": d["categories"], "libs": libs, "samples": samples, "docs": docs, "examples": examples}
     out = SITE / "src" / "data.json"
     out.write_text(json.dumps(data, ensure_ascii=False, indent=1))

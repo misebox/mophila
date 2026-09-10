@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""examples/ と samples/ の全スクリプトが実行でき、examples/error.moph の各行が
+"""examples/ の全スクリプトが実行でき、examples/syntax/error.moph の各行が
 書いてある種別のエラーで止まることを確かめる。本体のテストではなく、言語や部品を変えたときに手で回す。
 
 使い方: scripts/check_examples.py   (先に cargo build)
@@ -19,9 +19,9 @@ def run(path: Path) -> subprocess.CompletedProcess:
 
 
 def check_scripts() -> list[str]:
-    files = sorted(p for p in (ROOT / "examples").glob("*.moph") if p.name != "error.moph")
-    files += sorted((ROOT / "samples").glob("*.moph"))
-    files += sorted((ROOT / "samples").glob("*/main.moph"))
+    files = sorted(p for p in (ROOT / "examples/syntax").glob("*.moph") if p.name != "error.moph")
+    files += sorted((ROOT / "examples/gallery").glob("*.moph"))
+    files += sorted((ROOT / "examples/gallery").glob("*/main.moph"))
     failed = []
     for f in files:
         r = run(f)
@@ -32,7 +32,7 @@ def check_scripts() -> list[str]:
 
 
 def check_errors() -> list[str]:
-    src = (ROOT / "examples/error.moph").read_text().splitlines()
+    src = (ROOT / "examples/syntax/error.moph").read_text().splitlines()
     setup, failed, checked = [], [], 0
     with tempfile.TemporaryDirectory() as d:
         case = Path(d) / "case.moph"

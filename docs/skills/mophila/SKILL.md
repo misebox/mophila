@@ -7,7 +7,7 @@ description: Write or debug mophila (.moph) motion graphics scripts in this repo
 
 実装はインタプリタ。`mophila render` はソースを毎回解釈する。
 
-正は `docs/mophila-spec.md` (意味) と `examples/*.moph` (構文の見本)。形式文法は `docs/mophila.gbnf`。迷ったらそれらを読む。
+正は `docs/mophila-spec.md` (意味) と `examples/syntax/*.moph` (構文の見本)。形式文法は `docs/mophila.gbnf`。迷ったらそれらを読む。
 
 ## 確認コマンド
 
@@ -115,15 +115,15 @@ func show(objs, at, dur) {
 
 矢印: `Line` と 3 点の `Polygon`。角度は `math.atan2` が無いので、向きを `(dx, dy)` から計算する。
 
-View の入れ子: `v.place(sub, at = Pos(x, y, anchor = :topLeft), w = 7)` で別の View を比率を保って置く。`track.place(sub, at = 0s)` でその View の Timeline を動かす。`sub.opacity` で全体をフェードできる。samples/grid.moph が例。
+View の入れ子: `v.place(sub, at = Pos(x, y, anchor = :topLeft), w = 7)` で別の View を比率を保って置く。`track.place(sub, at = 0s)` でその View の Timeline を動かす。`sub.opacity` で全体をフェードできる。examples/gallery/grid.moph が例。
 
-部品が互いに依存して動くもの (多関節、木): 範囲行 `0..1: child.from = parent.to` は毎フレーム評価されるので、親の属性を読む行を書けば子が追従する。Timeline を置いた順に当たるので、親の行を先に置く。samples/fractal.moph が例 (枝が親の先端を読み、再帰で 2^n 本作る。Vector は `+` `-` `* Number` が使える)。多関節の人物は samples/walker.moph (腰 → 腿 → 脛 → 足を親の先端で順につなぎ、角度は歩行周期の sin。奥 → 胴 → 手前の順に Timeline を置く)。`import { make, speed, floor } from .walker` の `make(near, far, long)` で「その場で long の間歩く人」の View (箱 6 x 6) を作れる。置く側が position.x を動かし、幅 w のとき 1 秒に `speed * w / 6` 進めると足が滑らない。samples/crowd.moph が奥行きを付けて並べた例。
+部品が互いに依存して動くもの (多関節、木): 範囲行 `0..1: child.from = parent.to` は毎フレーム評価されるので、親の属性を読む行を書けば子が追従する。Timeline を置いた順に当たるので、親の行を先に置く。examples/gallery/fractal.moph が例 (枝が親の先端を読み、再帰で 2^n 本作る。Vector は `+` `-` `* Number` が使える)。多関節の人物は examples/gallery/walker.moph (腰 → 腿 → 脛 → 足を親の先端で順につなぎ、角度は歩行周期の sin。奥 → 胴 → 手前の順に Timeline を置く)。`import { make, speed, floor } from .walker` の `make(near, far, long)` で「その場で long の間歩く人」の View (箱 6 x 6) を作れる。置く側が position.x を動かし、幅 w のとき 1 秒に `speed * w / 6` 進めると足が滑らない。examples/gallery/crowd.moph が奥行きを付けて並べた例。
 
 ピクセル単位の絵 (グラデーション、模様、フラクタル): 図形の `fill` に `Shader(color = func (x, y, t) { ... Color) }` を入れる。x, y は箱の座標、t は秒。関数は GPU で全ピクセル分走るので数値の計算だけ (文字列・図形・Dict は不可、再帰不可)。外側の List (Number か Color だけ) と関数は使える。時間で変える値は t から計算するか、`args: [..]` を motion の行で変える。`samples: 4` で 2x2 のアンチエイリアス (計算は 4 倍)。複素数は Vector で書ける (`.x` `.y`、`+`、Number との `*`)。
 
-曲線は `Path(from =, segments = [(:curve, 制御点, 制御点, 終点), (:line, 点)], closed = true)`、楕円は `Ellipse(position =, rx =, ry =)`。塗りは Color のほかに `Gradient(from =, to =, stops = [...])` (`kind = :radial` なら from を中心に radius まで) が使える。線は `strokeCap` `strokeJoin` `dash` で形を変えられ、`dashOffset` を motion で動かすと破線が流れる。重ね方は `blend` (`:multiply` `:screen` `:add` など)。図形を回すときは `rotation` (度、時計回り。中心は position、Line は from、Polygon は重心) を使う。頂点を計算し直す必要はない。標準ライブラリは名前で import する。`animation` (`fade_in(o, duration)` / `fade_out` / `fade_to` / `slide_in(o, dx, dy)` / `slide_out` / `move_by` / `show(track, objs, at, end)` が Timeline を返すので `track.place(tl, at =)` に置く)、`color` (`mix` `lighten` `darken` `alpha` `hsl` `gray`)、`shape` (Polygon の points = `regular_polygon` `star` `arrow`)、`layout` (`grid` `cell` `along` `fit`)。自分で opacity の motion を書く前にこれらを使う。エスケープタイム系フラクタル (Mandelbrot、Julia、Burning Ship、Multibrot) は標準ライブラリ fractal を使う: `import { escape_time, mandelbrot, julia, perturbation, plain, smooth } from fractal` して `escape_time(formula =, precision =, coloring =, center =, span =, zoom =, max_iter =, samples =)` が Shader を返す。反復式は Dict (seed / step / start / delta / degree)、色付けは `func (mu, z) -> Color` で、どちらも自作できる。深く寄るなら `perturbation` (基準軌道をスクリプト側の 64 bit で計算し GPU は差分だけ。10 兆倍あたりまで)。samples/mandelbrot.moph、julia.moph、burning_ship.moph が例。
+曲線は `Path(from =, segments = [(:curve, 制御点, 制御点, 終点), (:line, 点)], closed = true)`、楕円は `Ellipse(position =, rx =, ry =)`。塗りは Color のほかに `Gradient(from =, to =, stops = [...])` (`kind = :radial` なら from を中心に radius まで) が使える。線は `strokeCap` `strokeJoin` `dash` で形を変えられ、`dashOffset` を motion で動かすと破線が流れる。重ね方は `blend` (`:multiply` `:screen` `:add` など)。図形を回すときは `rotation` (度、時計回り。中心は position、Line は from、Polygon は重心) を使う。頂点を計算し直す必要はない。標準ライブラリは名前で import する。`animation` (`fade_in(o, duration)` / `fade_out` / `fade_to` / `slide_in(o, dx, dy)` / `slide_out` / `move_by` / `show(track, objs, at, end)` が Timeline を返すので `track.place(tl, at =)` に置く)、`color` (`mix` `lighten` `darken` `alpha` `hsl` `gray`)、`shape` (Polygon の points = `regular_polygon` `star` `arrow`)、`layout` (`grid` `cell` `along` `fit`)。自分で opacity の motion を書く前にこれらを使う。エスケープタイム系フラクタル (Mandelbrot、Julia、Burning Ship、Multibrot) は標準ライブラリ fractal を使う: `import { escape_time, mandelbrot, julia, perturbation, plain, smooth } from fractal` して `escape_time(formula =, precision =, coloring =, center =, span =, zoom =, max_iter =, samples =)` が Shader を返す。反復式は Dict (seed / step / start / delta / degree)、色付けは `func (mu, z) -> Color` で、どちらも自作できる。深く寄るなら `perturbation` (基準軌道をスクリプト側の 64 bit で計算し GPU は差分だけ。10 兆倍あたりまで)。examples/gallery/mandelbrot.moph、julia.moph、burning_ship.moph が例。
 
-音声: `import "bgm.m4a" as bgm` して `track.place(bgm, at = 0s, loop = true, volume = 0.6, fadeOut = 3s)` (samples/mophila_intro/main.moph)。`loop = true` は動画の終わりまで繰り返す。`duration:` で切る。preview でも鳴る。
+音声: `import "bgm.m4a" as bgm` して `track.place(bgm, at = 0s, loop = true, volume = 0.6, fadeOut = 3s)` (examples/gallery/mophila_intro/main.moph)。`loop = true` は動画の終わりまで繰り返す。`duration:` で切る。preview でも鳴る。
 
 字幕: `Subtitle(text = s, duration =)` を `track.place(sub, at =)`。画面には描かれず、動画の字幕トラックになる (プレイヤーで表示)。preview と sheet では下に重ねて見える。字幕を TextArea で描かない。examples/media.moph が例。
 
@@ -185,7 +185,7 @@ for line in lines {
 - **矩形の中に文字を置くなら余白**。文字幅は `fontSize × 文字数 × 0.6` (英数) / `× 1.0` (日本語) が目安。箱の幅を超えるなら fontSize を下げる
 - **時間は文字量から決める** (上の「見やすい動画にする」)。切り替えの前に 1 秒、章の見出しは 4 秒
 
-## 場面を組む部品 (samples/mophila_intro/ の型)
+## 場面を組む部品 (examples/gallery/mophila_intro/ の型)
 
 intro は `main.moph` (章の順番と output) / `theme.moph` (画面、色、時間の決まり) / `slides.moph` (部品) / 場面ごとのファイル (`export func run(now)` が場面を組んで次の開始時刻を返す) に分かれている。新しく書くときは theme と slides を写す。場面の基本形は「左にコード、右にそのコードが実際に動く箱、下にナレーションの字幕」:
 
@@ -212,7 +212,7 @@ intro は `main.moph` (章の順番と output) / `theme.moph` (画面、色、�
 
 ## エラー
 
-`種別.細目: line N: message`。種別のツリーは `examples/error.moph`。よくあるもの:
+`種別.細目: line N: message`。種別のツリーは `examples/syntax/error.moph`。よくあるもの:
 - `TypeError.ArgumentType: Circle.position expects Pos, found Tuple` → 要素の数が Pos に合っていない
 - `ValueError.DurationRequired` → 実数時刻の Timeline に duration が無い、または時刻の単位が混在
 - `NameError.UndefinedVariable: "math" is not defined; add "import math"`

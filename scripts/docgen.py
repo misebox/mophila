@@ -222,7 +222,7 @@ def main() -> None:
         s["listed"] = s["name"] not in ONLY_START
     docs = [{"path": path, "key": key, "title": title, "text": (ROOT / path).read_text()} for path, key, title in DOCS]
     examples = [{"name": p.name, "code": p.read_text()} for p in sorted((ROOT / "examples/syntax").glob("*.moph"))]
-    data = {"builtins": d["builtins"], "types": d["types"], "categories": d["categories"], "libs": libs, "samples": samples, "docs": docs, "examples": examples}
+    data = {"builtins": d["builtins"], "errors": d["errors"], "types": d["types"], "categories": d["categories"], "libs": libs, "samples": samples, "docs": docs, "examples": examples}
     out = SITE / "src" / "data.json"
     out.write_text(json.dumps(data, ensure_ascii=False, indent=1))
     have = sum(1 for s in samples if s["media"])

@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use crate::docs::Entry;
-use crate::lang::error::{Result, err};
+use crate::lang::error::{Kind, Result, err};
 use crate::lang::value::{Module, Value};
 
 pub const DOCS: &[Entry] = &[
@@ -39,12 +39,12 @@ pub fn call(name: &str, values: &[Value]) -> Result<Value> {
         .iter()
         .map(|v| match v {
             Value::Number(n, _) => Ok(*n),
-            v => err("TypeError.ArgumentType", format!("{name} expects Number, found {}", v.type_name())),
+            v => err(Kind::ArgumentType, format!("{name} expects Number, found {}", v.type_name())),
         })
         .collect::<Result<Vec<f64>>>()?;
     let unary = |f: fn(f64) -> f64| match nums.as_slice() {
         [x] => Ok(Value::num(f(*x))),
-        _ => err("TypeError.ArityMismatch", format!("{name} takes 1 argument, {} given", nums.len())),
+        _ => err(Kind::ArityMismatch, format!("{name} takes 1 argument, {} given", nums.len())),
     };
     match name {
         "sin" => unary(f64::sin),
@@ -57,11 +57,11 @@ pub fn call(name: &str, values: &[Value]) -> Result<Value> {
         "exp" => unary(f64::exp),
         "atan2" => match nums.as_slice() {
             [y, x] => Ok(Value::num(y.atan2(*x))),
-            _ => err("TypeError.ArityMismatch", format!("atan2 takes 2 arguments (y, x), {} given", nums.len())),
+            _ => err(Kind::ArityMismatch, format!("atan2 takes 2 arguments (y, x), {} given", nums.len())),
         },
-        "max" | "min" if nums.is_empty() => err("TypeError.ArityMismatch", format!("{name} needs at least 1 argument")),
+        "max" | "min" if nums.is_empty() => err(Kind::ArityMismatch, format!("{name} needs at least 1 argument")),
         "max" => Ok(Value::num(nums.iter().cloned().fold(f64::NEG_INFINITY, f64::max))),
         "min" => Ok(Value::num(nums.iter().cloned().fold(f64::INFINITY, f64::min))),
-        _ => err("NameError.UndefinedAttribute", format!("no builtin \"{name}\"")),
+        _ => err(Kind::UndefinedAttribute, format!("no builtin \"{name}\"")),
     }
 }

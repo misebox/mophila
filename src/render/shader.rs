@@ -11,10 +11,10 @@ use vello::peniko::{Blob, ImageAlphaType, ImageData, ImageFormat};
 use vello::wgpu;
 
 use crate::lang::ast::{BinOp, Expr, Pattern, Stmt, StmtKind};
-use crate::lang::error::{MophError, Result, err};
+use crate::lang::error::{Kind, MophError, Result, err};
 use crate::lang::value::{Closure, Value};
 
-const KIND: &str = "RuntimeError.ShaderCompile";
+const KIND: Kind = Kind::ShaderCompile;
 
 // ---------- WGSL への変換 ----------
 
@@ -116,7 +116,7 @@ impl Gen {
         }
         let params = &closure.def.params;
         if params.len() != arg_tys.len() {
-            return err("TypeError.ArityMismatch", format!("shader function takes {} arguments, {} given", params.len(), arg_tys.len()));
+            return err(Kind::ArityMismatch, format!("shader function takes {} arguments, {} given", params.len(), arg_tys.len()));
         }
         let name = self.fresh("fn");
         self.stack.push(key.0);
@@ -175,7 +175,7 @@ impl Gen {
                     return err(KIND, format!("\"{name}\" is not a variable of this shader function (outer variables are constants)"));
                 };
                 if ty != expected {
-                    return err("TypeError.OperandType", format!("cannot assign {} to {name} ({})", ty.name(), expected.name()));
+                    return err(Kind::OperandType, format!("cannot assign {} to {name} ({})", ty.name(), expected.name()));
                 }
                 out.line(format!("{wgsl} = {v};"));
                 Ok(None)
@@ -194,7 +194,7 @@ impl Gen {
                         return err(KIND, format!("\"{name}\" is not a variable of this shader function"));
                     };
                     if ty != expected {
-                        return err("TypeError.OperandType", format!("cannot assign {} to {name} ({})", ty.name(), expected.name()));
+                        return err(Kind::OperandType, format!("cannot assign {} to {name} ({})", ty.name(), expected.name()));
                     }
                     out.line(format!("{wgsl} = {tmp};"));
                 }
@@ -207,7 +207,7 @@ impl Gen {
                 let (av, at) = self.expr(a, out, env, closure, ret)?;
                 let (bv, bt) = self.expr(b, out, env, closure, ret)?;
                 if at != Ty::Num || bt != Ty::Num {
-                    return err("TypeError.OperandType", "range bounds must be Number");
+                    return err(Kind::OperandType, "range bounds must be Number");
                 }
                 let i = self.fresh("i");
                 let end = if *op == BinOp::RangeInclusive { format!("i32({bv}) + 1") } else { format!("i32({bv})") };
@@ -250,7 +250,7 @@ impl Gen {
     fn if_(&mut self, cond: &Expr, then: &[Stmt], otherwise: Option<&[Stmt]>, out: &mut Body, env: &mut Env, closure: &Closure, ret: &mut Option<Ty>, want_value: bool) -> Result<Option<(String, Ty)>> {
         let (c, ct) = self.expr(cond, out, env, closure, ret)?;
         if ct != Ty::Bool {
-            return err("TypeError.OperandType", format!("if condition must be Bool, found {}", ct.name()));
+            return err(Kind::OperandType, format!("if condition must be Bool, found {}", ct.name()));
         }
         let mut then_body = Body::new(out.indent + 1);
         let then_val = self.block(then, &mut then_body, env, closure, ret, want_value)?;
@@ -298,14 +298,14 @@ impl Gen {
             Expr::Neg(inner) => {
                 let (v, ty) = self.expr(inner, out, env, closure, ret)?;
                 if ty != Ty::Num && ty != Ty::Color && ty != Ty::Vec {
-                    return err("TypeError.OperandType", format!("cannot negate {}", ty.name()));
+                    return err(Kind::OperandType, format!("cannot negate {}", ty.name()));
                 }
                 (format!("(-{v})"), ty)
             }
             Expr::Not(inner) => {
                 let (v, ty) = self.expr(inner, out, env, closure, ret)?;
                 if ty != Ty::Bool {
-                    return err("TypeError.OperandType", format!("cannot apply not to {}", ty.name()));
+                    return err(Kind::OperandType, format!("cannot apply not to {}", ty.name()));
                 }
                 (format!("(!{v})"), Ty::Bool)
             }
@@ -322,7 +322,7 @@ impl Gen {
                     let right = self.expr(e, out, env, closure, ret)?;
                     let (v, t) = binary(*op, &left.0, left.1, &right.0, right.1)?;
                     if t != Ty::Bool {
-                        return err("TypeError.OperandType", "a comparison must produce a Bool");
+                        return err(Kind::OperandType, "a comparison must produce a Bool");
                     }
                     parts.push(v);
                     left = right;
@@ -341,7 +341,7 @@ impl Gen {
                 _ if attr == "x" || attr == "y" => {
                     let (v, ty) = self.expr(target, out, env, closure, ret)?;
                     if ty != Ty::Vec {
-                        return err("NameError.UndefinedAttribute", format!("{} has no attribute \"{attr}\" in a shader", ty.name()));
+                        return err(Kind::UndefinedAttribute, format!("{} has no attribute \"{attr}\" in a shader", ty.name()));
                     }
                     (format!("{v}.{attr}"), Ty::Num)
                 }
@@ -363,7 +363,7 @@ impl Gen {
                             return err(KIND, format!("\"{fname}\" is a variable, not a function"));
                         }
                         let Some(Value::Func(f)) = find_captured(fname, closure) else {
-                            return err("NameError.UndefinedVariable", format!("\"{fname}\" is not a function known to the shader"));
+                            return err(Kind::UndefinedVariable, format!("\"{fname}\" is not a function known to the shader"));
                         };
                         let tys: Vec<Ty> = values.iter().map(|(_, t)| *t).collect();
                         let (name, ret_ty) = self.func(&f, &tys)?;
@@ -377,13 +377,13 @@ impl Gen {
                 let (tv, tt) = self.expr(target, out, env, closure, ret)?;
                 let (iv, it) = self.expr(index, out, env, closure, ret)?;
                 if it != Ty::Num {
-                    return err("TypeError.OperandType", "index must be Number");
+                    return err(Kind::OperandType, "index must be Number");
                 }
                 let elem = match tt {
                     Ty::Nums(_) => Ty::Num,
                     Ty::Colors(_) => Ty::Color,
                     Ty::Vecs(_) => Ty::Vec,
-                    other => return err("TypeError.OperandType", format!("cannot index {}", other.name())),
+                    other => return err(Kind::OperandType, format!("cannot index {}", other.name())),
                 };
                 (format!("{tv}[u32({iv})]"), elem)
             }
@@ -400,7 +400,7 @@ impl Gen {
     /// 関数の外側の変数。値をそのまま埋め込む
     fn captured(&mut self, name: &str, closure: &Closure) -> Result<(String, Ty)> {
         let Some(v) = find_captured(name, closure) else {
-            return err("NameError.UndefinedVariable", format!("\"{name}\" is not defined"));
+            return err(Kind::UndefinedVariable, format!("\"{name}\" is not defined"));
         };
         Ok(match v {
             Value::Number(n, _) => (lit(n), Ty::Num),
@@ -442,7 +442,7 @@ fn find_captured(name: &str, closure: &Closure) -> Option<Value> {
 
 fn unify(ret: &mut Option<Ty>, ty: Ty) -> Result<()> {
     match ret {
-        Some(existing) if *existing != ty => err("TypeError.OperandType", format!("shader function returns both {} and {}", existing.name(), ty.name())),
+        Some(existing) if *existing != ty => err(Kind::OperandType, format!("shader function returns both {} and {}", existing.name(), ty.name())),
         _ => {
             *ret = Some(ty);
             Ok(())
@@ -473,7 +473,7 @@ fn color_lit(c: &[f32; 4]) -> String {
 
 fn binary(op: BinOp, lv: &str, lt: Ty, rv: &str, rt: Ty) -> Result<(String, Ty)> {
     use Ty::{Bool, Color, Num, Vec};
-    let bad = || MophError::new("TypeError.OperandType", format!("cannot {} {} and {} in a shader", crate::lang::eval::verb(op), lt.name(), rt.name()));
+    let bad = || MophError::new(Kind::OperandType, format!("cannot {} {} and {} in a shader", crate::lang::eval::verb(op), lt.name(), rt.name()));
     Ok(match op {
         BinOp::Add | BinOp::Sub => match (lt, rt) {
             (Num, Num) => (format!("({lv} {} {rv})", sym(op)), Num),
@@ -540,7 +540,7 @@ fn build(name: &str, values: Vec<(String, Ty)>) -> Result<(String, Ty)> {
     let mut parts = Vec::new();
     for (v, ty) in values {
         if ty != Ty::Num {
-            return err("TypeError.ArgumentType", format!("{name} expects Number, found {}", ty.name()));
+            return err(Kind::ArgumentType, format!("{name} expects Number, found {}", ty.name()));
         }
         parts.push(v);
     }
@@ -548,20 +548,20 @@ fn build(name: &str, values: Vec<(String, Ty)>) -> Result<(String, Ty)> {
         ("Vector", [x, y]) => Ok((format!("vec2<f32>({x}, {y})"), Ty::Vec)),
         ("Color", [r, g, b]) => Ok((format!("vec4<f32>({r} / 255.0, {g} / 255.0, {b} / 255.0, 1.0)"), Ty::Color)),
         ("Color", [r, g, b, a]) => Ok((format!("vec4<f32>({r} / 255.0, {g} / 255.0, {b} / 255.0, {a})"), Ty::Color)),
-        ("Vector", _) => err("TypeError.ArityMismatch", "Vector takes 2 arguments"),
-        _ => err("TypeError.ArityMismatch", "Color takes 3 or 4 arguments"),
+        ("Vector", _) => err(Kind::ArityMismatch, "Vector takes 2 arguments"),
+        _ => err(Kind::ArityMismatch, "Color takes 3 or 4 arguments"),
     }
 }
 
 fn math_call(name: &str, args: &[(String, Ty)]) -> Result<(String, Ty)> {
     if args.iter().any(|(_, t)| *t != Ty::Num) {
-        return err("TypeError.ArgumentType", format!("math.{name} takes Numbers"));
+        return err(Kind::ArgumentType, format!("math.{name} takes Numbers"));
     }
     let list: Vec<&str> = args.iter().map(|(v, _)| v.as_str()).collect();
     let unary = |f: &str| -> Result<(String, Ty)> {
         match list.as_slice() {
             [x] => Ok((format!("{f}({x})"), Ty::Num)),
-            _ => err("TypeError.ArityMismatch", format!("math.{name} takes 1 argument, {} given", list.len())),
+            _ => err(Kind::ArityMismatch, format!("math.{name} takes 1 argument, {} given", list.len())),
         }
     };
     match name {
@@ -569,14 +569,14 @@ fn math_call(name: &str, args: &[(String, Ty)]) -> Result<(String, Ty)> {
         "ln" => unary("log"),
         "atan2" => match list.as_slice() {
             [y, x] => Ok((format!("atan2({y}, {x})"), Ty::Num)),
-            _ => err("TypeError.ArityMismatch", "math.atan2 takes 2 arguments (y, x)"),
+            _ => err(Kind::ArityMismatch, "math.atan2 takes 2 arguments (y, x)"),
         },
         "max" | "min" => match list.as_slice() {
-            [] => err("TypeError.ArityMismatch", format!("math.{name} needs at least 1 argument")),
+            [] => err(Kind::ArityMismatch, format!("math.{name} needs at least 1 argument")),
             [x] => Ok((x.to_string(), Ty::Num)),
             _ => Ok((list[1..].iter().fold(list[0].to_string(), |acc, x| format!("{name}({acc}, {x})")), Ty::Num)),
         },
-        _ => err("NameError.UndefinedAttribute", format!("math has no \"{name}\" usable in a shader")),
+        _ => err(Kind::UndefinedAttribute, format!("math has no \"{name}\" usable in a shader")),
     }
 }
 
@@ -584,7 +584,7 @@ fn math_call(name: &str, args: &[(String, Ty)]) -> Result<(String, Ty)> {
 pub fn compile(closure: &Closure) -> Result<String> {
     let params = &closure.def.params;
     if params.len() != 3 && params.len() != 4 {
-        return err("TypeError.ArityMismatch", format!("Shader.color must be func (x, y, t) or func (x, y, t, args), found {} parameters", params.len()));
+        return err(Kind::ArityMismatch, format!("Shader.color must be func (x, y, t) or func (x, y, t, args), found {} parameters", params.len()));
     }
     let mut g = Gen { decls: Vec::new(), funcs: HashMap::new(), consts: HashMap::new(), counter: 0, stack: Vec::new() };
     let mut env: Env = vec![HashMap::new()];
@@ -604,7 +604,7 @@ pub fn compile(closure: &Closure) -> Result<String> {
         }
     }
     if ret != Some(Ty::Color) {
-        return err("TypeError.ArgumentType", format!("Shader.color must return Color, found {}", ret.map_or("nothing".to_string(), Ty::name)));
+        return err(Kind::ArgumentType, format!("Shader.color must return Color, found {}", ret.map_or("nothing".to_string(), Ty::name)));
     }
     let mut wgsl = String::from(
         "struct U { t: f32, ox: f32, oy: f32, sx: f32, sy: f32, w: u32, h: u32, n: u32, s: u32, p0: u32, p1: u32, p2: u32 }\n\

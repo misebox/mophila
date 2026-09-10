@@ -12,10 +12,12 @@ export interface LibItem { name: string; category: string; isFunc: boolean; sign
 export interface Lib { name: string; path: string; entries: Entry[]; items: LibItem[] }
 export interface MediaInfo { width: number; height: number; fps: number; seconds: number }
 export interface Sample { name: string; desc: string; code: string; length: number; media: MediaInfo | null; trim: string; listed: boolean }
+export interface ErrorKind { name: string; doc: string }
 export interface Doc { path: string; key: string; title: string; text: string }
 export interface Example { name: string; code: string }
 export interface Data {
   builtins: Entry[];
+  errors: ErrorKind[];
   types: TypeDoc[];
   categories: string[];
   libs: Lib[];

@@ -1,4 +1,4 @@
-use crate::lang::error::{Result, err};
+use crate::lang::error::{Kind, Result, err};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Tok {
@@ -103,7 +103,7 @@ pub fn lex(src: &str) -> Result<Vec<Token>> {
                 let after = chars.get(i + 1 + hex.len()).copied();
                 if !matches!(hex.len(), 3 | 4 | 6 | 8) || after.is_some_and(|c| c.is_alphanumeric()) {
                     let word: String = chars[i + 1..].iter().take_while(|c| c.is_alphanumeric()).collect();
-                    return err("SyntaxError.InvalidLiteral", format!("line {line}:{col}: color literal must have 3, 4, 6 or 8 hex digits, found #{word}"));
+                    return err(Kind::InvalidLiteral, format!("line {line}:{col}: color literal must have 3, 4, 6 or 8 hex digits, found #{word}"));
                 }
                 push(&mut tokens, Tok::Color(parse_color(&hex)), line);
                 i += 1 + hex.len();
@@ -114,7 +114,7 @@ pub fn lex(src: &str) -> Result<Vec<Token>> {
                 i += 1;
                 loop {
                     match chars.get(i) {
-                        None | Some('\n') => return err("SyntaxError.UnexpectedToken", format!("line {line}:{col}: unterminated string")),
+                        None | Some('\n') => return err(Kind::UnexpectedToken, format!("line {line}:{col}: unterminated string")),
                         Some('"') => break,
                         Some('\\') => {
                             let escaped = match chars.get(i + 1) {
@@ -122,7 +122,7 @@ pub fn lex(src: &str) -> Result<Vec<Token>> {
                                 Some('\\') => '\\',
                                 Some('n') => '\n',
                                 Some('t') => '\t',
-                                other => return err("SyntaxError.InvalidLiteral", format!("line {line}:{col}: unknown escape \\{}", other.map(|c| c.to_string()).unwrap_or_default())),
+                                other => return err(Kind::InvalidLiteral, format!("line {line}:{col}: unknown escape \\{}", other.map(|c| c.to_string()).unwrap_or_default())),
                             };
                             text.push(escaped);
                             i += 2;
@@ -212,7 +212,7 @@ pub fn lex(src: &str) -> Result<Vec<Token>> {
                             '^' => Tok::Caret,
                             '<' => Tok::Lt,
                             '>' => Tok::Gt,
-                            _ => return err("SyntaxError.UnexpectedToken", format!("line {line}:{col}: unexpected character {c:?}")),
+                            _ => return err(Kind::UnexpectedToken, format!("line {line}:{col}: unexpected character {c:?}")),
                         },
                         1,
                     ),
@@ -245,7 +245,7 @@ fn parse_color(hex: &str) -> [f32; 4] {
 fn lex_number(chars: &[char], start: usize, line: usize, col: usize) -> Result<(Tok, usize)> {
     let invalid = |end: usize| {
         let text: String = chars[start..end].iter().collect();
-        crate::lang::error::MophError::new("SyntaxError.InvalidLiteral", format!("line {line}:{col}: invalid literal {text}"))
+        crate::lang::error::MophError::new(Kind::InvalidLiteral, format!("line {line}:{col}: invalid literal {text}"))
     };
     let (value, mut i) = read_number(chars, start).ok_or_else(|| invalid(start + 1))?;
 

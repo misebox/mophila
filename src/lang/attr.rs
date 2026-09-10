@@ -6,7 +6,7 @@
 
 use std::rc::Rc;
 
-use crate::lang::error::{MophError, Result, err};
+use crate::lang::error::{Kind, MophError, Result, err};
 use crate::lang::eval::Interp;
 use crate::lang::value::{Record, Value};
 
@@ -45,7 +45,7 @@ impl<'a> Attr<'a> {
     pub fn set(self, what: &str, v: Value) -> Result<Written> {
         match self.set {
             Some(set) => set(v),
-            None => err("NameError.UndefinedAttribute", format!("{what} cannot be assigned")),
+            None => err(Kind::UndefinedAttribute, format!("{what} cannot be assigned")),
         }
     }
 }
@@ -54,7 +54,7 @@ impl<'a> Attr<'a> {
 fn number(what: &str, v: Value) -> Result<f64> {
     match v {
         Value::Number(n, _) => Ok(n),
-        v => err("TypeError.AttributeType", format!("{what} expects Number, found {}", v.type_name())),
+        v => err(Kind::AttributeType, format!("{what} expects Number, found {}", v.type_name())),
     }
 }
 
@@ -145,7 +145,7 @@ fn set_anchor(v: &Value, nv: Value) -> Result<Written> {
     let (x, y) = nums(v);
     match nv {
         Value::Symbol(s) => wrote(Value::Apos(s, x, y)),
-        v => err("TypeError.AttributeType", format!("anchor expects Anchor, found {}", v.type_name())),
+        v => err(Kind::AttributeType, format!("anchor expects Anchor, found {}", v.type_name())),
     }
 }
 
@@ -157,7 +157,7 @@ fn get_vector(v: &Value) -> Result<Value> {
 fn set_vector(v: &Value, nv: Value) -> Result<Written> {
     match nv {
         Value::Vector(x, y) => wrote(rebuilt(v, x, y)),
-        v => err("TypeError.AttributeType", format!("vector expects Vector, found {}", v.type_name())),
+        v => err(Kind::AttributeType, format!("vector expects Vector, found {}", v.type_name())),
     }
 }
 
@@ -186,7 +186,7 @@ fn get_a(v: &Value) -> Result<Value> {
 fn tuple_at(v: &Value, i: usize) -> Result<Value> {
     match v {
         Value::Tuple(items) if items.len() == 2 => Ok(items[i].clone()),
-        v => err("NameError.UndefinedAttribute", format!("{} has no attribute here", v.type_name())),
+        v => err(Kind::UndefinedAttribute, format!("{} has no attribute here", v.type_name())),
     }
 }
 
@@ -209,12 +209,12 @@ fn get_duration(v: &Value) -> Result<Value> {
 
 fn set_duration_attr(v: &Value, nv: Value) -> Result<Written> {
     let Value::Duration(d) = nv else {
-        return err("TypeError.AttributeType", format!("duration expects Duration, found {}", nv.type_name()));
+        return err(Kind::AttributeType, format!("duration expects Duration, found {}", nv.type_name()));
     };
     match v {
         Value::Timeline(t) => t.duration.set(Some(d)),
         Value::Motion(m) => m.duration.set(Some(d)),
-        _ => return err("TypeError.AttributeType", "duration cannot be assigned here"),
+        _ => return err(Kind::AttributeType, "duration cannot be assigned here"),
     }
     Ok(Written::Done)
 }
@@ -222,7 +222,7 @@ fn set_duration_attr(v: &Value, nv: Value) -> Result<Written> {
 fn get_file(v: &Value) -> Result<Value> {
     match v {
         Value::Audio(a) => Ok(Value::Str(a.name.clone())),
-        v => err("NameError.UndefinedAttribute", format!("{} has no file", v.type_name())),
+        v => err(Kind::UndefinedAttribute, format!("{} has no file", v.type_name())),
     }
 }
 
@@ -246,7 +246,7 @@ impl Interp {
                     o.attrs
                         .get(name)
                         .cloned()
-                        .ok_or_else(|| MophError::new("NameError.UndefinedAttribute", format!("{} has no attribute \"{name}\"", o.kind)))
+                        .ok_or_else(|| MophError::new(Kind::UndefinedAttribute, format!("{} has no attribute \"{name}\"", o.kind)))
                 },
                 move |v| {
                     self.field_ok(&o.borrow().decl, name)?;
@@ -276,7 +276,7 @@ impl Interp {
         let [name, rest @ ..] = path else { return Ok(value) };
         let what = format!("{}.{name}", target.type_name());
         let Some(attr) = self.attr(&target, name) else {
-            return err("NameError.UndefinedAttribute", format!("{} has no attribute \"{name}\"", target.type_name()));
+            return err(Kind::UndefinedAttribute, format!("{} has no attribute \"{name}\"", target.type_name()));
         };
         let value = if rest.is_empty() { value } else { self.write_path(attr.get()?, rest, value)? };
         match attr.set(&what, value)? {

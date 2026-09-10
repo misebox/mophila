@@ -7,7 +7,7 @@ use vello::kurbo::{Affine, BezPath, Circle, Ellipse, Line, Point, Rect, RoundedR
 use vello::kurbo::{Cap, Join};
 use vello::peniko::{BlendMode, Brush, Color, ColorStops, Compose, Fill, Gradient, ImageBrush, Mix};
 
-use crate::lang::error::{Result, err};
+use crate::lang::error::{Kind, Result, err};
 use crate::render::text::{self, RenderCache};
 use crate::lang::value::{ObjRef, Value};
 
@@ -34,7 +34,7 @@ struct Frame {
 fn view_box(view: &ObjRef) -> Result<(f64, f64)> {
     match view.borrow().attrs.get("box") {
         Some(Value::Vector(w, h)) => Ok((*w, *h)),
-        _ => err("TypeError.AttributeType", "View.box must be a Vector"),
+        _ => err(Kind::AttributeType, "View.box must be a Vector"),
     }
 }
 
@@ -97,7 +97,7 @@ fn sub_transform(child: &ObjRef, parent: Affine) -> Result<Affine> {
         (Some(w), Some(h)) => (w, h),
         (Some(w), None) => (w, w * bh / bw),
         (None, Some(h)) => (h * bw / bh, h),
-        (None, None) => return err("TypeError.ArityMismatch", "a placed View needs w or h"),
+        (None, None) => return err(Kind::ArityMismatch, "a placed View needs w or h"),
     };
     let (cx, cy) = anchored_center(&c.attrs, w, h, "View")?;
     let scale = (w / bw).min(h / bh);
@@ -163,7 +163,7 @@ fn draw_object(scene: &mut Scene, c: &crate::lang::value::Object, transform: Aff
         }
         "Polygon" => {
             let Some(Value::List(points)) = c.attrs.get("points") else {
-                return err("TypeError.AttributeType", "Polygon.points must be a List of Vector");
+                return err(Kind::AttributeType, "Polygon.points must be a List of Vector");
             };
             let mut path = BezPath::new();
             for (i, p) in points.borrow().iter().enumerate() {
@@ -176,16 +176,16 @@ fn draw_object(scene: &mut Scene, c: &crate::lang::value::Object, transform: Aff
         }
         "Path" => {
             let Some(Value::List(segments)) = c.attrs.get("segments") else {
-                return err("TypeError.AttributeType", "Path.segments must be a List");
+                return err(Kind::AttributeType, "Path.segments must be a List");
             };
             let mut path = BezPath::new();
             path.move_to(vector(&c.attrs, "from", kind)?);
             for seg in segments.borrow().iter() {
                 let Value::Tuple(items) = seg else {
-                    return err("TypeError.AttributeType", format!("Path.segments expects a Tuple like (:line, point), found {}", seg.type_name()));
+                    return err(Kind::AttributeType, format!("Path.segments expects a Tuple like (:line, point), found {}", seg.type_name()));
                 };
                 let Some(Value::Symbol(op)) = items.first() else {
-                    return err("TypeError.AttributeType", "the first item of a Path segment must be :move, :line, :quad or :curve");
+                    return err(Kind::AttributeType, "the first item of a Path segment must be :move, :line, :quad or :curve");
                 };
                 let pts: Vec<Point> = items[1..].iter().map(|p| point_of(p, "Path.segments")).collect::<Result<_>>()?;
                 match (op.as_str(), pts.as_slice()) {
@@ -193,7 +193,7 @@ fn draw_object(scene: &mut Scene, c: &crate::lang::value::Object, transform: Aff
                     ("line", [p]) => path.line_to(*p),
                     ("quad", [c1, p]) => path.quad_to(*c1, *p),
                     ("curve", [c1, c2, p]) => path.curve_to(*c1, *c2, *p),
-                    (op, pts) => return err("TypeError.ArityMismatch", format!(":{op} got {} points; :move and :line take 1, :quad takes 2, :curve takes 3", pts.len())),
+                    (op, pts) => return err(Kind::ArityMismatch, format!(":{op} got {} points; :move and :line take 1, :quad takes 2, :curve takes 3", pts.len())),
                 }
             }
             if matches!(c.attrs.get("closed"), Some(Value::Bool(true))) {
@@ -202,7 +202,7 @@ fn draw_object(scene: &mut Scene, c: &crate::lang::value::Object, transform: Aff
             let center = path.bounding_box().center();
             (path, center)
         }
-        kind => return err("TypeError.NotPlaceable", format!("cannot draw {kind}")),
+        kind => return err(Kind::NotPlaceable, format!("cannot draw {kind}")),
     };
     let placed = spin(origin)? * transform;
     // blend が付いていたら、その図形の描画だけを 1 枚のレイヤーにして重ね方を変える
@@ -257,7 +257,7 @@ fn hash_value(v: &Value, h: &mut impl Hasher) {
 fn draw_text(scene: &mut Scene, attrs: &Attrs, transform: Affine, spin: &dyn Fn(Point) -> Result<Affine>, scale: f64, opacity: f32, cache: &mut RenderCache) -> Result<()> {
     let kind = "TextArea";
     let Some(Value::Str(content)) = attrs.get("text") else {
-        return err("NameError.UndefinedAttribute", "TextArea.text is not set");
+        return err(Kind::UndefinedAttribute, "TextArea.text is not set");
     };
     let font_size = number(attrs, "fontSize", kind)?;
     let family = match attrs.get("font") {
@@ -297,8 +297,8 @@ fn draw_text(scene: &mut Scene, attrs: &Attrs, transform: Affine, spin: &dyn Fn(
 fn number(attrs: &Attrs, name: &str, kind: &str) -> Result<f64> {
     match attrs.get(name) {
         Some(Value::Number(v, _)) => Ok(*v),
-        Some(v) => err("TypeError.AttributeType", format!("{kind}.{name} expects Number, found {}", v.type_name())),
-        None => err("NameError.UndefinedAttribute", format!("{kind}.{name} is not set")),
+        Some(v) => err(Kind::AttributeType, format!("{kind}.{name} expects Number, found {}", v.type_name())),
+        None => err(Kind::UndefinedAttribute, format!("{kind}.{name} is not set")),
     }
 }
 
@@ -308,17 +308,17 @@ fn point_of(v: &Value, whose: &str) -> Result<Point> {
         Value::Vector(x, y) => Ok(Point::new(*x, *y)),
         Value::Tuple(items) => match items.as_slice() {
             [Value::Number(x, _), Value::Number(y, _)] => Ok(Point::new(*x, *y)),
-            _ => err("TypeError.AttributeType", format!("{whose} expects Vector, found {}", v.type_name())),
+            _ => err(Kind::AttributeType, format!("{whose} expects Vector, found {}", v.type_name())),
         },
-        other => err("TypeError.AttributeType", format!("{whose} expects Vector, found {}", other.type_name())),
+        other => err(Kind::AttributeType, format!("{whose} expects Vector, found {}", other.type_name())),
     }
 }
 
 fn vector(attrs: &Attrs, name: &str, kind: &str) -> Result<Point> {
     match attrs.get(name) {
         Some(Value::Vector(x, y)) => Ok(Point::new(*x, *y)),
-        Some(v) => err("TypeError.AttributeType", format!("{kind}.{name} expects Vector, found {}", v.type_name())),
-        None => err("NameError.UndefinedAttribute", format!("{kind}.{name} is not set")),
+        Some(v) => err(Kind::AttributeType, format!("{kind}.{name} expects Vector, found {}", v.type_name())),
+        None => err(Kind::UndefinedAttribute, format!("{kind}.{name} is not set")),
     }
 }
 
@@ -327,7 +327,7 @@ fn brush(attrs: &Attrs, name: &str, kind: &str) -> Result<Option<Brush>> {
     match attrs.get(name) {
         Some(Value::Color([r, g, b, a])) => Ok(Some(Brush::Solid(Color::new([*r, *g, *b, *a])))),
         Some(Value::Object(o)) if o.borrow().kind == "Gradient" => Ok(Some(Brush::Gradient(gradient(&o.borrow().attrs)?))),
-        Some(v) => err("TypeError.AttributeType", format!("{kind}.{name} expects a Paint, found {}", v.type_name())),
+        Some(v) => err(Kind::AttributeType, format!("{kind}.{name} expects a Paint, found {}", v.type_name())),
         None => Ok(None),
     }
 }
@@ -335,18 +335,18 @@ fn brush(attrs: &Attrs, name: &str, kind: &str) -> Result<Option<Brush>> {
 /// Gradient を peniko の Gradient にする。座標は箱の座標
 fn gradient(attrs: &Attrs) -> Result<Gradient> {
     let Some(Value::List(items)) = attrs.get("stops") else {
-        return err("NameError.UndefinedAttribute", "Gradient.stops must be a List of Color");
+        return err(Kind::UndefinedAttribute, "Gradient.stops must be a List of Color");
     };
     let colors: Vec<Color> = items
         .borrow()
         .iter()
         .map(|c| match c {
             Value::Color([r, g, b, a]) => Ok(Color::new([*r, *g, *b, *a])),
-            other => err("TypeError.AttributeType", format!("Gradient.stops expects Color, found {}", other.type_name())),
+            other => err(Kind::AttributeType, format!("Gradient.stops expects Color, found {}", other.type_name())),
         })
         .collect::<Result<_>>()?;
     if colors.len() < 2 {
-        return err("ValueError.OutOfRange", "Gradient.stops needs at least 2 colors");
+        return err(Kind::OutOfRange, "Gradient.stops needs at least 2 colors");
     }
     let mut stops = ColorStops::default();
     vello::peniko::ColorStopsSource::collect_stops(colors.as_slice(), &mut stops);
@@ -359,7 +359,7 @@ fn gradient(attrs: &Attrs) -> Result<Gradient> {
         "linear" => Gradient::new_linear(from, vector(attrs, "to", "Gradient")?),
         "radial" => Gradient::new_radial(from, number(attrs, "radius", "Gradient")? as f32),
         "sweep" => Gradient::new_sweep(from, 0.0, std::f32::consts::TAU),
-        other => return err("ValueError.OutOfRange", format!("unknown Gradient.kind :{other}")),
+        other => return err(Kind::OutOfRange, format!("unknown Gradient.kind :{other}")),
     };
     Ok(g.with_stops(stops))
 }
@@ -376,7 +376,7 @@ fn stroke_style(attrs: &Attrs) -> Result<Stroke> {
             "butt" => Cap::Butt,
             "round" => Cap::Round,
             "square" => Cap::Square,
-            other => return err("ValueError.OutOfRange", format!("unknown strokeCap :{other}")),
+            other => return err(Kind::OutOfRange, format!("unknown strokeCap :{other}")),
         });
     }
     if let Some(Value::Symbol(join)) = attrs.get("strokeJoin") {
@@ -384,7 +384,7 @@ fn stroke_style(attrs: &Attrs) -> Result<Stroke> {
             "miter" => Join::Miter,
             "round" => Join::Round,
             "bevel" => Join::Bevel,
-            other => return err("ValueError.OutOfRange", format!("unknown strokeJoin :{other}")),
+            other => return err(Kind::OutOfRange, format!("unknown strokeJoin :{other}")),
         });
     }
     if let Some(Value::List(items)) = attrs.get("dash") {
@@ -393,7 +393,7 @@ fn stroke_style(attrs: &Attrs) -> Result<Stroke> {
             .iter()
             .map(|v| match v {
                 Value::Number(n, _) => Ok(*n),
-                other => err("TypeError.AttributeType", format!("dash expects Number, found {}", other.type_name())),
+                other => err(Kind::AttributeType, format!("dash expects Number, found {}", other.type_name())),
             })
             .collect::<Result<_>>()?;
         if !pattern.is_empty() {
@@ -421,7 +421,7 @@ fn blend_mode(attrs: &Attrs) -> Result<Option<BlendMode>> {
         "lighten" => Mix::Lighten,
         "difference" => Mix::Difference,
         "add" => return Ok(Some(BlendMode::new(Mix::Normal, Compose::Plus))),
-        other => return err("ValueError.OutOfRange", format!("unknown blend :{other}")),
+        other => return err(Kind::OutOfRange, format!("unknown blend :{other}")),
     };
     Ok(Some(BlendMode::new(mix, Compose::SrcOver)))
 }
@@ -430,7 +430,7 @@ fn blend_mode(attrs: &Attrs) -> Result<Option<BlendMode>> {
 fn color(attrs: &Attrs, name: &str, kind: &str) -> Result<Option<Color>> {
     match attrs.get(name) {
         Some(Value::Color([r, g, b, a])) => Ok(Some(Color::new([*r, *g, *b, *a]))),
-        Some(v) => err("TypeError.AttributeType", format!("{kind}.{name} expects Color, found {}", v.type_name())),
+        Some(v) => err(Kind::AttributeType, format!("{kind}.{name} expects Color, found {}", v.type_name())),
         None => Ok(None),
     }
 }
@@ -439,7 +439,7 @@ fn color(attrs: &Attrs, name: &str, kind: &str) -> Result<Option<Color>> {
 
 fn anchored_center(attrs: &Attrs, w: f64, h: f64, kind: &str) -> Result<(f64, f64)> {
     let Some(Value::Apos(anchor, x, y)) = attrs.get("position") else {
-        return err("TypeError.AttributeType", format!("{kind}.position must be a Pos"));
+        return err(Kind::AttributeType, format!("{kind}.position must be a Pos"));
     };
     let (dx, dy) = match anchor.as_str() {
         "center" => (0.0, 0.0),
@@ -451,7 +451,7 @@ fn anchored_center(attrs: &Attrs, w: f64, h: f64, kind: &str) -> Result<(f64, f6
         "bottom" => (0.0, -h / 2.0),
         "left" => (w / 2.0, 0.0),
         "right" => (-w / 2.0, 0.0),
-        other => return err("ValueError.OutOfRange", format!("unknown anchor :{other}")),
+        other => return err(Kind::OutOfRange, format!("unknown anchor :{other}")),
     };
     Ok((x + dx, y + dy))
 }
@@ -479,7 +479,7 @@ pub fn overlay_subtitles(scene: &mut Scene, cache: &mut RenderCache, cues: &[cra
 fn draw_shader_fill(scene: &mut Scene, path: &BezPath, transform: Affine, opacity: f32, shader: &ObjRef, frame: &Frame, key: usize, cache: &mut RenderCache) -> Result<()> {
     let sh = shader.borrow();
     let Some(Value::Func(closure)) = sh.attrs.get("color") else {
-        return err("TypeError.AttributeType", "Shader.color must be a func (x, y, t)");
+        return err(Kind::AttributeType, "Shader.color must be a func (x, y, t)");
     };
     let args: Vec<f32> = match sh.attrs.get("args") {
         Some(Value::List(items)) => items
@@ -487,19 +487,19 @@ fn draw_shader_fill(scene: &mut Scene, path: &BezPath, transform: Affine, opacit
             .iter()
             .map(|v| match v {
                 Value::Number(n, _) => Ok(*n as f32),
-                other => err("TypeError.AttributeType", format!("Shader.args must hold Numbers, found {}", other.type_name())),
+                other => err(Kind::AttributeType, format!("Shader.args must hold Numbers, found {}", other.type_name())),
             })
             .collect::<Result<_>>()?,
-        Some(other) => return err("TypeError.AttributeType", format!("Shader.args expects List, found {}", other.type_name())),
+        Some(other) => return err(Kind::AttributeType, format!("Shader.args expects List, found {}", other.type_name())),
         None => Vec::new(),
     };
     let samples = match sh.attrs.get("samples") {
         Some(Value::Number(n, _)) if *n >= 1.0 => *n as u32,
-        Some(other) => return err("TypeError.AttributeType", format!("Shader.samples must be a Number of 1 or more, found {other}")),
+        Some(other) => return err(Kind::AttributeType, format!("Shader.samples must be a Number of 1 or more, found {other}")),
         None => 1,
     };
     let Some(runner) = cache.shaders.as_mut() else {
-        return err("RuntimeError.ShaderUnavailable", "a Shader fill needs the GPU (render, preview, sheet)");
+        return err(Kind::ShaderUnavailable, "a Shader fill needs the GPU (render, preview, sheet)");
     };
     let bounds = transform.transform_rect_bbox(path.bounding_box()).intersect(frame.viewport);
     if bounds.is_zero_area() {

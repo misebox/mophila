@@ -512,5 +512,6 @@ pub fn json() -> Json {
             json!({ "name": t.name, "category": t.category, "union": t.union, "make": t.make, "values": values, "members": t.members, "doc": t.doc, "attrs": attrs, "methods": methods })
         })
         .collect();
-    json!({ "builtins": entries(BUILTINS), "math": entries(crate::stdlib::math::DOCS), "types": types, "categories": CATEGORIES })
+    let errors: Vec<Json> = crate::lang::error::KINDS.iter().map(|k| json!({ "name": k.name(), "doc": k.doc() })).collect();
+    json!({ "builtins": entries(BUILTINS), "math": entries(crate::stdlib::math::DOCS), "types": types, "categories": CATEGORIES, "errors": errors })
 }

@@ -6,7 +6,7 @@ import { href, route } from "@/route";
 
 const current = (): string => route().sub || "functions";
 const typeOf = (name: string): TypeDoc | undefined => data.types.find((t) => t.name === name);
-const currentLabel = (): string => (current() === "functions" ? "Function" : current());
+const currentLabel = (): string => (current() === "functions" ? "Function" : current() === "errors" ? "Error" : current());
 
 const EntryTable: Component<{ rows: Entry[] }> = (props) => (
   <Table
@@ -18,6 +18,21 @@ const EntryTable: Component<{ rows: Entry[] }> = (props) => (
     data={props.rows}
     rowKey={(r) => r.signature}
   />
+);
+
+const Errors: Component = () => (
+  <Stack gap={3}>
+    <Heading level={1} size="xl">Error</Heading>
+    <Text tone="muted">止まるときに出る種別。<code>種別.細目: line N: message</code> の形で、message は英語。</Text>
+    <Table
+      columns={[
+        { key: "name", header: "種別", render: (v) => <code>{String(v)}</code> },
+        { key: "doc", header: "意味" },
+      ]}
+      data={data.errors}
+      rowKey={(e) => e.name}
+    />
+  </Stack>
 );
 
 const Functions: Component = () => (
@@ -100,6 +115,7 @@ const TypePage: Component<{ type: TypeDoc }> = (props) => (
 
 export const BuiltinContent: Component<{ id: string }> = (props) => (
   <Switch fallback={<Functions />}>
+    <Match when={props.id === "errors"}><Errors /></Match>
     <Match when={typeOf(props.id)}>{(t) => <TypePage type={t()} />}</Match>
   </Switch>
 );
@@ -110,7 +126,12 @@ const typeLinks = (category: string): IndexItem[] =>
 /** 組み込みの目次: 関数と、分類ごとの型 */
 export const builtinGroups = (): IndexGroup[] => [
   { title: "組み込み", items: [] },
-  { items: [{ label: "Function", href: href("builtins", "functions"), active: current() === "functions" }] },
+  {
+    items: [
+      { label: "Function", href: href("builtins", "functions"), active: current() === "functions" },
+      { label: "Error", href: href("builtins", "errors"), active: current() === "errors" },
+    ],
+  },
   ...data.categories.map((c) => ({ title: c, items: typeLinks(c) })),
 ];
 

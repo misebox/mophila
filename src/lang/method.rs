@@ -7,7 +7,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::lang::error::{Result, err};
+use crate::lang::error::{Kind, Result, err};
 use crate::lang::eval::{Interp, cmp, equals, format, whole};
 use crate::lang::value::{Motion, Timeline, Value};
 
@@ -111,7 +111,7 @@ fn list(items: Vec<Value>) -> Value {
 
 /// 引数の数が合わないときの言い方
 fn arity<T>(m: &str, want: &str, got: usize) -> Result<T> {
-    err("TypeError.ArityMismatch", format!("{m} takes {want}, {got} given"))
+    err(Kind::ArityMismatch, format!("{m} takes {want}, {got} given"))
 }
 
 fn text_of(v: &Value) -> String {
@@ -147,7 +147,7 @@ fn str_len(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
 
 fn str_replace(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
     let [(None, Value::Str(from)), (None, Value::Str(to))] = args.as_slice() else {
-        return err("TypeError.ArgumentType", "String.replace takes two Strings");
+        return err(Kind::ArgumentType, "String.replace takes two Strings");
     };
     Ok(Value::Str(text_of(&r).replace(from.as_str(), to)))
 }
@@ -170,7 +170,7 @@ fn seq_len(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
 
 fn list_push(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
     let (Value::List(target), Some(v)) = (&r, one(&args)) else {
-        return err("TypeError.ArgumentType", "List.push takes one value");
+        return err(Kind::ArgumentType, "List.push takes one value");
     };
     target.borrow_mut().push(v.clone());
     Ok(Value::Nothing)
@@ -198,12 +198,12 @@ fn seq_to_list(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
 }
 
 fn seq_contains(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
-    let Some(v) = one(&args) else { return err("TypeError.ArgumentType", "contains takes one value") };
+    let Some(v) = one(&args) else { return err(Kind::ArgumentType, "contains takes one value") };
     Ok(Value::Bool(items_of(&r).iter().any(|x| equals(x, v))))
 }
 
 fn seq_index_of(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
-    let Some(v) = one(&args) else { return err("TypeError.ArgumentType", "index_of takes one value") };
+    let Some(v) = one(&args) else { return err(Kind::ArgumentType, "index_of takes one value") };
     Ok(Value::num(items_of(&r).iter().position(|x| equals(x, v)).map_or(-1.0, |i| i as f64)))
 }
 
@@ -215,14 +215,14 @@ fn seq_sum(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
         .iter()
         .try_fold(0.0, |acc, v| match v {
             Value::Number(n, _) => Ok(acc + n),
-            v => err("TypeError.OperandType", format!("cannot sum {}", v.type_name())),
+            v => err(Kind::OperandType, format!("cannot sum {}", v.type_name())),
         })
         .map(Value::num)
 }
 
 fn seq_join(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
     let [(None, Value::Str(sep))] = args.as_slice() else {
-        return err("TypeError.ArgumentType", "join takes one String");
+        return err(Kind::ArgumentType, "join takes one String");
     };
     Ok(Value::Str(items_of(&r).iter().map(|v| v.to_string()).collect::<Vec<_>>().join(sep)))
 }
@@ -230,8 +230,8 @@ fn seq_join(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
 fn func_arg<'a>(args: &'a Args, whose: &str, at: usize) -> Result<&'a Value> {
     match args.get(at) {
         Some((None, f @ (Value::Func(_) | Value::Builtin(_)))) => Ok(f),
-        Some((_, v)) => err("TypeError.ArgumentType", format!("{whose} expects a func, found {}", v.type_name())),
-        None => err("TypeError.ArityMismatch", format!("{whose} needs a func")),
+        Some((_, v)) => err(Kind::ArgumentType, format!("{whose} expects a func, found {}", v.type_name())),
+        None => err(Kind::ArityMismatch, format!("{whose} needs a func")),
     }
 }
 
@@ -248,7 +248,7 @@ fn seq_filter(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
         match it.call_func(&f, vec![v.clone()])? {
             Value::Bool(true) => out.push(v),
             Value::Bool(false) => {}
-            other => return err("TypeError.ArgumentType", format!("filter expects Bool, found {}", other.type_name())),
+            other => return err(Kind::ArgumentType, format!("filter expects Bool, found {}", other.type_name())),
         }
     }
     Ok(list(out))
@@ -256,7 +256,7 @@ fn seq_filter(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
 
 fn seq_reduce(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
     let Some((None, init)) = args.first() else {
-        return err("TypeError.ArityMismatch", "reduce takes an initial value and a func");
+        return err(Kind::ArityMismatch, "reduce takes an initial value and a func");
     };
     let f = func_arg(&args, "reduce", 1)?.clone();
     let mut acc = init.clone();
@@ -279,22 +279,22 @@ fn seq_sort(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
         })
     });
     match failed {
-        Some(msg) => err("TypeError.OperandType", msg),
+        Some(msg) => err(Kind::OperandType, msg),
         None => Ok(list(out)),
     }
 }
 
 fn seq_zip(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
-    let Some(other) = one(&args) else { return err("TypeError.ArgumentType", "zip takes one List") };
+    let Some(other) = one(&args) else { return err(Kind::ArgumentType, "zip takes one List") };
     if !matches!(other, Value::List(_) | Value::Tuple(_) | Value::Range(..)) {
-        return err("TypeError.ArgumentType", format!("zip expects List, found {}", other.type_name()));
+        return err(Kind::ArgumentType, format!("zip expects List, found {}", other.type_name()));
     }
     Ok(list(items_of(&r).into_iter().zip(items_of(other)).map(|(a, b)| Value::Tuple(vec![a, b])).collect()))
 }
 
 fn range_steps(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
     let ([(None, Value::Number(n, _))], Value::Range(a, b)) = (args.as_slice(), &r) else {
-        return err("TypeError.ArgumentType", "Range.steps takes one Number");
+        return err(Kind::ArgumentType, "Range.steps takes one Number");
     };
     // 端を含めて n 等分。Range は end を含まないので、..= で作ったものは b-1 が終端
     let steps = whole(*n, "steps")?;
@@ -325,7 +325,7 @@ fn dict_values(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
 
 fn dict_has(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
     let [(None, Value::Str(key))] = args.as_slice() else {
-        return err("TypeError.ArgumentType", "Dict.has takes one String");
+        return err(Kind::ArgumentType, "Dict.has takes one String");
     };
     Ok(Value::Bool(entries_of(&r).iter().any(|(k, _)| k == key)))
 }
@@ -338,7 +338,7 @@ fn dict_len(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
 }
 
 fn tl_place(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
-    let Value::Timeline(t) = &r else { return err("TypeError.ArgumentType", "place is a method of Timeline") };
+    let Value::Timeline(t) = &r else { return err(Kind::ArgumentType, "place is a method of Timeline") };
     let placed = it.make_placed("Timeline.place", &args)?;
     t.tracks.borrow_mut().push(placed);
     Ok(Value::Nothing)
@@ -351,7 +351,7 @@ fn reverse(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
     match &r {
         Value::Timeline(t) => Ok(Value::Timeline(Rc::new(t.reverse()))),
         Value::Motion(m) => Ok(Value::Motion(Rc::new(m.reverse()))),
-        v => err("TypeError.ArgumentType", format!("reverse is a method of Timeline and Motion, found {}", v.type_name())),
+        v => err(Kind::ArgumentType, format!("reverse is a method of Timeline and Motion, found {}", v.type_name())),
     }
 }
 
@@ -360,23 +360,23 @@ fn convert(r: &Value, tl: impl Fn(&Timeline) -> Timeline, mo: impl Fn(&Motion) -
     match r {
         Value::Timeline(t) => Ok(Value::Timeline(Rc::new(tl(t)))),
         Value::Motion(m) => Ok(Value::Motion(Rc::new(mo(m)))),
-        v => err("TypeError.ArgumentType", format!("{whose} is a method of Timeline and Motion, found {}", v.type_name())),
+        v => err(Kind::ArgumentType, format!("{whose} is a method of Timeline and Motion, found {}", v.type_name())),
     }
 }
 
 fn scale(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
     let [(None, Value::Number(k, _))] = args.as_slice() else {
-        return err("TypeError.ArgumentType", "scale takes one Number");
+        return err(Kind::ArgumentType, "scale takes one Number");
     };
     if *k <= 0.0 {
-        return err("ValueError.OutOfRange", format!("scale expects a positive Number, found {k}"));
+        return err(Kind::OutOfRange, format!("scale expects a positive Number, found {k}"));
     }
     convert(&r, |t| t.scaled(*k), |m| m.scaled(*k), "scale")
 }
 
 fn fit(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
     let [(None, Value::Duration(d))] = args.as_slice() else {
-        return err("TypeError.ArgumentType", "fit takes one Duration");
+        return err(Kind::ArgumentType, "fit takes one Duration");
     };
     convert(&r, |t| t.fit(*d), |m| m.fit(*d), "fit")
 }
@@ -387,29 +387,29 @@ fn trim(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
         let slot = match name.as_deref() {
             Some("from") => 0,
             Some("to") => 1,
-            Some(n) => return err("TypeError.ArgumentType", format!("trim has no argument \"{n}\"; it takes from and to")),
+            Some(n) => return err(Kind::ArgumentType, format!("trim has no argument \"{n}\"; it takes from and to")),
             None if i < 2 => i,
             None => return arity("trim", "at most 2 arguments", args.len()),
         };
         let Value::Duration(d) = v else {
-            return err("TypeError.ArgumentType", format!("trim expects Duration, found {}", v.type_name()));
+            return err(Kind::ArgumentType, format!("trim expects Duration, found {}", v.type_name()));
         };
         span[slot] = Some(*d);
     }
     let whole_length = match &r {
         Value::Timeline(t) => t.duration(),
         Value::Motion(m) => m.duration(),
-        v => return err("TypeError.ArgumentType", format!("trim is a method of Timeline and Motion, found {}", v.type_name())),
+        v => return err(Kind::ArgumentType, format!("trim is a method of Timeline and Motion, found {}", v.type_name())),
     };
     let (from, to) = (span[0].unwrap_or(0.0), span[1].unwrap_or(whole_length));
     if to < from {
-        return err("ValueError.OutOfRange", format!("trim: from is {from}s but to is {to}s"));
+        return err(Kind::OutOfRange, format!("trim: from is {from}s but to is {to}s"));
     }
     convert(&r, |t| t.trim(from, to), |m| m.trim(from, to), "trim")
 }
 
 fn motion_apply(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
-    let Value::Motion(m) = &r else { return err("TypeError.ArgumentType", "apply is a method of Motion") };
+    let Value::Motion(m) = &r else { return err(Kind::ArgumentType, "apply is a method of Motion") };
     let m = m.clone();
     it.apply_motion(&m, args)
 }

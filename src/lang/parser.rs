@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::lang::ast::{Arg, BinOp, DictKey, Expr, FieldDecl, FuncDef, ImportKind, ImportSource, MemberDecl, MotionDef, MotionRow, Param, Pattern, RowItem, Stmt, StmtKind, TypeAnn, TypeDecl};
-use crate::lang::error::{Result, err};
+use crate::lang::error::{Kind, Result, err};
 use crate::lang::lexer::{Tok, Token, lex};
 
 pub fn parse(src: &str) -> Result<Vec<Stmt>> {
@@ -61,7 +61,7 @@ impl Parser {
     }
 
     fn unexpected<T>(&self, expected: &str) -> Result<T> {
-        err("SyntaxError.UnexpectedToken", format!("line {}:{}: expected {expected} but found {:?}", self.line(), self.col(), self.peek()))
+        err(Kind::UnexpectedToken, format!("line {}:{}: expected {expected} but found {:?}", self.line(), self.col(), self.peek()))
     }
 
     fn ident(&mut self) -> Result<String> {
@@ -119,12 +119,12 @@ impl Parser {
             Tok::Export => {
                 self.next();
                 if *self.peek() == Tok::AliasKw {
-                    return err("SyntaxError.UnexpectedToken", format!("line {}: alias is a short name for this file only; it cannot be exported", self.line()));
+                    return err(Kind::UnexpectedToken, format!("line {}: alias is a short name for this file only; it cannot be exported", self.line()));
                 }
                 let inner = self.stmt()?;
                 match inner.kind {
                     StmtKind::Let(..) | StmtKind::TypeDecl(..) => Ok(StmtKind::Export(Box::new(inner))),
-                    _ => err("SyntaxError.UnexpectedToken", format!("line {}: export must be followed by let, func, struct or record", inner.line)),
+                    _ => err(Kind::UnexpectedToken, format!("line {}: export must be followed by let, func, struct or record", inner.line)),
                 }
             }
             Tok::Import => {
@@ -180,7 +180,7 @@ impl Parser {
                         Vec::new()
                     };
                     if anns.iter().any(|(n, _)| *n == name) {
-                        return err("SyntaxError.UnexpectedToken", format!("@{name} is written twice"));
+                        return err(Kind::UnexpectedToken, format!("@{name} is written twice"));
                     }
                     anns.push((name, args));
                     self.skip_newlines();
@@ -248,7 +248,7 @@ impl Parser {
                         values.push(self.expr(0)?);
                     }
                     if targets.len() != values.len() {
-                        return err("TypeError.ArityMismatch", format!("line {}:{}: {} targets but {} values", self.line(), self.col(), targets.len(), values.len()));
+                        return err(Kind::ArityMismatch, format!("line {}:{}: {} targets but {} values", self.line(), self.col(), targets.len(), values.len()));
                     }
                     return Ok(StmtKind::AssignMulti(targets, values));
                 }
@@ -261,7 +261,7 @@ impl Parser {
                     Expr::Ident(name) => Ok(StmtKind::AssignVar(name, value)),
                     Expr::Attr(target, attr) => Ok(StmtKind::AssignAttr(*target, attr, value)),
                     Expr::Index(target, index) => Ok(StmtKind::AssignIndex(*target, *index, value)),
-                    _ => err("SyntaxError.UnexpectedToken", format!("line {}:{}: cannot assign to this expression", self.line(), self.col())),
+                    _ => err(Kind::UnexpectedToken, format!("line {}:{}: cannot assign to this expression", self.line(), self.col())),
                 }
             }
         }
@@ -594,7 +594,7 @@ impl Parser {
                 Tok::LParen => "(".to_string(),
                 Tok::RParen => ")".to_string(),
                 Tok::Eof | Tok::Newline => return self.unexpected("\">\""),
-                other => return err("SyntaxError.UnexpectedToken", format!("line {}:{}: unexpected {other:?} in type", self.line(), self.col())),
+                other => return err(Kind::UnexpectedToken, format!("line {}:{}: unexpected {other:?} in type", self.line(), self.col())),
             };
             parts.push(part);
         }
@@ -627,17 +627,17 @@ impl Parser {
         for (ann, args) in &anns {
             match ann.as_str() {
                 "immutable" if !immutable => decl.immutable = true,
-                "immutable" => return err("SyntaxError.UnexpectedToken", "record is already immutable"),
+                "immutable" => return err(Kind::UnexpectedToken, "record is already immutable"),
                 "nocopy" => decl.nocopy = true,
                 "nodeepcopy" => decl.nodeepcopy = true,
                 "deprecated" => {
                     decl.deprecated = Some(match args.first() {
                         Some(Expr::Str(text)) => text.clone(),
-                        Some(_) => return err("TypeError.ArgumentType", "@deprecated takes a String"),
+                        Some(_) => return err(Kind::ArgumentType, "@deprecated takes a String"),
                         None => String::new(),
                     });
                 }
-                other => return err("NameError.UndefinedVariable", format!("unknown property @{other}")),
+                other => return err(Kind::UndefinedVariable, format!("unknown property @{other}")),
             }
         }
         self.expect(Tok::LBrace)?;
@@ -661,10 +661,10 @@ impl Parser {
                     };
                     let has_self = matches!(def.params.first().map(|p| &p.pattern), Some(Pattern::Name(n)) if n == "self" || n == "_");
                     if receiver && !has_self {
-                        return err("SyntaxError.UnexpectedToken", format!("method {member} needs self (or _) as its first parameter"));
+                        return err(Kind::UnexpectedToken, format!("method {member} needs self (or _) as its first parameter"));
                     }
                     if !receiver && has_self {
-                        return err("SyntaxError.UnexpectedToken", format!("func {member} must not take self; use method"));
+                        return err(Kind::UnexpectedToken, format!("func {member} must not take self; use method"));
                     }
                     decl.members.push(MemberDecl { name: member, private, receiver, def });
                 }
@@ -842,10 +842,10 @@ impl Parser {
             self.next();
             let (end, rel) = self.keyframe_time()?;
             if rel != relative {
-                return err("ValueError.DurationRequired", format!("line {}:{}: both ends of a keyframe range must be the same kind", self.line(), self.col()));
+                return err(Kind::DurationRequired, format!("line {}:{}: both ends of a keyframe range must be the same kind", self.line(), self.col()));
             }
             if end <= time {
-                return err("ValueError.OutOfRange", format!("line {}:{}: keyframe range must go forward", self.line(), self.col()));
+                return err(Kind::OutOfRange, format!("line {}:{}: keyframe range must go forward", self.line(), self.col()));
             }
             Some(end)
         } else {
@@ -862,7 +862,7 @@ impl Parser {
                 self.next();
                 let value = self.expr(0)?;
                 let (obj, path) = split_path(e).ok_or_else(|| {
-                    crate::lang::error::MophError::new("SyntaxError.UnexpectedToken", format!("line {}:{}: keyframe must assign to an attribute", self.line(), self.col()))
+                    crate::lang::error::MophError::new(Kind::UnexpectedToken, format!("line {}:{}: keyframe must assign to an attribute", self.line(), self.col()))
                 })?;
                 items.push(RowItem::Assign(obj, path, value));
             } else {
@@ -882,11 +882,11 @@ impl Parser {
             self.next();
             match name.as_str() {
                 "linear" | "ease" | "ease_in" | "ease_out" => ease = Some(name),
-                "ease_in_out" => return err("ValueError.OutOfRange", format!("line {}:{}: use :ease instead of :ease_in_out", self.line(), self.col())),
+                "ease_in_out" => return err(Kind::OutOfRange, format!("line {}:{}: use :ease instead of :ease_in_out", self.line(), self.col())),
                 "fade" | "fade_in" | "fade_out" => {
-                    return err("ValueError.OutOfRange", format!("line {}:{}: write opacity values, or use fade_in / fade_out from the animation library", self.line(), self.col()))
+                    return err(Kind::OutOfRange, format!("line {}:{}: write opacity values, or use fade_in / fade_out from the animation library", self.line(), self.col()))
                 }
-                _ => return err("ValueError.OutOfRange", format!("line {}:{}: unknown modifier :{name}", self.line(), self.col())),
+                _ => return err(Kind::OutOfRange, format!("line {}:{}: unknown modifier :{name}", self.line(), self.col())),
             }
         }
         match self.peek() {

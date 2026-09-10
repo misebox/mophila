@@ -6,7 +6,7 @@ use std::rc::Rc;
 use std::cell::Cell;
 
 use crate::lang::ast::{Arg, BinOp, DictKey, Expr, ImportKind, ImportSource, MotionDef, Pattern, RowItem, Stmt, StmtKind};
-use crate::lang::error::{MophError, Result, err};
+use crate::lang::error::{Kind, MophError, Result, err};
 use crate::lang::value::{Audio, Clip, Closure, Module, Motion, MotionRowVal, ObjRef, Object, Placed, Ratio, Record, Scopes, Timeline, TlAssign, TlKeyframe, Track, UserType, Value, new_scope};
 use crate::stdlib;
 
@@ -88,7 +88,7 @@ impl Interp {
     pub fn run(&mut self, stmts: &[Stmt]) -> Result<Value> {
         match self.run_block(stmts)? {
             Flow::Next(v) => Ok(v),
-            Flow::Return(_) => err("SyntaxError.UnexpectedToken", "return outside of a function"),
+            Flow::Return(_) => err(Kind::UnexpectedToken, "return outside of a function"),
         }
     }
 
@@ -130,7 +130,7 @@ impl Interp {
             }
             StmtKind::TypeDef(name, members) => {
                 if self.scopes.len() != 1 {
-                    return err("SyntaxError.UnexpectedToken", "type is only allowed at the top level");
+                    return err(Kind::UnexpectedToken, "type is only allowed at the top level");
                 }
                 check_free_name(name)?;
                 self.types.insert(name.clone(), members.clone());
@@ -143,11 +143,11 @@ impl Interp {
             }
             StmtKind::Import(ImportKind::Names { source, names }) => {
                 let Value::Module(module) = self.load_module(source)? else {
-                    return err("TypeError.ArgumentType", "import { ... } from needs a module, not a file asset");
+                    return err(Kind::ArgumentType, "import { ... } from needs a module, not a file asset");
                 };
                 for name in names {
                     let Some(v) = module.items.get(name) else {
-                        return err("NameError.UndefinedAttribute", format!("module {} does not export \"{name}\"", module.name));
+                        return err(Kind::UndefinedAttribute, format!("module {} does not export \"{name}\"", module.name));
                     };
                     self.scopes.first().expect("global scope").borrow_mut().insert(name.clone(), v.clone());
                 }
@@ -155,7 +155,7 @@ impl Interp {
             }
             StmtKind::Export(inner) => {
                 if self.scopes.len() != 1 {
-                    return err("SyntaxError.UnexpectedToken", "export is only allowed at the top level");
+                    return err(Kind::UnexpectedToken, "export is only allowed at the top level");
                 }
                 let result = self.exec(inner)?;
                 match &inner.kind {
@@ -167,7 +167,7 @@ impl Interp {
             }
             StmtKind::TypeDecl(decl) => {
                 if self.scopes.len() != 1 {
-                    return err("SyntaxError.UnexpectedToken", "struct and record are only allowed at the top level");
+                    return err(Kind::UnexpectedToken, "struct and record are only allowed at the top level");
                 }
                 check_free_name(&decl.name)?;
                 let ty = Rc::new(UserType { decl: decl.clone(), scopes: self.scopes.clone() });
@@ -199,11 +199,11 @@ impl Interp {
                         let i = whole(*i, "an index")?;
                         let at = if i < 0 { i + n } else { i };
                         if at < 0 || at >= n {
-                            return err("ValueError.OutOfRange", format!("index {i} out of range for length {n}"));
+                            return err(Kind::OutOfRange, format!("index {i} out of range for length {n}"));
                         }
                         items[at as usize] = v;
                     }
-                    _ => return err("TypeError.OperandType", format!("cannot assign into {} with {} index", target.type_name(), index.type_name())),
+                    _ => return err(Kind::OperandType, format!("cannot assign into {} with {} index", target.type_name(), index.type_name())),
                 }
                 Ok(Flow::Next(Value::Nothing))
             }
@@ -219,7 +219,7 @@ impl Interp {
             }
             StmtKind::Output(e) if self.output.is_some() => {
                 let _ = e;
-                err("SyntaxError.UnexpectedToken", "a file can have only one output")
+                err(Kind::UnexpectedToken, "a file can have only one output")
             }
             StmtKind::Output(e) => {
                 self.output = Some(self.eval_object(e)?);
@@ -256,18 +256,18 @@ impl Interp {
         if self.matches_type(v, name) {
             return Ok(());
         }
-        Err(self.wrong_type("TypeError.AttributeType", "value", name, v))
+        Err(self.wrong_type(Kind::AttributeType, "value", name, v))
     }
 
     /// 型が合わないときのエラー。決まった値しか取らない型なら、取れる値を並べる
-    fn wrong_type(&self, kind: &'static str, what: &str, expected: &str, v: &Value) -> MophError {
+    fn wrong_type(&self, kind: Kind, what: &str, expected: &str, v: &Value) -> MophError {
         // 名前は同じでも宣言が違うとき
         if v.type_name() == self.real_type_name(expected) {
             return MophError::new(kind, format!("{what} expects the {expected} declared here, but this one was declared somewhere else"));
         }
         match self.types.get(expected) {
             Some(values) if values.iter().all(|m| m.starts_with(':')) => {
-                MophError::new("ValueError.OutOfRange", format!("{what} is one of {}, found {v}", values.join(" | ")))
+                MophError::new(Kind::OutOfRange, format!("{what} is one of {}, found {v}", values.join(" | ")))
             }
             _ => MophError::new(kind, format!("{what} expects {expected}, found {}", v.type_name())),
         }
@@ -281,10 +281,10 @@ impl Interp {
             None => schema(&o.kind).and_then(|s| s.iter().find(|(n, _)| *n == attr)).map(|(_, t)| (*t).to_string()),
         };
         let Some(expected) = expected else {
-            return err("NameError.UndefinedAttribute", format!("{} has no attribute \"{attr}\"", o.kind));
+            return err(Kind::UndefinedAttribute, format!("{} has no attribute \"{attr}\"", o.kind));
         };
         if !self.matches_type(&value, &self.real_type_name(&expected)) {
-            return Err(self.wrong_type("TypeError.AttributeType", &format!("{}.{attr}", o.kind), &expected, &value));
+            return Err(self.wrong_type(Kind::AttributeType, &format!("{}.{attr}", o.kind), &expected, &value));
         }
         o.attrs.insert(attr.to_string(), value);
         Ok(())
@@ -293,7 +293,7 @@ impl Interp {
     /// 属性パスに値を書く。[position, x] なら position (Pos) の x だけを変える
     fn set_path(&self, obj: &ObjRef, path: &[String], value: Value) -> Result<()> {
         if path.is_empty() {
-            return err("NameError.UndefinedAttribute", "empty attribute path");
+            return err(Kind::UndefinedAttribute, "empty attribute path");
         }
         self.write_path(Value::Object(obj.clone()), path, value).map(|_| ())
     }
@@ -337,7 +337,7 @@ impl Interp {
             ImportSource::Std(name) => match stdlib::find(name) {
                 Some(stdlib::Lib::Native(module)) => Ok(Value::Module(Rc::new(module))),
                 Some(stdlib::Lib::Script(src)) => self.run_module(format!("std:{name}"), name, src, self.base_dir.clone()),
-                None => err("NameError.UndefinedVariable", format!("no module named \"{name}\"")),
+                None => err(Kind::UndefinedVariable, format!("no module named \"{name}\"")),
             },
             ImportSource::File(path) => self.import_file(path),
         }
@@ -360,7 +360,7 @@ impl Interp {
         let src = match self.sources.get(&key) {
             Some(src) => src.clone(),
             None => std::fs::read_to_string(&full)
-                .map_err(|e| MophError::new("NameError.UndefinedVariable", format!("cannot read \"{}\": {e}", full.display())))?,
+                .map_err(|e| MophError::new(Kind::UndefinedVariable, format!("cannot read \"{}\": {e}", full.display())))?,
         };
         let dir = full.parent().map(|d| d.to_path_buf()).unwrap_or_default();
         self.run_module(key, path, &src, dir)
@@ -373,7 +373,7 @@ impl Interp {
             return Ok(m.clone());
         }
         if self.loading.contains(&key) {
-            return err("NameError.UndefinedVariable", format!("circular import of \"{label}\""));
+            return err(Kind::UndefinedVariable, format!("circular import of \"{label}\""));
         }
         self.loading.push(key.clone());
         let stmts = crate::lang::parser::parse(src)?;
@@ -401,7 +401,7 @@ impl Interp {
 
     fn assign_var(&mut self, name: &str, v: Value) -> Result<()> {
         let Some(scope) = self.scopes.iter().rev().find(|s| s.borrow().contains_key(name)) else {
-            return err("NameError.AssignWithoutLet", format!("\"{name}\" is not defined; use \"let {name} = ...\""));
+            return err(Kind::AssignWithoutLet, format!("\"{name}\" is not defined; use \"let {name} = ...\""));
         };
         scope.borrow_mut().insert(name.to_string(), v);
         Ok(())
@@ -422,7 +422,7 @@ impl Interp {
                     false => self.assign(obj, updated),
                 }
             }
-            _ => err("SyntaxError.UnexpectedToken", "cannot assign to this expression"),
+            _ => err(Kind::UnexpectedToken, "cannot assign to this expression"),
         }
     }
 
@@ -432,7 +432,7 @@ impl Interp {
             Value::Tuple(items) => Ok(items),
             Value::Range(a, b) => Ok((a..b).map(|i| Value::num(i as f64)).collect()),
             Value::Dict(entries) => Ok(entries.borrow().iter().map(|(k, v)| Value::Tuple(vec![Value::Str(k.clone()), v.clone()])).collect()),
-            v => err("TypeError.ArgumentType", format!("cannot iterate over {}", v.type_name())),
+            v => err(Kind::ArgumentType, format!("cannot iterate over {}", v.type_name())),
         }
     }
 
@@ -444,11 +444,11 @@ impl Interp {
             }
             Pattern::List(pats) => {
                 let Value::List(items) = value else {
-                    return err("TypeError.ArgumentType", format!("cannot destructure {} into a list", value.type_name()));
+                    return err(Kind::ArgumentType, format!("cannot destructure {} into a list", value.type_name()));
                 };
                 let items = items.borrow().clone();
                 if items.len() != pats.len() {
-                    return err("TypeError.ArityMismatch", format!("expected a list of {}, found {}", pats.len(), items.len()));
+                    return err(Kind::ArityMismatch, format!("expected a list of {}, found {}", pats.len(), items.len()));
                 }
                 for (p, v) in pats.iter().zip(items) {
                     self.bind(p, v)?;
@@ -457,10 +457,10 @@ impl Interp {
             }
             Pattern::Tuple(pats) => {
                 let Value::Tuple(items) = value else {
-                    return err("TypeError.ArgumentType", format!("cannot destructure {} into a tuple", value.type_name()));
+                    return err(Kind::ArgumentType, format!("cannot destructure {} into a tuple", value.type_name()));
                 };
                 if items.len() != pats.len() {
-                    return err("TypeError.ArityMismatch", format!("expected a tuple of {}, found {}", pats.len(), items.len()));
+                    return err(Kind::ArityMismatch, format!("expected a tuple of {}, found {}", pats.len(), items.len()));
                 }
                 for (p, v) in pats.iter().zip(items) {
                     self.bind(p, v)?;
@@ -479,14 +479,14 @@ impl Interp {
             .or_else(|| Self::is_builtin_type(name).then(|| Value::BuiltinType(name.to_string())))
             .ok_or_else(|| {
                 let hint = if stdlib::find(name).is_some() { format!("; add \"import {name}\"") } else { String::new() };
-                MophError::new("NameError.UndefinedVariable", format!("\"{name}\" is not defined{hint}"))
+                MophError::new(Kind::UndefinedVariable, format!("\"{name}\" is not defined{hint}"))
             })
     }
 
     fn eval_object(&mut self, e: &Expr) -> Result<ObjRef> {
         match self.eval(e)? {
             Value::Object(o) => Ok(o),
-            v => err("TypeError.AttributeType", format!("expected an object, found {}", v.type_name())),
+            v => err(Kind::AttributeType, format!("expected an object, found {}", v.type_name())),
         }
     }
 
@@ -506,21 +506,21 @@ impl Interp {
                 }),
                 Value::Duration(v) => Ok(Value::Duration(-v)),
                 Value::Vector(x, y) => Ok(Value::Vector(-x, -y)),
-                v => err("TypeError.OperandType", format!("cannot negate {}", v.type_name())),
+                v => err(Kind::OperandType, format!("cannot negate {}", v.type_name())),
             },
             Expr::Not(inner) => match self.eval(inner)? {
                 Value::Bool(b) => Ok(Value::Bool(!b)),
-                v => err("TypeError.OperandType", format!("cannot apply not to {}", v.type_name())),
+                v => err(Kind::OperandType, format!("cannot apply not to {}", v.type_name())),
             },
             Expr::Binary(BinOp::And, l, r) => match self.eval(l)? {
                 Value::Bool(false) => Ok(Value::Bool(false)),
                 Value::Bool(true) => self.eval_bool(r).map(Value::Bool),
-                v => err("TypeError.OperandType", format!("cannot apply and to {}", v.type_name())),
+                v => err(Kind::OperandType, format!("cannot apply and to {}", v.type_name())),
             },
             Expr::Binary(BinOp::Or, l, r) => match self.eval(l)? {
                 Value::Bool(true) => Ok(Value::Bool(true)),
                 Value::Bool(false) => self.eval_bool(r).map(Value::Bool),
-                v => err("TypeError.OperandType", format!("cannot apply or to {}", v.type_name())),
+                v => err(Kind::OperandType, format!("cannot apply or to {}", v.type_name())),
             },
             // a < b <= c。真ん中は 1 度だけ評価し、偽が出たらそこで止める
             Expr::Compare(first, rest) => {
@@ -561,7 +561,7 @@ impl Interp {
                 let target = self.eval(target)?;
                 match self.attr(&target, attr) {
                     Some(found) => found.get(),
-                    None => err("NameError.UndefinedAttribute", no_attr(&target, attr)),
+                    None => err(Kind::UndefinedAttribute, no_attr(&target, attr)),
                 }
             }
             Expr::Call(callee, args) => self.call(callee, args),
@@ -609,7 +609,7 @@ impl Interp {
         match f {
             Value::Func(c) => self.apply(c, args.into_iter().map(|v| (None, v)).collect()),
             Value::Builtin(name) => stdlib::math::call(name, &args),
-            v => err("TypeError.ArgumentType", format!("{} is not a function", v.type_name())),
+            v => err(Kind::ArgumentType, format!("{} is not a function", v.type_name())),
         }
     }
 
@@ -618,7 +618,7 @@ impl Interp {
         let mut out = Vec::with_capacity(args.len());
         for a in args {
             match &a.name {
-                Some(n) => return err("TypeError.ArgumentType", format!("{kind} takes no named argument \"{n}\"")),
+                Some(n) => return err(Kind::ArgumentType, format!("{kind} takes no named argument \"{n}\"")),
                 None => out.push(self.eval(&a.value)?),
             }
         }
@@ -633,20 +633,20 @@ impl Interp {
             let name = match &arg.name {
                 Some(n) => {
                     if !fields.contains(&n.as_str()) {
-                        return err("NameError.UndefinedAttribute", format!("{kind} has no field \"{n}\""));
+                        return err(Kind::UndefinedAttribute, format!("{kind} has no field \"{n}\""));
                     }
                     n.clone()
                 }
                 None => {
                     let Some(f) = fields.get(next) else {
-                        return err("TypeError.ArityMismatch", format!("{kind} takes {} fields, more were given", fields.len()));
+                        return err(Kind::ArityMismatch, format!("{kind} takes {} fields, more were given", fields.len()));
                     };
                     next += 1;
                     (*f).to_string()
                 }
             };
             if map.insert(name.clone(), v).is_some() {
-                return err("TypeError.ArgumentType", format!("{kind}.{name} is given twice"));
+                return err(Kind::ArgumentType, format!("{kind}.{name} is given twice"));
             }
         }
         Ok(map)
@@ -657,24 +657,24 @@ impl Interp {
                 
                 let track = match args.first() {
                     Some((None, Value::Timeline(tl))) if tl.needs_duration() => {
-                        return err("ValueError.DurationRequired", "a timeline with relative (0..1) keyframes needs duration; set tl.duration = 8s");
+                        return err(Kind::DurationRequired, "a timeline with relative (0..1) keyframes needs duration; set tl.duration = 8s");
                     }
                     Some((None, Value::Timeline(tl))) => Track::Timeline(tl.clone()),
                     Some((None, Value::Object(o))) if o.borrow().kind == "View" => Track::Container(o.clone()),
                     Some((None, Value::Object(o))) if o.borrow().kind == "Subtitle" => {
                         if !o.borrow().attrs.contains_key("duration") {
-                            return err("ValueError.DurationRequired", "a Subtitle needs duration before it is placed");
+                            return err(Kind::DurationRequired, "a Subtitle needs duration before it is placed");
                         }
                         Track::Subtitle(o.clone())
                     }
                     Some((None, Value::Audio(a))) => Track::Audio(a.clone(), Clip { cut: None, volume: 1.0, looping: false }),
-                    Some((None, Value::Motion(_))) => return err("TypeError.NotPlaceable", "Motion cannot be placed; apply it to make a Timeline"),
-                    Some((None, v)) => return err("TypeError.ArgumentType", format!("{who} expects Timeline, View, Audio or Subtitle, found {}", v.type_name())),
-                    _ => return err("TypeError.ArgumentType", format!("{who} expects a Timeline, View, Audio or Subtitle as the first argument")),
+                    Some((None, Value::Motion(_))) => return err(Kind::NotPlaceable, "Motion cannot be placed; apply it to make a Timeline"),
+                    Some((None, v)) => return err(Kind::ArgumentType, format!("{who} expects Timeline, View, Audio or Subtitle, found {}", v.type_name())),
+                    _ => return err(Kind::ArgumentType, format!("{who} expects a Timeline, View, Audio or Subtitle as the first argument")),
                 };
                 let mut placed = Placed { track, at: 0.0, fade_in: 0.0, fade_out: 0.0 };
                 for (name, v) in &args[1..] {
-                    let arg = name.as_deref().ok_or_else(|| MophError::new("TypeError.ArgumentType", format!("{who} takes one positional argument")))?;
+                    let arg = name.as_deref().ok_or_else(|| MophError::new(Kind::ArgumentType, format!("{who} takes one positional argument")))?;
                     // 音声だけの引数
                     if let Track::Audio(_, clip) = &mut placed.track {
                         match (arg, v) {
@@ -696,7 +696,7 @@ impl Interp {
                                     "loop" => "Bool",
                                     _ => "Duration",
                                 };
-                                return err("TypeError.ArgumentType", format!("{who} {arg} expects {expected}, found {}", v.type_name()));
+                                return err(Kind::ArgumentType, format!("{who} {arg} expects {expected}, found {}", v.type_name()));
                             }
                             _ => {}
                         }
@@ -704,14 +704,14 @@ impl Interp {
                     let slot = match arg {
                         "at" => &mut placed.at,
                         "fadeIn" | "fadeOut" if matches!(placed.track, Track::Subtitle(_)) => {
-                            return err("TypeError.ArgumentType", format!("{who}: a Subtitle has no {arg}; set its duration"));
+                            return err(Kind::ArgumentType, format!("{who}: a Subtitle has no {arg}; set its duration"));
                         }
                         "fadeIn" => &mut placed.fade_in,
                         "fadeOut" => &mut placed.fade_out,
-                        other => return err("TypeError.ArgumentType", format!("{who} has no argument \"{other}\"")),
+                        other => return err(Kind::ArgumentType, format!("{who} has no argument \"{other}\"")),
                     };
                     let Value::Duration(d) = v else {
-                        return err("TypeError.ArgumentType", format!("{who} {arg} expects Duration, found {}", v.type_name()));
+                        return err(Kind::ArgumentType, format!("{who} {arg} expects Duration, found {}", v.type_name()));
                     };
                     *slot = *d;
                 }
@@ -722,17 +722,17 @@ impl Interp {
     fn cannot_construct(&self, kind: &str) -> Result<Value> {
         let Some(t) = crate::docs::TYPES.iter().find(|t| t.name == kind) else {
             return match self.types.contains_key(kind) {
-                true => err("TypeError.ArgumentType", format!("{kind} is a union of types, so it cannot be built")),
-                false => err("NameError.UndefinedVariable", format!("type \"{kind}\" is not defined")),
+                true => err(Kind::ArgumentType, format!("{kind} is a union of types, so it cannot be built")),
+                false => err(Kind::UndefinedVariable, format!("type \"{kind}\" is not defined")),
             };
         };
         if !t.members.is_empty() {
-            return err("TypeError.ArgumentType", format!("{kind} is a union of {}, so it cannot be built", t.members.join(" | ")));
+            return err(Kind::ArgumentType, format!("{kind} is a union of {}, so it cannot be built", t.members.join(" | ")));
         }
         match (t.make.lines().next().filter(|f| !f.is_empty()), t.values.first()) {
-            (Some(form), _) => err("TypeError.ArgumentType", format!("{kind} cannot be called; write it like {form}")),
-            (_, Some((v, _))) => err("TypeError.ArgumentType", format!("{kind} only takes fixed values; write one like {v}")),
-            _ => err("TypeError.ArgumentType", format!("{kind} cannot be called")),
+            (Some(form), _) => err(Kind::ArgumentType, format!("{kind} cannot be called; write it like {form}")),
+            (_, Some((v, _))) => err(Kind::ArgumentType, format!("{kind} only takes fixed values; write one like {v}")),
+            _ => err(Kind::ArgumentType, format!("{kind} cannot be called")),
         }
     }
 
@@ -742,7 +742,7 @@ impl Interp {
         self.check_type(v, "Anchor")?;
         match v {
             Value::Symbol(a) => Ok(a.clone()),
-            v => Err(self.wrong_type("TypeError.ArgumentType", "Pos.anchor", "Anchor", v)),
+            v => Err(self.wrong_type(Kind::ArgumentType, "Pos.anchor", "Anchor", v)),
         }
     }
 
@@ -753,7 +753,7 @@ impl Interp {
                 let map = self.resolve_args(kind, &["x", "y"], args)?;
                 match (map.get("x"), map.get("y")) {
                     (Some(Value::Number(x, _)), Some(Value::Number(y, _))) => Ok(Value::Vector(*x, *y)),
-                    _ => err("TypeError.ArgumentType", "Vector needs x and y (Number)"),
+                    _ => err(Kind::ArgumentType, "Vector needs x and y (Number)"),
                 }
             }
             "Pos" => {
@@ -769,7 +769,7 @@ impl Interp {
                 let anchor = self.anchor_of(map.get("anchor"))?;
                 match (map.get("x"), map.get("y")) {
                     (Some(Value::Number(x, _)), Some(Value::Number(y, _))) => Ok(Value::Apos(anchor, *x, *y)),
-                    _ => err("TypeError.ArgumentType", "Pos needs x and y (Number)"),
+                    _ => err(Kind::ArgumentType, "Pos needs x and y (Number)"),
                 }
             }
             "Color" => {
@@ -777,9 +777,9 @@ impl Interp {
                 let ch = |name: &str, scale: f64, default: Option<f64>| -> Result<f32> {
                     match (map.get(name), default) {
                         (Some(Value::Number(v, _)), _) => Ok((v / scale) as f32),
-                        (Some(v), _) => err("TypeError.ArgumentType", format!("Color.{name} expects Number, found {}", v.type_name())),
+                        (Some(v), _) => err(Kind::ArgumentType, format!("Color.{name} expects Number, found {}", v.type_name())),
                         (None, Some(d)) => Ok(d as f32),
-                        (None, None) => err("TypeError.ArityMismatch", format!("Color needs {name}")),
+                        (None, None) => err(Kind::ArityMismatch, format!("Color needs {name}")),
                     }
                 };
                 Ok(Value::Color([ch("r", 255.0, None)?, ch("g", 255.0, None)?, ch("b", 255.0, None)?, ch("a", 1.0, Some(1.0))?]))
@@ -790,7 +790,7 @@ impl Interp {
                 let mut items: Vec<(String, Value)> = Vec::new();
                 for a in args {
                     let Some(key) = a.name.clone() else {
-                        return err("TypeError.ArgumentType", "Dict takes named arguments, as Dict(k = v); write { \"k\": v } for a key that is not a name");
+                        return err(Kind::ArgumentType, "Dict takes named arguments, as Dict(k = v); write { \"k\": v } for a key that is not a name");
                     };
                     let v = self.eval(&a.value)?;
                     match items.iter_mut().find(|(k, _)| *k == key) {
@@ -806,7 +806,7 @@ impl Interp {
                     (Some(Value::Number(a, _)), Some(Value::Number(b, _))) => {
                         Ok(Value::Range(whole(*a, "Range.start")?, whole(*b, "Range.end")?))
                     }
-                    _ => err("TypeError.ArgumentType", "Range needs start and end (Number)"),
+                    _ => err(Kind::ArgumentType, "Range needs start and end (Number)"),
                 }
             }
             "Timeline" => {
@@ -814,7 +814,7 @@ impl Interp {
                 let duration = match map.get("duration") {
                     Some(Value::Duration(d)) => Some(*d),
                     None => None,
-                    Some(v) => return Err(self.wrong_type("TypeError.ArgumentType", "Timeline.duration", "Duration", v)),
+                    Some(v) => return Err(self.wrong_type(Kind::ArgumentType, "Timeline.duration", "Duration", v)),
                 };
                 Ok(Value::Timeline(Rc::new(Timeline::empty(duration))))
             }
@@ -826,16 +826,16 @@ impl Interp {
                     for (name, v) in map {
                         let expected = sch.iter().find(|(n, _)| *n == name).map(|(_, t)| *t).expect("field exists");
                         if !self.matches_type(&v, expected) {
-                            return Err(self.wrong_type("TypeError.ArgumentType", &format!("{kind}.{name}"), expected, &v));
+                            return Err(self.wrong_type(Kind::ArgumentType, &format!("{kind}.{name}"), expected, &v));
                         }
                         // シェーダは関数の中身を GPU 向けに変換するので、書いた func しか受け取れない
                         if kind == "Shader" && name == "color" && !matches!(v, Value::Func(_)) {
-                            return err("TypeError.ArgumentType", "Shader.color expects a func written in the script, like func (x, y, t) { ... }");
+                            return err(Kind::ArgumentType, "Shader.color expects a func written in the script, like func (x, y, t) { ... }");
                         }
                         if kind == "TextArea" && name == "font" {
                             if let Value::Str(family) = &v {
                                 if !self.cache_mut().family_exists(family) {
-                                    return err("RuntimeError.FontNotFound", format!("font \"{family}\" not found"));
+                                    return err(Kind::FontNotFound, format!("font \"{family}\" not found"));
                                 }
                             }
                         }
@@ -874,7 +874,7 @@ impl Interp {
             return Ok(None);
         };
         if member.private && !self.is_inside(&ty.decl.name) {
-            return err("NameError.UndefinedAttribute", format!("{}.{name} is private", ty.decl.name));
+            return err(Kind::UndefinedAttribute, format!("{}.{name} is private", ty.decl.name));
         }
         let mut values: Vec<(Option<String>, Value)> = Vec::new();
         if let Some(v) = self_value {
@@ -907,7 +907,7 @@ impl Interp {
         let Some(ty) = decl else { return Ok(()) };
         match ty.decl.fields.iter().find(|f| f.name == field) {
             Some(f) if f.private && !self.is_inside(&ty.decl.name) => {
-                err("NameError.UndefinedAttribute", format!("{}.{field} is private", ty.decl.name))
+                err(Kind::UndefinedAttribute, format!("{}.{field} is private", ty.decl.name))
             }
             _ => Ok(()),
         }
@@ -920,7 +920,7 @@ impl Interp {
             return Ok(None);
         }
         if ty.decl.nocopy {
-            return err("NameError.UndefinedAttribute", format!("{} is @nocopy, so it cannot be copied", ty.decl.name));
+            return err(Kind::UndefinedAttribute, format!("{} is @nocopy, so it cannot be copied", ty.decl.name));
         }
         match (receiver, name) {
             (Value::Record(r), "copy") => {
@@ -930,10 +930,10 @@ impl Interp {
             }
             (Value::Object(o), "shallowCopy") | (Value::Object(o), "deepCopy") => {
                 if name == "deepCopy" && ty.decl.nodeepcopy {
-                    return err("NameError.UndefinedAttribute", format!("{} is @nodeepcopy, so it has no deepCopy", ty.decl.name));
+                    return err(Kind::UndefinedAttribute, format!("{} is @nodeepcopy, so it has no deepCopy", ty.decl.name));
                 }
                 if !args.is_empty() {
-                    return err("TypeError.ArityMismatch", format!("{name} takes no arguments"));
+                    return err(Kind::ArityMismatch, format!("{name} takes no arguments"));
                 }
                 let src = o.borrow();
                 let attrs = if name == "deepCopy" { src.attrs.iter().map(|(k, v)| (k.clone(), deep_copy(v))).collect() } else { src.attrs.clone() };
@@ -962,7 +962,7 @@ impl Interp {
         let decl = ty.decl.clone();
         let open: Vec<&str> = decl.fields.iter().filter(|f| !f.private).map(|f| f.name.as_str()).collect();
         if let Some(f) = decl.fields.iter().find(|f| f.private && f.default.is_none()) {
-            return err("TypeError.ArityMismatch", format!("{}.{} is private and has no default, so write \"func new\"", decl.name, f.name));
+            return err(Kind::ArityMismatch, format!("{}.{} is private and has no default, so write \"func new\"", decl.name, f.name));
         }
         let mut given: HashMap<String, Value> = HashMap::new();
         let mut next = 0;
@@ -970,7 +970,7 @@ impl Interp {
             let field = match name {
                 Some(n) => {
                     if !open.contains(&n.as_str()) {
-                        return err("NameError.UndefinedAttribute", format!("{} has no field \"{n}\"", decl.name));
+                        return err(Kind::UndefinedAttribute, format!("{} has no field \"{n}\"", decl.name));
                     }
                     n
                 }
@@ -979,11 +979,11 @@ impl Interp {
                         next += 1;
                         (*f).to_string()
                     }
-                    None => return err("TypeError.ArityMismatch", format!("{} takes {} fields, more were given", decl.name, open.len())),
+                    None => return err(Kind::ArityMismatch, format!("{} takes {} fields, more were given", decl.name, open.len())),
                 },
             };
             if given.insert(field.clone(), v).is_some() {
-                return err("TypeError.ArgumentType", format!("{}.{field} is given twice", decl.name));
+                return err(Kind::ArgumentType, format!("{}.{field} is given twice", decl.name));
             }
         }
         let mut fields: Vec<(String, Value)> = Vec::new();
@@ -992,7 +992,7 @@ impl Interp {
                 Some(v) => v,
                 None => match &f.default {
                     Some(d) => self.eval(d)?,
-                    None => return err("TypeError.ArityMismatch", format!("{}.{} is not given", decl.name, f.name)),
+                    None => return err(Kind::ArityMismatch, format!("{}.{} is not given", decl.name, f.name)),
                 },
             };
             self.check_type(&v, &f.ann.name)?;
@@ -1033,7 +1033,7 @@ impl Interp {
             count >= required && count <= m.def.params.len()
         };
         let Some(member) = news.iter().find(fits).or_else(|| news.first()) else {
-            return err("TypeError.ArityMismatch", format!("no new of {} takes {count} arguments", ty.decl.name));
+            return err(Kind::ArityMismatch, format!("no new of {} takes {count} arguments", ty.decl.name));
         };
         let closure = Closure { def: member.def.clone(), scopes: ty.scopes.clone() };
         self.constructing.push(ty.decl.name.clone());
@@ -1067,7 +1067,7 @@ impl Interp {
                 }
                 if let Value::Module(m) = &receiver {
                     let Some(item) = m.items.get(method).cloned() else {
-                        return err("NameError.UndefinedAttribute", format!("module {} has no item \"{method}\"", m.name));
+                        return err(Kind::UndefinedAttribute, format!("module {} has no item \"{method}\"", m.name));
                     };
                     // mod.TypeName(...) は、その型を作る
                     if let Value::Type(ty) = &item {
@@ -1082,7 +1082,7 @@ impl Interp {
                     return match item {
                         Value::Builtin(name) => call_builtin(name, values),
                         Value::Func(closure) => self.apply(&closure, values.into_iter().map(|v| (None, v)).collect()),
-                        v => err("TypeError.ArgumentType", format!("{} is not callable", v.type_name())),
+                        v => err(Kind::ArgumentType, format!("{} is not callable", v.type_name())),
                     };
                 }
                 let values = args.iter().map(|a| self.eval(&a.value).map(|v| (a.name.clone(), v))).collect::<Result<Vec<_>>>()?;
@@ -1092,7 +1092,7 @@ impl Interp {
                 }
                 match crate::lang::method::find(&receiver.type_name(), method) {
                     Some(m) => (m.call)(self, receiver, values),
-                    None => err("NameError.UndefinedAttribute", format!("{} has no method \"{method}\"", receiver.type_name())),
+                    None => err(Kind::UndefinedAttribute, format!("{} has no method \"{method}\"", receiver.type_name())),
                 }
             }
             callee => match self.eval(callee)? {
@@ -1106,7 +1106,7 @@ impl Interp {
                     let values = args.iter().map(|a| self.eval(&a.value)).collect::<Result<Vec<_>>>()?;
                     call_builtin(name, values)
                 }
-                v => err("TypeError.ArgumentType", format!("{} is not callable", v.type_name())),
+                v => err(Kind::ArgumentType, format!("{} is not callable", v.type_name())),
             },
         }
     }
@@ -1115,14 +1115,14 @@ impl Interp {
         let is_assign = def.rows.iter().flat_map(|r| &r.items).any(|i| matches!(i, RowItem::Assign(..)));
         let is_value = def.rows.iter().flat_map(|r| &r.items).any(|i| matches!(i, RowItem::Value(_)));
         if is_assign && is_value {
-            return err("SyntaxError.UnexpectedToken", "a motion cannot mix assignments and values");
+            return err(Kind::UnexpectedToken, "a motion cannot mix assignments and values");
         }
         let relative = def.rows.first().is_some_and(|r| r.relative);
         if def.rows.iter().any(|r| r.relative != relative) {
-            return err("ValueError.DurationRequired", "keyframe times must be all Duration or all Number (0..1)");
+            return err(Kind::DurationRequired, "keyframe times must be all Duration or all Number (0..1)");
         }
         if relative && def.rows.iter().any(|r| !(0.0..=1.0).contains(&r.time)) {
-            return err("ValueError.OutOfRange", "relative keyframe time must be within 0..1");
+            return err(Kind::OutOfRange, "relative keyframe time must be within 0..1");
         }
         // 対象と属性パスを列挙した形 → Timeline
         if let Some((target_expr, paths)) = &def.target {
@@ -1130,7 +1130,7 @@ impl Interp {
             let mut keyframes = Vec::new();
             for row in &def.rows {
                 if row.items.len() > paths.len() {
-                    return err("TypeError.ArityMismatch", format!("keyframe at {}s has {} values but {} attributes are listed", row.time, row.items.len(), paths.len()));
+                    return err(Kind::ArityMismatch, format!("keyframe at {}s has {} values but {} attributes are listed", row.time, row.items.len(), paths.len()));
                 }
                 let assigns = row
                     .items
@@ -1154,7 +1154,7 @@ impl Interp {
                 for item in &row.items {
                     let RowItem::Assign(obj, path, e) = item else { unreachable!() };
                     if path.is_empty() {
-                        return err("SyntaxError.UnexpectedToken", "keyframe must assign to an attribute");
+                        return err(Kind::UnexpectedToken, "keyframe must assign to an attribute");
                     }
                     let target = self.eval_object(obj)?;
                     assigns.push(TlAssign { target, path: path.clone(), expr: e.clone(), scopes: self.scopes.clone() });
@@ -1165,7 +1165,7 @@ impl Interp {
         }
         // 値の表 → Motion。params[0] は行の時刻、以降は左の列
         if def.rows.iter().any(|r| r.end.is_some()) {
-            return err("SyntaxError.UnexpectedToken", "a keyframe range (0..1:) needs a target; use it with assignments or motion target [...]");
+            return err(Kind::UnexpectedToken, "a keyframe range (0..1:) needs a target; use it with assignments or motion target [...]");
         }
         let mut rows = Vec::new();
         for row in &def.rows {
@@ -1195,7 +1195,7 @@ impl Interp {
     pub(crate) fn apply_motion(&mut self, motion: &Motion, args: Vec<(Option<String>, Value)>) -> Result<Value> {
         let [(None, Value::Object(target)), (None, Value::Func(f))] = args.as_slice() else {
             // 中で属性に代入する必要があるので、math の関数は渡せない
-            return err("TypeError.ArgumentType", "Motion.apply expects a target and a func written in the script");
+            return err(Kind::ArgumentType, "Motion.apply expects a target and a func written in the script");
         };
         let mut keyframes = Vec::new();
         for row in &motion.rows {
@@ -1220,7 +1220,7 @@ impl Interp {
             ("View", "place") => match args.first() {
                 Some((None, Value::Object(child))) if child.borrow().kind == "View" => {
                     if Rc::ptr_eq(child, obj) {
-                        return err("ValueError.OutOfRange", "a View cannot be placed in itself");
+                        return err(Kind::OutOfRange, "a View cannot be placed in itself");
                     }
                     // 置き先での位置と大きさは子 View の属性として持つ
                     for (name, v) in &args[1..] {
@@ -1228,13 +1228,13 @@ impl Interp {
                             Some("at") => self.set_attr(child, "position", v.clone())?,
                             Some("w") => self.set_attr(child, "w", v.clone())?,
                             Some("h") => self.set_attr(child, "h", v.clone())?,
-                            Some(other) => return err("TypeError.ArgumentType", format!("View.place has no argument \"{other}\"")),
-                            None => return err("TypeError.ArgumentType", "View.place takes one positional argument"),
+                            Some(other) => return err(Kind::ArgumentType, format!("View.place has no argument \"{other}\"")),
+                            None => return err(Kind::ArgumentType, "View.place takes one positional argument"),
                         }
                     }
                     let c = child.borrow();
                     if !c.attrs.contains_key("position") || !(c.attrs.contains_key("w") || c.attrs.contains_key("h")) {
-                        return err("TypeError.ArityMismatch", "placing a View needs at: and w: or h:");
+                        return err(Kind::ArityMismatch, "placing a View needs at: and w: or h:");
                     }
                     drop(c);
                     obj.borrow_mut().children.push(child.clone());
@@ -1245,28 +1245,28 @@ impl Interp {
                     if let Some((name, _)) = args.get(1) {
                         let what = name.clone().unwrap_or_else(|| "a second value".to_string());
                         let kind = child.borrow().kind.clone();
-                        return err("TypeError.ArgumentType", format!("View.place has no argument \"{what}\" for a {kind}; set its position"));
+                        return err(Kind::ArgumentType, format!("View.place has no argument \"{what}\" for a {kind}; set its position"));
                     }
                     obj.borrow_mut().children.push(child.clone());
                     Ok(Value::Nothing)
                 }
-                Some((None, Value::Motion(_))) => err("TypeError.NotPlaceable", "Motion cannot be placed; apply it to make a Timeline"),
-                Some((None, v)) => err("TypeError.ArgumentType", format!("View.place expects Placeable, found {}", v.type_name())),
-                _ => err("TypeError.ArgumentType", "View.place expects a Shape as the first argument"),
+                Some((None, Value::Motion(_))) => err(Kind::NotPlaceable, "Motion cannot be placed; apply it to make a Timeline"),
+                Some((None, v)) => err(Kind::ArgumentType, format!("View.place expects Placeable, found {}", v.type_name())),
+                _ => err(Kind::ArgumentType, "View.place expects a Shape as the first argument"),
             },
             ("View", "addTrack") => {
                 let placed = self.make_placed(&format!("{kind}.{method}"), &args)?;
                 obj.borrow_mut().tracks.push(placed);
                 Ok(Value::Nothing)
             }
-            _ => err("NameError.UndefinedAttribute", format!("{kind} has no method \"{method}\"")),
+            _ => err(Kind::UndefinedAttribute, format!("{kind} has no method \"{method}\"")),
         }
     }
 
     fn eval_bool(&mut self, e: &Expr) -> Result<bool> {
         match self.eval(e)? {
             Value::Bool(b) => Ok(b),
-            v => err("TypeError.OperandType", format!("expected Bool, found {}", v.type_name())),
+            v => err(Kind::OperandType, format!("expected Bool, found {}", v.type_name())),
         }
     }
 
@@ -1313,27 +1313,27 @@ impl Interp {
                     Some(v) => v,
                     None => match &param.default {
                         Some(d) => self.eval(d)?,
-                        None => return err("TypeError.ArityMismatch", format!("{} is not given", crate::lang::ast::pattern_text(&param.pattern))),
+                        None => return err(Kind::ArityMismatch, format!("{} is not given", crate::lang::ast::pattern_text(&param.pattern))),
                     },
                 };
                 // 型を書いてあれば、渡された値を確かめる
                 if let Some(ann) = &param.ann {
                     if !self.matches_type(&value, &self.real_type_name(&ann.name)) {
-                        return Err(self.wrong_type("TypeError.ArgumentType", &crate::lang::ast::pattern_text(&param.pattern), &ann.name, &value));
+                        return Err(self.wrong_type(Kind::ArgumentType, &crate::lang::ast::pattern_text(&param.pattern), &ann.name, &value));
                     }
                 }
                 self.bind(&param.pattern, value)?;
             }
             if positional.next().is_some() {
-                return err("TypeError.ArityMismatch", format!("function takes {} arguments, more were given", params.len()));
+                return err(Kind::ArityMismatch, format!("function takes {} arguments, more were given", params.len()));
             }
             if let Some(name) = named.keys().next() {
-                return err("TypeError.ArgumentType", format!("unknown named argument \"{name}\""));
+                return err(Kind::ArgumentType, format!("unknown named argument \"{name}\""));
             }
             let out = self.run_block(&closure.def.body).map(Flow::value)?;
             if let Some(ann) = &closure.def.returns {
                 if !self.matches_type(&out, &self.real_type_name(&ann.name)) {
-                    return Err(self.wrong_type("TypeError.ArgumentType", "the return value", &ann.name, &out));
+                    return Err(self.wrong_type(Kind::ArgumentType, "the return value", &ann.name, &out));
                 }
             }
             Ok(out)
@@ -1520,24 +1520,24 @@ pub(crate) fn format(template: &str, values: &[Value]) -> Result<Value> {
     while let Some(start) = rest.find('{') {
         out.push_str(&rest[..start]);
         let Some(end) = rest[start..].find('}') else {
-            return err("ValueError.OutOfRange", format!("unterminated {{ in {template:?}"));
+            return err(Kind::OutOfRange, format!("unterminated {{ in {template:?}"));
         };
         let name = &rest[start + 1..start + end];
         match &by_name {
             Some(entries) => match entries.iter().find(|(k, _)| k == name) {
                 Some((_, v)) => out.push_str(&v.to_string()),
-                None => return err("NameError.UndefinedAttribute", format!("format has no key \"{name}\"")),
+                None => return err(Kind::UndefinedAttribute, format!("format has no key \"{name}\"")),
             },
             None => match values.get(index) {
                 Some(v) => out.push_str(&v.to_string()),
-                None => return err("TypeError.ArityMismatch", format!("format expects {} arguments, {} given", index + 1, values.len())),
+                None => return err(Kind::ArityMismatch, format!("format expects {} arguments, {} given", index + 1, values.len())),
             },
         }
         index += 1;
         rest = &rest[start + end + 1..];
     }
     if by_name.is_none() && index < values.len() {
-        return err("TypeError.ArityMismatch", format!("format expects {index} arguments, {} given", values.len()));
+        return err(Kind::ArityMismatch, format!("format expects {index} arguments, {} given", values.len()));
     }
     out.push_str(rest);
     Ok(Value::Str(out))
@@ -1555,14 +1555,14 @@ fn collect_names(pat: &Pattern, out: &mut Vec<String>) {
 /// 音声ファイルを読む。長さは ffprobe で調べる (ffmpeg に付属)
 fn load_audio(name: &str, path: std::path::PathBuf) -> Result<Audio> {
     if !path.is_file() {
-        return err("NameError.UndefinedVariable", format!("cannot read \"{name}\": {} is not a file", path.display()));
+        return err(Kind::UndefinedVariable, format!("cannot read \"{name}\": {} is not a file", path.display()));
     }
     // 音声ストリームがあることと、全体の長さを調べる。出力は "audio" の行 (ストリームごと) と長さの行
     let output = std::process::Command::new("ffprobe")
         .args(["-v", "error", "-select_streams", "a", "-show_entries", "stream=codec_type:format=duration", "-of", "default=nw=1:nk=1"])
         .arg(&path)
         .output()
-        .map_err(|e| MophError::new("RuntimeError.AudioUnreadable", format!("ffprobe is needed to read \"{name}\": {e}")))?;
+        .map_err(|e| MophError::new(Kind::AudioUnreadable, format!("ffprobe is needed to read \"{name}\": {e}")))?;
     let text = String::from_utf8_lossy(&output.stdout);
     let lines: Vec<&str> = text.lines().map(str::trim).collect();
     let length = match lines.as_slice() {
@@ -1570,7 +1570,7 @@ fn load_audio(name: &str, path: std::path::PathBuf) -> Result<Audio> {
         _ => None,
     };
     let Some(length) = length else {
-        return err("RuntimeError.AudioUnreadable", format!("\"{name}\" has no audio stream ffprobe can read {}", String::from_utf8_lossy(&output.stderr).trim()));
+        return err(Kind::AudioUnreadable, format!("\"{name}\" has no audio stream ffprobe can read {}", String::from_utf8_lossy(&output.stderr).trim()));
     };
     Ok(Audio { name: name.to_string(), path, length })
 }
@@ -1578,19 +1578,19 @@ fn load_audio(name: &str, path: std::path::PathBuf) -> Result<Audio> {
 fn index_value(target: &Value, index: &Value) -> Result<Value> {
     if let Value::Dict(entries) = target {
         let Value::Str(key) = index else {
-            return err("TypeError.OperandType", format!("Dict key must be String, found {}", index.type_name()));
+            return err(Kind::OperandType, format!("Dict key must be String, found {}", index.type_name()));
         };
         return entries
             .borrow()
             .iter()
             .find(|(k, _)| k == key)
             .map(|(_, v)| v.clone())
-            .ok_or_else(|| MophError::new("ValueError.OutOfRange", format!("key {key:?} not found")));
+            .ok_or_else(|| MophError::new(Kind::OutOfRange, format!("key {key:?} not found")));
     }
     let items: Vec<Value> = match target {
         Value::List(items) => items.borrow().clone(),
         Value::Tuple(items) => items.clone(),
-        v => return err("TypeError.OperandType", format!("cannot index {}", v.type_name())),
+        v => return err(Kind::OperandType, format!("cannot index {}", v.type_name())),
     };
     if let Value::Range(a, b) = index {
         let n = items.len() as i64;
@@ -1598,13 +1598,13 @@ fn index_value(target: &Value, index: &Value) -> Result<Value> {
         return Ok(Value::List(Rc::new(RefCell::new(items[a.min(b)..b].to_vec()))));
     }
     let Value::Number(i, _) = index else {
-        return err("TypeError.OperandType", format!("index must be Number, found {}", index.type_name()));
+        return err(Kind::OperandType, format!("index must be Number, found {}", index.type_name()));
     };
     let n = items.len() as i64;
     let i = whole(*i, "an index")?;
     let at = if i < 0 { i + n } else { i };
     if at < 0 || at >= n {
-        return err("ValueError.OutOfRange", format!("index {i} out of range for length {n}"));
+        return err(Kind::OutOfRange, format!("index {i} out of range for length {n}"));
     }
     Ok(items[at as usize].clone())
 }
@@ -1734,7 +1734,7 @@ fn fade_factor(placed: &Placed, elapsed: f64, local: f64, duration: f64) -> Opti
 /// 整数が要る所。切り捨てずにエラーにする
 pub(crate) fn whole(v: f64, what: &str) -> Result<i64> {
     if v.fract() != 0.0 || !v.is_finite() {
-        return err("ValueError.OutOfRange", format!("{what} must be a whole number, found {v}"));
+        return err(Kind::OutOfRange, format!("{what} must be a whole number, found {v}"));
     }
     Ok(v as i64)
 }
@@ -1784,7 +1784,7 @@ fn call_builtin(name: &'static str, values: Vec<Value>) -> Result<Value> {
         }
         "type_of" => match values.as_slice() {
             [v] => Ok(Value::Str(v.type_name())),
-            _ => err("TypeError.ArityMismatch", format!("type_of takes 1 argument, {} given", values.len())),
+            _ => err(Kind::ArityMismatch, format!("type_of takes 1 argument, {} given", values.len())),
         },
         name => stdlib::math::call(name, &values),
     }
@@ -1817,10 +1817,10 @@ pub const KINDS: &[&str] = &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Pa
 /// 型の名前は大文字で始まり、組み込みの型と union の名前は使えない
 fn check_free_name(name: &str) -> Result<()> {
     if !name.starts_with(char::is_uppercase) {
-        return err("NameError.Reserved", format!("a type name must start with an uppercase letter; \"{name}\" does not"));
+        return err(Kind::Reserved, format!("a type name must start with an uppercase letter; \"{name}\" does not"));
     }
     if crate::docs::TYPES.iter().any(|t| t.name == name) {
-        return err("NameError.Reserved", format!("\"{name}\" is a builtin type and cannot be redeclared"));
+        return err(Kind::Reserved, format!("\"{name}\" is a builtin type and cannot be redeclared"));
     }
     Ok(())
 }
@@ -1914,7 +1914,7 @@ fn binary(op: BinOp, l: Value, r: Value) -> Result<Value> {
             other => other.clone(),
         };
         let result = binary(op, as_tuple(&l), as_tuple(&r)).map_err(|e| match e.kind {
-            "TypeError.OperandType" => MophError::new("TypeError.OperandType", format!("cannot {} {} and {}", verb(op), l.type_name(), r.type_name())),
+            Kind::OperandType => MophError::new(Kind::OperandType, format!("cannot {} {} and {}", verb(op), l.type_name(), r.type_name())),
             _ => e,
         })?;
         return Ok(match result {
@@ -1963,14 +1963,14 @@ fn binary(op: BinOp, l: Value, r: Value) -> Result<Value> {
             _ => num(|a, b| a * b),
         },
         BinOp::Div => match (&l, &r) {
-            (_, Number(b, _)) | (_, Duration(b)) if *b == 0.0 => return err("RuntimeError.DivisionByZero", "division by zero"),
+            (_, Number(b, _)) | (_, Duration(b)) if *b == 0.0 => return err(Kind::DivisionByZero, "division by zero"),
             (Duration(a), Number(b, _)) => Some(Duration(a / b)),
             (Duration(a), Duration(b)) => Some(Value::num(a / b)),
             (Value::Tuple(items), Number(k, _)) => scale_tuple(items, *k, BinOp::Div)?,
             _ => num(|a, b| a / b),
         },
         BinOp::Rem => match (&l, &r) {
-            (_, Number(b, _)) if *b == 0.0 => return err("RuntimeError.DivisionByZero", "division by zero"),
+            (_, Number(b, _)) if *b == 0.0 => return err(Kind::DivisionByZero, "division by zero"),
             _ => num(|a, b| a % b),
         },
         BinOp::Pow => num(f64::powf),
@@ -1989,7 +1989,7 @@ fn binary(op: BinOp, l: Value, r: Value) -> Result<Value> {
         BinOp::Ne => Some(Bool(!equals(&l, &r))),
         BinOp::And | BinOp::Or => unreachable!("handled in eval"),
     };
-    result.ok_or_else(|| MophError::new("TypeError.OperandType", format!("cannot {} {} and {}", verb(op), l.type_name(), r.type_name())))
+    result.ok_or_else(|| MophError::new(Kind::OperandType, format!("cannot {} {} and {}", verb(op), l.type_name(), r.type_name())))
 }
 
 pub fn verb(op: BinOp) -> &'static str {
@@ -2025,7 +2025,7 @@ fn exact(op: BinOp, a: Ratio, b: Ratio) -> Option<Value> {
 
 fn zip_tuples(a: &[Value], b: &[Value], op: BinOp) -> Result<Option<Value>> {
     if a.len() != b.len() {
-        return err("TypeError.ArityMismatch", format!("tuples have different lengths: {} and {}", a.len(), b.len()));
+        return err(Kind::ArityMismatch, format!("tuples have different lengths: {} and {}", a.len(), b.len()));
     }
     let items = a.iter().zip(b).map(|(x, y)| binary(op, x.clone(), y.clone())).collect::<Result<Vec<_>>>()?;
     Ok(Some(Value::Tuple(items)))
@@ -2040,7 +2040,7 @@ fn scale_tuple(items: &[Value], k: f64, op: BinOp) -> Result<Option<Value>> {
 fn check_color(v: Option<Value>) -> Result<Option<Value>> {
     if let Some(Value::Color(c)) = &v {
         if c.iter().any(|x| !(0.0..=1.0).contains(x)) {
-            return err("ValueError.OutOfRange", "color channel exceeds 1.0");
+            return err(Kind::OutOfRange, "color channel exceeds 1.0");
         }
     }
     Ok(v)

@@ -116,7 +116,7 @@ fn document_update(note: &Notification) -> Option<(Uri, String, bool)> {
 fn diagnose(uri: &Uri, text: &str, run: bool) -> (Vec<(Uri, Diagnostic)>, Option<Vec<(String, Value)>>) {
     let stmts = match crate::lang::parser::parse(text) {
         Ok(s) => s,
-        Err(e) => return (vec![(uri.clone(), diagnostic(text, &e.kind, &e.message))], None),
+        Err(e) => return (vec![(uri.clone(), diagnostic(text, e.kind.name(), &e.message))], None),
     };
     if !run {
         return (vec![], None);
@@ -129,7 +129,7 @@ fn diagnose(uri: &Uri, text: &str, run: bool) -> (Vec<(Uri, Diagnostic)>, Option
             // "in ./x.moph: line N: in ./y.moph: line M: message" は一番内側のファイルに出す
             let (target, message) = innermost_file(uri, &e.message);
             let target_text = if target.as_str() == uri.as_str() { text.to_string() } else { file_path(&target).and_then(|p| std::fs::read_to_string(p).ok()).unwrap_or_default() };
-            (vec![(target, diagnostic(&target_text, &e.kind, &message))], None)
+            (vec![(target, diagnostic(&target_text, e.kind.name(), &message))], None)
         }
     }
 }

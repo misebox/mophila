@@ -13,6 +13,80 @@
    "signature": "type_of(値)"
   }
  ],
+ "errors": [
+  {
+   "doc": "構文として読めない",
+   "name": "SyntaxError.UnexpectedToken"
+  },
+  {
+   "doc": "色の桁数、Duration の形式など、書き方が決まっている値が合わない",
+   "name": "SyntaxError.InvalidLiteral"
+  },
+  {
+   "doc": "その名前が見つからない",
+   "name": "NameError.UndefinedVariable"
+  },
+  {
+   "doc": "その型にその属性やメソッドが無い",
+   "name": "NameError.UndefinedAttribute"
+  },
+  {
+   "doc": "let を書かずに初めて代入した",
+   "name": "NameError.AssignWithoutLet"
+  },
+  {
+   "doc": "組み込みの型や関数の名前を宣言し直した",
+   "name": "NameError.Reserved"
+  },
+  {
+   "doc": "演算子の左右の型が合わない",
+   "name": "TypeError.OperandType"
+  },
+  {
+   "doc": "属性に入れる値の型が合わない",
+   "name": "TypeError.AttributeType"
+  },
+  {
+   "doc": "引数の型が合わない",
+   "name": "TypeError.ArgumentType"
+  },
+  {
+   "doc": "引数や列の数が合わない",
+   "name": "TypeError.ArityMismatch"
+  },
+  {
+   "doc": "place できない型を置いた",
+   "name": "TypeError.NotPlaceable"
+  },
+  {
+   "doc": "時刻の単位が混ざっている、または 0..1 で書いたのに duration が無い",
+   "name": "ValueError.DurationRequired"
+  },
+  {
+   "doc": "型は合うが値が範囲外",
+   "name": "ValueError.OutOfRange"
+  },
+  {
+   "doc": "0 で割った",
+   "name": "RuntimeError.DivisionByZero"
+  },
+  {
+   "doc": "その名前のフォントが見つからない",
+   "name": "RuntimeError.FontNotFound"
+  },
+  {
+   "doc": "音声ファイルを読めない",
+   "name": "RuntimeError.AudioUnreadable"
+  },
+  {
+   "doc": "Shader を WGSL に変換できない",
+   "name": "RuntimeError.ShaderCompile"
+  },
+  {
+   "doc": "GPU が使えないので Shader を走らせられない",
+   "name": "RuntimeError.ShaderUnavailable"
+  }
+ ],
  "types": [
   {
    "attrs": [],

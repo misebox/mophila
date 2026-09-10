@@ -1864,8 +1864,8 @@ fn deep_copy(v: &Value) -> Value {
 }
 
 /// record のフィールドを読む
-/// いちばん外側のスコープ。builtin関数も、ふつうの束縛として置く。
-/// 名前で分岐しないので、同じ名前を書いたときに黙ってbuiltinが勝つことがない
+/// いちばん外側のスコープ。builtin 関数も、ふつうの束縛として置く。
+/// 名前で分岐しないので、同じ名前を書いたときに黙って builtin が勝つことがない
 fn root_scope() -> Rc<RefCell<HashMap<String, Value>>> {
     let scope = new_scope();
     for b in crate::docs::BUILTINS {
@@ -1874,7 +1874,7 @@ fn root_scope() -> Rc<RefCell<HashMap<String, Value>>> {
     scope
 }
 
-/// builtin関数。log と type_of は本体、ほかは math
+/// builtin 関数。log と type_of は本体、ほかは math
 fn call_builtin(name: &'static str, values: Vec<Value>) -> Result<Value> {
     match name {
         "log" => {
@@ -1909,10 +1909,10 @@ fn same_place(before: &Value, after: &Value) -> bool {
 }
 
 /// 属性の型に値が合うか。builtin の Union (Paint = Color | Shader) もここで見る
-/// builtin型の名前 (補完用)
+/// builtin 型の名前 (補完用)
 pub const KINDS: &[&str] = &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "View", "Timeline", "Subtitle", "Shader", "Gradient", "Color"];
 
-/// builtin型の属性と型
+/// builtin 型の属性と型
 /// 型の名前は大文字で始まり、builtin の型と union の名前は使えない
 fn check_free_name(name: &str) -> Result<()> {
     if !name.starts_with(char::is_uppercase) {

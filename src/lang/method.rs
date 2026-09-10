@@ -423,7 +423,7 @@ mod tests {
     fn every_receiver_is_a_known_type() {
         for m in METHODS {
             for r in m.receivers {
-                assert!(crate::docs::TYPES.iter().any(|t| t.name == *r), "{}.{} の受け手 \"{r}\" はbuiltin の型ではない", r, m.name);
+                assert!(crate::docs::TYPES.iter().any(|t| t.name == *r), "{}.{} の受け手 \"{r}\" は builtin の型ではない", r, m.name);
                 assert!(find(r, m.name).is_some(), "{r}.{} を引けない", m.name);
             }
         }

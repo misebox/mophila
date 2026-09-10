@@ -1,8 +1,8 @@
-# mophila 言語仕様 (整理中)
+# mophila 言語仕様
 
-決定済みの方針と examples/syntax/ を整理したもの。言語はできるだけ少ない部品の組み合わせで構成する。
+言語の意味と規則。構文の見本は examples/syntax/ を正とする。言語はできるだけ少ない部品の組み合わせで構成する。
 
-実装はインタプリタ。ソースを字句解析 → 構文解析し、構文木を評価して View と Timeline を作り、毎フレーム、キーフレームの式を構文木のまま評価して描く。コード生成は行わない。`bundle` はソースと import 先のファイルを実行ファイルに埋め込むもので、コンパイルではない。構文の見本は examples/ を正とし、ここには意味と規則を書く。未決事項は mophila-draft.md。
+実装はインタプリタ。ソースを字句解析 → 構文解析し、構文木を評価して View と Timeline を作り、毎フレーム、キーフレームの式を構文木のまま評価して描く。コード生成は行わない。`bundle` はソースと import 先のファイルを実行ファイルに埋め込むもので、コンパイルではない。未決事項は mophila-draft.md。
 
 ## 1. 字句
 
@@ -520,7 +520,7 @@ output v      # この View が動画になる。1 つのファイルに 1 つ
 - `view.addTrack(x)` で、その View の動きとして付ける。`output` した View に付けたものが動画になる。`x` は Timeline、View、Audio、Subtitle のどれかで、引数は `Timeline.place` と同じ
 - クロージャと Timeline はスコープを共有する (複製しない)。定義後に変数を変えれば、その値が見える
 
-## 6. builtinと標準ライブラリ
+## 6. builtin と標準ライブラリ
 
 `import` なしで使えるのは、builtin の型の名前と、次の 2 つだけ。どちらも呼び出しの形でしか書けず、値として取り出すことはできない。
 
@@ -529,9 +529,9 @@ output v      # この View が動画になる。1 つのファイルに 1 つ
 | `log(値, ...)` | 引数を空白区切りで stderr へ出す。どの型でも受け取る。動画には出ない |
 | `type_of(値)` | その値の型の名前を String で返す |
 
-String / List / Dict / Range のメソッドはbuiltinで、`import` は要らない。一覧は「builtin」のページと examples/syntax/collection.moph。
+String / List / Dict / Range のメソッドは builtin で、`import` は要らない。一覧は「builtin」のページと examples/syntax/collection.moph。
 
-`import` で使う標準ライブラリ。関数の一覧と説明は「ライブラリ」のページを正とする (ドキュメントコメントから作っている)。
+`import` で使う標準ライブラリ。関数の一覧と説明は「module」のページを正とする (ドキュメントコメントから作っている)。
 
 | モジュール | 内容 |
 |---|---|

@@ -79,7 +79,7 @@ pub enum Value {
     BuiltinType(String),
     /// import で束縛されるモジュール
     Module(Rc<Module>),
-    /// builtin関数 (math.sin など)
+    /// builtin 関数 (math.sin など)
     Builtin(&'static str),
     /// import "file.m4a" で読み込んだ音声ファイル
     Audio(Rc<Audio>),

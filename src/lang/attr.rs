@@ -296,7 +296,7 @@ mod tests {
     fn every_receiver_is_a_known_type() {
         for a in ATTRS {
             for r in a.receivers {
-                assert!(crate::docs::TYPES.iter().any(|t| t.name == *r), "{r}.{} の受け手はbuiltin の型ではない", a.name);
+                assert!(crate::docs::TYPES.iter().any(|t| t.name == *r), "{r}.{} の受け手は builtin の型ではない", a.name);
                 assert!(def_of(r, a.name).is_some(), "{r}.{} を引けない", a.name);
             }
         }

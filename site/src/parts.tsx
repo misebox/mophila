@@ -22,10 +22,20 @@ export const Code: Component<{ text: string }> = (props) => (
 // 見出しに id を付けて、サイドバーから飛べるようにする
 export const slug = (s: string): string => s.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "");
 
+interface Inline { parser: { parseInline(tokens: Tokens.TableCell["tokens"]): string } }
+
 marked.use({
   renderer: {
     heading(this: { parser: { parseInline(tokens: Tokens.Heading["tokens"]): string } }, token: Tokens.Heading): string {
       return `<h${token.depth} id="${slug(token.text)}">${this.parser.parseInline(token.tokens)}</h${token.depth}>\n`;
+    },
+    // 表は中身の幅で組み、狭ければ表だけ横に流す (列を潰して単語を折らない)
+    table(this: Inline, token: Tokens.Table): string {
+      const cell = (c: Tokens.TableCell, tag: string, align: string | null): string =>
+        `<${tag}${align === null ? "" : ` style="text-align:${align}"`}>${this.parser.parseInline(c.tokens)}</${tag}>`;
+      const head = token.header.map((c, i) => cell(c, "th", token.align[i])).join("");
+      const body = token.rows.map((r) => `<tr>${r.map((c, i) => cell(c, "td", token.align[i])).join("")}</tr>`).join("");
+      return `<div class="md-table"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>\n`;
     },
   },
 });
@@ -57,7 +67,11 @@ export interface IndexGroup { title?: string; href?: string; active?: boolean; i
 
 // 題のある group は畳める。中の項目が選ばれたら開く
 const Caret: Component<{ open: boolean }> = (props) => (
-  <span class="side-caret" classList={{ open: props.open }} aria-hidden="true">▸</span>
+  <span class="side-caret" classList={{ open: props.open }} aria-hidden="true">
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 5l7 7-7 7" />
+    </svg>
+  </span>
 );
 
 // 開いている group を題で覚える。既定は閉じていて、今いる項目を含む group だけ開く
@@ -67,7 +81,7 @@ const [opened, setOpened] = createSignal<Record<string, boolean>>({});
 // 題を押すとそのページ、右の三角で開閉する
 const SideGroup: Component<{ group: IndexGroup }> = (props) => {
   const key = (): string => props.group.title ?? "";
-  const hasActive = (): boolean => props.group.items.some((it) => it.active === true);
+  const hasActive = (): boolean => props.group.active === true || props.group.items.some((it) => it.active === true);
   const open = (): boolean => hasActive() || opened()[key()] === true;
   const toggle = (): void => {
     setOpened({ ...opened(), [key()]: !open() });

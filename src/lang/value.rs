@@ -176,7 +176,6 @@ pub struct MotionRowVal {
     pub time: f64,
     pub values: Vec<Value>,
     pub ease: Option<String>,
-    pub effect: Option<String>,
 }
 
 impl Motion {
@@ -187,10 +186,8 @@ impl Motion {
     pub fn normalize(mut self) -> Self {
         if self.rows.len() >= 2 {
             let ease = std::mem::take(&mut self.rows[0].ease);
-            let effect = std::mem::take(&mut self.rows[0].effect);
             let second = &mut self.rows[1];
             second.ease = second.ease.take().or(ease);
-            second.effect = second.effect.take().or(effect);
         }
         self
     }
@@ -202,23 +199,19 @@ impl Motion {
         let rows = (0..n)
             .map(|j| {
                 let src = &self.rows[n - 1 - j];
-                let (ease, effect) = if j == 0 { (None, None) } else { flip_modifiers(&self.rows[n - j]) };
-                MotionRowVal { time: d - src.time, values: src.values.clone(), ease, effect }
+                let ease = if j == 0 { None } else { self.rows[n - j].ease.as_deref().map(flip_name) };
+                MotionRowVal { time: d - src.time, values: src.values.clone(), ease }
             })
             .collect();
         Motion { rows, relative: self.relative, duration: Cell::new(self.duration.get()) }
     }
 }
 
-fn modifiers(ease: &Option<String>, effect: &Option<String>) -> String {
-    [ease, effect].iter().filter_map(|m| m.as_ref()).map(|m| format!(" :{m}")).collect()
+fn modifiers(ease: &Option<String>) -> String {
+    ease.as_ref().map(|m| format!(" :{m}")).unwrap_or_default()
 }
 
 /// 区間 (i-1, i) の修飾子は行 i に付いている。逆順では行 n-i の位置に来て、in と out が入れ替わる
-fn flip_modifiers(row: &MotionRowVal) -> (Option<String>, Option<String>) {
-    (row.ease.as_deref().map(flip_name), row.effect.as_deref().map(flip_name))
-}
-
 fn flip_name(name: &str) -> String {
     match name {
         "ease_in" => "ease_out".into(),
@@ -256,7 +249,6 @@ pub struct TlKeyframe {
     pub end: Option<f64>,
     pub assigns: Vec<TlAssign>,
     pub ease: Option<String>,
-    pub effect: Option<String>,
 }
 
 pub struct TlAssign {
@@ -286,10 +278,8 @@ impl Timeline {
     pub fn normalize(mut self) -> Self {
         if self.keyframes.len() >= 2 {
             let first = std::mem::take(&mut self.keyframes[0].ease);
-            let effect = std::mem::take(&mut self.keyframes[0].effect);
             let second = &mut self.keyframes[1];
             second.ease = second.ease.take().or(first);
-            second.effect = second.effect.take().or(effect);
         }
         self
     }
@@ -300,12 +290,7 @@ impl Timeline {
         let keyframes = (0..n)
             .map(|j| {
                 let src = &self.keyframes[n - 1 - j];
-                let (ease, effect) = if j == 0 {
-                    (None, None)
-                } else {
-                    let m = &self.keyframes[n - j];
-                    (m.ease.as_deref().map(flip_name), m.effect.as_deref().map(flip_name))
-                };
+                let ease = if j == 0 { None } else { self.keyframes[n - j].ease.as_deref().map(flip_name) };
                 let assigns = src
                     .assigns
                     .iter()
@@ -316,7 +301,7 @@ impl Timeline {
                     Some(e) => (d - e, Some(d - src.time)),
                     None => (d - src.time, None),
                 };
-                TlKeyframe { time, end, assigns, ease, effect }
+                TlKeyframe { time, end, assigns, ease }
             })
             .collect();
         Timeline { param: self.param.clone(), keyframes, relative: self.relative, duration: Cell::new(self.duration.get()) }
@@ -398,15 +383,15 @@ impl fmt::Display for Value {
                     .keyframes
                     .iter()
                     .map(|k| match k.end {
-                        Some(e) => format!("{}{unit}..{e}{unit}{}", k.time, modifiers(&k.ease, &k.effect)),
-                        None => format!("{}{unit}{}", k.time, modifiers(&k.ease, &k.effect)),
+                        Some(e) => format!("{}{unit}..{e}{unit}{}", k.time, modifiers(&k.ease)),
+                        None => format!("{}{unit}{}", k.time, modifiers(&k.ease)),
                     })
                     .collect();
                 write!(f, "Timeline {{ duration: {}s, keyframes: [{}] }}", t.duration(), rows.join(", "))
             }
             Value::Motion(m) => {
                 let unit = if m.relative { "" } else { "s" };
-                let rows: Vec<String> = m.rows.iter().map(|r| format!("{}{unit}{}", r.time, modifiers(&r.ease, &r.effect))).collect();
+                let rows: Vec<String> = m.rows.iter().map(|r| format!("{}{unit}{}", r.time, modifiers(&r.ease))).collect();
                 write!(f, "Motion {{ duration: {}s, rows: [{}] }}", m.duration(), rows.join(", "))
             }
             Value::Func(c) => write!(f, "func ({} params)", c.def.params.len()),

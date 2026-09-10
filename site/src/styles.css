@@ -44,7 +44,8 @@
 }
 
 html { -webkit-text-size-adjust: 100%; }
-body { margin: 0; font-size: 16px; line-height: 1.75; color: var(--ink); background: var(--so-bg); overflow-wrap: anywhere; }
+/* break-word は「1 行に入らない語」だけ折る。anywhere は列幅の計算まで縮めて短い語を折ってしまう */
+body { margin: 0; font-size: 16px; line-height: 1.75; color: var(--ink); background: var(--so-bg); overflow-wrap: break-word; }
 h1, h2, h3, h4 { letter-spacing: -0.01em; line-height: 1.3; }
 a { color: var(--accent); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -95,16 +96,20 @@ main { padding-block: 40px 120px; }
 .side-bar { display: none; }
 .side-group + .side-group { margin-top: 18px; }
 /* 題の行。左に題、右に開閉の三角 */
-.side-head { display: flex; align-items: center; gap: 4px; width: 100%; min-height: 36px; padding: 0; border: 0; background: none; text-align: left; font: inherit; }
+.side-head { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 40px; padding: 0 8px; margin: 0 -8px; border: 0; border-radius: 8px; background: none; text-align: left; font: inherit; }
+/* 押せる所と、色が変わる所を同じにする */
 .side-head-btn { cursor: pointer; justify-content: space-between; }
+.side-head-btn:hover { background: var(--so-bg-subtle); }
 /* 開閉はできるだけ広い所を押せるようにする。題がリンクのときは、その右の余白すべてが開閉 */
-.side-caret-btn { flex: 1; display: flex; align-items: center; justify-content: flex-end; align-self: stretch; min-width: 44px; padding: 0 2px; border: 0; background: none; cursor: pointer; }
-.side-caret-btn:hover .side-caret { color: var(--ink); }
-.side-title { min-width: 0; color: var(--ink); font-size: 14px; font-weight: 600; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.side-head-btn .side-title { flex: 1; }
+/* 押せる範囲は、指した所が塗られて見える */
+.side-caret-btn { flex: none; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px; background: none; color: var(--muted); cursor: pointer; }
+.side-caret-btn:hover { background: var(--so-bg-subtle); color: var(--accent); }
+.side-title { flex: 1; min-width: 0; color: var(--ink); font-size: 14px; font-weight: 600; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+a.side-title { align-self: stretch; display: flex; align-items: center; padding: 0 8px; margin: 0 -8px; border-radius: 8px; }
+a.side-title:hover { background: var(--so-bg-subtle); }
 .side-head-btn:hover .side-title, a.side-title:hover { color: var(--accent); }
 a.side-title.active { color: var(--accent); }
-.side-caret { display: inline-block; font-size: 12px; color: var(--muted); transition: transform 0.12s; }
+.side-caret { display: flex; transition: transform 0.12s; }
 .side-caret.open { transform: rotate(90deg); }
 .side-items.nested { padding-left: 14px; border-left: 1px solid var(--line); margin-left: 4px; margin-top: 2px; }
 .side-link { display: block; color: var(--muted); text-decoration: none; padding: 4px 0; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -152,15 +157,27 @@ video.sample { width: 100%; max-width: min(100%, var(--native, 960px)); aspect-r
 .gh { font-size: 13px; align-self: flex-start; }
 
 /* Markdown */
-.md { max-width: 800px; }
-.md h1 { font-size: var(--so-font-size-2xl); margin: 0 0 20px; }
-.md h2 { font-size: var(--so-font-size-xl); margin: 48px 0 14px; padding-top: 32px; border-top: 1px solid var(--line); }
-.md h3 { font-size: var(--so-font-size-lg); margin: 32px 0 10px; }
-.md p, .md ul, .md ol { margin: 0 0 14px; }
-.md pre { background: var(--tint); border: 1px solid var(--line); border-radius: var(--so-radius); padding: 16px 18px; overflow-x: auto; font-size: 13.5px; line-height: 1.6; }
-.md table { border-collapse: collapse; display: block; overflow-x: auto; margin: 0 0 20px; font-size: 14px; }
-.md th, .md td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
-.md th { background: var(--tint); }
+.md { max-width: 46em; }
+.md h1 { font-size: var(--so-font-size-2xl); margin: 0 0 24px; }
+.md h2 { font-size: var(--so-font-size-xl); margin: 56px 0 16px; padding-top: 28px; border-top: 1px solid var(--line); }
+.md h3 { font-size: var(--so-font-size-md); margin: 36px 0 10px; color: var(--ink); }
+.md p, .md ul, .md ol { margin: 0 0 16px; }
+.md li + li { margin-top: 8px; }
+.md > :first-child { margin-top: 0; }
+/* 地の文の中のコードは、地色を敷いて拾いやすくする */
+.md :not(pre) > code { background: var(--tint); border-radius: 4px; padding: 1px 5px; font-size: 0.88em; }
+.md pre { background: var(--tint); border: 1px solid var(--line); border-radius: var(--so-radius); padding: 16px 18px; overflow-x: auto; font-size: 13.5px; line-height: 1.7; margin: 0 0 20px; }
+/* 表は罫線を横だけにして、列は中身の幅で組む。入らなければ表だけ横に流す */
+.md-table { overflow-x: auto; margin: 0 0 24px; }
+.md table { border-collapse: collapse; width: auto; min-width: 100%; font-size: 14px; line-height: 1.65; }
+.md th, .md td { border: 0; border-bottom: 1px solid var(--line); padding: 9px 16px 9px 0; text-align: left; vertical-align: top; overflow-wrap: normal; }
+/* 短い列が 1 文字ずつ折れないように。説明の列 (最後) だけ普通に折る */
+.md th, .md td:not(:last-child) { word-break: keep-all; }
+.md th { white-space: nowrap; font-size: 12.5px; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--ink); padding-bottom: 6px; }
+.md tbody tr:last-child td { border-bottom: 0; }
+/* 表の中でも地色は残す。値がいくつ並んでいるのか見えなくなる */
+.md table code { white-space: nowrap; overflow-wrap: normal; }
+.md td > code + code, .md td code + code { margin-left: 2px; }
 
 /* 表: 長い署名で列がつぶれないよう、幅は中身に合わせて横スクロールさせる */
 .so-table-wrapper { overflow-x: auto; max-width: 100%; }
@@ -195,10 +212,10 @@ video.sample { width: 100%; max-width: min(100%, var(--native, 960px)); aspect-r
   .side-scroll { flex: 1; overflow-y: auto; padding: 12px var(--gutter) 48px; }
   /* 指で押せる大きさに。題の行と項目は 48px、三角は横 56px */
   .side-scroll { font-size: 16px; }
-  .side-head { min-height: 52px; }
+  .side-head { min-height: 56px; }
   .side-title { font-size: 16px; }
-  .side-caret-btn { min-width: 64px; padding-right: 8px; margin-right: -8px; }
-  .side-caret { font-size: 14px; }
+  .side-caret-btn { width: 48px; height: 48px; border-radius: 10px; }
+  .side-caret svg { width: 26px; height: 26px; }
   .side-link { display: flex; align-items: center; min-height: 48px; padding: 0; }
   .side-items.nested { padding-left: 16px; }
   .side-group + .side-group { margin-top: 8px; }

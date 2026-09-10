@@ -1,7 +1,7 @@
 # slides.moph — intro の場面を組む部品。基本形は「左にコード、右にそれが動く箱、下にナレーションの字幕」
 
 import math
-import { fade_to } from transition
+import { fade_to } from animation
 import { W, H, v, track, ink, dim, panel, line, accent, mono, fade_time, stagger, chapter_time, review, pause, dwell, longer } from .theme
 
 export func place(o) {

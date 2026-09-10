@@ -8,7 +8,7 @@ func box(label, cx, cy, w, color) {
    text(label, cx, cy, 0.4, ink, :center)]
 }
 func link(x1, y1, x2, y2) {
-  place(Line(from = (x1, y1), to = (x2, y2), stroke = line, strokeWidth = 0.05, opacity = 0))
+  place(Line(from = Vector(x1, y1), to = Vector(x2, y2), stroke = line, strokeWidth = 0.05, opacity = 0))
 }
 
 export func run(now) {

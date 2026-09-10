@@ -29,7 +29,7 @@ func upper_angle(p) { -0.6 * math.sin(p) }
 func fore_angle(p) { upper_angle(p) + 0.55 }
 
 func limb(box, color) {
-  let l = Line(from = (0, 0), to = (0, 0), stroke = color, strokeWidth = width)
+  let l = Line(from = Vector(0, 0), to = Vector(0, 0), stroke = color, strokeWidth = width)
   box.place(l)
   l
 }
@@ -74,7 +74,7 @@ func side_of(box, side, color, long) {
 
 # その場で long の間歩く人。near は手前の手足と胴の色、far は奥の手足の色
 export func make(near, far, long) {
-  let box = View(box = (6, 6))
+  let box = View(box = Vector(6, 6))
   let tl = Timeline()
   # 奥 → 胴 → 手前 の順に置き、同じ順に当てる (親の値を読む行は、親の行が先に当たっている必要がある)
   tl.place(side_of(box, 1, far, long), at = 0s)
@@ -99,11 +99,11 @@ export func make(near, far, long) {
 }
 
 # ---------- 単体で見るとき: 1 人が左から右へ横切る ----------
-let v = View(box = (16, 9))
+let v = View(box = Vector(16, 9))
 let track = Timeline()
 v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #14161c))
 let ground_y = 8
-v.place(Line(from = (0, ground_y), to = (16, ground_y), stroke = #3a4560, strokeWidth = 0.04))
+v.place(Line(from = Vector(0, ground_y), to = Vector(16, ground_y), stroke = #3a4560, strokeWidth = 0.04))
 let total = 7s
 let one = make(#e8ecf7, #8b93a7, total)
 v.place(one, at = Pos(-5, ground_y + 6 - floor, anchor = :bottomLeft), w = 6)

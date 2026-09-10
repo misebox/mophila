@@ -22,11 +22,10 @@ use crate::lang::value::Value;
 
 const KEYWORDS: &[&str] = &[
     "let", "func", "if", "else", "for", "in", "and", "or", "not", "true", "false", "return", "context", "as", "motion", "output",
-    "import", "export", "from", "type", "record",
+    "import", "export", "from", "type", "record", "struct", "method", "private", "alias",
 ];
 const SYMBOLS: &[&str] = &[
     "center", "topLeft", "topRight", "bottomLeft", "bottomRight", "top", "bottom", "left", "right", "linear", "ease", "ease_in", "ease_out",
-    "fade",
 ];
 
 /// 開いている文書と、最後に保存時に実行したときのトップレベルの値

@@ -2,7 +2,7 @@
 
 import math
 
-let v = View(box = (16, 9))
+let v = View(box = Vector(16, 9))
 v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #101020))
 
 let cx = 8
@@ -78,7 +78,7 @@ v.place(title)
 track.place(context title as o {
   motion (t) {
     0s:   o.opacity = 0
-    1.5s: o.opacity = 1 :fade
+    1.5s: o.opacity = 1
   }
 }, at = 0s)
 

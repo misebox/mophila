@@ -4,7 +4,7 @@
 import math
 import { escape_time, mandelbrot, perturbation, smooth } from fractal
 
-let v = View(box = (16, 9))
+let v = View(box = Vector(16, 9))
 let total = 2m
 let seconds = total / 1s
 let end_zoom = 1000000000000    # 1e12。64 bit の基準軌道で 10 兆倍あたりまで持つ

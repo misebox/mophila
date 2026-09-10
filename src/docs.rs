@@ -14,8 +14,8 @@ pub struct Entry {
 
 /// import なしで使えるもの
 pub const BUILTINS: &[Entry] = &[
-    Entry { name: "log", signature: "log(値: Any, ...)", returns: "Nothing", doc: "引数を空白区切りで stderr に出す。動画には出ない" },
-    Entry { name: "type_of", signature: "type_of(値: Any)", returns: "String", doc: "型名を返す" },
+    Entry { name: "log", signature: "log(値, ...)", returns: "Nothing", doc: "引数を空白区切りで stderr に出す。どの型でも受け取る。動画には出ない" },
+    Entry { name: "type_of", signature: "type_of(値)", returns: "String", doc: "その値の型の名前を返す。どの型でも受け取る" },
 ];
 
 /// 値のメソッドと属性。receiver は型名、returns は戻り値の型 (代入だけのものは空)
@@ -30,7 +30,7 @@ pub struct Method {
 pub const METHODS: &[Method] = &[
     Method { receiver: "String", name: "len", signature: "s.len()", returns: "Number", doc: "文字数" },
     Method { receiver: "String", name: "replace", signature: "s.replace(from: String, to: String)", returns: "String", doc: "from を to に置き換えた文字列" },
-    Method { receiver: "String", name: "format", signature: "\"{name}\".format(値: Any, ...)", returns: "String", doc: "{ } を順に引数で置き換える。名前は説明用" },
+    Method { receiver: "String", name: "format", signature: "\"{name}\".format(値, ...)", returns: "String", doc: "{ } を順に引数で置き換える。名前は説明用" },
     Method { receiver: "List", name: "len", signature: "xs.len()", returns: "Number", doc: "要素数" },
     Method { receiver: "List", name: "push", signature: "xs.push(値: T)", returns: "Nothing", doc: "末尾に追加する。その List 自身が変わる" },
     Method { receiver: "List", name: "enumerate", signature: "xs.enumerate()", returns: "List<(Number, T)>", doc: "番号と要素の組。for (i, x) in xs.enumerate() で使う" },
@@ -39,9 +39,9 @@ pub const METHODS: &[Method] = &[
     Method { receiver: "List", name: "index_of", signature: "xs.index_of(値: T)", returns: "Number", doc: "最初に現れる位置。無ければ -1" },
     Method { receiver: "List", name: "sum", signature: "xs.sum()", returns: "Number", doc: "Number の合計" },
     Method { receiver: "List", name: "join", signature: "xs.join(sep: String)", returns: "String", doc: "各要素を文字列にして sep でつなぐ" },
-    Method { receiver: "List", name: "map", signature: "xs.map(f: Func<T -> U>)", returns: "List<U>", doc: "各要素に f を通した結果の List" },
-    Method { receiver: "List", name: "filter", signature: "xs.filter(f: Func<T -> Bool>)", returns: "List<T>", doc: "f が true を返した要素だけの List" },
-    Method { receiver: "List", name: "reduce", signature: "xs.reduce(初期値: U, f: Func<U, T -> U>)", returns: "U", doc: "初期値から順に f を通して 1 つの値にする" },
+    Method { receiver: "List", name: "map", signature: "xs.map(f: (T) -> U)", returns: "List<U>", doc: "各要素に f を通した結果の List" },
+    Method { receiver: "List", name: "filter", signature: "xs.filter(f: (T) -> Bool)", returns: "List<T>", doc: "f が true を返した要素だけの List" },
+    Method { receiver: "List", name: "reduce", signature: "xs.reduce(初期値: U, f: (U, T) -> U)", returns: "U", doc: "初期値から順に f を通して 1 つの値にする" },
     Method { receiver: "List", name: "sort", signature: "xs.sort()", returns: "List<T>", doc: "昇順に並べた新しい List (要素は Number か Duration)" },
     Method { receiver: "List", name: "zip", signature: "xs.zip(ys: List<U>)", returns: "List<(T, U)>", doc: "同じ位置どうしを組にする。短い方に合わせる" },
     Method { receiver: "Range", name: "to_list", signature: "(0..n).to_list()", returns: "List<Number>", doc: "範囲の整数を並べた List" },
@@ -55,7 +55,7 @@ pub const METHODS: &[Method] = &[
     Method { receiver: "Timeline", name: "place", signature: "tl.place(x: Timeline | View | Audio | Subtitle, at: Duration, fadeIn: Duration, fadeOut: Duration, duration: Duration, volume: Number, loop: Bool)", returns: "Nothing", doc: "at の時刻に置く。duration volume loop は Audio だけ" },
     Method { receiver: "Timeline", name: "reverse", signature: "tl.reverse()", returns: "Timeline", doc: "時間を逆にした Timeline" },
     Method { receiver: "Timeline", name: "duration", signature: "tl.duration = 8s", returns: "Duration", doc: "全体の長さ。0..1 で書いた表はこれに合わせて伸縮する" },
-    Method { receiver: "Motion", name: "apply", signature: "m.apply(target: Placeable, f: Func<Placeable, Duration, List -> Nothing>)", returns: "Timeline", doc: "表の行ごとに f を呼び、そこで target の属性に代入された値を、その時刻の値とする Timeline を返す" },
+    Method { receiver: "Motion", name: "apply", signature: "m.apply(target: Placeable, f: (Placeable, Duration, List) -> Nothing)", returns: "Timeline", doc: "表の行ごとに f を呼び、そこで target の属性に代入された値を、その時刻の値とする Timeline を返す" },
     Method { receiver: "Motion", name: "reverse", signature: "m.reverse()", returns: "Motion", doc: "時間を逆にした Motion" },
     Method { receiver: "Motion", name: "duration", signature: "m.duration = 8s", returns: "", doc: "全体の長さを決める。0..1 で書いた表はこれに合わせて伸縮する。代入だけで、読み出しはできない" },
     Method { receiver: "Vector", name: "x", signature: "v.x", returns: "Number", doc: "x 成分" },
@@ -91,12 +91,12 @@ pub struct Type {
 
 /// 分類の並び順
 pub const CATEGORIES: &[&str] =
-    &["Value", "Collection", "Function", "Position", "Shape", "Paint", "Scene", "Time", "Media", "Enum", "Union", "Meta"];
+    &["Primitive", "Collection", "Function", "Position", "Shape", "Paint", "Scene", "Time", "Media", "Enum", "Union", "Meta"];
 
 pub const TYPES: &[Type] = &[
     Type {
         name: "Number",
-        category: "Value",
+        category: "Primitive",
         union: "",
         make: "1\n1.5\n1/3\n25%",
         values: &[],
@@ -105,7 +105,7 @@ pub const TYPES: &[Type] = &[
     },
     Type {
         name: "Duration",
-        category: "Value",
+        category: "Primitive",
         union: "",
         make: "2s\n500ms\n1m23s\n01:23\n01:23:45.678",
         values: &[],
@@ -114,16 +114,16 @@ pub const TYPES: &[Type] = &[
     },
     Type {
         name: "Bool",
-        category: "Value",
+        category: "Primitive",
         union: "",
         make: "true\nfalse",
         values: &[],
         members: &[],
-        doc: "真か偽。if の条件と、&& || ! の値",
+        doc: "真か偽。if の条件になり、and or not と比較演算子が返す",
     },
     Type {
         name: "String",
-        category: "Value",
+        category: "Primitive",
         union: "",
         make: "\"hello\"",
         values: &[],
@@ -132,12 +132,12 @@ pub const TYPES: &[Type] = &[
     },
     Type {
         name: "Symbol",
-        category: "Value",
+        category: "Primitive",
         union: "",
         make: ":center\n:linear",
         values: &[],
         members: &[],
-        doc: "先頭に : を付けた名前。名前そのものが値で、同じ名前どうしだけが等しい。Anchor や Ease のように「決まった名前しか取らない型」の値は、すべて Symbol",
+        doc: "先頭に : を付けた名前。名前そのものが値で、同じ名前どうしだけが等しい。Anchor や Easing のように「決まった名前しか取らない型」の値は、すべて Symbol",
     },
     Type {
         name: "Tuple",
@@ -146,7 +146,7 @@ pub const TYPES: &[Type] = &[
         make: "(1, 1.5)\nTuple(1, 1.5)",
         values: &[],
         members: &[],
-        doc: "要素ごとに型が違ってよい組。長さは書いたときに決まる。型が Vector か Pos と決まっている所に Number の組を書くと、その型に変換される (Circle(position = (8, 4.5)) など)。それ以外の場所では Tuple のまま",
+        doc: "要素ごとに型が違ってよい組。長さは書いたときに決まる。Vector や Pos が要る場所には書けない。そこには型名を書く",
     },
     Type {
         name: "List",
@@ -182,7 +182,7 @@ pub const TYPES: &[Type] = &[
         make: "func (x: Number) -> Number { x * 2 }\nfunc (x) { x * 2 }\nfunc (a: Number, b: Number = 1) -> Number { a + b }\nfunc () -> Duration { 3s }\nfunc (o) { o.opacity = 0 }",
         values: &[],
         members: &[],
-        doc: "関数。変数に入れて渡せる。引数の型 (名前: 型) と戻り値の型 (-> 型) は、どちらも書かなくてよい。既定値は = で書く。型を書く場所での表記は Func<引数 -> 戻り値>",
+        doc: "関数。変数に入れて渡せる。引数の型 (名前: 型) と戻り値の型 (-> 型) は、どちらも書かなくてよい。既定値は = で書く。型を書く場所での表記は宣言と同じ形で、(引数) -> 戻り値",
     },
     Type {
         name: "Vector",
@@ -191,7 +191,7 @@ pub const TYPES: &[Type] = &[
         make: "Vector(8, 4.5)",
         values: &[],
         members: &[],
-        doc: "実数 2 つの組。座標、大きさ、複素数に使う。Vector どうしを + -、Number と * / できる。属性の型が Vector と決まっている所には (8, 4.5) と書ける",
+        doc: "実数 2 つの組。座標、大きさ、複素数に使う。Vector どうしを + -、Number と * / できる",
     },
     Type {
         name: "Pos",
@@ -200,7 +200,7 @@ pub const TYPES: &[Type] = &[
         make: "Pos(8, 4.5)\nPos(0, 0, anchor = :topLeft)\nPos(Vector(8, 4.5))",
         values: &[],
         members: &[],
-        doc: "位置と、その位置がものの どこ を指すか。フィールドは x、y、anchor で、anchor の既定は :center。図形や View の position に入れる。属性の型が Pos と決まっている所には (8, 4.5) と書ける",
+        doc: "位置と、その位置がものの どこ を指すか。フィールドは x、y、anchor で、anchor の既定は :center。図形や View の position に入れる",
     },
     Type {
         name: "Circle",
@@ -366,7 +366,7 @@ pub const TYPES: &[Type] = &[
         doc: "TextArea の align。w で折り返した各行を、幅の中でどちらに寄せるか",
     },
     Type {
-        name: "Ease",
+        name: "Easing",
         category: "Enum",
         union: "",
         make: "",
@@ -377,16 +377,7 @@ pub const TYPES: &[Type] = &[
             (":ease", "両端が遅く、真ん中が速い"),
         ],
         members: &[],
-        doc: "motion の行末に書く、前の行からこの行までの値の変わり方。時刻と値は変えず、その間の通り方だけを変える",
-    },
-    Type {
-        name: "Effect",
-        category: "Enum",
-        union: "",
-        make: "",
-        values: &[(":fade", "区間の間、対象の opacity を動かす。表の最初の区間なら 0 から 1、最後の区間なら 1 から 0")],
-        members: &[],
-        doc: "motion の行末に、Ease と並べて書ける。値の補間とは別に、その区間の間だけ対象の見え方を変える",
+        doc: "motion の行末に書く修飾子。前の行からこの行までの区間で、値がどう変わるかを決める。時刻と値は変えず、その間の通り方だけを変える。属性の型ではなく、行末にだけ書ける。名前は CSS の easing キーワードと同じ",
     },
     Type {
         name: "StrokeCap",

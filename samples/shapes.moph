@@ -3,7 +3,7 @@
 import math
 import { regular_polygon } from shape
 
-let v = View(box = (16, 9))
+let v = View(box = Vector(16, 9))
 v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #f5f4f0))
 
 let total = 6s

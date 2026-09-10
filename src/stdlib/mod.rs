@@ -17,7 +17,7 @@ pub const SCRIPTS: &[(&str, &str)] = &[
     ("color", include_str!("color.moph")),
     ("shape", include_str!("shape.moph")),
     ("layout", include_str!("layout.moph")),
-    ("transition", include_str!("transition.moph")),
+    ("animation", include_str!("animation.moph")),
     ("fractal", include_str!("fractal.moph")),
 ];
 

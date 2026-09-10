@@ -43,7 +43,7 @@ output v
 
 ## 他の言語と違うところ
 
-- `(1, 2)` は Tuple。座標の型は Vector (`Vector(1, 2)`)、位置は Pos (`Pos(1, 2)`)。ただし型の決まった場所 (属性など) では `box = (4, 3)` `position = (1, 2)` と素の Tuple で書けて、その型に変換される。図形の位置は `position` 属性
+- `(1, 2)` は Tuple。座標の型は Vector (`Vector(1, 2)`)、位置は Pos (`Pos(1, 2)`)。Vector や Pos が要る場所に素の Tuple は書けない。図形の位置は `position` 属性
 - 列挙値は `:center` `:topLeft` `:left` のように `:name`
 - `1/3` は演算。`10s` `500ms` `1m23s` `01:23` は Duration。`25%` は Number (0.25) であって Duration ではない
 - 文字列に埋め込みは無い。`"x = {x}".format(x)` (位置で置き換え)
@@ -59,7 +59,7 @@ output v
 
 ## 自分の型を作る
 
-トップレベルに `record` (値。書き換えられない) か `struct` (実体。属性を書き換えられる) を書く。
+トップレベルに `record` か `struct` を書く。違いはイミュータブルかどうかだけ。`record` は作った後に書き換えられず、型名とフィールドがすべて同じなら `==` で等しい。`struct` は属性を書き換えられ、`==` は同じ実体かどうかを見る。
 
 ```
 record Size {
@@ -91,7 +91,7 @@ struct Counter {
 - `motion (t) { 時刻: o.attr = 式 }` が Timeline。時刻は Duration か 0..1 の実数 (`50%` 可)。1 つの motion で混ぜない
 - 実数時刻の Timeline は `tl.duration = 8s` が必須。`duration` を変えると全体が比例して伸縮する
 - `0..1: o.position = Pos(math.cos(math.TAU * t), ...)` のように範囲を書くと、その区間は補間せず毎フレーム式を評価する。円運動・振動はこれで書く。行を刻んで近似しない
-- 行末の修飾子はその行に入る区間に効く: `:ease` (加減速) `:ease_in` `:ease_out` `:linear`。`:fade` は最初の区間なら 0→1、最後の区間なら 1→0。途中は `o.opacity` の値で書く
+- 行末の修飾子はその行に入る区間に効く: `:ease` (加減速) `:ease_in` `:ease_out` `:linear`。出し入れは `o.opacity` の値で書くか、`animation` の `fade_in` / `fade_out` を使う
 - `tl.reverse()` で逆再生
 - 入れ物: `let track = Timeline()` に `track.place(tl, at = 3s, fadeIn = 1s)`。`v.addTrack(track)`。Timeline は終わった後も最後の状態を保つ。始まる前は何もしない
 - 後から place した Timeline が同じ属性を書けば勝つ
@@ -121,7 +121,7 @@ View の入れ子: `v.place(sub, at = Pos(x, y, anchor = :topLeft), w = 7)` で�
 
 ピクセル単位の絵 (グラデーション、模様、フラクタル): 図形の `fill` に `Shader(color = func (x, y, t) { ... Color) }` を入れる。x, y は箱の座標、t は秒。関数は GPU で全ピクセル分走るので数値の計算だけ (文字列・図形・Dict は不可、再帰不可)。外側の List (Number か Color だけ) と関数は使える。時間で変える値は t から計算するか、`args: [..]` を motion の行で変える。`samples: 4` で 2x2 のアンチエイリアス (計算は 4 倍)。複素数は Vector で書ける (`.x` `.y`、`+`、Number との `*`)。
 
-曲線は `Path(from =, segments = [(:curve, 制御点, 制御点, 終点), (:line, 点)], closed = true)`、楕円は `Ellipse(position =, rx =, ry =)`。塗りは Color のほかに `Gradient(from =, to =, stops = [...])` (`kind = :radial` なら from を中心に radius まで) が使える。線は `strokeCap` `strokeJoin` `dash` で形を変えられ、`dashOffset` を motion で動かすと破線が流れる。重ね方は `blend` (`:multiply` `:screen` `:add` など)。図形を回すときは `rotation` (度、時計回り。中心は position、Line は from、Polygon は重心) を使う。頂点を計算し直す必要はない。標準ライブラリは名前で import する。`transition` (`fade_in(o, duration)` / `fade_out` / `fade_to` / `slide_in(o, dx, dy)` / `slide_out` / `move_by` / `show(track, objs, at, end)` が Timeline を返すので `track.place(tl, at =)` に置く)、`color` (`mix` `lighten` `darken` `alpha` `hsl` `gray`)、`shape` (Polygon の points = `regular_polygon` `star` `arrow`)、`layout` (`grid` `cell` `along` `fit`)。自分で opacity の motion を書く前にこれらを使う。エスケープタイム系フラクタル (Mandelbrot、Julia、Burning Ship、Multibrot) は標準ライブラリ fractal を使う: `import { escape_time, mandelbrot, julia, perturbation, plain, smooth } from fractal` して `escape_time(formula =, precision =, coloring =, center =, span =, zoom =, max_iter =, samples =)` が Shader を返す。反復式は Dict (seed / step / start / delta / degree)、色付けは `func (mu, z) -> Color` で、どちらも自作できる。深く寄るなら `perturbation` (基準軌道をスクリプト側の 64 bit で計算し GPU は差分だけ。10 兆倍あたりまで)。samples/mandelbrot.moph、julia.moph、burning_ship.moph が例。
+曲線は `Path(from =, segments = [(:curve, 制御点, 制御点, 終点), (:line, 点)], closed = true)`、楕円は `Ellipse(position =, rx =, ry =)`。塗りは Color のほかに `Gradient(from =, to =, stops = [...])` (`kind = :radial` なら from を中心に radius まで) が使える。線は `strokeCap` `strokeJoin` `dash` で形を変えられ、`dashOffset` を motion で動かすと破線が流れる。重ね方は `blend` (`:multiply` `:screen` `:add` など)。図形を回すときは `rotation` (度、時計回り。中心は position、Line は from、Polygon は重心) を使う。頂点を計算し直す必要はない。標準ライブラリは名前で import する。`animation` (`fade_in(o, duration)` / `fade_out` / `fade_to` / `slide_in(o, dx, dy)` / `slide_out` / `move_by` / `show(track, objs, at, end)` が Timeline を返すので `track.place(tl, at =)` に置く)、`color` (`mix` `lighten` `darken` `alpha` `hsl` `gray`)、`shape` (Polygon の points = `regular_polygon` `star` `arrow`)、`layout` (`grid` `cell` `along` `fit`)。自分で opacity の motion を書く前にこれらを使う。エスケープタイム系フラクタル (Mandelbrot、Julia、Burning Ship、Multibrot) は標準ライブラリ fractal を使う: `import { escape_time, mandelbrot, julia, perturbation, plain, smooth } from fractal` して `escape_time(formula =, precision =, coloring =, center =, span =, zoom =, max_iter =, samples =)` が Shader を返す。反復式は Dict (seed / step / start / delta / degree)、色付けは `func (mu, z) -> Color` で、どちらも自作できる。深く寄るなら `perturbation` (基準軌道をスクリプト側の 64 bit で計算し GPU は差分だけ。10 兆倍あたりまで)。samples/mandelbrot.moph、julia.moph、burning_ship.moph が例。
 
 音声: `import "bgm.m4a" as bgm` して `track.place(bgm, at = 0s, loop = true, volume = 0.6, fadeOut = 3s)` (samples/mophila_intro/main.moph)。`loop = true` は動画の終わりまで繰り返す。`duration:` で切る。preview でも鳴る。
 

@@ -6,7 +6,7 @@ import .bars
 import .clock
 import .bounce
 
-let v = View(box = (16, 9))
+let v = View(box = Vector(16, 9))
 v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #202028))
 
 # 余白 0.3 を除いた領域を 2x2 に分け、各マスの中心に置く

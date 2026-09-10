@@ -1,4 +1,4 @@
-# transition.moph — 現れる、消える、滑り込む、回る。
+# animation.moph — 現れる、消える、滑り込む、回る。
 # どの関数も Timeline を返すだけで、そのままでは何も起きない。track.place(tl, at = 時刻) で置いた時刻から動く
 
 ## target の不透明度を from から to へ変える Timeline を返す。

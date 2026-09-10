@@ -1,16 +1,16 @@
 # bars.moph — 棒グラフが順に伸び、値のラベルが後から現れる
 
-import { fade_in } from transition
+import { fade_in } from animation
 
-let v = View(box = (16, 9))
+let v = View(box = Vector(16, 9))
 v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #f7f7f2))
 
 let title = TextArea(text = "Monthly visitors", position = Pos(1, 0.6, anchor = :topLeft), fontSize = 0.7, fill = #202020, opacity = 0)
 v.place(title)
 
 # 軸
-let x_axis = Line(from = (1.5, 7.5), to = (15, 7.5), stroke = #808080, strokeWidth = 0.03, opacity = 0)
-let y_axis = Line(from = (1.5, 2), to = (1.5, 7.5), stroke = #808080, strokeWidth = 0.03, opacity = 0)
+let x_axis = Line(from = Vector(1.5, 7.5), to = Vector(15, 7.5), stroke = #808080, strokeWidth = 0.03, opacity = 0)
+let y_axis = Line(from = Vector(1.5, 2), to = Vector(1.5, 7.5), stroke = #808080, strokeWidth = 0.03, opacity = 0)
 v.place(x_axis)
 v.place(y_axis)
 

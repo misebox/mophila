@@ -138,7 +138,7 @@ pub fn lex(src: &str) -> Result<Vec<Token>> {
             }
             ':' if chars.get(i + 1).is_some_and(|c| c.is_alphabetic() || *c == '_') => {
                 let name = take_ident(&chars, i + 1);
-                i += 1 + name.len();
+                i += 1 + name.chars().count();
                 push(&mut tokens, Tok::Symbol(name), line);
             }
             c if c.is_ascii_digit() => {
@@ -148,7 +148,7 @@ pub fn lex(src: &str) -> Result<Vec<Token>> {
             }
             c if c.is_alphabetic() || c == '_' => {
                 let name = take_ident(&chars, i);
-                i += name.len();
+                i += name.chars().count();
                 let tok = match name.as_str() {
                     "let" => Tok::Let,
                     "if" => Tok::If,
@@ -226,6 +226,8 @@ pub fn lex(src: &str) -> Result<Vec<Token>> {
     Ok(tokens)
 }
 
+/// 識別子。英字・数字・_ で、英字は Unicode の文字全部 (日本語も書ける)。
+/// 進める幅は chars の要素数なので、呼ぶ側は name.chars().count() を足す
 fn take_ident(chars: &[char], start: usize) -> String {
     chars[start..].iter().take_while(|c| c.is_alphanumeric() || **c == '_').collect()
 }

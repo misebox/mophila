@@ -39,7 +39,7 @@ let n = 1
 let y = z + 1                  # NameError.UndefinedVariable: "z" is not defined
 import "nope.m4a" as bgm       # NameError.UndefinedVariable: cannot read "nope.m4a": ... is not a file
 w = 1                          # NameError.AssignWithoutLet: "w" is not defined; use "let w = ..."
-record List { a: Number }      # NameError.Reserved: "List" は組み込みの型なので、宣言し直せない
+record List { a: Number }      # NameError.Reserved: "List" is a builtin type and cannot be redeclared
 let x = Circle(radius = 1)
 x.width = 2                    # NameError.UndefinedAttribute: Circle has no attribute "width"
 

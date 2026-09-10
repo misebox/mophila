@@ -88,7 +88,6 @@ pub struct MotionRow {
     pub relative: bool,
     pub items: Vec<RowItem>,
     pub ease: Option<String>,
-    pub effect: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -120,7 +119,7 @@ pub enum DictKey {
     Shorthand(String),
 }
 
-/// 型注釈。name は先頭の型名、text は表示用の全文 (例: "Func<Number -> Number>")
+/// 型注釈。name は型の名前 (関数なら "Func")、text は表示用の全文 (例: "(Number) -> Number")
 /// struct Name { フィールド、func、method }
 #[derive(Debug, Clone)]
 pub struct TypeDecl {

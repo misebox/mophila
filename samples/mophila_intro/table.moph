@@ -5,7 +5,7 @@ import { place, text, heading, card, outline, loop_demo, scene, add, say, close 
 
 # 同じ表を、違う duration で
 func bouncer(color, life) {
-  let b = View(box = (4, 3))
+  let b = View(box = Vector(4, 3))
   b.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 4, h = 3, fill = #1b2130))
   let c = Circle(position = Pos(0.6, 1.5), radius = 0.35, fill = color)
   b.place(c)

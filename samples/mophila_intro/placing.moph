@@ -34,7 +34,7 @@ export func run(now) {
   }
   let t1 = now + 0.5s
   add(sc, objs, t1)
-  let head = place(Line(from = (x0, 1.9), to = (x0, 6.4), stroke = ink, strokeWidth = 0.05, opacity = 0))
+  let head = place(Line(from = Vector(x0, 1.9), to = Vector(x0, 6.4), stroke = ink, strokeWidth = 0.05, opacity = 0))
   add(sc, [head], t1)
   let sweep = context head as h {
     motion (t) {

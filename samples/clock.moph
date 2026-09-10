@@ -1,9 +1,9 @@
 # clock.moph — アナログ時計。16 秒で秒針が 2 周し、分針と時針もわずかに進む
 
 import { polar } from shape
-import { spin } from transition
+import { spin } from animation
 
-let v = View(box = (16, 9))
+let v = View(box = Vector(16, 9))
 v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #e8e4d8))
 
 let cx = 8
@@ -33,7 +33,7 @@ for (i, n) in ["12", "3", "6", "9"].enumerate() {
 let total = 16s
 let track = Timeline(duration = total)
 for (length, width, color, turns) in [(2.0, 0.16, ink, 2/720), (3.3, 0.1, ink, 2/60), (3.5, 0.04, red, 2)] {
-  let hand = Line(from = (cx, cy), to = (cx, cy - length), stroke = color, strokeWidth = width)
+  let hand = Line(from = Vector(cx, cy), to = Vector(cx, cy - length), stroke = color, strokeWidth = width)
   v.place(hand)
   track.place(spin(hand, turns, total), at = 0s)
 }

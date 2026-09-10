@@ -6,7 +6,7 @@ import { place, text, heading, card, outline, demo, scene, add, say, close } fro
 
 # 同じ絵の箱を作る (1 つの View は 1 か所にしか置けない)
 func picture(life) {
-  let b = View(box = (4, 3))
+  let b = View(box = Vector(4, 3))
   b.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 4, h = 3, fill = #1b2130))
   let c = Circle(position = Pos(1.4, 1.5), radius = 0.8, fill = accent)
   b.place(c)
@@ -30,7 +30,7 @@ export func run(now) {
   let sc = scene()
   add(sc, [heading("座標は、箱の中の値")], now)
   add(sc, card([
-    "let b = View(box = (4, 3))",
+    "let b = View(box = Vector(4, 3))",
     "b.place(Circle(",
     "  position: Pos(1.4, 1.5), radius = 0.8,",
     "))",

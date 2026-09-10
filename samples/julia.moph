@@ -3,7 +3,7 @@
 import math
 import { escape_time, julia, plain, smooth } from fractal
 
-let v = View(box = (16, 9))
+let v = View(box = Vector(16, 9))
 let total = 40s
 
 let stops = [#061a3f, #1c4f9c, #5c9be6, #cfe6ff, #ffffff, #cfe6ff, #5c9be6, #1c4f9c, #061a3f]

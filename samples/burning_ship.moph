@@ -4,7 +4,7 @@
 import math
 import { escape_time, burning_ship, perturbation, smooth } from fractal
 
-let v = View(box = (16, 9))
+let v = View(box = Vector(16, 9))
 let total = 40s
 let seconds = total / 1s
 let end_zoom = 50

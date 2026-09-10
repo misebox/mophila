@@ -34,7 +34,7 @@ import math
 ##   span = 0.02,
 ## )
 ## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = set))
-export func escape_time(formula: Dict, coloring: Func<Number, Vector -> Color>, center: Vector, span: Number, precision: Symbol = :perturbation, zoom: Func<Number -> Number> = func (t) { 1 }, max_iter: Func<Number -> Number> = func (zoom) { 200 }, samples: Number = 1, at: Vector = Vector(0, 0), box: Vector = Vector(16, 9), flip: Bool = false, bailout: Number = 256, ref_iter: Number = 8000) -> Shader {
+export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, center: Vector, span: Number, precision: Symbol = :perturbation, zoom: (Number) -> Number = func (t) { 1 }, max_iter: (Number) -> Number = func (zoom) { 200 }, samples: Number = 1, at: Vector = Vector(0, 0), box: Vector = Vector(16, 9), flip: Bool = false, bailout: Number = 256, ref_iter: Number = 8000) -> Shader {
   let seed = formula["seed"]
   let step = formula["step"]
   let start = formula["start"]
@@ -225,7 +225,7 @@ export let perturbation = :perturbation
 ## @example
 ## # 48 回の反復で 1 周する色。最初と最後が同じ色なので継ぎ目が出ない
 ## let coloring = smooth([#061a3f, #5c9be6, #ffffff, #061a3f], 48, inside = #061a3f)
-export func smooth(stops: List<Color>, period: Number, inside: Color = #000000) -> Func<Number, Vector -> Color> {
+export func smooth(stops: List<Color>, period: Number, inside: Color = #000000) -> (Number, Vector) -> Color {
   let last = stops.len() - 1
   func (mu, z) {
     if mu < 0 { return inside }

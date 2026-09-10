@@ -16,7 +16,8 @@ pub struct Event {
     pub v0: Option<Value>,
     pub v1: Value,
     pub ease: Option<String>,
-    pub effect: Option<String>,
+    /// 範囲の行 (0s..2s:)。区間の間ずっと式を評価する
+    pub continuous: bool,
 }
 
 /// --filter key=value の条件
@@ -141,13 +142,13 @@ pub fn media_report(media: &Media, filter: &Filter) -> String {
 
 fn timeline_events(interp: &mut Interp, tl: &Rc<Timeline>, start: f64, out: &mut Vec<Event>) {
     let scale = tl.time_scale();
-    // (対象, 属性パス) ごとに、時刻順の (時刻, 値, ease, effect)
-    let mut series: Vec<(ObjRef, String, Vec<(f64, Option<f64>, Value, Option<String>, Option<String>)>)> = Vec::new();
+    // (対象, 属性パス) ごとに、時刻順の (時刻, 終わり, 値, ease)
+    let mut series: Vec<(ObjRef, String, Vec<(f64, Option<f64>, Value, Option<String>)>)> = Vec::new();
     for kf in &tl.keyframes {
         for a in &kf.assigns {
             let path = a.path.join(".");
             let value = interp.eval_assign_pub(tl, a, kf.time).unwrap_or(Value::Nothing);
-            let entry = (start + kf.time * scale, kf.end.map(|e| start + e * scale), value, kf.ease.clone(), kf.effect.clone());
+            let entry = (start + kf.time * scale, kf.end.map(|e| start + e * scale), value, kf.ease.clone());
             match series.iter_mut().find(|(o, p, _)| Rc::ptr_eq(o, &a.target) && *p == path) {
                 Some((_, _, list)) => list.push(entry),
                 None => series.push((a.target.clone(), path, vec![entry])),
@@ -155,11 +156,11 @@ fn timeline_events(interp: &mut Interp, tl: &Rc<Timeline>, start: f64, out: &mut
         }
     }
     for (target, attr, list) in series {
-        let mut prev: Option<&(f64, Option<f64>, Value, Option<String>, Option<String>)> = None;
+        let mut prev: Option<&(f64, Option<f64>, Value, Option<String>)> = None;
         for item in &list {
-            let (time, end, value, ease, effect) = item;
+            let (time, end, value, ease) = item;
             match end {
-                Some(e) => out.push(Event { from: *time, to: *e, target: target.clone(), attr: attr.clone(), v0: None, v1: value.clone(), ease: None, effect: Some("continuous".into()) }),
+                Some(e) => out.push(Event { from: *time, to: *e, target: target.clone(), attr: attr.clone(), v0: None, v1: value.clone(), ease: None, continuous: true }),
                 None => out.push(Event {
                     from: prev.map_or(*time, |p| p.1.unwrap_or(p.0)),
                     to: *time,
@@ -168,7 +169,7 @@ fn timeline_events(interp: &mut Interp, tl: &Rc<Timeline>, start: f64, out: &mut
                     v0: prev.map(|p| p.2.clone()),
                     v1: value.clone(),
                     ease: ease.clone(),
-                    effect: effect.clone(),
+                    continuous: false,
                 }),
             }
             prev = Some(item);
@@ -200,7 +201,12 @@ pub fn format_events(events: &[Event], filter: &Filter) -> String {
             Some(v0) if e.from < e.to => format!("{v0} → {}", e.v1),
             _ => format!("= {}", e.v1),
         };
-        let mods: String = [&e.ease, &e.effect].iter().filter_map(|m| m.as_ref()).map(|m| format!(" :{m}")).collect();
+        let mods = match (&e.ease, e.continuous) {
+            (Some(ease), true) => format!(" :{ease} :continuous"),
+            (Some(ease), false) => format!(" :{ease}"),
+            (None, true) => " :continuous".to_string(),
+            (None, false) => String::new(),
+        };
         lines.push(format!("{:>8.2}s  {:>7.2}s  {:<40} {} {}{}", e.from, e.to - e.from, label(&e.target), e.attr, change, mods));
     }
     lines.join("\n")

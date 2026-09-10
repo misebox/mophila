@@ -18,8 +18,15 @@ const groups = (): IndexGroup[] =>
     items: lib.entries.length > 0 ? [] : lib.items.map((it) => ({ label: it.name, href: href("lib", itemId(lib, it.name)), active: current() === itemId(lib, it.name) })),
   }));
 
+// 名前が多いと 1 行に収まらないので、その場合だけ 1 行 1 名前にする
+const importLine = (lib: Lib, names: string[]): string => {
+  if (lib.entries.length > 0) return `import ${lib.name}`;
+  const one = `import { ${names.join(", ")} } from ${lib.name}`;
+  return one.length <= 60 ? one : `import {\n${names.map((n) => `  ${n},`).join("\n")}\n} from ${lib.name}`;
+};
+
 const ImportLine: Component<{ lib: Lib; names?: string[] }> = (props) => (
-  <pre class="code"><code>{props.lib.entries.length > 0 ? `import ${props.lib.name}` : `import { ${(props.names ?? namesOf(props.lib)).join(", ")} } from ${props.lib.name}`}</code></pre>
+  <pre class="code"><code>{importLine(props.lib, props.names ?? namesOf(props.lib))}</code></pre>
 );
 
 // module の一覧: Rust のものは表、.moph のものは分類ごとの export の一覧

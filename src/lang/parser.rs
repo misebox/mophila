@@ -119,7 +119,7 @@ impl Parser {
             Tok::Export => {
                 self.next();
                 if *self.peek() == Tok::AliasKw {
-                    return err("SyntaxError.UnexpectedToken", format!("line {}: alias はそのファイルの中だけの短い名前なので export できない", self.line()));
+                    return err("SyntaxError.UnexpectedToken", format!("line {}: alias is a short name for this file only; it cannot be exported", self.line()));
                 }
                 let inner = self.stmt()?;
                 match inner.kind {
@@ -203,10 +203,10 @@ impl Parser {
                 self.next();
                 let name = self.ident()?;
                 self.expect(Tok::Eq)?;
-                let mut members = vec![self.ident()?];
+                let mut members = vec![self.type_member()?];
                 while *self.peek() == Tok::Pipe {
                     self.next();
-                    members.push(self.ident()?);
+                    members.push(self.type_member()?);
                 }
                 Ok(StmtKind::TypeDef(name, members))
             }
@@ -518,7 +518,34 @@ impl Parser {
     }
 
     /// 型注釈。Name または Name<...>。< > の中はトークンをそのまま文字列にする
+    /// 関数の型 `(A, B) -> R`。宣言 `func (a: A, b: B) -> R` と同じ形
+    fn func_type(&mut self) -> Result<TypeAnn> {
+        self.expect(Tok::LParen)?;
+        let mut params: Vec<String> = Vec::new();
+        while *self.peek() != Tok::RParen {
+            let mut text = self.type_ann()?.text;
+            // 可変長は型の後ろに ...
+            if *self.peek() == Tok::DotDot && *self.peek_at(1) == Tok::Dot {
+                self.next();
+                self.next();
+                text.push_str("...");
+            }
+            params.push(text);
+            if *self.peek() != Tok::Comma {
+                break;
+            }
+            self.next();
+        }
+        self.expect(Tok::RParen)?;
+        self.expect(Tok::Arrow)?;
+        let returns = self.type_ann()?;
+        Ok(TypeAnn { name: "Func".to_string(), text: format!("({}) -> {}", params.join(", "), returns.text) })
+    }
+
     fn type_ann(&mut self) -> Result<TypeAnn> {
+        if *self.peek() == Tok::LParen {
+            return self.func_type();
+        }
         let name = self.ident()?;
         if *self.peek() != Tok::Lt {
             return Ok(TypeAnn { text: name.clone(), name });
@@ -545,6 +572,8 @@ impl Parser {
                 Tok::Arrow => "->".to_string(),
                 Tok::DotDot => "...".to_string(),
                 Tok::Dot => ".".to_string(),
+                Tok::LParen => "(".to_string(),
+                Tok::RParen => ")".to_string(),
                 Tok::Eof | Tok::Newline => return self.unexpected("\">\""),
                 other => return err("SyntaxError.UnexpectedToken", format!("line {}:{}: unexpected {other:?} in type", self.line(), self.col())),
             };
@@ -558,6 +587,15 @@ impl Parser {
             text.push_str(part);
         }
         Ok(TypeAnn { text: format!("{name}<{text}>"), name })
+    }
+
+    /// type の右辺の 1 つ。型名か、決まった Symbol (":center")
+    fn type_member(&mut self) -> Result<String> {
+        if let Tok::Symbol(name) = self.peek().clone() {
+            self.next();
+            return Ok(format!(":{name}"));
+        }
+        self.ident()
     }
 
     /// struct / record の中身。フィールドと func / method
@@ -817,19 +855,20 @@ impl Parser {
                 break;
             }
         }
-        let (mut ease, mut effect) = (None, None);
+        let mut ease = None;
         while let Tok::Symbol(name) = self.peek().clone() {
             self.next();
             match name.as_str() {
                 "linear" | "ease" | "ease_in" | "ease_out" => ease = Some(name),
-                "fade" => effect = Some(name),
                 "ease_in_out" => return err("ValueError.OutOfRange", format!("line {}:{}: use :ease instead of :ease_in_out", self.line(), self.col())),
-                "fade_in" | "fade_out" => return err("ValueError.OutOfRange", format!("line {}:{}: use :fade (direction follows the segment position) or opacity values instead of :{name}", self.line(), self.col())),
+                "fade" | "fade_in" | "fade_out" => {
+                    return err("ValueError.OutOfRange", format!("line {}:{}: write opacity values, or use fade_in / fade_out from the animation library", self.line(), self.col()))
+                }
                 _ => return err("ValueError.OutOfRange", format!("line {}:{}: unknown modifier :{name}", self.line(), self.col())),
             }
         }
         match self.peek() {
-            Tok::Newline | Tok::RBrace | Tok::Duration(_) | Tok::Number(_) => Ok(MotionRow { time, end, relative, items, ease, effect }),
+            Tok::Newline | Tok::RBrace | Tok::Duration(_) | Tok::Number(_) => Ok(MotionRow { time, end, relative, items, ease }),
             _ => self.unexpected("end of keyframe"),
         }
     }

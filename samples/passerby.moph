@@ -8,7 +8,7 @@
 import { make, speed, floor } from .walker
 import .fractal
 
-let v = View(box = (16, 9))
+let v = View(box = Vector(16, 9))
 let track = Timeline()
 let total = 8s
 

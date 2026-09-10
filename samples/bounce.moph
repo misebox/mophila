@@ -1,9 +1,9 @@
 # bounce.moph — 色の違うボールが順に落ちて弾み、8 秒後に逆再生で戻る。落下は ease_in (加速)、上昇は ease_out (減速)
 
-let v = View(box = (16, 9))
+let v = View(box = Vector(16, 9))
 v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #1c1c24))
 let floor = 7.8
-v.place(Line(from = (0, floor), to = (16, floor), stroke = #50505a, strokeWidth = 0.05))
+v.place(Line(from = Vector(0, floor), to = Vector(16, floor), stroke = #50505a, strokeWidth = 0.05))
 
 let colors = [#e04040, #e0a020, #40a060, #4080e0, #a060e0]
 let track = Timeline()

@@ -1,4 +1,4 @@
-# animation.moph — view への配置、motion、timeline (すべて仮)
+# motion.moph — motion と Timeline。View に置いて、時間で動かして、output するまで
 
 let v = View(box = Vector(4, 3))
 
@@ -22,7 +22,7 @@ let m1 = motion (t, a, b) {
 # m1.duration は 5s。延ばすには
 m1.duration = 10s
 
-# 定数だけの Motion。行末に Ease / Effect を書ける
+# 定数だけの Motion。行末に Easing を書ける
 let m2 = motion {
   0s: 0
   2s: 3
@@ -52,7 +52,7 @@ let tl2 = context c1 as o {
 
 # 属性名を先に列挙する形
 let tl3 = motion c1 [:position, :radius] {
-  0s: Pos(0.5, 0.5), 0.5 :fade
+  0s: Pos(0.5, 0.5), 0.5
   2s: Pos(3.5, 2.5), 1
   5s: Pos(0.5, 0.5) :ease_out
 }

@@ -21,10 +21,10 @@ export func run(now) {
   let x0 = 9.4
   let x1 = 15.0
   let ay = 6.3
-  let axis = [place(Line(from = (x0, ay), to = (x1, ay), stroke = line, strokeWidth = 0.05, opacity = 0))]
+  let axis = [place(Line(from = Vector(x0, ay), to = Vector(x1, ay), stroke = line, strokeWidth = 0.05, opacity = 0))]
   for i in 0..=4 {
     let x = x0 + i * (x1 - x0) / 4
-    axis.push(place(Line(from = (x, ay - 0.12), to = (x, ay + 0.12), stroke = line, strokeWidth = 0.04, opacity = 0)))
+    axis.push(place(Line(from = Vector(x, ay - 0.12), to = Vector(x, ay + 0.12), stroke = line, strokeWidth = 0.04, opacity = 0)))
     axis.push(text("{s}s".format(i), x, ay + 0.4, 0.26, dim, :center))
   }
   let marker = place(Circle(position = Pos(x0, ay), radius = 0.13, fill = ink, opacity = 0))

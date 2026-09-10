@@ -55,21 +55,24 @@ pub struct Interp {
     constructing: Vec<String>,
     /// @deprecated の警告を出した型。1 つにつき 1 度だけ出す
     warned: std::collections::HashSet<String>,
+    /// いま本体を実行している型。private が見えるのはこの中だけ
+    inside: Vec<String>,
+    /// 次の apply がどの型のメンバーか。apply がこれを inside に積む
+    calling: Option<String>,
 }
 
 impl Interp {
     pub fn new() -> Self {
-        // union がまとめる型と、決まった Symbol しか取らない型は docs::TYPES が持っている。
-        // Symbol の値そのものは描くときに確かめる
+        // union がまとめる型と、決まった Symbol しか取らない型は docs::TYPES が持っている
         let mut types: HashMap<String, Vec<String>> = HashMap::new();
         for t in crate::docs::TYPES {
             if !t.members.is_empty() {
                 types.insert(t.name.to_string(), t.members.iter().map(|m| m.to_string()).collect());
             } else if !t.values.is_empty() {
-                types.insert(t.name.to_string(), vec!["Symbol".to_string()]);
+                types.insert(t.name.to_string(), t.values.iter().map(|(v, _)| v.to_string()).collect());
             }
         }
-        Self { scopes: vec![new_scope()], output: None, types, cache: None, finished: HashMap::new(), last_t: f64::NEG_INFINITY, base_dir: PathBuf::from("."), exports: Vec::new(), sources: HashMap::new(), assets: HashMap::new(), initial: Vec::new(), modules: HashMap::new(), loading: Vec::new(), returning: None, constructing: Vec::new(), warned: std::collections::HashSet::new() }
+        Self { scopes: vec![new_scope()], output: None, types, cache: None, finished: HashMap::new(), last_t: f64::NEG_INFINITY, base_dir: PathBuf::from("."), exports: Vec::new(), sources: HashMap::new(), assets: HashMap::new(), initial: Vec::new(), modules: HashMap::new(), loading: Vec::new(), returning: None, constructing: Vec::new(), warned: std::collections::HashSet::new(), inside: Vec::new(), calling: None }
     }
 
     /// トップレベルの束縛 (LSP のホバー用)
@@ -129,6 +132,9 @@ impl Interp {
                 Ok(Flow::Next(Value::Nothing))
             }
             StmtKind::TypeDef(name, members) => {
+                if self.scopes.len() != 1 {
+                    return err("SyntaxError.UnexpectedToken", "type is only allowed at the top level");
+                }
                 check_free_name(name)?;
                 self.types.insert(name.clone(), members.clone());
                 Ok(Flow::Next(Value::Nothing))
@@ -164,7 +170,7 @@ impl Interp {
             }
             StmtKind::TypeDecl(decl) => {
                 if self.scopes.len() != 1 {
-                    return err("SyntaxError.UnexpectedToken", "struct と record はトップレベルにだけ書ける");
+                    return err("SyntaxError.UnexpectedToken", "struct and record are only allowed at the top level");
                 }
                 check_free_name(&decl.name)?;
                 let ty = Rc::new(UserType { decl: decl.clone(), scopes: self.scopes.clone() });
@@ -213,6 +219,10 @@ impl Interp {
                 self.assign(&Expr::Attr(Box::new(target.clone()), attr.clone()), v)?;
                 Ok(Flow::Next(Value::Nothing))
             }
+            StmtKind::Output(e) if self.output.is_some() => {
+                let _ = e;
+                err("SyntaxError.UnexpectedToken", "a file can have only one output")
+            }
             StmtKind::Output(e) => {
                 self.output = Some(self.eval_object(e)?);
                 Ok(Flow::Next(Value::Nothing))
@@ -233,23 +243,6 @@ impl Interp {
         }
     }
 
-    /// 型の決まった場所に置かれた値。specific tuple が要る場所なら、signature に合う素の Tuple をその型に変換する
-    fn coerce(&self, v: Value, expected: &str) -> Value {
-        let Value::Tuple(items) = &v else { return v };
-        match expected {
-            "Vector" => match items.as_slice() {
-                [Value::Number(x), Value::Number(y)] => Value::Vector(*x, *y),
-                _ => v,
-            },
-            "Pos" => match items.as_slice() {
-                [Value::Number(x), Value::Number(y)] => Value::Apos("center".into(), *x, *y),
-                [Value::Number(x), Value::Number(y), Value::Symbol(a)] => Value::Apos(a.clone(), *x, *y),
-                _ => v,
-            },
-            _ => v,
-        }
-    }
-
     /// 別名なら、指している型の名前に直す
     fn real_type_name(&self, name: &str) -> String {
         match self.scopes.iter().rev().find_map(|s| s.borrow().get(name).cloned()) {
@@ -265,10 +258,56 @@ impl Interp {
         if self.matches_type(v, name) {
             return Ok(());
         }
-        err("TypeError.AttributeType", format!("expected {name}, found {}", v.type_name()))
+        Err(self.wrong_type("TypeError.AttributeType", "value", name, v))
+    }
+
+    /// 型が合わないときのエラー。決まった値しか取らない型なら、取れる値を並べる
+    fn wrong_type(&self, kind: &'static str, what: &str, expected: &str, v: &Value) -> MophError {
+        match self.types.get(expected) {
+            Some(values) if values.iter().all(|m| m.starts_with(':')) => {
+                MophError::new("ValueError.OutOfRange", format!("{what} is one of {}, found {v}", values.join(" | ")))
+            }
+            _ => MophError::new(kind, format!("{what} expects {expected}, found {}", v.type_name())),
+        }
+    }
+
+    /// 属性に値を書く。型は宣言 (struct / record) か schema から引く
+    fn set_attr(&self, obj: &ObjRef, attr: &str, value: Value) -> Result<()> {
+        let mut o = obj.borrow_mut();
+        let expected = match &o.decl {
+            Some(ty) => ty.decl.fields.iter().find(|f| f.name == attr).map(|f| f.ann.name.clone()),
+            None => schema(&o.kind).and_then(|s| s.iter().find(|(n, _)| *n == attr)).map(|(_, t)| (*t).to_string()),
+        };
+        let Some(expected) = expected else {
+            return err("NameError.UndefinedAttribute", format!("{} has no attribute \"{attr}\"", o.kind));
+        };
+        if !self.matches_type(&value, &self.real_type_name(&expected)) {
+            return Err(self.wrong_type("TypeError.AttributeType", &format!("{}.{attr}", o.kind), &expected, &value));
+        }
+        o.attrs.insert(attr.to_string(), value);
+        Ok(())
+    }
+
+    /// 属性パスに値を書く。[position, x] なら position (Pos) の x だけを変える
+    fn set_path(&self, obj: &ObjRef, path: &[String], value: Value) -> Result<()> {
+        let [attr, rest @ ..] = path else {
+            return err("NameError.UndefinedAttribute", "empty attribute path");
+        };
+        if rest.is_empty() {
+            return self.set_attr(obj, attr, value);
+        }
+        let current = obj.borrow().attrs.get(attr).cloned();
+        let Some(current) = current else {
+            return err("NameError.UndefinedAttribute", format!("{}.{attr} is not set", obj.borrow().kind));
+        };
+        self.set_attr(obj, attr, set_field(current, rest, value)?)
     }
 
     fn matches_type(&self, v: &Value, name: &str) -> bool {
+        // ":center" のような要素は、その Symbol そのもの
+        if let Some(sym) = name.strip_prefix(':') {
+            return matches!(v, Value::Symbol(s) if s == sym);
+        }
         let actual = match v {
             Value::Func(_) => "Func".to_string(),
             v => v.type_name(),
@@ -363,17 +402,21 @@ impl Interp {
             }
             Expr::Attr(obj, attr) => match self.eval(obj)? {
                 Value::Object(obj) => {
+                    self.field_ok(&obj.borrow().decl, attr)?;
                     let expected = schema(&obj.borrow().kind).and_then(|s| s.iter().find(|(n, _)| *n == attr)).map(|(_, t)| *t);
                     let v = match expected {
-                        Some(t) => self.coerce(v, t),
+                        Some(_) => v,
                         None => v,
                     };
-                    set_attr(&obj, attr, v)
+                    self.set_attr(&obj, attr, v)
                 }
                 Value::Motion(m) if attr == "duration" => set_duration(&m.duration, v),
                 Value::Timeline(t) if attr == "duration" => set_duration(&t.duration, v),
                 // 値のフィールドへの代入。値は変わらないので、その値を持っている入れ物を更新する
                 other => {
+                    if let Value::Record(r) = &other {
+                        self.field_ok(&r.decl, attr)?;
+                    }
                     let updated = set_field(other, std::slice::from_ref(attr), v)?;
                     self.assign(obj, updated)
                 }
@@ -500,7 +543,7 @@ impl Interp {
             Expr::Attr(target, attr) if matches!(attr.as_str(), "anchor" | "vector") => match self.eval(target)? {
                 Value::Apos(a, x, y) => Ok(if attr == "anchor" { Value::Symbol(a) } else { Value::Vector(x, y) }),
                 Value::Object(obj) => self.attr_of(&obj, attr),
-                Value::Record(r) => record_field(&r, attr),
+                Value::Record(r) => self.record_attr(&r, attr),
                 v => err("NameError.UndefinedAttribute", format!("{} has no attribute \"{attr}\"", v.type_name())),
             },
             Expr::Attr(target, attr) if matches!(attr.as_str(), "x" | "y") => {
@@ -508,7 +551,7 @@ impl Interp {
                     Value::Vector(x, y) | Value::Apos(_, x, y) => Ok(Value::Number(if attr == "x" { x } else { y })),
                     Value::Tuple(items) if items.len() == 2 => Ok(items[if attr == "x" { 0 } else { 1 }].clone()),
                     Value::Object(obj) => self.attr_of(&obj, attr),
-                    Value::Record(r) => record_field(&r, attr),
+                    Value::Record(r) => self.record_attr(&r, attr),
                     v => err("NameError.UndefinedAttribute", format!("{} has no attribute \"{attr}\"", v.type_name())),
                 }
             }
@@ -528,7 +571,7 @@ impl Interp {
                     .get(attr)
                     .cloned()
                     .ok_or_else(|| MophError::new("NameError.UndefinedAttribute", format!("module {} has no item \"{attr}\"", m.name))),
-                Value::Record(r) => record_field(&r, attr),
+                Value::Record(r) => self.record_attr(&r, attr),
                 v => err("NameError.UndefinedAttribute", format!("{} has no attribute \"{attr}\"", v.type_name())),
             },
             Expr::Call(callee, args) => self.call(callee, args),
@@ -541,7 +584,14 @@ impl Interp {
                 self.scopes.push(scope);
                 let result = self.run_block(body);
                 self.scopes.pop();
-                result.map(Flow::value)
+                // return は関数を抜ける。context で止めない
+                match result? {
+                    Flow::Return(v) => {
+                        self.returning = Some(v.clone());
+                        Ok(v)
+                    }
+                    flow => Ok(flow.value()),
+                }
             }
             Expr::Dict(entries) => {
                 let mut out = Vec::new();
@@ -602,17 +652,27 @@ impl Interp {
     fn cannot_construct(&self, kind: &str) -> Result<Value> {
         let Some(t) = crate::docs::TYPES.iter().find(|t| t.name == kind) else {
             return match self.types.contains_key(kind) {
-                true => err("TypeError.ArgumentType", format!("{kind} は型の集まり (union) なので、これ自体は作れない")),
+                true => err("TypeError.ArgumentType", format!("{kind} is a union of types, so it cannot be built")),
                 false => err("NameError.UndefinedVariable", format!("type \"{kind}\" is not defined")),
             };
         };
         if !t.members.is_empty() {
-            return err("TypeError.ArgumentType", format!("{kind} は {} をまとめた名前 (union) なので、これ自体は作れない", t.members.join(" | ")));
+            return err("TypeError.ArgumentType", format!("{kind} is a union of {}, so it cannot be built", t.members.join(" | ")));
         }
         match (t.make.lines().next().filter(|f| !f.is_empty()), t.values.first()) {
-            (Some(form), _) => err("TypeError.ArgumentType", format!("{kind} は呼んで作れない。{form} のように書く")),
-            (_, Some((v, _))) => err("TypeError.ArgumentType", format!("{kind} は決まった値しか取らない型で、{v} のように書く")),
-            _ => err("TypeError.ArgumentType", format!("{kind} は呼んで作れない")),
+            (Some(form), _) => err("TypeError.ArgumentType", format!("{kind} cannot be called; write it like {form}")),
+            (_, Some((v, _))) => err("TypeError.ArgumentType", format!("{kind} only takes fixed values; write one like {v}")),
+            _ => err("TypeError.ArgumentType", format!("{kind} cannot be called")),
+        }
+    }
+
+    /// Pos の anchor。書かなければ :center
+    fn anchor_of(&self, v: Option<&Value>) -> Result<String> {
+        let Some(v) = v else { return Ok("center".to_string()) };
+        self.check_type(v, "Anchor")?;
+        match v {
+            Value::Symbol(a) => Ok(a.clone()),
+            v => Err(self.wrong_type("TypeError.ArgumentType", "Pos.anchor", "Anchor", v)),
         }
     }
 
@@ -631,20 +691,12 @@ impl Interp {
                 if let Some(Arg { name: None, value }) = args.first() {
                     if let Value::Vector(x, y) = self.eval(value)? {
                         let rest = self.resolve_args(kind, &["anchor"], &args[1..])?;
-                        let anchor = match rest.get("anchor") {
-                            Some(Value::Symbol(a)) => a.clone(),
-                            None => "center".to_string(),
-                            Some(v) => return err("TypeError.ArgumentType", format!("Pos.anchor expects Anchor, found {}", v.type_name())),
-                        };
+                        let anchor = self.anchor_of(rest.get("anchor"))?;
                         return Ok(Value::Apos(anchor, x, y));
                     }
                 }
                 let map = self.resolve_args(kind, &["x", "y", "anchor"], args)?;
-                let anchor = match map.get("anchor") {
-                    Some(Value::Symbol(a)) => a.clone(),
-                    None => "center".to_string(),
-                    Some(v) => return err("TypeError.ArgumentType", format!("Pos.anchor expects Anchor, found {}", v.type_name())),
-                };
+                let anchor = self.anchor_of(map.get("anchor"))?;
                 match (map.get("x"), map.get("y")) {
                     (Some(Value::Number(x)), Some(Value::Number(y))) => Ok(Value::Apos(anchor, *x, *y)),
                     _ => err("TypeError.ArgumentType", "Pos needs x and y (Number)"),
@@ -668,7 +720,7 @@ impl Interp {
                 let mut items: Vec<(String, Value)> = Vec::new();
                 for a in args {
                     let Some(key) = a.name.clone() else {
-                        return err("TypeError.ArgumentType", "Dict は Dict(k = v) と書く。名前にできないキーは { \"k\": v } で書く");
+                        return err("TypeError.ArgumentType", "Dict takes named arguments, as Dict(k = v); write { \"k\": v } for a key that is not a name");
                     };
                     let v = self.eval(&a.value)?;
                     match items.iter_mut().find(|(k, _)| *k == key) {
@@ -692,9 +744,8 @@ impl Interp {
                     let mut attrs = HashMap::new();
                     for (name, v) in map {
                         let expected = sch.iter().find(|(n, _)| *n == name).map(|(_, t)| *t).expect("field exists");
-                        let v = self.coerce(v, expected);
                         if !self.matches_type(&v, expected) {
-                            return err("TypeError.ArgumentType", format!("{kind}.{name} expects {expected}, found {}", v.type_name()));
+                            return Err(self.wrong_type("TypeError.ArgumentType", &format!("{kind}.{name}"), expected, &v));
                         }
                         if kind == "TextArea" && name == "font" {
                             if let Value::Str(family) = &v {
@@ -716,7 +767,7 @@ impl Interp {
     }
 
     /// 宣言した型の func / method / 複製のメソッドを呼ぶ。当てはまらなければ None
-    fn user_member(&mut self, receiver: &Value, name: &str, args: &[Arg], via_self: bool) -> Result<Option<Value>> {
+    fn user_member(&mut self, receiver: &Value, name: &str, args: &[Arg]) -> Result<Option<Value>> {
         let (ty, self_value) = match receiver {
             Value::Type(t) => (t.clone(), None),
             Value::Record(r) => match &r.decl {
@@ -737,7 +788,7 @@ impl Interp {
         let Some(member) = ty.decl.members.iter().find(|m| m.name == name && m.receiver == self_value.is_some()) else {
             return Ok(None);
         };
-        if member.private && !via_self {
+        if member.private && !self.is_inside(&ty.decl.name) {
             return err("NameError.UndefinedAttribute", format!("{}.{name} is private", ty.decl.name));
         }
         let mut values: Vec<(Option<String>, Value)> = Vec::new();
@@ -748,17 +799,48 @@ impl Interp {
             values.push((a.name.clone(), self.eval(&a.value)?));
         }
         let closure = Closure { def: member.def.clone(), scopes: ty.scopes.clone(), type_text: None };
-        self.apply(&closure, values).map(Some)
+        // 型名から new を呼んだときも、その中の型名はフィールドから作る (new を呼び直さない)
+        let is_new = !member.receiver && name == "new";
+        if is_new {
+            self.constructing.push(ty.decl.name.clone());
+        }
+        self.calling = Some(ty.decl.name.clone());
+        let out = self.apply(&closure, values);
+        if is_new {
+            self.constructing.pop();
+        }
+        out.map(Some)
+    }
+
+    /// いまその型の本体を実行しているか。private はこのときだけ見える
+    fn is_inside(&self, name: &str) -> bool {
+        self.inside.last().is_some_and(|n| n == name)
+    }
+
+    /// private なフィールドを外から触っていないか
+    fn field_ok(&self, decl: &Option<Rc<UserType>>, field: &str) -> Result<()> {
+        let Some(ty) = decl else { return Ok(()) };
+        match ty.decl.fields.iter().find(|f| f.name == field) {
+            Some(f) if f.private && !self.is_inside(&ty.decl.name) => {
+                err("NameError.UndefinedAttribute", format!("{}.{field} is private", ty.decl.name))
+            }
+            _ => Ok(()),
+        }
+    }
+
+    fn record_attr(&self, r: &Rc<Record>, field: &str) -> Result<Value> {
+        self.field_ok(&r.decl, field)?;
+        record_field(r, field)
     }
 
     /// copy / shallowCopy / deepCopy
     fn copy_method(&mut self, ty: &Rc<UserType>, receiver: &Value, name: &str, args: &[Arg]) -> Result<Option<Value>> {
         let wanted = matches!(name, "copy" | "shallowCopy" | "deepCopy");
-        if !wanted || ty.decl.members.iter().any(|m| m.name == name) {
+        if !wanted || ty.decl.members.iter().any(|m| m.name == name && m.receiver) {
             return Ok(None);
         }
         if ty.decl.nocopy {
-            return err("NameError.UndefinedAttribute", format!("{} は @nocopy なので複製できない", ty.decl.name));
+            return err("NameError.UndefinedAttribute", format!("{} is @nocopy, so it cannot be copied", ty.decl.name));
         }
         match (receiver, name) {
             (Value::Record(r), "copy") => {
@@ -768,7 +850,7 @@ impl Interp {
             }
             (Value::Object(o), "shallowCopy") | (Value::Object(o), "deepCopy") => {
                 if name == "deepCopy" && ty.decl.nodeepcopy {
-                    return err("NameError.UndefinedAttribute", format!("{} は @nodeepcopy なので deepCopy できない", ty.decl.name));
+                    return err("NameError.UndefinedAttribute", format!("{} is @nodeepcopy, so it has no deepCopy", ty.decl.name));
                 }
                 if !args.is_empty() {
                     return err("TypeError.ArityMismatch", format!("{name} takes no arguments"));
@@ -833,7 +915,6 @@ impl Interp {
                     None => return err("TypeError.ArityMismatch", format!("{}.{} is not given", decl.name, f.name)),
                 },
             };
-            let v = self.coerce(v, &f.ann.name);
             self.check_type(&v, &f.ann.name)?;
             fields.push((f.name.clone(), v));
         }
@@ -876,6 +957,7 @@ impl Interp {
         };
         let closure = Closure { def: member.def.clone(), scopes: ty.scopes.clone(), type_text: None };
         self.constructing.push(ty.decl.name.clone());
+        self.calling = Some(ty.decl.name.clone());
         let out = self.apply(&closure, values);
         self.constructing.pop();
         out
@@ -918,8 +1000,7 @@ impl Interp {
             Expr::Attr(target, method) => {
                 let receiver = self.eval(target)?;
                 // 型から func を呼ぶ / 値から method を呼ぶ
-                let via_self = matches!(target.as_ref(), Expr::Ident(n) if n == "self");
-                if let Some(out) = self.user_member(&receiver, method, args, via_self)? {
+                if let Some(out) = self.user_member(&receiver, method, args)? {
                     return Ok(out);
                 }
                 if let Value::Module(m) = &receiver {
@@ -971,13 +1052,6 @@ impl Interp {
         if relative && def.rows.iter().any(|r| !(0.0..=1.0).contains(&r.time)) {
             return err("ValueError.OutOfRange", "relative keyframe time must be within 0..1");
         }
-        let fade_ok = |rows: &[crate::lang::ast::MotionRow]| {
-            let n = rows.len();
-            rows.iter().enumerate().all(|(i, r)| r.effect.as_deref() != Some("fade") || i <= 1 || i == n - 1)
-        };
-        if !fade_ok(&def.rows) {
-            return err("ValueError.OutOfRange", ":fade is only allowed on the first or last segment; write opacity values for the middle");
-        }
         // 対象と属性パスを列挙した形 → Timeline
         if let Some((target_expr, paths)) = &def.target {
             let target = self.eval_object(target_expr)?;
@@ -995,7 +1069,7 @@ impl Interp {
                         TlAssign { target: target.clone(), path: path.clone(), expr: e.clone(), scopes: self.scopes.clone() }
                     })
                     .collect();
-                keyframes.push(TlKeyframe { time: row.time, end: row.end, assigns, ease: row.ease.clone(), effect: row.effect.clone() });
+                keyframes.push(TlKeyframe { time: row.time, end: row.end, assigns, ease: row.ease.clone() });
             }
             return Ok(Value::Timeline(Rc::new(Timeline { param: "t".into(), keyframes, relative, duration: Cell::new(None) }.normalize())));
         }
@@ -1013,7 +1087,7 @@ impl Interp {
                     let target = self.eval_object(obj)?;
                     assigns.push(TlAssign { target, path: path.clone(), expr: e.clone(), scopes: self.scopes.clone() });
                 }
-                keyframes.push(TlKeyframe { time: row.time, end: row.end, assigns, ease: row.ease.clone(), effect: row.effect.clone() });
+                keyframes.push(TlKeyframe { time: row.time, end: row.end, assigns, ease: row.ease.clone() });
             }
             return Ok(Value::Timeline(Rc::new(Timeline { param, keyframes, relative, duration: Cell::new(None) }.normalize())));
         }
@@ -1040,7 +1114,7 @@ impl Interp {
                 Ok(values)
             })();
             self.scopes.pop();
-            rows.push(MotionRowVal { time: row.time, values: result?, ease: row.ease.clone(), effect: row.effect.clone() });
+            rows.push(MotionRowVal { time: row.time, values: result?, ease: row.ease.clone() });
         }
         Ok(Value::Motion(Rc::new(Motion { rows, relative, duration: Cell::new(None) }.normalize())))
     }
@@ -1062,7 +1136,7 @@ impl Interp {
                 .map(|(attr, v)| TlAssign { target: target.clone(), path: vec![attr], expr: Expr::from_value(&v), scopes: vec![] })
                 .collect();
             target.borrow_mut().attrs = before;
-            keyframes.push(TlKeyframe { time: row.time, end: None, assigns, ease: row.ease.clone(), effect: row.effect.clone() });
+            keyframes.push(TlKeyframe { time: row.time, end: None, assigns, ease: row.ease.clone() });
         }
         Ok(Value::Timeline(Rc::new(Timeline { param: "t".into(), keyframes, relative: motion.relative, duration: Cell::new(motion.duration.get()) }.normalize())))
     }
@@ -1078,9 +1152,9 @@ impl Interp {
                     // 置き先での位置と大きさは子 View の属性として持つ
                     for (name, v) in &args[1..] {
                         match name.as_deref() {
-                            Some("at") => set_attr(child, "position", self.coerce(v.clone(), "Pos"))?,
-                            Some("w") => set_attr(child, "w", v.clone())?,
-                            Some("h") => set_attr(child, "h", v.clone())?,
+                            Some("at") => self.set_attr(child, "position", v.clone())?,
+                            Some("w") => self.set_attr(child, "w", v.clone())?,
+                            Some("h") => self.set_attr(child, "h", v.clone())?,
                             Some(other) => return err("TypeError.ArgumentType", format!("View.place has no argument \"{other}\"")),
                             None => return err("TypeError.ArgumentType", "View.place takes one positional argument"),
                         }
@@ -1094,6 +1168,12 @@ impl Interp {
                     Ok(Value::Nothing)
                 }
                 Some((None, Value::Object(child))) if self.matches_type(&Value::Object(child.clone()), "Placeable") => {
+                    // 図形は自分の position で置くので、at / w / h は受け取らない
+                    if let Some((name, _)) = args.get(1) {
+                        let what = name.clone().unwrap_or_else(|| "a second value".to_string());
+                        let kind = child.borrow().kind.clone();
+                        return err("TypeError.ArgumentType", format!("View.place has no argument \"{what}\" for a {kind}; set its position"));
+                    }
                     obj.borrow_mut().children.push(child.clone());
                     Ok(Value::Nothing)
                 }
@@ -1172,6 +1252,7 @@ impl Interp {
 
     fn attr_of(&self, obj: &ObjRef, attr: &str) -> Result<Value> {
         let obj = obj.borrow();
+        self.field_ok(&obj.decl, attr)?;
         obj.attrs
             .get(attr)
             .cloned()
@@ -1202,6 +1283,15 @@ impl Interp {
 
     /// 関数を呼ぶ。名前付き引数はパラメータ名で、残りは位置で対応させる
     pub fn apply(&mut self, closure: &Closure, args: Vec<(Option<String>, Value)>) -> Result<Value> {
+        // private が見えるのは、その型のメンバーの本体だけ。ふつうの呼び出しは空の枠を積む
+        let owner = self.calling.take().unwrap_or_default();
+        self.inside.push(owner);
+        let out = self.apply_inner(closure, args);
+        self.inside.pop();
+        out
+    }
+
+    fn apply_inner(&mut self, closure: &Closure, args: Vec<(Option<String>, Value)>) -> Result<Value> {
         let params = &closure.def.params;
         let (named, positional): (Vec<_>, Vec<_>) = args.into_iter().partition(|(n, _)| n.is_some());
         let mut positional = positional.into_iter().map(|(_, v)| v);
@@ -1219,18 +1309,15 @@ impl Interp {
                     Some(v) => v,
                     None => match &param.default {
                         Some(d) => self.eval(d)?,
-                        None => return err("TypeError.ArityMismatch", format!("missing argument for parameter {:?}", param.pattern)),
+                        None => return err("TypeError.ArityMismatch", format!("{} is not given", pattern_text(&param.pattern))),
                     },
                 };
-                // 型を書いてあれば、渡された値を確かめる。Tuple はその型に変換する
-                let value = match &param.ann {
-                    Some(ann) => {
-                        let v = self.coerce(value, &ann.name);
-                        self.check_type(&v, &ann.name)?;
-                        v
+                // 型を書いてあれば、渡された値を確かめる
+                if let Some(ann) = &param.ann {
+                    if !self.matches_type(&value, &self.real_type_name(&ann.name)) {
+                        return Err(self.wrong_type("TypeError.ArgumentType", &pattern_text(&param.pattern), &ann.name, &value));
                     }
-                    None => value,
-                };
+                }
                 self.bind(&param.pattern, value)?;
             }
             if positional.next().is_some() {
@@ -1241,7 +1328,9 @@ impl Interp {
             }
             let out = self.run_block(&closure.def.body).map(Flow::value)?;
             if let Some(ann) = &closure.def.returns {
-                self.check_type(&out, &ann.name)?;
+                if !self.matches_type(&out, &self.real_type_name(&ann.name)) {
+                    return Err(self.wrong_type("TypeError.ArgumentType", "the return value", &ann.name, &out));
+                }
             }
             Ok(out)
         })();
@@ -1295,7 +1384,7 @@ impl Interp {
                 let key = (Rc::as_ptr(tl) as usize, origin.to_bits());
                 if let Some(values) = self.finished.get(&key) {
                     for (target, path, value) in values.clone() {
-                        set_path(&target, &path, value)?;
+                        self.set_path(&target, &path, value)?;
                     }
                     return Ok(());
                 }
@@ -1320,7 +1409,7 @@ impl Interp {
                 };
                 if let Some(factor) = fade {
                     for target in timeline_targets(tl) {
-                        set_attr(&target, "opacity", Value::Number(factor))?;
+                        self.set_attr(&target, "opacity", Value::Number(factor))?;
                     }
                 }
             }
@@ -1340,22 +1429,20 @@ impl Interp {
                 }
             }
         }
-        let has_fade = tl.keyframes.iter().any(|k| k.effect.is_some());
         // 書かれた時刻 × scale が実際の時刻。t は実際の時刻なので、書かれた時刻の軸に戻して比べる
         let t = t / tl.time_scale();
-        let last_time = tl.keyframes.last().map_or(0.0, |k| k.end.unwrap_or(k.time));
         for (target, path, list) in by_attr {
             // 範囲の行の中なら、その時刻で式を評価するだけ
             if let Some((_, a)) = list.iter().find(|(kf, _)| kf.end.is_some_and(|e| kf.time <= t && t <= e)) {
                 let value = self.eval_assign(tl, a, t)?;
                 let value = match (path.first(), schema(&target.borrow().kind)) {
                     (Some(attr), Some(sch)) if path.len() == 1 => match sch.iter().find(|(n, _)| n == attr) {
-                        Some((_, ty)) => self.coerce(value, ty),
+                        Some(_) => value,
                         None => value,
                     },
                     _ => value,
                 };
-                set_path(&target, path, value)?;
+                self.set_path(&target, path, value)?;
                 continue;
             }
             // 点の列。範囲の行は始点と終点の 2 点になる
@@ -1370,31 +1457,22 @@ impl Interp {
             let next = points.iter().find(|(time, ..)| *time > t);
             let Some(&(t0, _, a0)) = prev else { continue };
             let v0 = self.eval_assign(tl, a0, t0)?;
-            let (value, opacity) = match next {
+            // 修飾子は区間 (kf0, kf1) のもので、kf1 に付いている
+            let value = match next {
                 Some(&(t1, kf1, a1)) if t0 < t => {
                     let v1 = self.eval_assign(tl, a1, t1)?;
-                    let k = ease(kf1.ease.as_deref(), (t - t0) / (t1 - t0));
-                    // 修飾子は区間 (kf0, kf1) のもので、kf1 に付いている。:fade は最初の区間なら 0→1、最後の区間なら 1→0
-                    let opacity = match kf1.effect.as_deref() {
-                        Some("fade") if t1 >= last_time => 1.0 - k,
-                        Some("fade") => k,
-                        _ => 1.0,
-                    };
-                    (interpolate(&v0, &v1, k), opacity)
+                    interpolate(&v0, &v1, ease(kf1.ease.as_deref(), (t - t0) / (t1 - t0)))
                 }
-                _ => (v0, 1.0),
+                _ => v0,
             };
             let value = match (path.first(), schema(&target.borrow().kind)) {
                 (Some(attr), Some(sch)) if path.len() == 1 => match sch.iter().find(|(n, _)| n == attr) {
-                    Some((_, t)) => self.coerce(value, t),
+                    Some(_) => value,
                     None => value,
                 },
                 _ => value,
             };
-            set_path(&target, path, value)?;
-            if has_fade {
-                set_attr(&target, "opacity", Value::Number(opacity))?;
-            }
+            self.set_path(&target, path, value)?;
         }
         Ok(())
     }
@@ -1727,19 +1805,13 @@ fn get_path(obj: &ObjRef, path: &[String]) -> Option<Value> {
     Some(v)
 }
 
-/// 属性パスに値を書く。[position, x] なら position (Pos) の x だけを変える
-fn set_path(obj: &ObjRef, path: &[String], value: Value) -> Result<()> {
-    let [attr, rest @ ..] = path else {
-        return err("NameError.UndefinedAttribute", "empty attribute path");
-    };
-    if rest.is_empty() {
-        return set_attr(obj, attr, value);
+/// エラーに出す引数の名前
+fn pattern_text(p: &Pattern) -> String {
+    match p {
+        Pattern::Name(n) => n.clone(),
+        Pattern::Tuple(items) => format!("({})", items.iter().map(pattern_text).collect::<Vec<_>>().join(", ")),
+        Pattern::List(items) => format!("[{}]", items.iter().map(pattern_text).collect::<Vec<_>>().join(", ")),
     }
-    let current = obj.borrow().attrs.get(attr).cloned();
-    let Some(current) = current else {
-        return err("NameError.UndefinedAttribute", format!("{}.{attr} is not set", obj.borrow().kind));
-    };
-    set_attr(obj, attr, set_field(current, rest, value)?)
 }
 
 /// deepCopy 用。中の実体も新しく作る
@@ -1756,6 +1828,13 @@ fn deep_copy(v: &Value) -> Value {
             })))
         }
         Value::List(items) => Value::List(Rc::new(RefCell::new(items.borrow().iter().map(deep_copy).collect()))),
+        Value::Dict(items) => Value::Dict(Rc::new(RefCell::new(items.borrow().iter().map(|(k, v)| (k.clone(), deep_copy(v))).collect()))),
+        Value::Record(r) => Value::Record(Rc::new(Record {
+            name: r.name.clone(),
+            decl: r.decl.clone(),
+            fields: r.fields.iter().map(|(f, v)| (f.clone(), deep_copy(v))).collect(),
+        })),
+        Value::Tuple(items) => Value::Tuple(items.iter().map(deep_copy).collect()),
         other => other.clone(),
     }
 }
@@ -1800,36 +1879,18 @@ fn set_field(current: Value, path: &[String], value: Value) -> Result<Value> {
     }
 }
 
-fn set_attr(obj: &ObjRef, attr: &str, value: Value) -> Result<()> {
-    let mut o = obj.borrow_mut();
-    let expected = match &o.decl {
-        Some(ty) => ty.decl.fields.iter().find(|f| f.name == attr).map(|f| f.ann.name.clone()),
-        None => schema(&o.kind).and_then(|s| s.iter().find(|(n, _)| *n == attr)).map(|(_, t)| (*t).to_string()),
-    };
-    let Some(expected) = expected else {
-        return err("NameError.UndefinedAttribute", format!("{} has no attribute \"{attr}\"", o.kind));
-    };
-    if !accepts(&expected, &value) {
-        return err("TypeError.AttributeType", format!("{}.{attr} expects {expected}, found {}", o.kind, value.type_name()));
-    }
-    o.attrs.insert(attr.to_string(), value);
-    Ok(())
-}
-
 /// 属性の型に値が合うか。組み込みの Union (Paint = Color | Shader) もここで見る
-fn accepts(expected: &str, value: &Value) -> bool {
-    let actual = value.type_name();
-    actual == expected || (expected == "Paint" && matches!(actual.as_str(), "Color" | "Shader" | "Gradient"))
-}
-
 /// 組み込み型の名前 (補完用)
 pub const KINDS: &[&str] = &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "View", "Timeline", "Subtitle", "Shader", "Gradient", "Color"];
 
 /// 組み込み型の属性と型
-/// 組み込みの型と union の名前は、struct / record / type で宣言し直せない
+/// 型の名前は大文字で始まり、組み込みの型と union の名前は使えない
 fn check_free_name(name: &str) -> Result<()> {
+    if !name.starts_with(char::is_uppercase) {
+        return err("NameError.Reserved", format!("a type name must start with an uppercase letter; \"{name}\" does not"));
+    }
     if crate::docs::TYPES.iter().any(|t| t.name == name) {
-        return err("NameError.Reserved", format!("\"{name}\" は組み込みの型なので、宣言し直せない"));
+        return err("NameError.Reserved", format!("\"{name}\" is a builtin type and cannot be redeclared"));
     }
     Ok(())
 }
@@ -1894,8 +1955,10 @@ fn binary(op: BinOp, l: Value, r: Value) -> Result<Value> {
             Value::Vector(x, y) => Value::Tuple(vec![Number(*x), Number(*y)]),
             other => other.clone(),
         };
-        let result = binary(op, as_tuple(&l), as_tuple(&r))
-            .map_err(|_| MophError::new("TypeError.OperandType", format!("cannot {} {} and {}", verb(op), l.type_name(), r.type_name())))?;
+        let result = binary(op, as_tuple(&l), as_tuple(&r)).map_err(|e| match e.kind {
+            "TypeError.OperandType" => MophError::new("TypeError.OperandType", format!("cannot {} {} and {}", verb(op), l.type_name(), r.type_name())),
+            _ => e,
+        })?;
         return Ok(match result {
             Value::Tuple(items) => match items.as_slice() {
                 [Number(x), Number(y)] => Value::Vector(*x, *y),

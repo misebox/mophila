@@ -4,7 +4,7 @@ import math
 
 export let W = 16
 export let H = 9
-export let v = View(box = (W, H))
+export let v = View(box = Vector(W, H))
 export let track = Timeline()
 
 export let bg     = #0f1218

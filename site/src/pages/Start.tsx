@@ -1,6 +1,6 @@
 import { Show, type Component } from "solid-js";
 import { data } from "@/data";
-import { Code, GitHubLink } from "@/parts";
+import { Code, GitHubLink, Markdown } from "@/parts";
 import { blob, repo, repoName } from "@/repo";
 
 const INSTALL = `git clone ${repo}.git
@@ -16,6 +16,7 @@ const COMMANDS = [
 
 export const Start: Component = () => {
   const first = data.samples.find((s) => s.name === "first");
+  const editors = data.docs.find((d) => d.key === "editors");
   return (
     <div class="reading">
       <section>
@@ -68,11 +69,25 @@ export const Start: Component = () => {
             <Code text={s().code} />
             <ul class="plain">
               <li>View は 16 x 9 の箱。座標はこの箱の中の値で、ピクセルは出力のときに決める</li>
-              <li>place で図形を箱に置く。apos! は基準点 (center や bottomLeft) と座標</li>
-              <li>context ... motion で「何秒にどの属性がいくつになるか」を書く。行末の :ease は補間の仕方</li>
+              <li>place で図形を箱に置く。Pos は座標と、その座標が図形のどこを指すか (anchor)</li>
+              <li>context ... motion で「何秒にどの属性がいくつになるか」を書く。行末の :ease は値の変わり方</li>
               <li>Timeline に motion を置く時刻 (at) をずらすと、それぞれ別のタイミングで動き出す</li>
             </ul>
             <GitHubLink href={blob(`samples/${s().name}.moph`)} />
+          </section>
+        )}
+      </Show>
+
+      <Show when={editors}>
+        {(d) => (
+          <section>
+            <h2>エディタ</h2>
+            <p>シンタックスハイライトと、補完・ホバー・定義へ移動が使えます。</p>
+            <details class="fold">
+              <summary>VS Code と Neovim の設定</summary>
+              <Markdown text={d().text} />
+            </details>
+            <GitHubLink href={blob(d().path)} />
           </section>
         )}
       </Show>

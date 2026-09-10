@@ -49,9 +49,11 @@ fn draw_view(scene: &mut Scene, view: &ObjRef, transform: Affine, frame: &Frame,
     if opacity <= 0.0 {
         return Ok(());
     }
-    let grouped = opacity < 1.0;
+    // opacity か blend が付いていたら、中身をまとめて 1 枚のレイヤーにする
+    let blend = blend_mode(&v.attrs)?.unwrap_or(BlendMode::new(Mix::Normal, Compose::SrcOver));
+    let grouped = opacity < 1.0 || blend.mix != Mix::Normal || blend.compose != Compose::SrcOver;
     if grouped {
-        scene.push_layer(Fill::NonZero, Mix::Normal, opacity as f32, Affine::IDENTITY, &frame.viewport);
+        scene.push_layer(Fill::NonZero, blend, opacity as f32, Affine::IDENTITY, &frame.viewport);
     }
     for child in &v.children {
         if child.borrow().kind == "View" {
@@ -173,10 +175,10 @@ fn draw_object(scene: &mut Scene, c: &crate::lang::value::Object, transform: Aff
             path.move_to(vector(&c.attrs, "from", kind)?);
             for seg in segments.borrow().iter() {
                 let Value::Tuple(items) = seg else {
-                    return err("TypeError.AttributeType", format!("Path.segments expects (:line, 点) のような Tuple, found {}", seg.type_name()));
+                    return err("TypeError.AttributeType", format!("Path.segments expects a Tuple like (:line, point), found {}", seg.type_name()));
                 };
                 let Some(Value::Symbol(op)) = items.first() else {
-                    return err("TypeError.AttributeType", "Path.segments の最初の要素は :move :line :quad :curve");
+                    return err("TypeError.AttributeType", "the first item of a Path segment must be :move, :line, :quad or :curve");
                 };
                 let pts: Vec<Point> = items[1..].iter().map(|p| point_of(p, "Path.segments")).collect::<Result<_>>()?;
                 match (op.as_str(), pts.as_slice()) {
@@ -184,7 +186,7 @@ fn draw_object(scene: &mut Scene, c: &crate::lang::value::Object, transform: Aff
                     ("line", [p]) => path.line_to(*p),
                     ("quad", [c1, p]) => path.quad_to(*c1, *p),
                     ("curve", [c1, c2, p]) => path.curve_to(*c1, *c2, *p),
-                    (op, pts) => return err("TypeError.ArityMismatch", format!(":{op} に点が {} 個。:move :line は 1 個、:quad は 2 個、:curve は 3 個", pts.len())),
+                    (op, pts) => return err("TypeError.ArityMismatch", format!(":{op} got {} points; :move and :line take 1, :quad takes 2, :curve takes 3", pts.len())),
                 }
             }
             if matches!(c.attrs.get("closed"), Some(Value::Bool(true))) {

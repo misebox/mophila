@@ -51,9 +51,10 @@ pattern     ::= ident
 params      ::= (ws param (ws "," ws param)*)? ws
 param       ::= pattern (ws ":" ws type-ann)? (ws "=" ws expr)?
 
-# 型注釈。< > の中はトークン列として読む (例: Func<Number, Number -> Number>)
-type-ann    ::= ident ("<" type-tokens ">")?
-type-tokens ::= (ident | "," | "->" | "..." | "." | "<" type-tokens ">" | sp)*
+# 型注釈。関数は宣言と同じ形 ((Number, Number) -> Number)。< > の中はトークン列として読む
+type-ann    ::= func-type | ident ("<" type-tokens ">")?
+func-type   ::= "(" (ws type-ann "..."? (ws "," ws type-ann "..."?)*)? ws ")" ws "->" ws type-ann
+type-tokens ::= (ident | "," | "->" | "..." | "." | "(" | ")" | "<" type-tokens ">" | sp)*
 
 # ---------- 式 (優先順位の低い順) ----------
 expr        ::= or-expr
@@ -105,7 +106,7 @@ motion-row  ::= key-time (".." key-time)? ":" ws row-items? (sp modifier)*
 key-time    ::= duration | number
 row-items   ::= row-item (ws "," ws row-item)*
 row-item    ::= expr ws "=" ws expr | expr
-modifier    ::= ":linear" | ":ease" | ":ease_in" | ":ease_out" | ":fade"
+modifier    ::= ":linear" | ":ease" | ":ease_in" | ":ease_out"
 
 # ---------- 字句 ----------
 ident       ::= [A-Za-z_] [A-Za-z0-9_]*

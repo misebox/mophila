@@ -4,11 +4,11 @@ let v = View(box = Vector(4, 3))
 let track = Timeline()
 
 # ---- 音声。.moph 以外のファイルを import すると Audio になる (長さは ffprobe で読む) ----
-import "../samples/mophila_intro/bgm.m4a" as bgm
-log(type_of(bgm), bgm.duration, bgm.file)         # Audio 152.52s ../samples/mophila_intro/bgm.m4a
+import "../samples/mophila_intro/QuietSignal.m4a" as bgm
+log(type_of(bgm), bgm.duration, bgm.file)         # Audio 152.52s ../samples/mophila_intro/QuietSignal.m4a
 
-track.place(bgm, at = 0s, loop = true, fadeIn = 1s, fadeOut = 2s, volume = 0.6)   # 動画の終わりまで繰り返す (動画は延びない)
-track.place(bgm, at = 3s, duration = 5s)                                        # 3 秒から 5 秒分だけ (重ねて鳴る)
+track.place(bgm, at = 0s, fadeIn = 1s, duration=5s, fadeOut = 2s)   # 動画の終わりまで繰り返す (動画は延びない)
+track.place(bgm, at = 0.5s, duration = 5s, volume = 0.6)                                        # 3 秒から 5 秒分だけ (重ねて鳴る)
 
 # ---- 字幕。text と duration を持つ。画面には描かず、動画の字幕トラック (mp4 は mov_text) に書く ----
 let s1 = Subtitle(text = "最初の字幕", duration = 3s)

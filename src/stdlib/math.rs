@@ -25,9 +25,9 @@ pub const DOCS: &[Entry] = &[
 
 pub fn module() -> Module {
     let mut items = HashMap::new();
-    items.insert("PI".into(), Value::Number(std::f64::consts::PI));
-    items.insert("TAU".into(), Value::Number(std::f64::consts::TAU));
-    items.insert("E".into(), Value::Number(std::f64::consts::E));
+    items.insert("PI".into(), Value::num(std::f64::consts::PI));
+    items.insert("TAU".into(), Value::num(std::f64::consts::TAU));
+    items.insert("E".into(), Value::num(std::f64::consts::E));
     for f in ["sin", "cos", "floor", "ceil", "abs", "sqrt", "ln", "exp", "atan2", "max", "min"] {
         items.insert(f.into(), Value::Builtin(f));
     }
@@ -38,12 +38,12 @@ pub fn call(name: &str, values: &[Value]) -> Result<Value> {
     let nums = values
         .iter()
         .map(|v| match v {
-            Value::Number(n) => Ok(*n),
+            Value::Number(n, _) => Ok(*n),
             v => err("TypeError.ArgumentType", format!("{name} expects Number, found {}", v.type_name())),
         })
         .collect::<Result<Vec<f64>>>()?;
     let unary = |f: fn(f64) -> f64| match nums.as_slice() {
-        [x] => Ok(Value::Number(f(*x))),
+        [x] => Ok(Value::num(f(*x))),
         _ => err("TypeError.ArityMismatch", format!("{name} takes 1 argument, {} given", nums.len())),
     };
     match name {
@@ -56,12 +56,12 @@ pub fn call(name: &str, values: &[Value]) -> Result<Value> {
         "ln" => unary(f64::ln),
         "exp" => unary(f64::exp),
         "atan2" => match nums.as_slice() {
-            [y, x] => Ok(Value::Number(y.atan2(*x))),
+            [y, x] => Ok(Value::num(y.atan2(*x))),
             _ => err("TypeError.ArityMismatch", format!("atan2 takes 2 arguments (y, x), {} given", nums.len())),
         },
         "max" | "min" if nums.is_empty() => err("TypeError.ArityMismatch", format!("{name} needs at least 1 argument")),
-        "max" => Ok(Value::Number(nums.iter().cloned().fold(f64::NEG_INFINITY, f64::max))),
-        "min" => Ok(Value::Number(nums.iter().cloned().fold(f64::INFINITY, f64::min))),
+        "max" => Ok(Value::num(nums.iter().cloned().fold(f64::NEG_INFINITY, f64::max))),
+        "min" => Ok(Value::num(nums.iter().cloned().fold(f64::INFINITY, f64::min))),
         _ => err("NameError.UndefinedAttribute", format!("no builtin \"{name}\"")),
     }
 }

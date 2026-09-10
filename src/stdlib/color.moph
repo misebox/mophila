@@ -2,7 +2,7 @@
 
 import math
 
-func lerp(a, b, k) { a + (b - a) * k }
+func lerp(a: Number, b: Number, k: Number) -> Number { a + (b - a) * k }
 
 ## 2 色を混ぜる。k が 0 なら a、1 なら b
 ## @category 混ぜる

@@ -93,7 +93,12 @@ fn walk(interp: &mut Interp, placed: &Placed, origin: f64, out: &mut Vec<Event>)
                 walk(interp, child, start, out);
             }
         }
-        Track::Timeline(tl) => timeline_events(interp, tl, start, out),
+        Track::Timeline(tl) => {
+            for child in tl.tracks.borrow().clone().iter() {
+                walk(interp, child, start, out);
+            }
+            timeline_events(interp, tl, start, out);
+        }
         Track::Audio(..) | Track::Subtitle(_) => {}
     }
 }
@@ -217,7 +222,7 @@ pub fn text_visibility(events: &[Event], filter: &Filter) -> String {
     let mut by_obj: HashMap<usize, (ObjRef, Vec<(f64, f64)>)> = HashMap::new();
     for e in events.iter().filter(|e| e.attr == "opacity" && e.target.borrow().kind == "TextArea") {
         let entry = by_obj.entry(Rc::as_ptr(&e.target) as usize).or_insert_with(|| (e.target.clone(), Vec::new()));
-        let v1 = match e.v1 { Value::Number(n) => n, _ => 0.0 };
+        let v1 = match e.v1 { Value::Number(n, _) => n, _ => 0.0 };
         entry.1.push((e.to, v1));
     }
     let mut rows: Vec<(f64, String)> = Vec::new();

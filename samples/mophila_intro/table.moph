@@ -39,14 +39,15 @@ export func run(now) {
     "go.duration = 4s      # 右下",
   ], 0.7, 1.8, 7.6, 0.28), now + 0.4s)
   let t1 = now + 0.5s
-  let end = t1 + 22s
   let x0 = 9.4
   add(sc, [outline(x0 - 0.1, 1.5, 3.4, 2.6), outline(x0 - 0.1, 4.3, 3.4, 2.6), text("duration = 2s", x0 + 3.6, 2.8, 0.3, dim, :left), text("duration = 4s", x0 + 3.6, 5.6, 0.3, dim, :left)], t1)
-  loop_demo(bouncer(accent, 2s), x0, 1.6, 3.2, t1, 2s, end)
-  loop_demo(bouncer(blue, 4s), x0, 4.4, 3.2, t1, 4s, end)
+  # ナレーションの長さを先に出し、その終わりまで往復させる
   let t = say(sc, "変化は、時刻と値の表で書きます。間は補間されます。", t1)
   t = say(sc, ":ease を付けた区間は、ゆっくり始まり、ゆっくり止まります。", t)
   t = say(sc, "時刻を 0 から 1 で書き、duration を変えると、同じ表が伸び縮みします。", t)
   t = say(sc, "上は 2 秒、下は 4 秒で往復しています。", t)
-  close(sc, longer(t, end))
+  let end = longer(t, t1 + 22s)
+  loop_demo(bouncer(accent, 2s), x0, 1.6, 3.2, t1, 2s, end)
+  loop_demo(bouncer(blue, 4s), x0, 4.4, 3.2, t1, 4s, end)
+  close(sc, end)
 }

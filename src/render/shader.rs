@@ -314,6 +314,21 @@ impl Gen {
                 let (rv, rt) = self.expr(r, out, env, closure, ret)?;
                 binary(*op, &lv, lt, &rv, rt)?
             }
+            // a < b <= c。シェーダの式は副作用が無いので、真ん中を 2 度書いて && でつなぐ
+            Expr::Compare(first, rest) => {
+                let mut left = self.expr(first, out, env, closure, ret)?;
+                let mut parts = Vec::new();
+                for (op, e) in rest {
+                    let right = self.expr(e, out, env, closure, ret)?;
+                    let (v, t) = binary(*op, &left.0, left.1, &right.0, right.1)?;
+                    if t != Ty::Bool {
+                        return err("TypeError.OperandType", "a comparison must produce a Bool");
+                    }
+                    parts.push(v);
+                    left = right;
+                }
+                (format!("({})", parts.join(" && ")), Ty::Bool)
+            }
             Expr::Attr(target, attr) => match target.as_ref() {
                 Expr::Ident(m) if m == "math" && matches!(attr.as_str(), "PI" | "TAU" | "E") => {
                     let v = match attr.as_str() {
@@ -388,7 +403,7 @@ impl Gen {
             return err("NameError.UndefinedVariable", format!("\"{name}\" is not defined"));
         };
         Ok(match v {
-            Value::Number(n) => (lit(n), Ty::Num),
+            Value::Number(n, _) => (lit(n), Ty::Num),
             Value::Bool(b) => (b.to_string(), Ty::Bool),
             Value::Color(c) => (color_lit(&c), Ty::Color),
             Value::Vector(x, y) => (vec_lit(x, y), Ty::Vec),
@@ -398,8 +413,8 @@ impl Gen {
                     return Ok(found.clone());
                 }
                 let items = items.borrow();
-                let (ty, elems): (Ty, Vec<String>) = if items.iter().all(|v| matches!(v, Value::Number(_))) {
-                    (Ty::Nums(Some(items.len())), items.iter().map(|v| match v { Value::Number(n) => lit(*n), _ => unreachable!() }).collect())
+                let (ty, elems): (Ty, Vec<String>) = if items.iter().all(|v| matches!(v, Value::Number(_, _))) {
+                    (Ty::Nums(Some(items.len())), items.iter().map(|v| match v { Value::Number(n, _) => lit(*n), _ => unreachable!() }).collect())
                 } else if items.iter().all(|v| matches!(v, Value::Color(_))) {
                     (Ty::Colors(items.len()), items.iter().map(|v| match v { Value::Color(c) => color_lit(c), _ => unreachable!() }).collect())
                 } else if items.iter().all(|v| matches!(v, Value::Vector(..))) {

@@ -32,10 +32,10 @@ export func run(now) {
   add(sc, card([
     "let b = View(box = Vector(4, 3))",
     "b.place(Circle(",
-    "  position: Pos(1.4, 1.5), radius = 0.8,",
+    "  position = Pos(1.4, 1.5), radius = 0.8,",
     "))",
     "b.place(Rect(",
-    "  position: Pos(3.0, 1.5), w = 1, h = 1.6,",
+    "  position = Pos(3.0, 1.5), w = 1, h = 1.6,",
     "))",
     "output b",
     "",
@@ -55,7 +55,7 @@ export func run(now) {
   let gw = 2.6
   let gh = gw * 3 / 4
   add(sc, [outline(gx, fy, gw, gh), text("--size vga (4:3)", gx + gw / 2, fy + gh + 0.35, 0.27, dim, :center)], t2)
-  t = say(sc, "16:9 に出せば余白が付き、4:3 ならぴったり収まります。", t2)
+  t = say(sc, "16:9 で書き出すと余白が付き、4:3 ならぴったり収まります。", t2)
   t = say(sc, "大きさは、出力するときにコマンドが決めます。", t)
   let end = t + 1s
   demo(picture(end - t1), fx + (fw - fh * 4 / 3) / 2, fy, fh * 4 / 3, t1, end)

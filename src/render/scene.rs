@@ -43,7 +43,7 @@ fn view_box(view: &ObjRef) -> Result<(f64, f64)> {
 fn draw_view(scene: &mut Scene, view: &ObjRef, transform: Affine, frame: &Frame, cache: &mut RenderCache) -> Result<()> {
     let v = view.borrow();
     let opacity = match v.attrs.get("opacity") {
-        Some(Value::Number(o)) => o.clamp(0.0, 1.0),
+        Some(Value::Number(o, _)) => o.clamp(0.0, 1.0),
         _ => 1.0,
     };
     if opacity <= 0.0 {
@@ -91,8 +91,8 @@ fn draw_view(scene: &mut Scene, view: &ObjRef, transform: Affine, frame: &Frame,
 fn sub_transform(child: &ObjRef, parent: Affine) -> Result<Affine> {
     let (bw, bh) = view_box(child)?;
     let c = child.borrow();
-    let w = match c.attrs.get("w") { Some(Value::Number(w)) => Some(*w), _ => None };
-    let h = match c.attrs.get("h") { Some(Value::Number(h)) => Some(*h), _ => None };
+    let w = match c.attrs.get("w") { Some(Value::Number(w, _)) => Some(*w), _ => None };
+    let h = match c.attrs.get("h") { Some(Value::Number(h, _)) => Some(*h), _ => None };
     let (w, h) = match (w, h) {
         (Some(w), Some(h)) => (w, h),
         (Some(w), None) => (w, w * bh / bw),
@@ -118,41 +118,48 @@ fn draw_object(scene: &mut Scene, c: &crate::lang::value::Object, transform: Aff
     let kind = c.kind.as_str();
     let scale = transform.as_coeffs()[0].hypot(transform.as_coeffs()[1]);
     let opacity = match c.attrs.get("opacity") {
-        Some(Value::Number(o)) => o.clamp(0.0, 1.0) as f32,
+        Some(Value::Number(o, _)) => o.clamp(0.0, 1.0) as f32,
         _ => 1.0,
     };
-    // 回転は箱の座標で先に掛ける。中心は図形ごとの基準点 (position、Line は from、Polygon は頂点の重心)
-    let spin = |origin: Point| match c.attrs.get("rotation") {
-        Some(Value::Number(deg)) if *deg != 0.0 => transform * Affine::rotate_about(deg.to_radians(), origin),
-        _ => transform,
+    // 回転の中心は pivot、書いていなければ囲む四角形の中心。描く座標で回すので、後から掛ける
+    let spin = |bbox: Point| -> Result<Affine> {
+        let Some(Value::Number(deg, _)) = c.attrs.get("rotation") else { return Ok(Affine::IDENTITY) };
+        if *deg == 0.0 {
+            return Ok(Affine::IDENTITY);
+        }
+        let origin = match c.attrs.get("pivot") {
+            Some(v) => point_of(v, &format!("{kind}.pivot"))?,
+            None => bbox,
+        };
+        Ok(Affine::rotate_about(deg.to_radians(), transform * origin))
     };
     if kind == "TextArea" {
-        return draw_text(scene, &c.attrs, spin(anchor_point(&c.attrs, kind)?), scale, opacity, cache);
+        return draw_text(scene, &c.attrs, transform, &spin, scale, opacity, cache);
     }
     let (path, origin) = match kind {
         "Circle" => {
             let r = number(&c.attrs, "radius", kind)?;
             let (x, y) = anchored_center(&c.attrs, 2.0 * r, 2.0 * r, kind)?;
-            (Circle::new((x, y), r).to_path(0.01), anchor_point(&c.attrs, kind)?)
+            (Circle::new((x, y), r).to_path(0.01), Point::new(x, y))
         }
         "Ellipse" => {
             let (rx, ry) = (number(&c.attrs, "rx", kind)?, number(&c.attrs, "ry", kind)?);
             let (x, y) = anchored_center(&c.attrs, 2.0 * rx, 2.0 * ry, kind)?;
-            (Ellipse::new((x, y), (rx, ry), 0.0).to_path(0.01), anchor_point(&c.attrs, kind)?)
+            (Ellipse::new((x, y), (rx, ry), 0.0).to_path(0.01), Point::new(x, y))
         }
         "Rect" => {
             let (w, h) = (number(&c.attrs, "w", kind)?, number(&c.attrs, "h", kind)?);
             let (x, y) = anchored_center(&c.attrs, w, h, kind)?;
             let rect = Rect::from_center_size((x, y), (w, h));
             let path = match c.attrs.get("radius") {
-                Some(Value::Number(r)) if *r > 0.0 => RoundedRect::from_rect(rect, *r).to_path(0.01),
+                Some(Value::Number(r, _)) if *r > 0.0 => RoundedRect::from_rect(rect, *r).to_path(0.01),
                 _ => rect.to_path(0.01),
             };
-            (path, anchor_point(&c.attrs, kind)?)
+            (path, Point::new(x, y))
         }
         "Line" => {
-            let from = vector(&c.attrs, "from", kind)?;
-            (Line::new(from, vector(&c.attrs, "to", kind)?).to_path(0.01), from)
+            let (from, to) = (vector(&c.attrs, "from", kind)?, vector(&c.attrs, "to", kind)?);
+            (Line::new(from, to).to_path(0.01), Point::new((from.x + to.x) / 2.0, (from.y + to.y) / 2.0))
         }
         "Polygon" => {
             let Some(Value::List(points)) = c.attrs.get("points") else {
@@ -197,7 +204,7 @@ fn draw_object(scene: &mut Scene, c: &crate::lang::value::Object, transform: Aff
         }
         kind => return err("TypeError.NotPlaceable", format!("cannot draw {kind}")),
     };
-    let placed = spin(origin);
+    let placed = spin(origin)? * transform;
     // blend が付いていたら、その図形の描画だけを 1 枚のレイヤーにして重ね方を変える
     let blend = blend_mode(&c.attrs)?;
     if let Some(mode) = blend {
@@ -233,7 +240,7 @@ fn fingerprint(c: &crate::lang::value::Object, transform: Affine) -> u64 {
 
 fn hash_value(v: &Value, h: &mut impl Hasher) {
     match v {
-        Value::Number(n) => n.to_bits().hash(h),
+        Value::Number(n, _) => n.to_bits().hash(h),
         Value::Bool(b) => b.hash(h),
         Value::Str(s) | Value::Symbol(s) => s.hash(h),
         Value::Duration(d) => d.to_bits().hash(h),
@@ -247,7 +254,7 @@ fn hash_value(v: &Value, h: &mut impl Hasher) {
 }
 
 /// TextArea。fontSize と w は箱の単位なので、ピクセルに直してレイアウトする
-fn draw_text(scene: &mut Scene, attrs: &Attrs, transform: Affine, scale: f64, opacity: f32, cache: &mut RenderCache) -> Result<()> {
+fn draw_text(scene: &mut Scene, attrs: &Attrs, transform: Affine, spin: &dyn Fn(Point) -> Result<Affine>, scale: f64, opacity: f32, cache: &mut RenderCache) -> Result<()> {
     let kind = "TextArea";
     let Some(Value::Str(content)) = attrs.get("text") else {
         return err("NameError.UndefinedAttribute", "TextArea.text is not set");
@@ -258,7 +265,7 @@ fn draw_text(scene: &mut Scene, attrs: &Attrs, transform: Affine, scale: f64, op
         _ => None,
     };
     let max_width = match attrs.get("w") {
-        Some(Value::Number(w)) => Some((*w * scale) as f32),
+        Some(Value::Number(w, _)) => Some((*w * scale) as f32),
         _ => None,
     };
     let align = match attrs.get("align") {
@@ -269,14 +276,15 @@ fn draw_text(scene: &mut Scene, attrs: &Attrs, transform: Affine, scale: f64, op
     let (w, h) = (max_width.unwrap_or(layout.width()) as f64 / scale, f64::from(layout.height()) / scale);
     let (cx, cy) = anchored_center(attrs, w, h, kind)?;
     let top_left = transform * Point::new(cx - w / 2.0, cy - h / 2.0);
+    let placed = spin(Point::new(cx, cy))? * Affine::translate(top_left.to_vec2());
     let fill = color(attrs, "fill", kind)?.unwrap_or(Color::BLACK);
-    text::draw(scene, layout, Affine::translate(top_left.to_vec2()), fill.multiply_alpha(opacity));
+    text::draw(scene, layout, placed, fill.multiply_alpha(opacity));
     Ok(())
 }
 
 fn number(attrs: &Attrs, name: &str, kind: &str) -> Result<f64> {
     match attrs.get(name) {
-        Some(Value::Number(v)) => Ok(*v),
+        Some(Value::Number(v, _)) => Ok(*v),
         Some(v) => err("TypeError.AttributeType", format!("{kind}.{name} expects Number, found {}", v.type_name())),
         None => err("NameError.UndefinedAttribute", format!("{kind}.{name} is not set")),
     }
@@ -287,7 +295,7 @@ fn point_of(v: &Value, whose: &str) -> Result<Point> {
     match v {
         Value::Vector(x, y) => Ok(Point::new(*x, *y)),
         Value::Tuple(items) => match items.as_slice() {
-            [Value::Number(x), Value::Number(y)] => Ok(Point::new(*x, *y)),
+            [Value::Number(x, _), Value::Number(y, _)] => Ok(Point::new(*x, *y)),
             _ => err("TypeError.AttributeType", format!("{whose} expects Vector, found {}", v.type_name())),
         },
         other => err("TypeError.AttributeType", format!("{whose} expects Vector, found {}", other.type_name())),
@@ -347,7 +355,7 @@ fn gradient(attrs: &Attrs) -> Result<Gradient> {
 /// 線の描き方。端の形、角の形、破線
 fn stroke_style(attrs: &Attrs) -> Result<Stroke> {
     let width = match attrs.get("strokeWidth") {
-        Some(Value::Number(w)) => *w,
+        Some(Value::Number(w, _)) => *w,
         _ => 0.01,
     };
     let mut stroke = Stroke::new(width);
@@ -372,13 +380,13 @@ fn stroke_style(attrs: &Attrs) -> Result<Stroke> {
             .borrow()
             .iter()
             .map(|v| match v {
-                Value::Number(n) => Ok(*n),
+                Value::Number(n, _) => Ok(*n),
                 other => err("TypeError.AttributeType", format!("dash expects Number, found {}", other.type_name())),
             })
             .collect::<Result<_>>()?;
         if !pattern.is_empty() {
             let offset = match attrs.get("dashOffset") {
-                Some(Value::Number(o)) => *o,
+                Some(Value::Number(o, _)) => *o,
                 _ => 0.0,
             };
             stroke = stroke.with_dashes(offset, pattern);
@@ -416,13 +424,6 @@ fn color(attrs: &Attrs, name: &str, kind: &str) -> Result<Option<Color>> {
 }
 
 /// position (Pos) と大きさから中心座標を求める
-/// position に書いた点そのもの。回転の中心に使う
-fn anchor_point(attrs: &Attrs, kind: &str) -> Result<Point> {
-    match attrs.get("position") {
-        Some(Value::Apos(_, x, y)) => Ok(Point::new(*x, *y)),
-        _ => err("TypeError.AttributeType", format!("{kind}.position must be a Pos")),
-    }
-}
 
 fn anchored_center(attrs: &Attrs, w: f64, h: f64, kind: &str) -> Result<(f64, f64)> {
     let Some(Value::Apos(anchor, x, y)) = attrs.get("position") else {
@@ -473,7 +474,7 @@ fn draw_shader_fill(scene: &mut Scene, path: &BezPath, transform: Affine, opacit
             .borrow()
             .iter()
             .map(|v| match v {
-                Value::Number(n) => Ok(*n as f32),
+                Value::Number(n, _) => Ok(*n as f32),
                 other => err("TypeError.AttributeType", format!("Shader.args must hold Numbers, found {}", other.type_name())),
             })
             .collect::<Result<_>>()?,
@@ -481,7 +482,7 @@ fn draw_shader_fill(scene: &mut Scene, path: &BezPath, transform: Affine, opacit
         None => Vec::new(),
     };
     let samples = match sh.attrs.get("samples") {
-        Some(Value::Number(n)) if *n >= 1.0 => *n as u32,
+        Some(Value::Number(n, _)) if *n >= 1.0 => *n as u32,
         Some(other) => return err("TypeError.AttributeType", format!("Shader.samples must be a Number of 1 or more, found {other}")),
         None => 1,
     };

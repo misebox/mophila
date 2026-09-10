@@ -9,21 +9,24 @@ export func run(now) {
   let sc = scene()
   add(sc, [heading("作ったものは、部品")], now)
   add(sc, card([
-    "import { make } from .walker",
-    "",
-    "# make(手前の色, 奥の色, 歩く長さ) が",
-    "# その場で歩く人の View を返す",
-    "for (x, w, color) in sizes {",
-    "  let p = make(color, #8b93a7, 20s)",
-    "  v.place(p, at = Pos(x, 7, anchor = :bottomLeft), w = w)",
-    "  track.place(p, at = 0s)",
+    "# walker.moph — 歩く人の View を作って返す",
+    "export func make(near: Color, far: Color,",
+    "                 long: Duration) -> View {",
+    "  let box = View(box = Vector(6, 6))",
+    "  # ... 腰、腿、脛、足を置いて motion を付ける",
+    "  box",
     "}",
-  ], 0.7, 1.8, 7.6, 0.28), now + 0.4s)
+    "",
+    "import { make } from .walker        # 使う側",
+    "let p = make(color, #8b93a7, 20s)",
+    "v.place(p, at = Pos(x, 7, anchor = :bottomLeft), w = w)",
+    "track.place(p, at = 0s)",
+  ], 0.7, 1.6, 7.6, 0.26), now + 0.4s)
   let t1 = now + 0.5s
   let t = say(sc, "作った View は部品です。関数にすれば、何個でも作れます。", t1)
   t = say(sc, "同じ人を、別の場所に別の大きさで置きました。", t)
   t = say(sc, "中の座標は変えていません。置く側が場所と大きさを決めます。", t)
-  t = say(sc, "夕暮れの通りの人たちも、この 1 つの部品です。", t)
+  t = say(sc, "同じ部品を、奥行きを変えて何人も並べれば、通りになります。", t)
   let end = longer(t, t1 + 16s)
   let sizes = [(8.6, 2.2, #9aa1b8), (10.6, 3.4, #c2c8dc), (12.8, 4.6, accent)]
   for (x, w, color) in sizes {

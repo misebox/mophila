@@ -104,7 +104,13 @@ fn walk(placed: &Placed, origin: f64, limit: f64, out: &mut Media) {
                 walk(child, start, limit, out);
             }
         }
-        Track::Timeline(_) => {}
+        Track::Timeline(tl) => {
+            // duration を書いた入れ物は、はみ出した分を切る
+            let limit = tl.duration.get().map_or(limit, |d| limit.min(start + d));
+            for child in tl.tracks.borrow().clone().iter() {
+                walk(child, start, limit, out);
+            }
+        }
         Track::Audio(audio, clip) => {
             let natural = if clip.looping { clip.cut.unwrap_or(f64::INFINITY) } else { audio.clip_length(clip) };
             let length = (start + natural).min(limit) - start;

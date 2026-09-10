@@ -4,7 +4,7 @@ import math
 
 # 10 桁で丸める (0 のところに 0.00000000000000006 が出ないように)
 let scale = 10000000000
-func tidy(x) { math.floor(x * scale + 0.5) / scale }
+func tidy(x: Number) -> Number { math.floor(x * scale + 0.5) / scale }
 
 ## 中心から距離 r、角度 degrees の点。0 が真上で、時計回り
 ## @category 位置

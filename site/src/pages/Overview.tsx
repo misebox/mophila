@@ -53,10 +53,10 @@ export const Overview: Component = () => (
         </ul>
       </section>
       <section>
-        <h2>LLM に書かせる</h2>
+        <h2>LLM を使って書く</h2>
         <p>
           言語は小さく、文法は <Link href={blob("docs/mophila.gbnf")} external>GBNF</Link> に、書き方の要点は <Link href={blob("docs/skills/mophila/SKILL.md")} external>skill</Link> にまとめてあります。
-          これと Language Server を渡せば、Claude Code などにスクリプトを書かせて、そのまま render できます。
+          これと Language Server を渡せば、Claude Code などにスクリプトを書いてもらい、そのまま render できます。
         </p>
       </section>
     </div>

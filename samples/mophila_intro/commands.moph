@@ -6,10 +6,10 @@ import { place, heading, card, scene, add, say, close } from .slides
 export func run(now) {
   log("commands", now)
   let sc = scene()
-  add(sc, [heading("動画にも、画像にも、その場でも")], now)
+  add(sc, [heading("render、preview、bundle")], now)
   let cmds = [
-    ("mophila render scene.moph -o scene.mp4 --size fhd --fps 30", "動画。--size で画面サイズ、--fps でフレームレート", ["render で動画を出します。"]),
-    ("mophila render scene.moph -o frame.png --size fhd --at 2.5s", "画像。--at の時刻の 1 枚", ["--at で時刻を指定すると、その時刻の画像を出します。"]),
+    ("mophila render scene.moph -o scene.mp4 --size fhd --fps 30", "動画。--size で画面サイズ、--fps でフレームレート", ["render は、スクリプトを動画にします。"]),
+    ("mophila render scene.moph -o frame.png --size fhd --at 2.5s", "画像。--at の時刻の 1 枚", ["--at を付けると、その時刻の 1 枚を画像にします。"]),
     ("mophila preview scene.moph", "その場で再生。一時停止と時刻の移動", ["preview は、その場でウィンドウに再生します。"]),
     ("mophila bundle scene.moph -o scene", "実行ファイル。スクリプトと import 先を埋め込む", ["bundle は、スクリプトを埋め込んだ実行ファイルを作ります。"]),
   ]

@@ -1,4 +1,4 @@
-# review.moph — LLM と書く 3: 確認も文字で。timeline の出力は LLM が読める
+# review.moph — LLM を使って書く 3: 確認も文字で。timeline の出力は LLM が読める
 
 import { W, H, v, track, ink, dim, accent, mono, review, dwell, longer } from .theme
 import { place, text, heading, card, scene, add, say, close } from .slides
@@ -7,7 +7,7 @@ export func run(now) {
   log("review", now)
   let sc = scene()
   add(sc, [heading("確かめるのも、文字で")], now)
-  let t = say(sc, "何が、いつ、どう変わるかは、文字で出せます。", now + 0.5s)
+  let t = say(sc, "何が、いつ、どう変わるかは、コマンドが文字で並べてくれます。", now + 0.5s)
   let t1 = now + 0.5s
   add(sc, card([
     "$ mophila timeline crowd.moph",
@@ -24,8 +24,8 @@ export func run(now) {
     "# subtitles and audio: from – to  length  content",
     "    1.00s –    7.00s     6.0s  Subtitle \"…\"  SHORT (needs 6.3s)",
   ], 0.7, 1.8, 14.6, 0.27), t1)
-  t = say(sc, "timeline は、変化の一覧を時刻順に出します。短すぎる字幕には印が付きます。", t)
-  t = say(sc, "sheet は、指定した時刻のコマを 1 枚の画像に並べます。", t)
+  t = say(sc, "timeline は、変化の一覧を時刻順に並べます。短すぎる字幕には印が付きます。", t)
+  t = say(sc, "sheet は、一定の間隔や指定した時刻のコマを 1 枚に並べます。", t)
   t = say(sc, "LLM はこれを読んで、自分で直せます。", t)
   close(sc, t + review)
 }

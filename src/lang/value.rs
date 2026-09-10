@@ -14,9 +14,45 @@ pub fn new_scope() -> Scope {
     Rc::new(RefCell::new(HashMap::new()))
 }
 
+/// 分数のまま持っている数。約分済みで、分母は正
+#[derive(Clone, Copy, PartialEq)]
+pub struct Ratio {
+    pub num: i64,
+    pub den: i64,
+}
+
+impl Ratio {
+    /// 約分して作る。分母が 0 なら作らない
+    pub fn new(num: i64, den: i64) -> Option<Ratio> {
+        if den == 0 {
+            return None;
+        }
+        let sign = if den < 0 { -1 } else { 1 };
+        let g = gcd(num.unsigned_abs(), den.unsigned_abs()) as i64;
+        Some(Ratio { num: sign * (num / g), den: sign * (den / g) })
+    }
+
+    pub fn value(self) -> f64 {
+        self.num as f64 / self.den as f64
+    }
+}
+
+/// 10 進にすると長くなる数か
+fn long_decimal(v: f64) -> bool {
+    format!("{v}").split_once('.').is_some_and(|(_, frac)| frac.len() > 6)
+}
+
+fn gcd(a: u64, b: u64) -> u64 {
+    match b {
+        0 => a.max(1),
+        _ => gcd(b, a % b),
+    }
+}
+
 #[derive(Clone)]
 pub enum Value {
-    Number(f64),
+    /// 実際の値と、分数のままの姿。分数で表せる間だけ後ろを持つ
+    Number(f64, Option<Ratio>),
     Bool(bool),
     Str(String),
     Symbol(String),
@@ -82,8 +118,6 @@ pub struct UserType {
 pub struct Closure {
     pub def: Rc<FuncDef>,
     pub scopes: Scopes,
-    /// let の型注釈 (type_of の表示用)
-    pub type_text: Option<String>,
 }
 
 pub struct Object {
@@ -227,6 +261,15 @@ pub struct Timeline {
     /// キーフレームの時刻が 0..1 の割合か
     pub relative: bool,
     pub duration: Cell<Option<f64>>,
+    /// place で中に置いたもの。入れ物として使うときはこちらだけを持つ
+    pub tracks: RefCell<Vec<Placed>>,
+}
+
+impl Timeline {
+    /// 中身のない入れ物
+    pub fn empty(duration: Option<f64>) -> Timeline {
+        Timeline { param: "t".into(), keyframes: Vec::new(), relative: false, duration: Cell::new(duration), tracks: RefCell::new(Vec::new()) }
+    }
 }
 
 /// 書かれた時刻の範囲。relative なら 1、そうでなければ最後の時刻
@@ -261,7 +304,12 @@ pub struct TlAssign {
 
 impl Timeline {
     pub fn duration(&self) -> f64 {
-        duration_of(self.relative, self.duration.get(), self.keyframes.iter().map(|k| k.end.unwrap_or(k.time)))
+        let keyframes = duration_of(self.relative, self.duration.get(), self.keyframes.iter().map(|k| k.end.unwrap_or(k.time)));
+        match self.duration.get() {
+            Some(d) => d,
+            // 入れ物として使っているときは、中に置いたものの終わりまで
+            None => keyframes.max(self.tracks.borrow().iter().map(Placed::end).fold(0.0, f64::max)),
+        }
     }
 
     /// 書かれた時刻 → 実際の時刻 の倍率。duration を変えると全体が伸縮する
@@ -271,7 +319,7 @@ impl Timeline {
     }
 
     pub fn needs_duration(&self) -> bool {
-        self.relative && self.duration.get().is_none()
+        self.relative && self.duration.get().is_none() && !self.keyframes.is_empty()
     }
 
     /// 先頭行に付いた修飾子は最初の区間のものなので、2 行目に移す
@@ -304,14 +352,14 @@ impl Timeline {
                 TlKeyframe { time, end, assigns, ease }
             })
             .collect();
-        Timeline { param: self.param.clone(), keyframes, relative: self.relative, duration: Cell::new(self.duration.get()) }
+        Timeline { param: self.param.clone(), keyframes, relative: self.relative, duration: Cell::new(self.duration.get()), tracks: RefCell::new(self.tracks.borrow().clone()) }
     }
 }
 
 impl Value {
     pub fn type_name(&self) -> String {
         match self {
-            Value::Number(_) => "Number".into(),
+            Value::Number(..) => "Number".into(),
             Value::Bool(_) => "Bool".into(),
             Value::Str(_) => "String".into(),
             Value::Symbol(_) => "Symbol".into(),
@@ -326,7 +374,7 @@ impl Value {
             Value::Object(o) => o.borrow().kind.clone(),
             Value::Timeline(_) => "Timeline".into(),
             Value::Motion(_) => "Motion".into(),
-            Value::Func(c) => c.type_text.clone().unwrap_or_else(|| "Func".into()),
+            Value::Func(_) => "Func".into(),
             Value::Record(r) => r.name.clone(),
             Value::Type(_) | Value::BuiltinType(_) => "Type".into(),
             Value::Module(_) => "Module".into(),
@@ -337,10 +385,47 @@ impl Value {
     }
 }
 
+impl Value {
+    /// 分数として持たない数
+    pub fn num(v: f64) -> Value {
+        Value::Number(v, Ratio::new_from(v))
+    }
+
+    /// 分数のまま持つ数
+    pub fn ratio(num: i64, den: i64) -> Option<Value> {
+        Ratio::new(num, den).map(|r| Value::Number(r.value(), Some(r)))
+    }
+
+}
+
+impl Ratio {
+    /// 短い 10 進で書ける数は、その分数として持つ。1/3 のように書けないものは持たない
+    fn new_from(v: f64) -> Option<Ratio> {
+        if !v.is_finite() || v.abs() >= 9.0e15 {
+            return None;
+        }
+        if v.fract() == 0.0 {
+            return Some(Ratio { num: v as i64, den: 1 });
+        }
+        let text = format!("{v}");
+        let (int, frac) = text.split_once('.')?;
+        // 指数表記や、長すぎる小数は分数にしない
+        if frac.len() > 9 || !frac.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        let den = 10_i64.checked_pow(frac.len() as u32)?;
+        let digits: i64 = format!("{}{}", int.trim_start_matches('-'), frac).parse().ok()?;
+        let num = if text.starts_with('-') { -digits } else { digits };
+        Ratio::new(num, den)
+    }
+}
+
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Value::Number(v) => write!(f, "{v}"),
+            // 10 進で短く書けない数だけ分数で出す。0.5 は 0.5、1/3 は 1/3
+            Value::Number(v, Some(r)) if r.den != 1 && long_decimal(*v) => write!(f, "{}/{}", r.num, r.den),
+            Value::Number(v, _) => write!(f, "{v}"),
             Value::Bool(v) => write!(f, "{v}"),
             Value::Str(s) => write!(f, "{s}"),
             Value::Symbol(s) => write!(f, ":{s}"),
@@ -356,7 +441,11 @@ impl fmt::Display for Value {
             }
             Value::Tuple(items) => {
                 let parts: Vec<String> = items.iter().map(|v| v.to_string()).collect();
-                write!(f, "({})", parts.join(", "))
+                // 要素 1 つは括弧付きの式と見分けが付くように (1,)
+                match parts.len() {
+                    1 => write!(f, "({},)", parts[0]),
+                    _ => write!(f, "({})", parts.join(", ")),
+                }
             }
             Value::List(items) => {
                 let parts: Vec<String> = items.borrow().iter().map(|v| v.to_string()).collect();
@@ -394,7 +483,22 @@ impl fmt::Display for Value {
                 let rows: Vec<String> = m.rows.iter().map(|r| format!("{}{unit}{}", r.time, modifiers(&r.ease))).collect();
                 write!(f, "Motion {{ duration: {}s, rows: [{}] }}", m.duration(), rows.join(", "))
             }
-            Value::Func(c) => write!(f, "func ({} params)", c.def.params.len()),
+            // 書いてある通りの見出し。型と既定値があればそれも出す
+            Value::Func(c) => {
+                let params: Vec<String> = c
+                    .def
+                    .params
+                    .iter()
+                    .map(|p| {
+                        let name = crate::lang::ast::pattern_text(&p.pattern);
+                        let ann = p.ann.as_ref().map(|a| format!(": {}", a.text)).unwrap_or_default();
+                        let default = p.default.as_ref().map(|_| " = ...".to_string()).unwrap_or_default();
+                        format!("{name}{ann}{default}")
+                    })
+                    .collect();
+                let returns = c.def.returns.as_ref().map(|r| format!(" -> {}", r.text)).unwrap_or_default();
+                write!(f, "func ({}){returns}", params.join(", "))
+            }
             Value::Record(r) => {
                 let parts: Vec<String> = r.fields.iter().map(|(_, v)| v.to_string()).collect();
                 write!(f, "{}({})", r.name, parts.join(", "))

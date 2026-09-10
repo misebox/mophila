@@ -7,7 +7,7 @@ use std::cell::Cell;
 
 use crate::lang::ast::{Arg, BinOp, DictKey, Expr, ImportKind, ImportSource, MotionDef, Pattern, RowItem, Stmt, StmtKind};
 use crate::lang::error::{MophError, Result, err};
-use crate::lang::value::{Audio, Clip, Closure, Module, Motion, MotionRowVal, ObjRef, Object, Placed, Record, Scopes, Timeline, TlAssign, TlKeyframe, Track, UserType, Value, new_scope};
+use crate::lang::value::{Audio, Clip, Closure, Module, Motion, MotionRowVal, ObjRef, Object, Placed, Ratio, Record, Scopes, Timeline, TlAssign, TlKeyframe, Track, UserType, Value, new_scope};
 use crate::stdlib;
 
 /// 文の実行結果。return で関数を抜けるときに伝える
@@ -121,12 +121,9 @@ impl Interp {
     fn exec_kind(&mut self, stmt: &StmtKind) -> Result<Flow> {
         match stmt {
             StmtKind::Let(pat, ann, e) => {
-                let mut v = self.eval(e)?;
+                let v = self.eval(e)?;
                 if let Some(ann) = ann {
                     self.check_type(&v, &ann.name)?;
-                    if let Value::Func(c) = &v {
-                        v = Value::Func(Rc::new(Closure { def: c.def.clone(), scopes: c.scopes.clone(), type_text: Some(ann.text.clone()) }));
-                    }
                 }
                 self.bind(pat, v)?;
                 Ok(Flow::Next(Value::Nothing))
@@ -196,10 +193,11 @@ impl Interp {
                             None => entries.push((key.clone(), v)),
                         }
                     }
-                    (Value::List(items), Value::Number(i)) => {
+                    (Value::List(items), Value::Number(i, _)) => {
                         let mut items = items.borrow_mut();
                         let n = items.len() as i64;
-                        let at = if (*i as i64) < 0 { *i as i64 + n } else { *i as i64 };
+                        let i = whole(*i, "an index")?;
+                        let at = if i < 0 { i + n } else { i };
                         if at < 0 || at >= n {
                             return err("ValueError.OutOfRange", format!("index {i} out of range for length {n}"));
                         }
@@ -263,6 +261,10 @@ impl Interp {
 
     /// 型が合わないときのエラー。決まった値しか取らない型なら、取れる値を並べる
     fn wrong_type(&self, kind: &'static str, what: &str, expected: &str, v: &Value) -> MophError {
+        // 名前は同じでも宣言が違うとき
+        if v.type_name() == self.real_type_name(expected) {
+            return MophError::new(kind, format!("{what} expects the {expected} declared here, but this one was declared somewhere else"));
+        }
         match self.types.get(expected) {
             Some(values) if values.iter().all(|m| m.starts_with(':')) => {
                 MophError::new("ValueError.OutOfRange", format!("{what} is one of {}, found {v}", values.join(" | ")))
@@ -308,14 +310,32 @@ impl Interp {
         if let Some(sym) = name.strip_prefix(':') {
             return matches!(v, Value::Symbol(s) if s == sym);
         }
+        // 関数の型。中身までは見ない
+        if name.contains("->") {
+            return matches!(v, Value::Func(_) | Value::Builtin(_));
+        }
         let actual = match v {
-            Value::Func(_) => "Func".to_string(),
+            Value::Func(_) | Value::Builtin(_) => "Func".to_string(),
             v => v.type_name(),
         };
         if actual == name {
-            return true;
+            // 名前が同じでも、別の宣言なら別の型。import した先の同名の型と混ざらない
+            return match (self.declared(v), self.lookup_type(name)) {
+                (Some(a), Some(b)) => Rc::ptr_eq(&a, &b),
+                (Some(_), None) => false,
+                _ => true,
+            };
         }
         self.types.get(name).is_some_and(|members| members.iter().any(|m| self.matches_type(v, m)))
+    }
+
+    /// その値が struct / record なら、その宣言
+    fn declared(&self, v: &Value) -> Option<Rc<UserType>> {
+        match v {
+            Value::Record(r) => r.decl.clone(),
+            Value::Object(o) => o.borrow().decl.clone(),
+            _ => None,
+        }
     }
 
     /// 名前だけの import は標準ライブラリ (本体に入っているもの)、. や "" で始まるものはファイル
@@ -429,7 +449,7 @@ impl Interp {
         match self.eval(e)? {
             Value::List(items) => Ok(items.borrow().clone()),
             Value::Tuple(items) => Ok(items),
-            Value::Range(a, b) => Ok((a..b).map(|i| Value::Number(i as f64)).collect()),
+            Value::Range(a, b) => Ok((a..b).map(|i| Value::num(i as f64)).collect()),
             Value::Dict(entries) => Ok(entries.borrow().iter().map(|(k, v)| Value::Tuple(vec![Value::Str(k.clone()), v.clone()])).collect()),
             v => err("TypeError.ArgumentType", format!("cannot iterate over {}", v.type_name())),
         }
@@ -491,7 +511,7 @@ impl Interp {
 
     pub fn eval(&mut self, e: &Expr) -> Result<Value> {
         match e {
-            Expr::Number(v) => Ok(Value::Number(*v)),
+            Expr::Number(v) => Ok(Value::num(*v)),
             Expr::Duration(v) => Ok(Value::Duration(*v)),
             Expr::Color(c) => Ok(Value::Color(*c)),
             Expr::Str(s) => Ok(Value::Str(s.clone())),
@@ -499,7 +519,10 @@ impl Interp {
             Expr::Bool(b) => Ok(Value::Bool(*b)),
             Expr::Ident(name) => self.lookup(name),
             Expr::Neg(inner) => match self.eval(inner)? {
-                Value::Number(v) => Ok(Value::Number(-v)),
+                Value::Number(v, r) => Ok(match r.and_then(|r| Ratio::new(-r.num, r.den)) {
+                    Some(r) => Value::Number(-v, Some(r)),
+                    None => Value::num(-v),
+                }),
                 Value::Duration(v) => Ok(Value::Duration(-v)),
                 Value::Vector(x, y) => Ok(Value::Vector(-x, -y)),
                 v => err("TypeError.OperandType", format!("cannot negate {}", v.type_name())),
@@ -518,6 +541,19 @@ impl Interp {
                 Value::Bool(false) => self.eval_bool(r).map(Value::Bool),
                 v => err("TypeError.OperandType", format!("cannot apply or to {}", v.type_name())),
             },
+            // a < b <= c。真ん中は 1 度だけ評価し、偽が出たらそこで止める
+            Expr::Compare(first, rest) => {
+                let mut left = self.eval(first)?;
+                for (op, e) in rest {
+                    let right = self.eval(e)?;
+                    match binary(*op, left, right.clone())? {
+                        Value::Bool(true) => {}
+                        v => return Ok(v),
+                    }
+                    left = right;
+                }
+                Ok(Value::Bool(true))
+            }
             Expr::Binary(op, l, r) => {
                 let l = self.eval(l)?;
                 let r = self.eval(r)?;
@@ -548,7 +584,7 @@ impl Interp {
             },
             Expr::Attr(target, attr) if matches!(attr.as_str(), "x" | "y") => {
                 match self.eval(target)? {
-                    Value::Vector(x, y) | Value::Apos(_, x, y) => Ok(Value::Number(if attr == "x" { x } else { y })),
+                    Value::Vector(x, y) | Value::Apos(_, x, y) => Ok(Value::num(if attr == "x" { x } else { y })),
                     Value::Tuple(items) if items.len() == 2 => Ok(items[if attr == "x" { 0 } else { 1 }].clone()),
                     Value::Object(obj) => self.attr_of(&obj, attr),
                     Value::Record(r) => self.record_attr(&r, attr),
@@ -560,7 +596,7 @@ impl Interp {
                 Value::Audio(a) if attr == "duration" => Ok(Value::Duration(a.length)),
                 Value::Audio(a) if attr == "file" => Ok(Value::Str(a.name.clone())),
                 // 色の成分。r g b は 0..255、a は 0..1 (new Color { } と同じ単位)
-                Value::Color([r, g, b, a]) if matches!(attr.as_str(), "r" | "g" | "b" | "a") => Ok(Value::Number(match attr.as_str() {
+                Value::Color([r, g, b, a]) if matches!(attr.as_str(), "r" | "g" | "b" | "a") => Ok(Value::num(match attr.as_str() {
                     "r" => (r as f64 * 255.0 * 1000.0).round() / 1000.0,
                     "g" => (g as f64 * 255.0 * 1000.0).round() / 1000.0,
                     "b" => (b as f64 * 255.0 * 1000.0).round() / 1000.0,
@@ -594,21 +630,35 @@ impl Interp {
                 }
             }
             Expr::Dict(entries) => {
-                let mut out = Vec::new();
+                let mut out: Vec<(String, Value)> = Vec::new();
                 for (key, e) in entries {
                     let key = match key {
                         DictKey::Str(k) | DictKey::Shorthand(k) => k.clone(),
                     };
-                    out.push((key, self.eval(e)?));
+                    let v = self.eval(e)?;
+                    // 同じキーを 2 回書いたら後が勝つ。Dict(k = v) と同じ
+                    match out.iter_mut().find(|(k, _)| *k == key) {
+                        Some(slot) => slot.1 = v,
+                        None => out.push((key, v)),
+                    }
                 }
                 Ok(Value::Dict(Rc::new(RefCell::new(out))))
             }
-            Expr::Func(def) => Ok(Value::Func(Rc::new(Closure { def: def.clone(), scopes: self.scopes.clone(), type_text: None }))),
+            Expr::Func(def) => Ok(Value::Func(Rc::new(Closure { def: def.clone(), scopes: self.scopes.clone() }))),
             Expr::Motion(def) => self.eval_motion(def),
         }
     }
 
     /// 引数を、宣言の順に並んだフィールド名へ割り当てる。位置と名前を混ぜられる
+    /// 関数として呼ぶ。書いた関数でも math の関数でも同じように呼べる
+    fn call_func(&mut self, f: &Value, args: Vec<Value>) -> Result<Value> {
+        match f {
+            Value::Func(c) => self.apply(c, args.into_iter().map(|v| (None, v)).collect()),
+            Value::Builtin(name) => stdlib::math::call(name, &args),
+            v => err("TypeError.ArgumentType", format!("{} is not a function", v.type_name())),
+        }
+    }
+
     /// 名前を付けずに並べた引数だけを取る
     fn positional(&mut self, kind: &str, args: &[Arg]) -> Result<Vec<Value>> {
         let mut out = Vec::with_capacity(args.len());
@@ -648,6 +698,72 @@ impl Interp {
         Ok(map)
     }
 
+    /// place / addTrack の引数から、置くものを組み立てる
+    fn make_placed(&mut self, who: &str, args: &[(Option<String>, Value)]) -> Result<Placed> {
+                
+                let track = match args.first() {
+                    Some((None, Value::Timeline(tl))) if tl.needs_duration() => {
+                        return err("ValueError.DurationRequired", "a timeline with relative (0..1) keyframes needs duration; set tl.duration = 8s");
+                    }
+                    Some((None, Value::Timeline(tl))) => Track::Timeline(tl.clone()),
+                    Some((None, Value::Object(o))) if o.borrow().kind == "View" => Track::Container(o.clone()),
+                    Some((None, Value::Object(o))) if o.borrow().kind == "Subtitle" => {
+                        if !o.borrow().attrs.contains_key("duration") {
+                            return err("ValueError.DurationRequired", "a Subtitle needs duration before it is placed");
+                        }
+                        Track::Subtitle(o.clone())
+                    }
+                    Some((None, Value::Audio(a))) => Track::Audio(a.clone(), Clip { cut: None, volume: 1.0, looping: false }),
+                    Some((None, Value::Motion(_))) => return err("TypeError.NotPlaceable", "Motion cannot be placed; apply it to make a Timeline"),
+                    Some((None, v)) => return err("TypeError.ArgumentType", format!("{who} expects Timeline, View, Audio or Subtitle, found {}", v.type_name())),
+                    _ => return err("TypeError.ArgumentType", format!("{who} expects a Timeline, View, Audio or Subtitle as the first argument")),
+                };
+                let mut placed = Placed { track, at: 0.0, fade_in: 0.0, fade_out: 0.0 };
+                for (name, v) in &args[1..] {
+                    let arg = name.as_deref().ok_or_else(|| MophError::new("TypeError.ArgumentType", format!("{who} takes one positional argument")))?;
+                    // 音声だけの引数
+                    if let Track::Audio(_, clip) = &mut placed.track {
+                        match (arg, v) {
+                            ("duration", Value::Duration(d)) => {
+                                clip.cut = Some(*d);
+                                continue;
+                            }
+                            ("volume", Value::Number(n, _)) => {
+                                clip.volume = *n;
+                                continue;
+                            }
+                            ("loop", Value::Bool(b)) => {
+                                clip.looping = *b;
+                                continue;
+                            }
+                            ("duration" | "volume" | "loop", v) => {
+                                let expected = match arg {
+                                    "volume" => "Number",
+                                    "loop" => "Bool",
+                                    _ => "Duration",
+                                };
+                                return err("TypeError.ArgumentType", format!("{who} {arg} expects {expected}, found {}", v.type_name()));
+                            }
+                            _ => {}
+                        }
+                    }
+                    let slot = match arg {
+                        "at" => &mut placed.at,
+                        "fadeIn" | "fadeOut" if matches!(placed.track, Track::Subtitle(_)) => {
+                            return err("TypeError.ArgumentType", format!("{who}: a Subtitle has no {arg}; set its duration"));
+                        }
+                        "fadeIn" => &mut placed.fade_in,
+                        "fadeOut" => &mut placed.fade_out,
+                        other => return err("TypeError.ArgumentType", format!("{who} has no argument \"{other}\"")),
+                    };
+                    let Value::Duration(d) = v else {
+                        return err("TypeError.ArgumentType", format!("{who} {arg} expects Duration, found {}", v.type_name()));
+                    };
+                    *slot = *d;
+                }
+        Ok(placed)
+    }
+
     /// 呼んでは作れない名前。組み込みの型なら書き方を示す
     fn cannot_construct(&self, kind: &str) -> Result<Value> {
         let Some(t) = crate::docs::TYPES.iter().find(|t| t.name == kind) else {
@@ -682,7 +798,7 @@ impl Interp {
             "Vector" => {
                 let map = self.resolve_args(kind, &["x", "y"], args)?;
                 match (map.get("x"), map.get("y")) {
-                    (Some(Value::Number(x)), Some(Value::Number(y))) => Ok(Value::Vector(*x, *y)),
+                    (Some(Value::Number(x, _)), Some(Value::Number(y, _))) => Ok(Value::Vector(*x, *y)),
                     _ => err("TypeError.ArgumentType", "Vector needs x and y (Number)"),
                 }
             }
@@ -698,7 +814,7 @@ impl Interp {
                 let map = self.resolve_args(kind, &["x", "y", "anchor"], args)?;
                 let anchor = self.anchor_of(map.get("anchor"))?;
                 match (map.get("x"), map.get("y")) {
-                    (Some(Value::Number(x)), Some(Value::Number(y))) => Ok(Value::Apos(anchor, *x, *y)),
+                    (Some(Value::Number(x, _)), Some(Value::Number(y, _))) => Ok(Value::Apos(anchor, *x, *y)),
                     _ => err("TypeError.ArgumentType", "Pos needs x and y (Number)"),
                 }
             }
@@ -706,7 +822,7 @@ impl Interp {
                 let map = self.resolve_args(kind, &["r", "g", "b", "a"], args)?;
                 let ch = |name: &str, scale: f64, default: Option<f64>| -> Result<f32> {
                     match (map.get(name), default) {
-                        (Some(Value::Number(v)), _) => Ok((v / scale) as f32),
+                        (Some(Value::Number(v, _)), _) => Ok((v / scale) as f32),
                         (Some(v), _) => err("TypeError.ArgumentType", format!("Color.{name} expects Number, found {}", v.type_name())),
                         (None, Some(d)) => Ok(d as f32),
                         (None, None) => err("TypeError.ArityMismatch", format!("Color needs {name}")),
@@ -733,9 +849,20 @@ impl Interp {
             "Range" => {
                 let map = self.resolve_args(kind, &["start", "end"], args)?;
                 match (map.get("start"), map.get("end")) {
-                    (Some(Value::Number(a)), Some(Value::Number(b))) => Ok(Value::Range(*a as i64, *b as i64)),
+                    (Some(Value::Number(a, _)), Some(Value::Number(b, _))) => {
+                        Ok(Value::Range(whole(*a, "Range.start")?, whole(*b, "Range.end")?))
+                    }
                     _ => err("TypeError.ArgumentType", "Range needs start and end (Number)"),
                 }
+            }
+            "Timeline" => {
+                let map = self.resolve_args(kind, &["duration"], args)?;
+                let duration = match map.get("duration") {
+                    Some(Value::Duration(d)) => Some(*d),
+                    None => None,
+                    Some(v) => return Err(self.wrong_type("TypeError.ArgumentType", "Timeline.duration", "Duration", v)),
+                };
+                Ok(Value::Timeline(Rc::new(Timeline::empty(duration))))
             }
             _ => {
                 if let Some(sch) = schema(kind) {
@@ -746,6 +873,10 @@ impl Interp {
                         let expected = sch.iter().find(|(n, _)| *n == name).map(|(_, t)| *t).expect("field exists");
                         if !self.matches_type(&v, expected) {
                             return Err(self.wrong_type("TypeError.ArgumentType", &format!("{kind}.{name}"), expected, &v));
+                        }
+                        // シェーダは関数の中身を GPU 向けに変換するので、書いた func しか受け取れない
+                        if kind == "Shader" && name == "color" && !matches!(v, Value::Func(_)) {
+                            return err("TypeError.ArgumentType", "Shader.color expects a func written in the script, like func (x, y, t) { ... }");
                         }
                         if kind == "TextArea" && name == "font" {
                             if let Value::Str(family) = &v {
@@ -798,7 +929,7 @@ impl Interp {
         for a in args {
             values.push((a.name.clone(), self.eval(&a.value)?));
         }
-        let closure = Closure { def: member.def.clone(), scopes: ty.scopes.clone(), type_text: None };
+        let closure = Closure { def: member.def.clone(), scopes: ty.scopes.clone() };
         // 型名から new を呼んだときも、その中の型名はフィールドから作る (new を呼び直さない)
         let is_new = !member.receiver && name == "new";
         if is_new {
@@ -955,7 +1086,7 @@ impl Interp {
         let Some(member) = news.iter().find(fits).or_else(|| news.first()) else {
             return err("TypeError.ArityMismatch", format!("no new of {} takes {count} arguments", ty.decl.name));
         };
-        let closure = Closure { def: member.def.clone(), scopes: ty.scopes.clone(), type_text: None };
+        let closure = Closure { def: member.def.clone(), scopes: ty.scopes.clone() };
         self.constructing.push(ty.decl.name.clone());
         self.calling = Some(ty.decl.name.clone());
         let out = self.apply(&closure, values);
@@ -1007,6 +1138,15 @@ impl Interp {
                     let Some(item) = m.items.get(method).cloned() else {
                         return err("NameError.UndefinedAttribute", format!("module {} has no item \"{method}\"", m.name));
                     };
+                    // mod.TypeName(...) は、その型を作る
+                    if let Value::Type(ty) = &item {
+                        let ty = ty.clone();
+                        return self.construct_user(&ty, args);
+                    }
+                    if let Value::BuiltinType(name) = &item {
+                        let name = name.clone();
+                        return self.construct(&name, args);
+                    }
                     let values = args.iter().map(|a| self.eval(&a.value)).collect::<Result<Vec<_>>>()?;
                     return match item {
                         Value::Builtin(name) => stdlib::math::call(name, &values),
@@ -1020,6 +1160,11 @@ impl Interp {
                     Value::Motion(m) if method == "apply" => self.apply_motion(&m, values),
                     Value::Motion(m) if method == "reverse" && values.is_empty() => Ok(Value::Motion(Rc::new(m.reverse()))),
                     Value::Timeline(t) if method == "reverse" && values.is_empty() => Ok(Value::Timeline(Rc::new(t.reverse()))),
+                    Value::Timeline(t) if method == "place" => {
+                        let placed = self.make_placed("Timeline.place", &values)?;
+                        t.tracks.borrow_mut().push(placed);
+                        Ok(Value::Nothing)
+                    }
                     other => self.collection_method(&other, method, values),
                 }
             }
@@ -1071,7 +1216,7 @@ impl Interp {
                     .collect();
                 keyframes.push(TlKeyframe { time: row.time, end: row.end, assigns, ease: row.ease.clone() });
             }
-            return Ok(Value::Timeline(Rc::new(Timeline { param: "t".into(), keyframes, relative, duration: Cell::new(None) }.normalize())));
+            return Ok(Value::Timeline(Rc::new(Timeline { param: "t".into(), keyframes, relative, duration: Cell::new(None), tracks: RefCell::new(Vec::new()) }.normalize())));
         }
         // 属性への割り当て → Timeline
         if is_assign {
@@ -1089,7 +1234,7 @@ impl Interp {
                 }
                 keyframes.push(TlKeyframe { time: row.time, end: row.end, assigns, ease: row.ease.clone() });
             }
-            return Ok(Value::Timeline(Rc::new(Timeline { param, keyframes, relative, duration: Cell::new(None) }.normalize())));
+            return Ok(Value::Timeline(Rc::new(Timeline { param, keyframes, relative, duration: Cell::new(None), tracks: RefCell::new(Vec::new()) }.normalize())));
         }
         // 値の表 → Motion。params[0] は行の時刻、以降は左の列
         if def.rows.iter().any(|r| r.end.is_some()) {
@@ -1100,7 +1245,7 @@ impl Interp {
             self.scopes.push(new_scope());
             let result = (|| {
                 if let Some(t) = def.params.first() {
-                    self.scopes.last().expect("scope").borrow_mut().insert(t.clone(), Value::Number(row.time));
+                    self.scopes.last().expect("scope").borrow_mut().insert(t.clone(), Value::num(row.time));
                 }
                 let mut values = Vec::new();
                 for (i, item) in row.items.iter().enumerate() {
@@ -1122,7 +1267,8 @@ impl Interp {
     /// Motion の各行で f(target, t, [列...]) を呼び、その中で target の属性に代入された値をキーフレームとして記録する
     fn apply_motion(&mut self, motion: &Motion, args: Vec<(Option<String>, Value)>) -> Result<Value> {
         let [(None, Value::Object(target)), (None, Value::Func(f))] = args.as_slice() else {
-            return err("TypeError.ArgumentType", "Motion.apply expects (target, func)");
+            // 中で属性に代入する必要があるので、math の関数は渡せない
+            return err("TypeError.ArgumentType", "Motion.apply expects a target and a func written in the script");
         };
         let mut keyframes = Vec::new();
         for row in &motion.rows {
@@ -1138,7 +1284,7 @@ impl Interp {
             target.borrow_mut().attrs = before;
             keyframes.push(TlKeyframe { time: row.time, end: None, assigns, ease: row.ease.clone() });
         }
-        Ok(Value::Timeline(Rc::new(Timeline { param: "t".into(), keyframes, relative: motion.relative, duration: Cell::new(motion.duration.get()) }.normalize())))
+        Ok(Value::Timeline(Rc::new(Timeline { param: "t".into(), keyframes, relative: motion.relative, duration: Cell::new(motion.duration.get()), tracks: RefCell::new(Vec::new()) }.normalize())))
     }
 
     fn method(&mut self, obj: &ObjRef, method: &str, args: Vec<(Option<String>, Value)>) -> Result<Value> {
@@ -1181,68 +1327,8 @@ impl Interp {
                 Some((None, v)) => err("TypeError.ArgumentType", format!("View.place expects Placeable, found {}", v.type_name())),
                 _ => err("TypeError.ArgumentType", "View.place expects a Shape as the first argument"),
             },
-            ("View", "addTrack") | ("Timeline", "place") => {
-                let who = format!("{kind}.{method}");
-                let track = match args.first() {
-                    Some((None, Value::Timeline(tl))) if tl.needs_duration() => {
-                        return err("ValueError.DurationRequired", "a timeline with relative (0..1) keyframes needs duration; set tl.duration = 8s");
-                    }
-                    Some((None, Value::Timeline(tl))) => Track::Timeline(tl.clone()),
-                    Some((None, Value::Object(o))) if matches!(o.borrow().kind.as_str(), "Timeline" | "View") => Track::Container(o.clone()),
-                    Some((None, Value::Object(o))) if o.borrow().kind == "Subtitle" => {
-                        if !o.borrow().attrs.contains_key("duration") {
-                            return err("ValueError.DurationRequired", "a Subtitle needs duration before it is placed");
-                        }
-                        Track::Subtitle(o.clone())
-                    }
-                    Some((None, Value::Audio(a))) => Track::Audio(a.clone(), Clip { cut: None, volume: 1.0, looping: false }),
-                    Some((None, Value::Motion(_))) => return err("TypeError.NotPlaceable", "Motion cannot be placed; apply it to make a Timeline"),
-                    Some((None, v)) => return err("TypeError.ArgumentType", format!("{who} expects Timeline, Audio or Subtitle, found {}", v.type_name())),
-                    _ => return err("TypeError.ArgumentType", format!("{who} expects a Timeline as the first argument")),
-                };
-                let mut placed = Placed { track, at: 0.0, fade_in: 0.0, fade_out: 0.0 };
-                for (name, v) in &args[1..] {
-                    let arg = name.as_deref().ok_or_else(|| MophError::new("TypeError.ArgumentType", format!("{who} takes one positional argument")))?;
-                    // 音声だけの引数
-                    if let Track::Audio(_, clip) = &mut placed.track {
-                        match (arg, v) {
-                            ("duration", Value::Duration(d)) => {
-                                clip.cut = Some(*d);
-                                continue;
-                            }
-                            ("volume", Value::Number(n)) => {
-                                clip.volume = *n;
-                                continue;
-                            }
-                            ("loop", Value::Bool(b)) => {
-                                clip.looping = *b;
-                                continue;
-                            }
-                            ("duration" | "volume" | "loop", v) => {
-                                let expected = match arg {
-                                    "volume" => "Number",
-                                    "loop" => "Bool",
-                                    _ => "Duration",
-                                };
-                                return err("TypeError.ArgumentType", format!("{who} {arg} expects {expected}, found {}", v.type_name()));
-                            }
-                            _ => {}
-                        }
-                    }
-                    let slot = match arg {
-                        "at" => &mut placed.at,
-                        "fadeIn" | "fadeOut" if matches!(placed.track, Track::Subtitle(_)) => {
-                            return err("TypeError.ArgumentType", format!("{who}: a Subtitle has no {arg}; set its duration"));
-                        }
-                        "fadeIn" => &mut placed.fade_in,
-                        "fadeOut" => &mut placed.fade_out,
-                        other => return err("TypeError.ArgumentType", format!("{who} has no argument \"{other}\"")),
-                    };
-                    let Value::Duration(d) = v else {
-                        return err("TypeError.ArgumentType", format!("{who} {arg} expects Duration, found {}", v.type_name()));
-                    };
-                    *slot = *d;
-                }
+            ("View", "addTrack") => {
+                let placed = self.make_placed(&format!("{kind}.{method}"), &args)?;
                 obj.borrow_mut().tracks.push(placed);
                 Ok(Value::Nothing)
             }
@@ -1309,13 +1395,13 @@ impl Interp {
                     Some(v) => v,
                     None => match &param.default {
                         Some(d) => self.eval(d)?,
-                        None => return err("TypeError.ArityMismatch", format!("{} is not given", pattern_text(&param.pattern))),
+                        None => return err("TypeError.ArityMismatch", format!("{} is not given", crate::lang::ast::pattern_text(&param.pattern))),
                     },
                 };
                 // 型を書いてあれば、渡された値を確かめる
                 if let Some(ann) = &param.ann {
                     if !self.matches_type(&value, &self.real_type_name(&ann.name)) {
-                        return Err(self.wrong_type("TypeError.ArgumentType", &pattern_text(&param.pattern), &ann.name, &value));
+                        return Err(self.wrong_type("TypeError.ArgumentType", &crate::lang::ast::pattern_text(&param.pattern), &ann.name, &value));
                     }
                 }
                 self.bind(&param.pattern, value)?;
@@ -1365,7 +1451,8 @@ impl Interp {
 
     fn apply_track_from(&mut self, placed: &Placed, t: f64, origin: f64) -> Result<()> {
         let duration = placed.track.duration();
-        let local = (t - placed.at).min(duration);
+        let elapsed = t - placed.at;
+        let local = elapsed.min(duration);
         if local < 0.0 {
             return Ok(());
         }
@@ -1376,6 +1463,16 @@ impl Interp {
             Track::Container(obj) => {
                 let children = obj.borrow().tracks.clone();
                 for child in &children {
+                    self.apply_track_from(child, local, origin)?;
+                }
+                // View は中身をまとめて 1 枚にできるので、その opacity を動かす
+                if let Some(factor) = fade_factor(placed, elapsed, local, duration) {
+                    let obj = obj.clone();
+                    self.set_attr(&obj, "opacity", Value::num(factor))?;
+                }
+            }
+            Track::Timeline(tl) if tl.keyframes.is_empty() => {
+                for child in tl.tracks.borrow().clone().iter() {
                     self.apply_track_from(child, local, origin)?;
                 }
             }
@@ -1401,15 +1498,13 @@ impl Interp {
                 self.finished.insert(key, values);
             }
             Track::Timeline(tl) => {
+                for child in tl.tracks.borrow().clone().iter() {
+                    self.apply_track_from(child, local, origin)?;
+                }
                 self.apply_timeline(tl, local)?;
-                let fade = match (placed.fade_in > 0.0 && local < placed.fade_in, placed.fade_out > 0.0 && local > duration - placed.fade_out) {
-                    (true, _) => Some(local / placed.fade_in),
-                    (_, true) => Some((duration - local) / placed.fade_out),
-                    _ => None,
-                };
-                if let Some(factor) = fade {
+                if let Some(factor) = fade_factor(placed, elapsed, local, duration) {
                     for target in timeline_targets(tl) {
-                        self.set_attr(&target, "opacity", Value::Number(factor))?;
+                        self.set_attr(&target, "opacity", Value::num(factor))?;
                     }
                 }
             }
@@ -1485,7 +1580,7 @@ impl Interp {
     fn eval_assign(&mut self, tl: &Timeline, a: &TlAssign, time: f64) -> Result<Value> {
         let saved = std::mem::replace(&mut self.scopes, a.scopes.clone());
         let scope = new_scope();
-        scope.borrow_mut().insert(tl.param.clone(), Value::Number(time));
+        scope.borrow_mut().insert(tl.param.clone(), Value::num(time));
         self.scopes.push(scope);
         let result = self.eval(&a.expr);
         self.scopes = saved;
@@ -1494,7 +1589,13 @@ impl Interp {
 }
 
 /// "{name}" を順に引数で置き換える。名前は説明用で、対応は位置で決まる
+/// "{a} {b}".format(...)。Dict を 1 つ渡したときは { } の中の名前で引き、
+/// そうでなければ左から順に引数で置き換える
 fn format(template: &str, values: &[Value]) -> Result<Value> {
+    let by_name = match values {
+        [Value::Dict(d)] => Some(d.borrow().clone()),
+        _ => None,
+    };
     let mut out = String::new();
     let mut rest = template;
     let mut index = 0;
@@ -1503,14 +1604,21 @@ fn format(template: &str, values: &[Value]) -> Result<Value> {
         let Some(end) = rest[start..].find('}') else {
             return err("ValueError.OutOfRange", format!("unterminated {{ in {template:?}"));
         };
-        let Some(v) = values.get(index) else {
-            return err("TypeError.ArityMismatch", format!("format expects {} arguments, {} given", index + 1, values.len()));
-        };
-        out.push_str(&v.to_string());
+        let name = &rest[start + 1..start + end];
+        match &by_name {
+            Some(entries) => match entries.iter().find(|(k, _)| k == name) {
+                Some((_, v)) => out.push_str(&v.to_string()),
+                None => return err("NameError.UndefinedAttribute", format!("format has no key \"{name}\"")),
+            },
+            None => match values.get(index) {
+                Some(v) => out.push_str(&v.to_string()),
+                None => return err("TypeError.ArityMismatch", format!("format expects {} arguments, {} given", index + 1, values.len())),
+            },
+        }
         index += 1;
         rest = &rest[start + end + 1..];
     }
-    if index < values.len() {
+    if by_name.is_none() && index < values.len() {
         return err("TypeError.ArityMismatch", format!("format expects {index} arguments, {} given", values.len()));
     }
     out.push_str(rest);
@@ -1571,11 +1679,11 @@ fn index_value(target: &Value, index: &Value) -> Result<Value> {
         let (a, b) = ((*a).clamp(0, n) as usize, (*b).clamp(0, n) as usize);
         return Ok(Value::List(Rc::new(RefCell::new(items[a.min(b)..b].to_vec()))));
     }
-    let Value::Number(i) = index else {
+    let Value::Number(i, _) = index else {
         return err("TypeError.OperandType", format!("index must be Number, found {}", index.type_name()));
     };
     let n = items.len() as i64;
-    let i = *i as i64;
+    let i = whole(*i, "an index")?;
     let at = if i < 0 { i + n } else { i };
     if at < 0 || at >= n {
         return err("ValueError.OutOfRange", format!("index {i} out of range for length {n}"));
@@ -1589,7 +1697,7 @@ impl Interp {
     let list = |v: Vec<Value>| Value::List(Rc::new(RefCell::new(v)));
     if let Value::Str(text) = receiver {
         return match (method, args.as_slice()) {
-            ("len", []) => Ok(Value::Number(text.chars().count() as f64)),
+            ("len", []) => Ok(Value::num(text.chars().count() as f64)),
             ("replace", [(None, Value::Str(from)), (None, Value::Str(to))]) => Ok(Value::Str(text.replace(from.as_str(), to))),
             _ => err("NameError.UndefinedAttribute", format!("String has no method \"{method}\" with {} arguments", args.len())),
         };
@@ -1600,7 +1708,7 @@ impl Interp {
             ("keys", []) => Ok(list(entries.iter().map(|(k, _)| Value::Str(k.clone())).collect())),
             ("values", []) => Ok(list(entries.iter().map(|(_, v)| v.clone()).collect())),
             ("has", [(None, Value::Str(key))]) => Ok(Value::Bool(entries.iter().any(|(k, _)| k == key))),
-            ("len", []) => Ok(Value::Number(entries.len() as f64)),
+            ("len", []) => Ok(Value::num(entries.len() as f64)),
             _ => err("NameError.UndefinedAttribute", format!("Dict has no method \"{method}\" with {} arguments", args.len())),
         };
     }
@@ -1611,19 +1719,19 @@ impl Interp {
                 target.borrow_mut().push(v.clone());
                 return Ok(Value::Nothing);
             }
-            ("len", []) => return Ok(Value::Number(target.borrow().len() as f64)),
+            ("len", []) => return Ok(Value::num(target.borrow().len() as f64)),
             _ => {}
         }
     }
     let items: Vec<Value> = match receiver {
         Value::List(items) => items.borrow().clone(),
         Value::Tuple(items) => items.clone(),
-        Value::Range(a, b) => (*a..*b).map(|i| Value::Number(i as f64)).collect(),
+        Value::Range(a, b) => (*a..*b).map(|i| Value::num(i as f64)).collect(),
         v => return err("NameError.UndefinedAttribute", format!("{} has no method \"{method}\"", v.type_name())),
     };
     match (method, args.as_slice()) {
-        ("len", []) => Ok(Value::Number(items.len() as f64)),
-        ("enumerate", []) => Ok(list(items.into_iter().enumerate().map(|(i, v)| Value::Tuple(vec![Value::Number(i as f64), v])).collect())),
+        ("len", []) => Ok(Value::num(items.len() as f64)),
+        ("enumerate", []) => Ok(list(items.into_iter().enumerate().map(|(i, v)| Value::Tuple(vec![Value::num(i as f64), v])).collect())),
         ("reverse", []) => Ok(list(items.into_iter().rev().collect())),
         ("to_list", []) => Ok(list(items)),
         ("push", [(None, v)]) => match receiver {
@@ -1635,19 +1743,19 @@ impl Interp {
         },
         ("contains", [(None, v)]) => Ok(Value::Bool(items.iter().any(|x| equals(x, v)))),
         ("sum", []) => items.iter().try_fold(0.0, |acc, v| match v {
-            Value::Number(n) => Ok(acc + n),
+            Value::Number(n, _) => Ok(acc + n),
             v => err("TypeError.OperandType", format!("cannot sum {}", v.type_name())),
-        }).map(Value::Number),
-        ("index_of", [(None, v)]) => Ok(Value::Number(items.iter().position(|x| equals(x, v)).map_or(-1.0, |i| i as f64))),
+        }).map(Value::num),
+        ("index_of", [(None, v)]) => Ok(Value::num(items.iter().position(|x| equals(x, v)).map_or(-1.0, |i| i as f64))),
         ("join", [(None, Value::Str(sep))]) => Ok(Value::Str(items.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(sep))),
-        ("map", [(None, Value::Func(f))]) => {
-            let out = items.into_iter().map(|v| self.apply(f, vec![(None, v)])).collect::<Result<Vec<_>>>()?;
+        ("map", [(None, f @ (Value::Func(_) | Value::Builtin(_)))]) => {
+            let out = items.into_iter().map(|v| self.call_func(f, vec![v])).collect::<Result<Vec<_>>>()?;
             Ok(list(out))
         }
-        ("filter", [(None, Value::Func(f))]) => {
+        ("filter", [(None, f @ (Value::Func(_) | Value::Builtin(_)))]) => {
             let mut out = vec![];
             for v in items {
-                match self.apply(f, vec![(None, v.clone())])? {
+                match self.call_func(f, vec![v.clone()])? {
                     Value::Bool(true) => out.push(v),
                     Value::Bool(false) => {}
                     other => return err("TypeError.ArgumentType", format!("filter expects Bool, found {}", other.type_name())),
@@ -1655,10 +1763,10 @@ impl Interp {
             }
             Ok(list(out))
         }
-        ("reduce", [(None, init), (None, Value::Func(f))]) => {
+        ("reduce", [(None, init), (None, f @ (Value::Func(_) | Value::Builtin(_)))]) => {
             let mut acc = init.clone();
             for v in items {
-                acc = self.apply(f, vec![(None, acc), (None, v)])?;
+                acc = self.call_func(f, vec![acc, v])?;
             }
             Ok(acc)
         }
@@ -1682,11 +1790,12 @@ impl Interp {
             };
             Ok(list(items.into_iter().zip(other).map(|(a, b)| Value::Tuple(vec![a, b])).collect()))
         }
-        ("steps", [(None, Value::Number(n))]) => match receiver {
+        ("steps", [(None, Value::Number(n, _))]) => match receiver {
             Value::Range(a, b) => {
                 // 端を含めて n 等分。Range は end を含まないので、..= で作ったものは b-1 が終端
+                let steps = whole(*n, "steps")?;
                 let (a, b, n) = (*a as f64, (*b - 1) as f64, *n);
-                let out = (0..=n as i64).map(|i| Value::Number(a + (b - a) * i as f64 / n)).collect();
+                let out = (0..=steps).map(|i| Value::num(a + (b - a) * i as f64 / n)).collect();
                 Ok(list(out))
             }
             _ => err("TypeError.ArgumentType", "steps is a method of Range"),
@@ -1698,7 +1807,7 @@ impl Interp {
 
 fn equals(a: &Value, b: &Value) -> bool {
     match (a, b) {
-        (Value::Number(x), Value::Number(y)) | (Value::Duration(x), Value::Duration(y)) => x == y,
+        (Value::Number(x, _), Value::Number(y, _)) | (Value::Duration(x), Value::Duration(y)) => x == y,
         (Value::Bool(x), Value::Bool(y)) => x == y,
         (Value::Str(x), Value::Str(y)) | (Value::Symbol(x), Value::Symbol(y)) => x == y,
         (Value::Tuple(x), Value::Tuple(y)) => x.len() == y.len() && x.iter().zip(y).all(|(a, b)| equals(a, b)),
@@ -1728,6 +1837,7 @@ fn equals(a: &Value, b: &Value) -> bool {
         (Value::Timeline(x), Value::Timeline(y)) => Rc::ptr_eq(x, y),
         (Value::Motion(x), Value::Motion(y)) => Rc::ptr_eq(x, y),
         (Value::Func(x), Value::Func(y)) => Rc::ptr_eq(x, y),
+        (Value::Builtin(x), Value::Builtin(y)) => x == y,
         (Value::Audio(x), Value::Audio(y)) => Rc::ptr_eq(x, y),
         (Value::Module(x), Value::Module(y)) => Rc::ptr_eq(x, y),
         _ => false,
@@ -1777,10 +1887,20 @@ fn collect_objects(obj: &ObjRef, out: &mut Vec<ObjRef>) {
         collect_objects(child, out);
     }
     for placed in &o.tracks {
-        match &placed.track {
+        collect_from_track(&placed.track, out);
+    }
+}
+
+/// 置いたものからたどれるオブジェクトを集める
+fn collect_from_track(track: &Track, out: &mut Vec<ObjRef>) {
+    {
+        match track {
             Track::Audio(..) => {}
             Track::Container(c) | Track::Subtitle(c) => collect_objects(c, out),
             Track::Timeline(tl) => {
+                for child in tl.tracks.borrow().iter() {
+                    collect_from_track(&child.track, out);
+                }
                 for a in tl.keyframes.iter().flat_map(|k| &k.assigns) {
                     collect_objects(&a.target, out);
                 }
@@ -1795,8 +1915,8 @@ fn get_path(obj: &ObjRef, path: &[String]) -> Option<Value> {
     let mut v = obj.borrow().attrs.get(attr).cloned()?;
     for field in rest {
         v = match (v, field.as_str()) {
-            (Value::Vector(x, _), "x") | (Value::Apos(_, x, _), "x") => Value::Number(x),
-            (Value::Vector(_, y), "y") | (Value::Apos(_, _, y), "y") => Value::Number(y),
+            (Value::Vector(x, _), "x") | (Value::Apos(_, x, _), "x") => Value::num(x),
+            (Value::Vector(_, y), "y") | (Value::Apos(_, _, y), "y") => Value::num(y),
             (Value::Apos(_, x, y), "vector") => Value::Vector(x, y),
             (Value::Apos(a, _, _), "anchor") => Value::Symbol(a),
             _ => return None,
@@ -1805,13 +1925,24 @@ fn get_path(obj: &ObjRef, path: &[String]) -> Option<Value> {
     Some(v)
 }
 
-/// エラーに出す引数の名前
-fn pattern_text(p: &Pattern) -> String {
-    match p {
-        Pattern::Name(n) => n.clone(),
-        Pattern::Tuple(items) => format!("({})", items.iter().map(pattern_text).collect::<Vec<_>>().join(", ")),
-        Pattern::List(items) => format!("[{}]", items.iter().map(pattern_text).collect::<Vec<_>>().join(", ")),
+/// fadeIn / fadeOut の途中なら、掛ける不透明度。
+/// fadeIn は置いた時刻からの経過だけで決まる。fadeOut は終わりが要るので、長さのあるものだけ
+fn fade_factor(placed: &Placed, elapsed: f64, local: f64, duration: f64) -> Option<f64> {
+    if placed.fade_in > 0.0 && elapsed < placed.fade_in {
+        return Some(elapsed / placed.fade_in);
     }
+    if placed.fade_out > 0.0 && duration > 0.0 && local > duration - placed.fade_out {
+        return Some((duration - local) / placed.fade_out);
+    }
+    None
+}
+
+/// 整数が要る所。切り捨てずにエラーにする
+fn whole(v: f64, what: &str) -> Result<i64> {
+    if v.fract() != 0.0 || !v.is_finite() {
+        return err("ValueError.OutOfRange", format!("{what} must be a whole number, found {v}"));
+    }
+    Ok(v as i64)
 }
 
 /// deepCopy 用。中の実体も新しく作る
@@ -1851,14 +1982,14 @@ fn record_field(r: &Rc<Record>, field: &str) -> Result<Value> {
 fn set_field(current: Value, path: &[String], value: Value) -> Result<Value> {
     let [field, rest @ ..] = path else { return Ok(value) };
     let number = |v: &Value| match v {
-        Value::Number(n) => Ok(*n),
+        Value::Number(n, _) => Ok(*n),
         v => err("TypeError.AttributeType", format!("{field} expects Number, found {}", v.type_name())),
     };
     match (current, field.as_str()) {
-        (Value::Vector(x, y), "x") => Ok(Value::Vector(number(&set_field(Value::Number(x), rest, value)?)?, y)),
-        (Value::Vector(x, y), "y") => Ok(Value::Vector(x, number(&set_field(Value::Number(y), rest, value)?)?)),
-        (Value::Apos(a, x, y), "x") => Ok(Value::Apos(a, number(&set_field(Value::Number(x), rest, value)?)?, y)),
-        (Value::Apos(a, x, y), "y") => Ok(Value::Apos(a, x, number(&set_field(Value::Number(y), rest, value)?)?)),
+        (Value::Vector(x, y), "x") => Ok(Value::Vector(number(&set_field(Value::num(x), rest, value)?)?, y)),
+        (Value::Vector(x, y), "y") => Ok(Value::Vector(x, number(&set_field(Value::num(y), rest, value)?)?)),
+        (Value::Apos(a, x, y), "x") => Ok(Value::Apos(a, number(&set_field(Value::num(x), rest, value)?)?, y)),
+        (Value::Apos(a, x, y), "y") => Ok(Value::Apos(a, x, number(&set_field(Value::num(y), rest, value)?)?)),
         (Value::Apos(a, x, y), "vector") => match set_field(Value::Vector(x, y), rest, value)? {
             Value::Vector(nx, ny) => Ok(Value::Apos(a, nx, ny)),
             v => err("TypeError.AttributeType", format!("vector expects Vector, found {}", v.type_name())),
@@ -1896,7 +2027,7 @@ fn check_free_name(name: &str) -> Result<()> {
 }
 
 pub fn schema(kind: &str) -> Option<&'static [(&'static str, &'static str)]> {
-    const SHAPE: [(&str, &str); 10] = [
+    const SHAPE: [(&str, &str); 11] = [
         ("fill", "Paint"),
         ("stroke", "Color"),
         ("strokeWidth", "Number"),
@@ -1906,11 +2037,12 @@ pub fn schema(kind: &str) -> Option<&'static [(&'static str, &'static str)]> {
         ("dashOffset", "Number"),
         ("opacity", "Number"),
         ("rotation", "Number"),
+        ("pivot", "Vector"),
         ("blend", "Blend"),
     ];
     macro_rules! with_shape {
         ($($extra:expr),*) => {{
-            const ATTRS: &[(&str, &str)] = &[$($extra,)* SHAPE[0], SHAPE[1], SHAPE[2], SHAPE[3], SHAPE[4], SHAPE[5], SHAPE[6], SHAPE[7], SHAPE[8], SHAPE[9]];
+            const ATTRS: &[(&str, &str)] = &[$($extra,)* SHAPE[0], SHAPE[1], SHAPE[2], SHAPE[3], SHAPE[4], SHAPE[5], SHAPE[6], SHAPE[7], SHAPE[8], SHAPE[9], SHAPE[10]];
             ATTRS
         }};
     }
@@ -1923,7 +2055,6 @@ pub fn schema(kind: &str) -> Option<&'static [(&'static str, &'static str)]> {
         "Path" => with_shape!(("from", "Vector"), ("segments", "List"), ("closed", "Bool")),
         "TextArea" => with_shape!(("position", "Pos"), ("text", "String"), ("w", "Number"), ("font", "String"), ("fontSize", "Number"), ("align", "Align")),
         "View" => &[("box", "Vector"), ("position", "Pos"), ("w", "Number"), ("h", "Number"), ("opacity", "Number"), ("blend", "Blend")],
-        "Timeline" => &[("duration", "Duration")],
         "Subtitle" => &[("text", "String"), ("duration", "Duration")],
         "Shader" => &[("color", "Func"), ("args", "List"), ("samples", "Number")],
         "Gradient" => &[("kind", "GradientKind"), ("from", "Vector"), ("to", "Vector"), ("radius", "Number"), ("stops", "List")],
@@ -1933,7 +2064,7 @@ pub fn schema(kind: &str) -> Option<&'static [(&'static str, &'static str)]> {
 
 fn interpolate(a: &Value, b: &Value, k: f64) -> Value {
     match (a, b) {
-        (Value::Number(x), Value::Number(y)) => Value::Number(x + (y - x) * k),
+        (Value::Number(x, _), Value::Number(y, _)) => Value::num(x + (y - x) * k),
         (Value::Duration(x), Value::Duration(y)) => Value::Duration(x + (y - x) * k),
         (Value::Vector(x0, y0), Value::Vector(x1, y1)) => Value::Vector(x0 + (x1 - x0) * k, y0 + (y1 - y0) * k),
         (Value::Apos(an, x0, y0), Value::Apos(_, x1, y1)) => Value::Apos(an.clone(), x0 + (x1 - x0) * k, y0 + (y1 - y0) * k),
@@ -1952,7 +2083,7 @@ fn binary(op: BinOp, l: Value, r: Value) -> Result<Value> {
     let is_vector = |v: &Value| matches!(v, Value::Vector(..));
     if (is_vector(&l) || is_vector(&r)) && matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div) {
         let as_tuple = |v: &Value| match v {
-            Value::Vector(x, y) => Value::Tuple(vec![Number(*x), Number(*y)]),
+            Value::Vector(x, y) => Value::Tuple(vec![Value::num(*x), Value::num(*y)]),
             other => other.clone(),
         };
         let result = binary(op, as_tuple(&l), as_tuple(&r)).map_err(|e| match e.kind {
@@ -1961,15 +2092,19 @@ fn binary(op: BinOp, l: Value, r: Value) -> Result<Value> {
         })?;
         return Ok(match result {
             Value::Tuple(items) => match items.as_slice() {
-                [Number(x), Number(y)] => Value::Vector(*x, *y),
+                [Number(x, _), Number(y, _)] => Value::Vector(*x, *y),
                 _ => Value::Tuple(items),
             },
             other => other,
         });
     }
+    // 両辺が分数のまま持てていれば、分数で計算する。表せなくなったら実数に落ちる
     let num = |f: fn(f64, f64) -> f64| -> Option<Value> {
         match (&l, &r) {
-            (Number(a), Number(b)) => Some(Number(f(*a, *b))),
+            (Number(a, ra), Number(b, rb)) => Some(match (ra, rb) {
+                (Some(x), Some(y)) => exact(op, *x, *y).unwrap_or_else(|| Value::num(f(*a, *b))),
+                _ => Value::num(f(*a, *b)),
+            }),
             _ => None,
         }
     };
@@ -1992,28 +2127,31 @@ fn binary(op: BinOp, l: Value, r: Value) -> Result<Value> {
             _ => num(|a, b| a - b),
         },
         BinOp::Mul => match (&l, &r) {
-            (Duration(a), Number(b)) | (Number(b), Duration(a)) => Some(Duration(a * b)),
-            (Value::Tuple(items), Number(k)) | (Number(k), Value::Tuple(items)) => scale_tuple(items, *k, BinOp::Mul)?,
-            (Value::Color(c), Number(k)) | (Number(k), Value::Color(c)) => {
+            (Duration(a), Number(b, _)) | (Number(b, _), Duration(a)) => Some(Duration(a * b)),
+            (Value::Tuple(items), Number(k, _)) | (Number(k, _), Value::Tuple(items)) => scale_tuple(items, *k, BinOp::Mul)?,
+            (Value::Color(c), Number(k, _)) | (Number(k, _), Value::Color(c)) => {
                 let k = *k as f32;
                 check_color(Some(Value::Color(std::array::from_fn(|i| c[i] * k))))?
             }
             _ => num(|a, b| a * b),
         },
         BinOp::Div => match (&l, &r) {
-            (_, Number(b)) | (_, Duration(b)) if *b == 0.0 => return err("RuntimeError.DivisionByZero", "division by zero"),
-            (Duration(a), Number(b)) => Some(Duration(a / b)),
-            (Duration(a), Duration(b)) => Some(Number(a / b)),
-            (Value::Tuple(items), Number(k)) => scale_tuple(items, *k, BinOp::Div)?,
+            (_, Number(b, _)) | (_, Duration(b)) if *b == 0.0 => return err("RuntimeError.DivisionByZero", "division by zero"),
+            (Duration(a), Number(b, _)) => Some(Duration(a / b)),
+            (Duration(a), Duration(b)) => Some(Value::num(a / b)),
+            (Value::Tuple(items), Number(k, _)) => scale_tuple(items, *k, BinOp::Div)?,
             _ => num(|a, b| a / b),
         },
         BinOp::Rem => match (&l, &r) {
-            (_, Number(b)) if *b == 0.0 => return err("RuntimeError.DivisionByZero", "division by zero"),
+            (_, Number(b, _)) if *b == 0.0 => return err("RuntimeError.DivisionByZero", "division by zero"),
             _ => num(|a, b| a % b),
         },
         BinOp::Pow => num(f64::powf),
         BinOp::Range | BinOp::RangeInclusive => match (&l, &r) {
-            (Number(a), Number(b)) => Some(Value::Range(*a as i64, *b as i64 + if op == BinOp::RangeInclusive { 1 } else { 0 })),
+            (Number(a, _), Number(b, _)) => {
+                let (a, b) = (whole(*a, "Range.start")?, whole(*b, "Range.end")?);
+                Some(Value::Range(a, b + i64::from(op == BinOp::RangeInclusive)))
+            }
             _ => None,
         },
         BinOp::Lt => cmp(&l, &r).map(|o| Bool(o.is_lt())),
@@ -2041,6 +2179,23 @@ pub fn verb(op: BinOp) -> &'static str {
 }
 
 /// Tuple 同士の要素ごとの演算。長さが違えばエラー
+/// 分数どうしの計算。桁が溢れたら諦めて実数に任せる
+fn exact(op: BinOp, a: Ratio, b: Ratio) -> Option<Value> {
+    let (num, den) = match op {
+        BinOp::Add => (a.num.checked_mul(b.den)?.checked_add(b.num.checked_mul(a.den)?)?, a.den.checked_mul(b.den)?),
+        BinOp::Sub => (a.num.checked_mul(b.den)?.checked_sub(b.num.checked_mul(a.den)?)?, a.den.checked_mul(b.den)?),
+        BinOp::Mul => (a.num.checked_mul(b.num)?, a.den.checked_mul(b.den)?),
+        BinOp::Div => (a.num.checked_mul(b.den)?, a.den.checked_mul(b.num)?),
+        // 指数が整数のときだけ
+        BinOp::Pow if b.den == 1 && (0..=32).contains(&b.num) => {
+            let n = b.num as u32;
+            (a.num.checked_pow(n)?, a.den.checked_pow(n)?)
+        }
+        _ => return None,
+    };
+    Value::ratio(num, den)
+}
+
 fn zip_tuples(a: &[Value], b: &[Value], op: BinOp) -> Result<Option<Value>> {
     if a.len() != b.len() {
         return err("TypeError.ArityMismatch", format!("tuples have different lengths: {} and {}", a.len(), b.len()));
@@ -2050,7 +2205,7 @@ fn zip_tuples(a: &[Value], b: &[Value], op: BinOp) -> Result<Option<Value>> {
 }
 
 fn scale_tuple(items: &[Value], k: f64, op: BinOp) -> Result<Option<Value>> {
-    let items = items.iter().map(|x| binary(op, x.clone(), Value::Number(k))).collect::<Result<Vec<_>>>()?;
+    let items = items.iter().map(|x| binary(op, x.clone(), Value::num(k))).collect::<Result<Vec<_>>>()?;
     Ok(Some(Value::Tuple(items)))
 }
 
@@ -2066,7 +2221,7 @@ fn check_color(v: Option<Value>) -> Result<Option<Value>> {
 
 fn cmp(l: &Value, r: &Value) -> Option<std::cmp::Ordering> {
     match (l, r) {
-        (Value::Number(a), Value::Number(b)) | (Value::Duration(a), Value::Duration(b)) => a.partial_cmp(b),
+        (Value::Number(a, _), Value::Number(b, _)) | (Value::Duration(a), Value::Duration(b)) => a.partial_cmp(b),
         _ => None,
     }
 }

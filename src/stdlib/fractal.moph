@@ -8,6 +8,9 @@
 
 import math
 
+# julia の定数。1 つの Vector か、時刻から Vector を返す関数
+type JuliaConstant = Vector | (Number) -> Vector
+
 ## エスケープタイム系フラクタルの Shader を作る。図形の fill に入れる
 ## @category 描く
 ## @param formula 反復式 (mandelbrot / julia(c) / burning_ship / multibrot(n))
@@ -44,12 +47,12 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
   let zoom_of = zoom
   # ピクセルの箱の座標 → 中心からの複素座標の差
   let up = if flip { 1 } else { -1 }
-  func offset(x, y, zm) {
+  func offset(x: Number, y: Number, zm: Number) -> Vector {
     let scale = span / zm / box.x
     Vector((x - at.x - box.x / 2) * scale, (y - at.y - box.y / 2) * scale * up)
   }
   # 滑らかな脱出回数
-  func escaped(n, r2) { n + 1 - math.ln(math.ln(r2) / 2) / ln_degree }
+  func escaped(n: Number, r2: Number) -> Number { n + 1 - math.ln(math.ln(r2) / 2) / ln_degree }
 
   if precision == :plain {
     return Shader(samples = samples,
@@ -76,7 +79,7 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
   let delta = formula["delta"]
   # 基準軌道 (中心の点の軌道) を 64 bit で。[re, im, re, im, ...]。脱出したらそこまで
   let k0 = param(0)
-  func reference() {
+  func reference() -> List<Number> {
     let orbit = []
     let Z = seed(center, k0)
     for n in 0..ref_iter {
@@ -143,7 +146,7 @@ export let mandelbrot = {
 ##
 ## # c を時刻で動かすと、形が移り変わる
 ## julia(func (t) { Vector(0.7885 * math.cos(t), 0.7885 * math.sin(t)) })
-export func julia(c) -> Dict {
+export func julia(c: JuliaConstant) -> Dict {
   let param = if type_of(c) == "Func" { c } else { func (t) { c } }
   {
     "seed": func (p, k) { p },
@@ -251,19 +254,19 @@ export func cmul(a: Vector, b: Vector) -> Vector { Vector(a.x * b.x - a.y * b.y,
 ## @example
 ## cabs2(Vector(3, 4))   # 25
 export func cabs2(z: Vector) -> Number { z.x * z.x + z.y * z.y }
-func cpow(z, n) {
+func cpow(z: Vector, n: Number) -> Vector {
   let r = Vector(1, 0)
   for i in 0..n { r = cmul(r, z) }
   r
 }
 # 二項係数 C(n, j)
-func binom(n, j) {
+func binom(n: Number, j: Number) -> Number {
   let r = 1
   for i in 0..j { r = r * (n - i) / (i + 1) }
   r
 }
 # |c + d| - |c| を桁落ちなしで
-func diffabs(c, d) {
+func diffabs(c: Number, d: Number) -> Number {
   if c >= 0 {
     if c + d >= 0 { return d }
     return -(2 * c + d)

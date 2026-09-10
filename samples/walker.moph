@@ -73,7 +73,7 @@ func side_of(box, side, color, long) {
 }
 
 # その場で long の間歩く人。near は手前の手足と胴の色、far は奥の手足の色
-export func make(near, far, long) {
+export func make(near: Color, far: Color, long: Duration) -> View {
   let box = View(box = Vector(6, 6))
   let tl = Timeline()
   # 奥 → 胴 → 手前 の順に置き、同じ順に当てる (親の値を読む行は、親の行が先に当たっている必要がある)

@@ -1,4 +1,4 @@
-# llm.moph — LLM と書く 1: 言語なので、文章で頼めば LLM が書ける (依頼 → コード → 動画)
+# llm.moph — LLM を使って書く 1: 文法とドキュメントを渡して頼む (依頼 → コード → 動画)
 
 import { W, H, v, track, ink, dim, accent, panel, line, mono, review, dwell, dwell_code, longer } from .theme
 import { place, show, text, heading, card, outline, scene, add, say, close } from .slides
@@ -7,13 +7,13 @@ import ..crowd
 export func run(now) {
   log("llm", now)
   let sc = scene()
-  add(sc, [heading("言語だから、LLM が書ける")], now)
+  add(sc, [heading("文法とドキュメントを渡して、頼む")], now)
   # 依頼の吹き出し
-  let ask = [place(Rect(position = Pos(0.7, 1.6, anchor = :topLeft), w = 7.6, h = 0.9, radius = 0.3, fill = #22304a, opacity = 0)),
-             place(TextArea(text = "夕暮れの通りを、人が歩いていく動画を作って。奥の人は小さく。", position = Pos(1.0, 1.8, anchor = :topLeft), w = 7.0, fontSize = 0.27, fill = ink, align = :left, opacity = 0))]
+  let ask = [place(Rect(position = Pos(0.7, 1.6, anchor = :topLeft), w = 7.6, h = 1.7, radius = 0.3, fill = #22304a, opacity = 0)),
+             place(TextArea(text = "docs/mophila.gbnf と misebox.github.io/mophila を読んで、mophila で書いて。夕暮れの通りを、人が歩いていく動画。奥の人は小さく。", position = Pos(1.0, 1.8, anchor = :topLeft), w = 7.0, fontSize = 0.27, fill = ink, align = :left, opacity = 0))]
   let t1 = now + 0.5s
   add(sc, ask, t1)
-  let t = say(sc, "文章で頼むと、LLM がスクリプトを書きます。", t1)
+  let t = say(sc, "文法とドキュメントの場所を渡して、mophila で書いてと頼みます。", t1)
   # コードが 1 行ずつ現れる
   let lines = [
     "import { make } from .walker",

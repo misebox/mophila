@@ -51,12 +51,13 @@ export func run(now) {
     "  0..1: foot.from = shin.to",
     "}",
   ], 0.7, 1.8, 7.6, 0.28)
-  let end = tb + 14s
-  for o in b_card { show([o], tb, end) }
+  # ナレーションの長さを先に出し、その終わりまで歩かせる
   t = say(sc, "式の中で、ほかの図形の値も読めます。", tb)
   t = say(sc, "この人は、腰、腿、脛、足の順に、親の先端を読んでつながっています。", t)
   t = say(sc, "角度を sin で揺らすだけで、歩きになります。", t)
+  let end = longer(t, tb + 14s)
+  for o in b_card { show([o], tb, end) }
   let p = make(ink, #8b93a7, end - tb)
   loop_demo(p, 9.8, 6.9 - 6, 6, tb, end - tb, end)
-  close(sc, longer(t, end))
+  close(sc, end)
 }

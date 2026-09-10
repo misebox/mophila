@@ -68,7 +68,7 @@ VS Code 拡張と Neovim の設定は `editors/vscode/README.md`。構文ハイ�
 - ドキュメントページ (`site/`、bun + SolidJS + soluid)。サンプルの動画、組み込みとライブラリの説明、仕様の写し。`bun run docs` でその場で見る (要 bun)。元データ `site/src/data.json` と動画は `bun run docs:gen` (= `scripts/docgen.py --media`) で作り直す。ライブラリの説明はソースの `##` コメントから
 - `docs/mophila-spec.md` — 言語仕様
 - `docs/mophila.gbnf` — 文法 (GBNF)
-- `docs/skills/mophila/SKILL.md` — 書き方の知恵 (LLM に書かせるときに渡す)
+- `docs/skills/mophila/SKILL.md` — 見やすい動画にするための書き方 (LLM に渡す)
 - `examples/` — 構文ごとの短い例
 - `samples/` — 動画の例。`samples/mophila_intro/main.moph` がこの言語の紹介動画
 - `src/stdlib/` — 標準ライブラリ。`import math` (Rust) と、本体に埋め込んだ .moph の `color` `shape` `layout` `animation` `fractal`

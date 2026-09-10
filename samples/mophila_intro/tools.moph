@@ -1,4 +1,4 @@
-# tools.moph — LLM と書く 2: 文法 (GBNF)、LSP、skill の 3 つで、書く側の道具が揃う
+# tools.moph — LLM を使って書く 2: 文法も書き方も、機械が読める形で置いてある
 
 import { W, H, v, track, ink, dim, accent, blue, green, panel, line, review, dwell, longer } from .theme
 import { place, text, heading, card, scene, add, say, close } from .slides
@@ -15,8 +15,8 @@ func pillar(title, lines, cx, color, at, sc) {
 export func run(now) {
   log("tools", now)
   let sc = scene()
-  add(sc, [heading("書く側の道具")], now)
-  let t = say(sc, "LLM に書かせるための道具が 3 つあります。", now + 0.5s)
+  add(sc, [heading("言語のことは、機械が知っている")], now)
+  let t = say(sc, "文法も書き方も、機械が読める形で置いてあります。", now + 0.5s)
   let t1 = t
   pillar("文法 (GBNF)", ["言語の文法を、そのまま", "LLM に渡せる形で置いてある", "", "docs/mophila.gbnf"], 3.3, accent, t1, sc)
   t = say(sc, "文法は GBNF で書いてあり、そのまま LLM に渡せます。", t1)
@@ -24,8 +24,8 @@ export func run(now) {
   pillar("LSP", ["書きながら、間違いが", "その場で分かる", "補完、定義へ移動、名前の変更", "VS Code / Neovim"], 8.0, blue, t2, sc)
   t = say(sc, "LSP があるので、書きながら間違いが分かります。", t2)
   let t3 = t
-  pillar("skill", ["書き方の知恵。部品の型、", "読める時間の決め方、", "見せてから言う、など", "docs/skills/mophila/"], 12.7, green, t3, sc)
-  t = say(sc, "skill には、動画としての書き方の知恵が入っています。", t3)
+  pillar("skill", ["この言語の書き方を", "まとめてある", "型、時間、確認のしかた", "docs/skills/mophila/"], 12.7, green, t3, sc)
+  t = say(sc, "skill には、この言語の書き方がまとめてあります。", t3)
   t = say(sc, "Claude Code のようなエディタで、そのまま使えます。", t)
   close(sc, t + review)
 }

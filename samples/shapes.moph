@@ -26,7 +26,7 @@ let roll = context ball as c {
 roll.duration = total
 track.place(roll, at = 0s)
 
-# 四角。rotation は時計回りの角度。Polygon は頂点の重心を中心に回る
+# 四角。rotation は時計回りの角度。中心は囲む四角形の中心で、pivot を書けばそこを軸にできる
 let square = Polygon(points = regular_polygon(cx, 4.6, 0.95, 4), fill = #3a6fb0)
 v.place(square)
 let spin = context square as s {

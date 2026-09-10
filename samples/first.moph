@@ -1,10 +1,10 @@
-# first.moph — 最初の 1 本。丸が右へ動き、四角が横に広がり、文字が現れる
+# first.moph — 最初の 1 本。丸が右へ動き、四角が横に広がり、文字が現れて、最後に消える
 
 let v = View(box = Vector(16, 9))
 v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #f4f1ea))
 
-let ball = Circle(position = Pos(3, 2.5), radius = 1, fill = #e0604a)
-let bar = Rect(position = Pos(2, 8, anchor = :bottomLeft), w = 0.5, h = 2, fill = #3a6fb0)
+let ball = Circle(position = Pos(3, 2.5), radius = 1, fill = #e0604a, opacity = 1)
+let bar = Rect(position = Pos(2, 8, anchor = :bottomLeft), w = 0.5, h = 2, fill = #3a6fb0, opacity = 1)
 let label = TextArea(text = "mophila", position = Pos(8, 5), fontSize = 1.2, fill = #222222, opacity = 0)
 v.place(ball)
 v.place(bar)
@@ -34,9 +34,16 @@ let appear = context label as l {
   }
 }
 
+# 3 つとも 1 秒かけて消える
+let leave = motion (t) {
+  0s: ball.opacity = 1, bar.opacity = 1, label.opacity = 1
+  1s: ball.opacity = 0, bar.opacity = 0, label.opacity = 0
+}
+
 let track = Timeline()
 track.place(move, at = 0s)
 track.place(widen, at = 0.5s)
 track.place(appear, at = 3s)
+track.place(leave, at = 7s)     # 文字が出そろう 4s から 3 秒見せて、最後の 1 秒で消える
 v.addTrack(track)
 output v

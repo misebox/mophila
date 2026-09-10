@@ -14,8 +14,8 @@ pub struct Entry {
 
 /// import なしで使えるもの
 pub const BUILTINS: &[Entry] = &[
-    Entry { name: "log", signature: "log(値, ...)", returns: "Nothing", doc: "引数を空白区切りで stderr に出す。どの型でも受け取る。動画には出ない" },
-    Entry { name: "type_of", signature: "type_of(値)", returns: "String", doc: "その値の型の名前を返す。どの型でも受け取る" },
+    Entry { name: "log", signature: "log(値, ...)", returns: "Nothing", doc: "引数を空白区切りで stderr に出す。動画には出ない。引数はどの型でもよいので、型を書けない" },
+    Entry { name: "type_of", signature: "type_of(値)", returns: "String", doc: "その値の型の名前を返す。引数はどの型でもよいので、型を書けない" },
 ];
 
 /// 値のメソッドと属性。receiver は型名、returns は戻り値の型 (代入だけのものは空)
@@ -30,7 +30,7 @@ pub struct Method {
 pub const METHODS: &[Method] = &[
     Method { receiver: "String", name: "len", signature: "s.len()", returns: "Number", doc: "文字数" },
     Method { receiver: "String", name: "replace", signature: "s.replace(from: String, to: String)", returns: "String", doc: "from を to に置き換えた文字列" },
-    Method { receiver: "String", name: "format", signature: "\"{name}\".format(値, ...)", returns: "String", doc: "{ } を順に引数で置き換える。名前は説明用" },
+    Method { receiver: "String", name: "format", signature: "\"{name}\".format(値, ...)", returns: "String", doc: "{ } を順に引数で置き換える。名前は説明用。Dict を 1 つ渡すと、{ } の中の名前で引く。引数はどの型でもよいので、型を書けない" },
     Method { receiver: "List", name: "len", signature: "xs.len()", returns: "Number", doc: "要素数" },
     Method { receiver: "List", name: "push", signature: "xs.push(値: T)", returns: "Nothing", doc: "末尾に追加する。その List 自身が変わる" },
     Method { receiver: "List", name: "enumerate", signature: "xs.enumerate()", returns: "List<(Number, T)>", doc: "番号と要素の組。for (i, x) in xs.enumerate() で使う" },
@@ -51,13 +51,13 @@ pub const METHODS: &[Method] = &[
     Method { receiver: "Dict", name: "has", signature: "d.has(key: String)", returns: "Bool", doc: "そのキーがあるか" },
     Method { receiver: "Dict", name: "len", signature: "d.len()", returns: "Number", doc: "要素数" },
     Method { receiver: "View", name: "place", signature: "v.place(o: Placeable, at: Pos, w: Number, h: Number)", returns: "Nothing", doc: "箱の中に置く。View を置くときは at と大きさを渡す (w か h の片方だけなら比率を保つ)" },
-    Method { receiver: "View", name: "addTrack", signature: "v.addTrack(tl: Timeline)", returns: "Nothing", doc: "この View の動きとして Timeline を付ける。output する View に付けたものが動画になる" },
-    Method { receiver: "Timeline", name: "place", signature: "tl.place(x: Timeline | View | Audio | Subtitle, at: Duration, fadeIn: Duration, fadeOut: Duration, duration: Duration, volume: Number, loop: Bool)", returns: "Nothing", doc: "at の時刻に置く。duration volume loop は Audio だけ" },
+    Method { receiver: "View", name: "addTrack", signature: "v.addTrack(x: Timeline | View | Audio | Subtitle, at: Duration, fadeIn: Duration, fadeOut: Duration, duration: Duration, volume: Number, loop: Bool)", returns: "Nothing", doc: "この View の動きとして付ける。output する View に付けたものが動画になる。引数は Timeline.place と同じ" },
+    Method { receiver: "Timeline", name: "place", signature: "tl.place(x: Timeline | View | Audio | Subtitle, at: Duration, fadeIn: Duration, fadeOut: Duration, duration: Duration, volume: Number, loop: Bool)", returns: "Nothing", doc: "at の時刻に中へ置く。fadeIn と fadeOut は Timeline と Audio だけ。duration volume loop は Audio だけ" },
     Method { receiver: "Timeline", name: "reverse", signature: "tl.reverse()", returns: "Timeline", doc: "時間を逆にした Timeline" },
     Method { receiver: "Timeline", name: "duration", signature: "tl.duration = 8s", returns: "Duration", doc: "全体の長さ。0..1 で書いた表はこれに合わせて伸縮する" },
-    Method { receiver: "Motion", name: "apply", signature: "m.apply(target: Placeable, f: (Placeable, Duration, List) -> Nothing)", returns: "Timeline", doc: "表の行ごとに f を呼び、そこで target の属性に代入された値を、その時刻の値とする Timeline を返す" },
+    Method { receiver: "Motion", name: "apply", signature: "m.apply(target: Placeable, f: (Placeable, Duration, List<Number>) -> Nothing)", returns: "Timeline", doc: "表の行ごとに f を呼び、そこで target の属性に代入された値を、その時刻の値とする Timeline を返す" },
     Method { receiver: "Motion", name: "reverse", signature: "m.reverse()", returns: "Motion", doc: "時間を逆にした Motion" },
-    Method { receiver: "Motion", name: "duration", signature: "m.duration = 8s", returns: "", doc: "全体の長さを決める。0..1 で書いた表はこれに合わせて伸縮する。代入だけで、読み出しはできない" },
+    Method { receiver: "Motion", name: "duration", signature: "m.duration = 8s", returns: "Duration", doc: "全体の長さを決める。0..1 で書いた表はこれに合わせて伸縮する。代入だけで、読み出しはできない" },
     Method { receiver: "Vector", name: "x", signature: "v.x", returns: "Number", doc: "x 成分" },
     Method { receiver: "Vector", name: "y", signature: "v.y", returns: "Number", doc: "y 成分" },
     Method { receiver: "Pos", name: "anchor", signature: "p.anchor", returns: "Anchor", doc: "基準点 (:center など)" },
@@ -101,7 +101,7 @@ pub const TYPES: &[Type] = &[
         make: "1\n1.5\n1/3\n25%",
         values: &[],
         members: &[],
-        doc: "数。整数と実数を区別しない。1/3 は分数のまま持ち、25% は 0.25 になる",
+        doc: "数。整数と実数を区別しない。分数で表せるあいだは分数のまま持つので、1/3 * 3 は 1、0.1 + 0.2 は 0.3 になる。sqrt のように分数で表せない計算が来ると実数に落ちる。25% は 0.25",
     },
     Type {
         name: "Duration",
@@ -143,10 +143,10 @@ pub const TYPES: &[Type] = &[
         name: "Tuple",
         category: "Collection",
         union: "",
-        make: "(1, 1.5)\nTuple(1, 1.5)",
+        make: "(1, 1.5)\nTuple(1, 1.5)\n(1,)\n()",
         values: &[],
         members: &[],
-        doc: "要素ごとに型が違ってよい組。長さは書いたときに決まる。Vector や Pos が要る場所には書けない。そこには型名を書く",
+        doc: "要素ごとに型が違ってよい組。長さは書いたときに決まる。要素 1 つは (1,)、空は ()。Vector や Pos が要る場所には書けない。そこには型名を書く",
     },
     Type {
         name: "List",
@@ -155,7 +155,7 @@ pub const TYPES: &[Type] = &[
         make: "[1, 2, 3]\nList(1, 2, 3)\nList()",
         values: &[],
         members: &[],
-        doc: "同じ型の要素を順に並べたもの。[ ] は List(...) と同じものを作る。for で回し、map や filter で作り直す。push で伸ばすと、その List 自身が変わる",
+        doc: "値を順に並べたもの。[ ] は List(...) と同じものを作る。for で回し、map や filter で作り直す。push で伸ばすと、その List 自身が変わる。要素の型は検査しないので、揃えるかどうかは書く側が決める。メソッドの署名にある T は要素の型、U は変換後の型",
     },
     Type {
         name: "Dict",
@@ -173,7 +173,7 @@ pub const TYPES: &[Type] = &[
         make: "0..5\n0..=5\nRange(0, 5)",
         values: &[],
         members: &[],
-        doc: "整数の範囲。.. は末尾を含まず、..= は含む。Range(0, 5) は 0..5 と同じで、0..=5 は Range(0, 6)。for i in 0..n のように回す",
+        doc: "整数の範囲。.. は末尾を含まず、..= は含む。Range(0, 5) は 0..5 と同じで、0..=5 は Range(0, 6)。for i in 0..n のように回す。両端が整数でなければ ValueError.OutOfRange",
     },
     Type {
         name: "Func",
@@ -500,7 +500,8 @@ pub const ATTRS: &[(&str, &str, &str)] = &[
     ("*", "dashOffset", "破線の始まりをずらす長さ。motion で動かすと破線が流れる"),
     ("*", "blend", "下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add"),
     ("*", "opacity", "不透明度 0..1"),
-    ("*", "rotation", "時計回りの回転 (度)。中心は position。Line は from、Polygon と Path は囲む四角形の中心"),
+    ("*", "rotation", "時計回りの回転 (度)"),
+    ("*", "pivot", "回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心"),
     ("Circle", "radius", "半径"),
     ("Ellipse", "rx", "横の半径"),
     ("Ellipse", "ry", "縦の半径"),

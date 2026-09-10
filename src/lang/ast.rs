@@ -32,6 +32,8 @@ pub enum Expr {
     Neg(Box<Expr>),
     Not(Box<Expr>),
     Binary(BinOp, Box<Expr>, Box<Expr>),
+    /// a < b <= c。真ん中は 1 度だけ評価し、偽が出たらそこで止める
+    Compare(Box<Expr>, Vec<(BinOp, Expr)>),
     Attr(Box<Expr>, String),
     Call(Box<Expr>, Vec<Arg>),
     Index(Box<Expr>, Box<Expr>),
@@ -199,7 +201,7 @@ impl Expr {
     pub fn from_value(v: &crate::lang::value::Value) -> Expr {
         use crate::lang::value::Value;
         match v {
-            Value::Number(n) => Expr::Number(*n),
+            Value::Number(n, _) => Expr::Number(*n),
             Value::Duration(d) => Expr::Duration(*d),
             Value::Color(c) => Expr::Color(*c),
             Value::Str(s) => Expr::Str(s.clone()),
@@ -217,4 +219,13 @@ impl Expr {
 fn construct(name: &str, args: Vec<Expr>) -> Expr {
     let args = args.into_iter().map(|value| Arg { name: None, value }).collect();
     Expr::Call(Box::new(Expr::Ident(name.to_string())), args)
+}
+
+/// 引数の見出しに使う名前
+pub fn pattern_text(p: &Pattern) -> String {
+    match p {
+        Pattern::Name(n) => n.clone(),
+        Pattern::Tuple(items) => format!("({})", items.iter().map(pattern_text).collect::<Vec<_>>().join(", ")),
+        Pattern::List(items) => format!("[{}]", items.iter().map(pattern_text).collect::<Vec<_>>().join(", ")),
+    }
 }

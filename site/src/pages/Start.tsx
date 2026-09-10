@@ -61,7 +61,7 @@ export const Start: Component = () => {
         {(s) => (
           <section>
             <h2>最初の 1 本</h2>
-            <p>丸が右へ動き、四角が横に広がり、文字が現れる 4 秒。3 つの図形が、それぞれ別の motion で別の時刻に変わります。</p>
+            <p>丸が右へ動き、四角が横に広がり、文字が現れて、最後に消えます。4 つの motion が、それぞれ別の時刻に動きます。</p>
             <Show when={s().media}>
               <video class="sample" src={`media/${s().name}.mp4`} autoplay muted loop playsinline preload="metadata" />
             </Show>

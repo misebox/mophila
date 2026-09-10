@@ -281,10 +281,10 @@ impl Parser {
                 Tok::Minus => (BinOp::Sub, 7, 8),
                 Tok::DotDot => (BinOp::Range, 6, 7),
                 Tok::DotDotEq => (BinOp::RangeInclusive, 6, 7),
-                Tok::Lt => (BinOp::Lt, 5, 6),
-                Tok::Le => (BinOp::Le, 5, 6),
-                Tok::Gt => (BinOp::Gt, 5, 6),
-                Tok::Ge => (BinOp::Ge, 5, 6),
+                Tok::Lt => (BinOp::Lt, 4, 5),
+                Tok::Le => (BinOp::Le, 4, 5),
+                Tok::Gt => (BinOp::Gt, 4, 5),
+                Tok::Ge => (BinOp::Ge, 4, 5),
                 Tok::EqEq => (BinOp::Eq, 4, 5),
                 Tok::Ne => (BinOp::Ne, 4, 5),
                 Tok::And => (BinOp::And, 3, 4),
@@ -296,6 +296,16 @@ impl Parser {
             }
             self.next();
             let rhs = self.expr(r_bp)?;
+            // 比較は続けて書ける。a < b <= c は (a < b) and (b <= c)
+            if compare_op(op) {
+                let mut parts = vec![(op, rhs)];
+                while let Some(next) = compare_of(self.peek()) {
+                    self.next();
+                    parts.push((next, self.expr(r_bp)?));
+                }
+                lhs = Expr::Compare(Box::new(lhs), parts);
+                continue;
+            }
             lhs = Expr::Binary(op, Box::new(lhs), Box::new(rhs));
         }
         Ok(lhs)
@@ -314,6 +324,11 @@ impl Parser {
             Tok::Symbol(s) => Expr::Symbol(s),
             Tok::Ident(name) => Expr::Ident(name),
             Tok::LParen => {
+                // () は空の Tuple
+                if *self.peek() == Tok::RParen {
+                    self.next();
+                    return Ok(Expr::Tuple(Vec::new()));
+                }
                 let first = self.expr(0)?;
                 if *self.peek() != Tok::Comma {
                     self.expect(Tok::RParen)?;
@@ -322,6 +337,10 @@ impl Parser {
                     let mut items = vec![first];
                     while *self.peek() == Tok::Comma {
                         self.next();
+                        // (1,) のように最後にコンマを置ける
+                        if *self.peek() == Tok::RParen {
+                            break;
+                        }
                         items.push(self.expr(0)?);
                     }
                     self.expect(Tok::RParen)?;
@@ -589,11 +608,14 @@ impl Parser {
         Ok(TypeAnn { text: format!("{name}<{text}>"), name })
     }
 
-    /// type の右辺の 1 つ。型名か、決まった Symbol (":center")
+    /// type の右辺の 1 つ。型名、決まった Symbol (":center")、関数の型
     fn type_member(&mut self) -> Result<String> {
         if let Tok::Symbol(name) = self.peek().clone() {
             self.next();
             return Ok(format!(":{name}"));
+        }
+        if *self.peek() == Tok::LParen {
+            return Ok(self.func_type()?.text);
         }
         self.ident()
     }
@@ -884,4 +906,20 @@ impl Parser {
             }
         }
     }
+}
+
+fn compare_op(op: BinOp) -> bool {
+    matches!(op, BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Eq | BinOp::Ne)
+}
+
+fn compare_of(tok: &Tok) -> Option<BinOp> {
+    Some(match tok {
+        Tok::Lt => BinOp::Lt,
+        Tok::Le => BinOp::Le,
+        Tok::Gt => BinOp::Gt,
+        Tok::Ge => BinOp::Ge,
+        Tok::EqEq => BinOp::Eq,
+        Tok::Ne => BinOp::Ne,
+        _ => return None,
+    })
 }

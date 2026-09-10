@@ -31,13 +31,16 @@ name_1             # 識別子は英字・数字・_。先頭は英字か _
 | 3 | `expr ^ expr` | 右 | べき |
 | 4 | `expr * expr` `expr / expr` `expr % expr` | 左 | 乗除、剰余 |
 | 5 | `expr + expr` `expr - expr` | 左 | 加減 |
-| 6 | `expr .. expr` `expr ..= expr` | なし | 範囲 |
-| 7 | `expr < expr` `expr <= expr` `expr > expr` `expr >= expr` | なし | 比較 |
-| 8 | `expr == expr` `expr != expr` | なし | 等価 |
-| 9 | `expr and expr` | 左 | 論理積 |
-| 10 | `expr or expr` | 左 | 論理和 |
+| 6 | `expr .. expr` `expr ..= expr` | 左 | 範囲 |
+| 7 | `expr < expr` `expr <= expr` `expr > expr` `expr >= expr` `expr == expr` `expr != expr` | 連鎖 | 比較 |
+| 8 | `expr and expr` | 左 | 論理積 |
+| 9 | `expr or expr` | 左 | 論理和 |
 
 `args` は `expr, ...`。名前を付けるときは `name = expr`。
+
+添字と `Range` の両端は整数でなければならない。`xs[1.5]` や `0.5..2.5` は `ValueError.OutOfRange` で、黙って切り捨てることはしない。
+
+比較は続けて書ける。`1 < 2 <= 2` は `(1 < 2) and (2 <= 2)` で、真ん中は 1 度しか評価しない。偽が出たらそこで止まる。`2 == 2 == 2` も `true`。
 
 括弧 `( expr )` は優先順位を変える。リテラル (`( )` `[ ]` `{ }`) と `func` `if` `context` `motion` は優先順位を持たない。3 と 4 を参照。
 
@@ -49,21 +52,38 @@ name_1             # 識別子は英字・数字・_。先頭は英字か _
 
 | 型 | リテラル | 備考 |
 |---|---|---|
-| Number | `1` `1.5` `1/3` `25%` | 整数と実数を区別しない。`1/3` は分数のまま保持。`100%` = 1.0 |
+| Number | `1` `1.5` `1/3` `25%` | 整数と実数を区別しない。`100%` = 1.0。3.2 を参照 |
 | Duration | `83s` `1m23s` `500ms` `01:23` `01:23:45.678` | 単位は ms / s / m / h。コロン形式は mm:ss と hh:mm:ss、小数秒可 |
 | Color | `#rgb` `#rgba` `#rrggbb` `#rrggbbaa` `Color(r, g, b)` `Color(r, g, b, a)` | r/g/b は 0..255、a は 0..1。3/4 桁は各桁を重ねて 6/8 桁に広げる |
 | String | `"hello"` `"say \"hi\""` | エスケープは `\"` `\\` `\n` `\t`。`+` で連結。埋め込みはしない。`"n = {n}".format(n)` が `{...}` を順に置き換える (中の名前は説明用)。Dict を渡すと `"{x} {y}".format({x, y})` のように名前で置き換える |
 | Bool | `true` `false` | |
 | Symbol | `:center` `:linear` | 名前そのものが値。同じ名前どうしだけが等しい |
-| Tuple | `(1, 1.5)` | 要素ごとに型が違ってよい。長さは書いたときに決まる |
-| List | `[1, 2, 3]` | 要素は同じ型 |
+| Tuple | `(1, 1.5)` | 要素ごとに型が違ってよい。長さは書いたときに決まる。要素 1 つは `(1,)`、空は `()` |
+| List | `[1, 2, 3]` | 値を順に並べたもの。要素の型は検査しない。メソッドの署名の `T` は要素の型、`U` は変換後の型 |
 | Dict | `{ "k": v }` `{ x, y }` | キーは String。挿入順を保つ。`{ x, y }` は `{ "x": x, "y": y }` の省略形 |
-| Range | `0..5` `0..=5` | `..` は末尾を含まない |
+| Range | `0..5` `0..=5` | 整数の範囲。`..` は末尾を含まない。両端が整数でなければ `ValueError.OutOfRange` |
 | Func | `func (x) { x }` | 型表記は `(引数) -> 戻り値` |
 | Type | `Circle` | 型そのもの。呼ぶとその型の値を作る |
 | Nothing | | 値を返さなかった関数の戻り値。書き方は無い |
 
-### 3.2 Func の型表記
+### 3.2 分数
+
+Number は、分数で表せるあいだ分数のまま持つ。実数に落ちるのは、分数で表せない計算をしたときだけ。
+
+```
+1/3                    # 1/3
+1/3 + 1/3 + 1/3        # 1
+1/3 * 3                # 1
+2/6                    # 1/3。約分される
+0.1 + 0.2 == 0.3       # true。小数も分数として持つ
+25%                    # 0.25
+```
+
+`+ - * /` と、指数が整数の `^` は分数のまま計算する。`math.sqrt` のように分数で表せない計算が来ると、そこで実数になる。桁が溢れたときも実数になる。
+
+表示は 10 進で書けるならその形。`1/2` は `0.5`、`1/3` は `1/3`。
+
+### 3.3 Func の型表記
 
 型は宣言と同じ形で書く。`func (a: Number, b: Number) -> Number` の型は `(Number, Number) -> Number`。
 
@@ -75,12 +95,14 @@ let apply:  ((Number) -> Number, Number) -> Number = func (f, x) { f(x) }
 
 引数を書かずに `Func` とだけ書いてもよい。可変長は型の後ろに `...` (`(Number...) -> Number`)。組み込みの `log` と `type_of` はどの型でも受け取るので、型を書けない。
 
-### 3.3 リテラルと型名
+### 3.4 リテラルと型名
 
 型は大文字で始まる。型名を呼ぶとその型の値ができる (`Vector(8, 4.5)`)。よく使う型にはリテラルがあり、同じ型名の呼び出しと同じ値になる。
 
 | リテラル | 同じもの |
 |---|---|
+| `()` | `Tuple()` |
+| `(1,)` | `Tuple(1)` |
 | `(1, 2)` | `Tuple(1, 2)` |
 | `[1, 2, 3]` | `List(1, 2, 3)` |
 | `{ "k": v }` | `Dict(k = v)` (名前にできないキーは `{ }` だけ) |
@@ -88,17 +110,19 @@ let apply:  ((Number) -> Number, Number) -> Number = func (f, x) { f(x) }
 | `0..=5` | `Range(0, 6)` |
 | `#4080e0` | `Color(64, 128, 224)` |
 
+同じキーを 2 回書いたら、どちらの書き方でも後が勝つ。
+
 `Number` `Duration` `Bool` `String` `Symbol` `Func` はリテラルだけで、呼んでは作れない。呼ぶと `TypeError.ArgumentType` で書き方を返す。
 
 組み込みの型の名前は予約されていて、`struct` / `record` / `type` で宣言し直すと `NameError.Reserved`。
 
-### 3.4 Union 型
+### 3.5 Union 型
 
 既存の型を `|` で結んだ名前。`type Fill = Color | Gradient`。値は作れず、引数や属性の型として書く。
 
 言語が持つ union: `Shape` (図形すべて)、`Placeable` (`Shape | View`)、`Paint` (`Color | Gradient | Shader`)。
 
-### 3.5 record と struct
+### 3.6 record と struct
 
 違いはイミュータブルかどうか。`record` はイミュータブル、`struct` はミュータブル。それ以外 (フィールド、`func`、`method`、`private`、注釈) は同じ。どちらもトップレベルで宣言する。
 
@@ -156,7 +180,7 @@ record のフィールドへの代入は、その値を変えるのではなく�
 
 同じ名前の `func` / `method` を宣言すれば、`copy` などより先にそちらが使われる。
 
-### 3.6 注釈
+### 3.7 注釈
 
 宣言の前の行に `@名前` を書く。複数は空白で並べる。
 
@@ -175,11 +199,11 @@ record Vec2 {
 }
 ```
 
-### 3.7 別名
+### 3.8 別名
 
 `alias P = Pos` で、長い型名に短い名前を付ける。そのファイルの、その行より後ろで使える。`export` はできない。
 
-### 3.8 決まった値しか取らない型
+### 3.9 決まった値しか取らない型
 
 属性がこの型なら、その型に載っている名前しか書けない。値はすべて Symbol で、型を呼んでは作れない。違う名前を書くと `ValueError.OutOfRange` が、取れる値を並べて出る。
 
@@ -200,14 +224,14 @@ record Vec2 {
 type Mode = :fast | :slow
 ```
 
-### 3.9 位置
+### 3.10 位置
 
 - Vector: 実数 2 つ。`.x` `.y`。`Vector ± Vector`、`Vector × Number`、`Vector ÷ Number`、`-Vector`
 - Pos: `x`、`y`、`anchor` (既定 `:center`)。`.anchor` `.vector` `.x` `.y` (`.x` `.y` は読み書きできる)。`Pos(Vector(1, 1.5))` でも作れる
 - `(8, 4.5)` は Tuple であって Vector でも Pos でもない。`Vector` や `Pos` が要る場所には型名を書く
 - anchor の解決 (`:topLeft` が図形のどこかを出すこと) は描画のときに行われ、スクリプトからは触れない
 
-### 3.10 図形
+### 3.11 図形
 
 `Circle` `Ellipse` `Rect` `TextArea` は `position` (Pos) で置く。`Line` は `from` と `to`、`Polygon` は `points`、`Path` は `from` と `segments` が位置を決めるので `position` を持たない。
 
@@ -236,11 +260,10 @@ type Mode = :fast | :slow
 | `dashOffset` | Number | 破線の始まりをずらす長さ |
 | `opacity` | Number | 不透明度 0..1 |
 | `rotation` | Number | 時計回りの回転 (度) |
+| `pivot` | Vector | 回転の中心。書かなければ、その図形を囲む四角形の中心 |
 | `blend` | Blend | 下の絵との重ね方 |
 
-`rotation` の中心は `position`。`Line` は `from`、`Polygon` と `Path` は囲む四角形の中心。
-
-### 3.11 箱
+### 3.12 箱
 
 ```
 View(box = Vector(16, 9))
@@ -253,7 +276,7 @@ View(box = Vector(16, 9))
 | `blend` | Blend | 中身を 1 枚にしてから、下の絵と重ねる |
 | `position` `w` `h` | Pos / Number | 別の View に置かれたときの位置と大きさ |
 
-### 3.12 塗り
+### 3.13 塗り
 
 `fill` に入れられるのは `Color` `Gradient` `Shader` (`Paint`)。
 
@@ -293,9 +316,11 @@ Shader(color = func (x, y, t) { Color(x * 16, 0, 128) })
 
 `args` は毎フレーム読むので、motion の行で変えれば動く。`run` では走らず、`render` `preview` `sheet` で走る。GPU の実数は 32 bit。
 
-### 3.13 時間
+### 3.14 時間
 
-時間を持つ型は 3 つ。`Motion` は値の並びだけを持ち、対象を持たない。`Timeline` は対象と属性まで決まっていて、入れ物にもなる。`Audio` は読み込んだ音声。
+時間を持つ型は 3 つ。`Motion` は値の並びだけを持ち、対象を持たない。`Timeline` は対象と属性まで決まったもので、同時に入れ物でもある。`Audio` は読み込んだ音声。
+
+`motion` が返す `Timeline` も `Timeline()` で作った `Timeline` も同じ型で、どちらも `place` で中にものを置ける。
 
 ```
 let m = motion (t, a, b) {      # Motion。値の表
@@ -328,13 +353,16 @@ motion (t) {
 
 `:linear` `:ease_in` `:ease_out` `:ease` の 4 つで、書かなければ `:linear`。Easing は属性の型ではなく、この行末にだけ書ける。値の意味は「組み込み」のページにある。
 
-置く:
+置く。`Timeline.place` は Timeline の中へ、`View.addTrack` はその View の動きとして付ける。引数は同じで、`output` した View に付いたものが動画になる。
 
 ```
+v.addTrack(track)
 track.place(tl, at = 2s, fadeIn = 0.3s, fadeOut = 0.3s)
 track.place(bgm, at = 0s, duration = 30s, volume = 0.6, loop = true)
 track.place(Subtitle(text = "ここに字幕", duration = 2s), at = 5s)
 ```
+
+`fadeIn` は置いた時刻から、`fadeOut` は終わりに向かって、置いたものの不透明度を動かす。View に付けると中身をまとめて 1 枚として掛かる。Subtitle には効かない (`duration` で長さを決める)。
 
 `duration` を指定した Timeline は、はみ出した分を切る。音声は `duration` で切り (繰り返さなければファイルより長くならない)、`volume` は 1 がそのまま、`loop = true` は `duration` か動画の終わりまで繰り返す (動画は延びない)。同じ音声を何度でも置けて、重なれば混ざる。
 
@@ -420,11 +448,11 @@ context a as x, b as y { }   # 複数書ける
 ### 4.5 型の宣言
 
 ```
-record Size { }        # 3.5
-struct Counter { }     # 3.5
-@nocopy                # 3.6。直後の record / struct に付く
-alias P = Pos          # 3.7。そのファイルのその行より後ろだけ
-type Fill = Color | Gradient   # 3.4
+record Size { }        # 3.6
+struct Counter { }     # 3.6
+@nocopy                # 3.7。直後の record / struct に付く
+alias P = Pos          # 3.8。そのファイルのその行より後ろだけ
+type Fill = Color | Gradient   # 3.5
 ```
 
 `record` `struct` `type` はトップレベルにだけ書ける。
@@ -472,7 +500,7 @@ output v      # この View が動画になる。1 つのファイルに 1 つ
 - 箱 (View) は `box = Vector(w, h)` で座標系を宣言する。中の座標はその単位
 - `view.place(shape)`。図形の位置は図形の `position` で決まる
 - `view.place(other_view, at = Pos, w =, h =)` で View を入れ子にする。w か h の片方だけなら縦横比を保ち、両方なら比率を保ったまま収める。子の座標は子の box で解釈される
-- `timeline.place(view, at =)` / `view.addTrack(view)` で、子 View の Timeline を親の時間軸で動かす
+- `view.addTrack(x)` で、その View の動きとして付ける。`output` した View に付けたものが動画になる。`x` は Timeline、View、Audio、Subtitle のどれかで、引数は `Timeline.place` と同じ
 - クロージャと Timeline はスコープを共有する (複製しない)。定義後に変数を変えれば、その値が見える
 
 ## 6. 組み込みと標準ライブラリ
@@ -493,7 +521,7 @@ String / List / Dict / Range のメソッドは組み込みで、`import` は要
 | math | 数学。`PI` `TAU` `E` などの定数と、三角関数・丸め・平方根・対数・最大最小 |
 | color | 色を作る、混ぜる。明るくする、暗くする、不透明度を変える、色相から作る |
 | shape | Polygon の `points` を作る。円周上の点、正多角形、星、矢印 |
-| layout | 並べる位置を出す。格子、直線上の等間隔、比率を保って収めた大きさ |
+| layout | 並べる位置を計算する。格子、直線上の等間隔、比率を保って収めた大きさ |
 | animation | 図形や View を動かす Timeline を返す。現れる、消える、滑る、回る |
 | fractal | エスケープタイム系フラクタルの Shader。反復式、精度、色付けを組み合わせる |
 

@@ -210,7 +210,8 @@ fn handle_request(docs: &HashMap<String, Doc>, req: &Request) -> Response {
             let doc = doc_of(&p.text_document_position_params.text_document.uri);
             let text = doc.map(|d| d.text.as_str()).unwrap_or("");
             let globals: &[(String, Value)] = doc.map(|d| d.globals.as_slice()).unwrap_or(&[]);
-            Response::new_ok(req.id.clone(), hover(text, globals, p.text_document_position_params.position))
+            let uri = &p.text_document_position_params.text_document.uri;
+            Response::new_ok(req.id.clone(), hover(uri, text, globals, p.text_document_position_params.position))
         }
         GotoDefinition::METHOD => {
             let p: GotoDefinitionParams = match params(req) { Ok(p) => p, Err(r) => return r };
@@ -348,23 +349,12 @@ fn enclosing_new(text: &str, pos: Position) -> Option<String> {
     None
 }
 
-/// import 先のソース。ファイルか、本体に埋め込んだ標準ライブラリの .moph
-fn module_source(uri: &Uri, path: &str) -> Option<String> {
-    if !path.ends_with(".moph") {
-        return match crate::stdlib::find(path)? {
-            crate::stdlib::Lib::Script(src) => Some(src.to_string()),
-            crate::stdlib::Lib::Native(_) => None,
-        };
-    }
-    std::fs::read_to_string(resolve(uri, path)?).ok()
-}
-
 /// import 先の export と output
 fn exports_of(uri: &Uri, path: &str) -> Option<Vec<(String, CompletionItemKind)>> {
     if path == "math" {
         return Some(MATH.iter().map(|e| (e.name.to_string(), if e.signature.contains('(') { CompletionItemKind::FUNCTION } else { CompletionItemKind::CONSTANT })).collect());
     }
-    let src = module_source(uri, path)?;
+    let (_, src) = module_source(uri, path)?;
     let tokens = lex(&src).ok()?;
     let mut out = Vec::new();
     for w in tokens.windows(3) {
@@ -386,11 +376,15 @@ fn attrs_doc(kind: &str) -> String {
     schema(kind).map(|s| s.iter().map(|(a, t)| format!("{a}: {t}")).collect::<Vec<_>>().join(", ")).unwrap_or_default()
 }
 
-fn hover(text: &str, globals: &[(String, Value)], pos: Position) -> Option<Hover> {
-    let (word, _) = word_at(text, pos)?;
+fn hover(uri: &Uri, text: &str, globals: &[(String, Value)], pos: Position) -> Option<Hover> {
+    let (word, before) = word_at(text, pos)?;
     let body = if let Some(attrs) = schema(&word) {
         let list = attrs.iter().map(|(a, t)| format!("- `{a}`: {t}")).collect::<Vec<_>>().join("\n");
         format!("**{word}**\n\n{list}")
+    } else if let Some(doc) = imported_doc(uri, text, &word, &before) {
+        doc
+    } else if let Some(doc) = doc_comment_of(text, &word) {
+        doc
     } else if let Some((_, v)) = globals.iter().find(|(n, _)| *n == word) {
         let shown = v.to_string();
         let shown: String = shown.chars().take(120).collect();
@@ -406,6 +400,99 @@ fn hover(text: &str, globals: &[(String, Value)], pos: Position) -> Option<Hover
         return None;
     };
     Some(Hover { contents: HoverContents::Markup(MarkupContent { kind: MarkupKind::Markdown, value: body }), range: None })
+}
+
+/// import した名前なら、import 先の ## ドキュメントコメントと署名
+fn imported_doc(uri: &Uri, text: &str, word: &str, before: &str) -> Option<String> {
+    let tokens = lex(text).ok()?;
+    let path = if before.ends_with('.') {
+        let module: String = before.trim_end_matches('.').chars().rev().take_while(|c| c.is_alphanumeric() || *c == '_').collect::<String>().chars().rev().collect();
+        import_path_for(&tokens, &module)?
+    } else {
+        import_path_for(&tokens, word)?
+    };
+    let (_, src) = module_source(uri, &path)?;
+    doc_comment_of(&src, word)
+}
+
+/// その行が name を定義しているか。let / func / struct / record / type、export 付きも
+fn defines(line: &str, name: &str) -> bool {
+    let Ok(tokens) = lex(line.trim()) else { return false };
+    let mut i = 0;
+    if matches!(tokens.first().map(|t| &t.tok), Some(Tok::Export)) {
+        i = 1;
+    }
+    let starts = matches!(
+        tokens.get(i).map(|t| &t.tok),
+        Some(Tok::Let | Tok::Func | Tok::Type | Tok::RecordKw | Tok::StructKw)
+    );
+    starts && matches!(tokens.get(i + 1).map(|t| &t.tok), Some(Tok::Ident(n)) if n == name)
+}
+
+/// export の行から、本体の { を落とした署名だけを取る
+fn signature_of(line: &str) -> String {
+    let chars: Vec<char> = line.chars().collect();
+    let Some(open) = chars.iter().position(|c| *c == '(') else {
+        return line.trim_end_matches(" {").trim_end().to_string();
+    };
+    let mut depth = 0;
+    let mut end = chars.len();
+    for (i, c) in chars.iter().enumerate().skip(open) {
+        match c {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    end = i + 1;
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    // 引数の後ろに -> 型 が続くなら、本体の { の手前まで
+    let rest: String = chars[end..].iter().collect();
+    let tail = match rest.trim_start().starts_with("->") {
+        true => rest.split('{').next().unwrap_or("").trim_end().to_string(),
+        false => String::new(),
+    };
+    format!("{}{}", chars[..end].iter().collect::<String>(), tail)
+}
+
+/// `##` の並びと、その次の export の 1 行
+fn doc_comment_of(src: &str, name: &str) -> Option<String> {
+    let mut block: Vec<String> = Vec::new();
+    for line in src.lines() {
+        if let Some(rest) = line.strip_prefix("##") {
+            block.push(rest.trim().to_string());
+            continue;
+        }
+        if defines(line, name) {
+            let signature = signature_of(line);
+            let mut out = vec![format!("```\n{signature}\n```")];
+            let summary: Vec<&String> = block.iter().take_while(|b| !b.starts_with('@')).collect();
+            if !summary.is_empty() {
+                out.push(summary.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(" "));
+            }
+            let tags: Vec<String> = block
+                .iter()
+                .filter(|b| b.starts_with("@param ") || b.starts_with("@returns "))
+                .map(|b| match b.strip_prefix("@param ") {
+                    Some(rest) => match rest.split_once(' ') {
+                        Some((n, d)) => format!("- `{n}` — {d}"),
+                        None => format!("- `{rest}`"),
+                    },
+                    None => format!("- 戻り値 — {}", b.trim_start_matches("@returns ")),
+                })
+                .collect();
+            if !tags.is_empty() {
+                out.push(tags.join("\n"));
+            }
+            return Some(out.join("\n\n"));
+        }
+        block.clear();
+    }
+    None
 }
 
 /// カーソルの下の語と同じ識別子の出現 (ファイル内)
@@ -484,11 +571,7 @@ fn definition(uri: &Uri, text: &str, pos: Position) -> Option<Location> {
     if before.ends_with('.') {
         let module: String = before.trim_end_matches('.').chars().rev().take_while(|c| c.is_alphanumeric() || *c == '_').collect::<String>().chars().rev().collect();
         if let Some(path) = import_path_for(&tokens, &module) {
-            if !path.ends_with(".moph") {
-                return None;
-            }
-            let target = resolve(uri, &path)?;
-            let src = std::fs::read_to_string(&target).ok()?;
+            let (target, src) = module_source(uri, &path)?;
             let def = find_definition(&lex(&src).ok()?, &word).or_else(|| if word == "output" { Some((1, 1)) } else { None })?;
             return Some(Location { uri: file_uri(&target)?, range: point(def) });
         }
@@ -497,15 +580,34 @@ fn definition(uri: &Uri, text: &str, pos: Position) -> Option<Location> {
         return Some(Location { uri: uri.clone(), range: point(def) });
     }
     if let Some(path) = import_path_for(&tokens, &word) {
-        if !path.ends_with(".moph") {
-            return None;
-        }
-        let target = resolve(uri, &path)?;
-        let src = std::fs::read_to_string(&target).ok()?;
+        let (target, src) = module_source(uri, &path)?;
         let def = find_definition(&lex(&src).ok()?, &word).unwrap_or((1, 1));
         return Some(Location { uri: file_uri(&target)?, range: point(def) });
     }
     None
+}
+
+/// import 先のファイルと中身。標準ライブラリは実行ファイルに埋め込んであるので、
+/// 定義へ飛べるように、読める場所へ書き出してからそこを指す
+fn module_source(uri: &Uri, path: &str) -> Option<(std::path::PathBuf, String)> {
+    if path.ends_with(".moph") {
+        let target = resolve(uri, path)?;
+        let src = std::fs::read_to_string(&target).ok()?;
+        return Some((target, src));
+    }
+    let (_, src) = crate::stdlib::SCRIPTS.iter().find(|(n, _)| *n == path)?;
+    let dir = std::env::var_os("XDG_CACHE_HOME")
+        .map(std::path::PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".cache")))
+        .unwrap_or_else(std::env::temp_dir)
+        .join("mophila")
+        .join("stdlib");
+    std::fs::create_dir_all(&dir).ok()?;
+    let target = dir.join(format!("{path}.moph"));
+    if std::fs::read_to_string(&target).ok().as_deref() != Some(*src) {
+        std::fs::write(&target, src).ok()?;
+    }
+    Some((target, (*src).to_string()))
 }
 
 fn point((line, col): (usize, usize)) -> Range {

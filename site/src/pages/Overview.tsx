@@ -1,23 +1,10 @@
-import { type Component } from "solid-js";
+import { Show, type Component } from "solid-js";
 import { Link } from "@/components/ui";
+import { data } from "@/data";
 import { Code } from "@/parts";
 import { href } from "@/route";
 import { blob, repo } from "@/repo";
 
-const CIRCLE = `let v = new View { box: (16, 9) }
-let c = new Circle { position: apos!(:center, 8, 4.5), radius: 1, fill: #ffb454 }
-v.place(c)
-
-let grow = context c as o {
-  motion (t) {
-    0s: o.radius = 1
-    3s: o.radius = 3 :ease
-  }
-}
-let track = new Timeline {}
-track.place(grow, at: 1s)
-v.addTrack(track)
-output v`;
 
 export const Overview: Component = () => (
   <div class="overview">
@@ -40,7 +27,7 @@ export const Overview: Component = () => (
       <section>
         <h2>丸を 1 つ置いて、大きくする</h2>
         <p>1 秒後から 3 秒かけて半径を 1 から 3 にする。時刻と値の表を書くだけで、間は補間されます。</p>
-        <Code text={CIRCLE} />
+        <Show when={data.samples.find((s) => s.name === "circle")}>{(s) => <Code text={s().code} />}</Show>
       </section>
       <section>
         <h2>考え方</h2>

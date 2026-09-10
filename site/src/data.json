@@ -2674,6 +2674,20 @@
  ],
  "samples": [
   {
+   "name": "circle",
+   "desc": "丸を 1 つ置いて、大きくする",
+   "code": "# circle.moph — 丸を 1 つ置いて、大きくする\n\nlet v = View(box = Vector(16, 9))\nv.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #f4f1ea))\n\nlet ball = Circle(position = Pos(8, 4.5), radius = 1, fill = #e0604a)\nv.place(ball)\n\n# 時刻と値の表。間は補間される\nlet grow = context ball as c {\n  motion (t) {\n    0s: c.radius = 1\n    3s: c.radius = 3 :ease\n  }\n}\n\nlet track = Timeline()\ntrack.place(grow, at = 1s)\nv.addTrack(track)\noutput v\n",
+   "length": 4.0,
+   "media": {
+    "width": 1280,
+    "height": 720,
+    "fps": 30.0,
+    "seconds": 4.0
+   },
+   "trim": "",
+   "listed": false
+  },
+  {
    "name": "first",
    "desc": "最初の 1 本。丸が右へ動き、四角が横に広がり、文字が現れて、最後に消える",
    "code": "# first.moph — 最初の 1 本。丸が右へ動き、四角が横に広がり、文字が現れて、最後に消える\n\nimport { fade_out } from animation\n\nlet v = View(box = Vector(16, 9))\nv.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #f4f1ea))\n\n# 動かす 3 つは 1 つの箱にまとめる。まとめて薄くできる\nlet stage = View(box = Vector(16, 9), opacity = 1)\nv.place(stage, at = Pos(0, 0, anchor = :topLeft), w = 16)\n\nlet ball = Circle(position = Pos(3, 2.5), radius = 1, fill = #e0604a)\nlet bar = Rect(position = Pos(2, 8, anchor = :bottomLeft), w = 0.5, h = 2, fill = #3a6fb0)\nlet label = TextArea(text = \"mophila\", position = Pos(8, 5), fontSize = 1.2, fill = #222222, opacity = 0)\nstage.place(ball)\nstage.place(bar)\nstage.place(label)\n\n# 丸は 3 秒かけて右へ。ease で加速して減速する\nlet move = context ball as b {\n  motion (t) {\n    0s: b.position.x = 3\n    3s: b.position.x = 13 :ease\n  }\n}\n\n# 四角は 2 秒で横に広がる\nlet widen = context bar as r {\n  motion (t) {\n    0s: r.w = 0.5\n    2s: r.w = 12 :ease_out\n  }\n}\n\n# 文字は 1 秒で現れる\nlet appear = context label as l {\n  motion (t) {\n    0s: l.opacity = 0\n    1s: l.opacity = 1\n  }\n}\n\nlet track = Timeline()\ntrack.place(move, at = 0s)\ntrack.place(widen, at = 0.5s)\ntrack.place(appear, at = 3s)\n# 文字が出そろう 4s から 3 秒見せて、最後の 1 秒で箱ごと消える\ntrack.place(fade_out(stage, 1s), at = 7s)\nv.addTrack(track)\noutput v\n",

@@ -18,10 +18,10 @@ BIN = ROOT / "target/debug/mophila"
 SITE = ROOT / "site"
 MEDIA = SITE / "public" / "media"
 # サンプルのページに出さないもの (使い方のページで扱う)
-ONLY_START = {"first"}
+ONLY_START = {"circle", "first"}
 # サンプルの表示順。intro は長いので動画は付けない
 # 並び順。あとのものが前のものを import するように並べる (grid は orbit / bars / clock / bounce を使う)
-SAMPLES = ["first", "shapes", "bounce", "bars", "clock", "orbit", "fractal", "walker", "passerby", "crowd", "grid", "julia", "burning_ship", "mandelbrot"]
+SAMPLES = ["circle", "first", "shapes", "bounce", "bars", "clock", "orbit", "fractal", "walker", "passerby", "crowd", "grid", "julia", "burning_ship", "mandelbrot"]
 
 
 def builtin_docs() -> dict:

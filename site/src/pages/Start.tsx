@@ -15,6 +15,7 @@ const COMMANDS = [
 ];
 
 export const Start: Component = () => {
+  const circle = data.samples.find((s) => s.name === "circle");
   const first = data.samples.find((s) => s.name === "first");
   const editors = data.docs.find((d) => d.key === "editors");
   return (
@@ -57,10 +58,31 @@ export const Start: Component = () => {
         <Code text={INSTALL} />
       </section>
 
+      <Show when={circle}>
+        {(s) => (
+          <section>
+            <h2>丸を 1 つ置いて、大きくする</h2>
+            <p>1 秒後から 3 秒かけて、半径を 1 から 3 にします。時刻と値を表に書くだけで、間は補間されます。</p>
+            <Show when={s().media}>
+              <video class="sample" src={`media/${s().name}.mp4`} autoplay muted loop playsinline preload="metadata" />
+            </Show>
+            <p>次の内容を circle.moph という名前で保存します。</p>
+            <Code text={s().code} />
+            <ul class="plain">
+              <li>View は 16 x 9 の箱。座標はこの箱の中の値で、ピクセルは出力のときに決める</li>
+              <li>place で図形を箱に置く。Pos は座標と、その座標が図形のどこを指すか (anchor)</li>
+              <li>context ... motion で「何秒にどの属性がいくつになるか」を書く。行末の :ease は値の変わり方</li>
+              <li>Timeline に置いた時刻 (at) から、その動きが始まる</li>
+            </ul>
+            <GitHubLink href={blob(`samples/${s().name}.moph`)} />
+          </section>
+        )}
+      </Show>
+
       <Show when={first}>
         {(s) => (
           <section>
-            <h2>最初の 1 本</h2>
+            <h2>複数のオブジェクトを動かす</h2>
             <p>丸が右へ動き、四角が横に広がり、文字が現れて、最後に消えます。4 つの motion が、それぞれ別の時刻に動きます。</p>
             <Show when={s().media}>
               <video class="sample" src={`media/${s().name}.mp4`} autoplay muted loop playsinline preload="metadata" />
@@ -68,10 +90,9 @@ export const Start: Component = () => {
             <p>次の内容を first.moph という名前で保存します。</p>
             <Code text={s().code} />
             <ul class="plain">
-              <li>View は 16 x 9 の箱。座標はこの箱の中の値で、ピクセルは出力のときに決める</li>
-              <li>place で図形を箱に置く。Pos は座標と、その座標が図形のどこを指すか (anchor)</li>
-              <li>context ... motion で「何秒にどの属性がいくつになるか」を書く。行末の :ease は値の変わり方</li>
               <li>Timeline に motion を置く時刻 (at) をずらすと、それぞれ別のタイミングで動き出す</li>
+              <li>動かす 3 つは 1 つの View にまとめてある。View の opacity は中身をまとめて 1 枚として掛かる</li>
+              <li>fade_out はその View を薄くする Timeline を返す。図形を 1 つずつ消さなくてよい</li>
             </ul>
             <GitHubLink href={blob(`samples/${s().name}.moph`)} />
           </section>

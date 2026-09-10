@@ -1,0 +1,20 @@
+# circle.moph — 丸を 1 つ置いて、大きくする
+
+let v = View(box = Vector(16, 9))
+v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #f4f1ea))
+
+let ball = Circle(position = Pos(8, 4.5), radius = 1, fill = #e0604a)
+v.place(ball)
+
+# 時刻と値の表。間は補間される
+let grow = context ball as c {
+  motion (t) {
+    0s: c.radius = 1
+    3s: c.radius = 3 :ease
+  }
+}
+
+let track = Timeline()
+track.place(grow, at = 1s)
+v.addTrack(track)
+output v

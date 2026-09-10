@@ -75,11 +75,11 @@ pub enum Value {
     Record(Rc<Record>),
     /// 型そのもの。呼ぶと値を作る
     Type(Rc<UserType>),
-    /// 組み込みの型の名前
+    /// builtin の型の名前
     BuiltinType(String),
     /// import で束縛されるモジュール
     Module(Rc<Module>),
-    /// 組み込み関数 (math.sin など)
+    /// builtin関数 (math.sin など)
     Builtin(&'static str),
     /// import "file.m4a" で読み込んだ音声ファイル
     Audio(Rc<Audio>),

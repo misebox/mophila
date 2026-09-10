@@ -79,7 +79,7 @@ enum Command {
         #[arg(long)]
         stdio: bool,
     },
-    /// 組み込みの型・関数・メソッドの説明を JSON で表示する (scripts/docgen.py が読む)
+    /// builtin の型・関数・メソッドの説明を JSON で表示する (scripts/docgen.py が読む)
     Doc,
     /// スクリプトを埋め込んだ実行ファイルを作る
     Bundle {

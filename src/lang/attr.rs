@@ -62,7 +62,7 @@ fn wrote(v: Value) -> Result<Written> {
     Ok(Written::Replace(v))
 }
 
-/// 組み込みの値が持つ属性 1 つ。ここが唯一の定義で、実行時の読み書きも
+/// builtin の値が持つ属性 1 つ。ここが唯一の定義で、実行時の読み書きも
 /// `mophila doc` が出す説明も、同じ表を引く
 pub struct AttrDef {
     /// この属性を持つ型
@@ -238,7 +238,7 @@ impl Interp {
         }
         Some(match (target, name) {
             (Value::Module(m), name) if m.items.contains_key(name) => Attr::ro(move || Ok(m.items[name].clone())),
-            // struct / 組み込みの型のインスタンス。属性は宣言か schema が決める
+            // struct / builtin の型のインスタンス。属性は宣言か schema が決める
             (Value::Object(o), name) => Attr::rw(
                 move || {
                     self.field_ok(&o.borrow().decl, name)?;
@@ -296,7 +296,7 @@ mod tests {
     fn every_receiver_is_a_known_type() {
         for a in ATTRS {
             for r in a.receivers {
-                assert!(crate::docs::TYPES.iter().any(|t| t.name == *r), "{r}.{} の受け手は組み込みの型ではない", a.name);
+                assert!(crate::docs::TYPES.iter().any(|t| t.name == *r), "{r}.{} の受け手はbuiltin の型ではない", a.name);
                 assert!(def_of(r, a.name).is_some(), "{r}.{} を引けない", a.name);
             }
         }

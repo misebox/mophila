@@ -112,6 +112,12 @@ a.side-title.active { color: var(--accent); }
 .side-caret { display: flex; transition: transform 0.12s; }
 .side-caret.open { transform: rotate(90deg); }
 .side-items.nested { padding-left: 14px; border-left: 1px solid var(--line); margin-left: 4px; margin-top: 2px; }
+/* 見出しと、その下にぶら下がる group。縦線 1 本でまとめる */
+.side-section + .side-section { margin-top: 24px; }
+.side-section-title { color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: 0.04em; padding: 0 8px 6px; }
+.side-section-body { padding-left: 12px; border-left: 1px solid var(--line); }
+/* 見出しの下は 1 まとまりに見せる。group どうしの間は外より狭く */
+.side-section-body .side-group + .side-group { margin-top: 8px; }
 .side-link { display: block; color: var(--muted); text-decoration: none; padding: 4px 0; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .side-link.deep { padding-left: 14px; font-size: 13px; }
 .side-link:hover { color: var(--ink); }

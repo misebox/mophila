@@ -12,7 +12,7 @@ pub enum Kind {
     UndefinedAttribute,
     /// let を書かずに初めて代入した
     AssignWithoutLet,
-    /// 組み込みの名前を宣言し直した
+    /// builtin の名前を宣言し直した
     Reserved,
     /// 演算子の左右
     OperandType,
@@ -65,7 +65,7 @@ impl Kind {
             Kind::UndefinedVariable => "その名前が見つからない",
             Kind::UndefinedAttribute => "その型にその属性やメソッドが無い",
             Kind::AssignWithoutLet => "let を書かずに初めて代入した",
-            Kind::Reserved => "組み込みの型や関数の名前を宣言し直した",
+            Kind::Reserved => "builtin の型や関数の名前を宣言し直した",
             Kind::OperandType => "演算子の左右の型が合わない",
             Kind::AttributeType => "属性に入れる値の型が合わない",
             Kind::ArgumentType => "引数の型が合わない",

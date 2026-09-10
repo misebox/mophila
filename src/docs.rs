@@ -1,4 +1,4 @@
-//! 組み込みの説明。LSP のホバーと補完、`mophila doc --json` (docgen の元) が同じ表を使う
+//! builtin の説明。LSP のホバーと補完、`mophila doc --json` (docgen の元) が同じ表を使う
 
 use serde_json::{Value as Json, json};
 
@@ -19,7 +19,7 @@ pub const BUILTINS: &[Entry] = &[
 ];
 
 
-/// 組み込みの型。
+/// builtin の型。
 /// - category はドキュメントの分類。CATEGORIES の順に並べる
 /// - union は言語が定義している union のうち、この型が属するもの (属さなければ空)
 /// - make は作り方。1 行が 1 通りで、ここに無い書き方は無い。作れない型は空

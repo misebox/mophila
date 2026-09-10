@@ -9,7 +9,7 @@
 # │  ├─ UndefinedVariable
 # │  ├─ UndefinedAttribute
 # │  ├─ AssignWithoutLet
-# │  └─ Reserved            組み込みの型の名前を struct / record / type で宣言し直した
+# │  └─ Reserved            builtin の型の名前を struct / record / type で宣言し直した
 # ├─ TypeError              型が合わない
 # │  ├─ OperandType          演算子の左右
 # │  ├─ AttributeType        属性に入れる値

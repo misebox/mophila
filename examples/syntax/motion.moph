@@ -33,7 +33,7 @@ let m2 = motion {
 let c1 = Circle(position = Pos(0.5, 1.5), radius = 0.3, fill = #a0a0a0)
 v.place(c1)
 
-# apply は組み込みメソッド。列を受け取る関数を渡す
+# apply はbuiltinメソッド。列を受け取る関数を渡す
 let calc = func (c1, t, [x, r, _]) {
   context c1 as o {
     o.position, o.radius = Pos(x / 5, 1.5), r / 100

@@ -523,7 +523,7 @@ impl Interp {
             .iter()
             .rev()
             .find_map(|s| s.borrow().get(name).cloned())
-            // 組み込みの型は名前だけで値として引ける (alias 用)
+            // builtin の型は名前だけで値として引ける (alias 用)
             .or_else(|| Self::is_builtin_type(name).then(|| Value::BuiltinType(name.to_string())))
             .ok_or_else(|| {
                 let hint = if stdlib::find(name).is_some() { format!("; add \"import {name}\"") } else { String::new() };
@@ -767,7 +767,7 @@ impl Interp {
         Ok(placed)
     }
 
-    /// 呼んでは作れない名前。組み込みの型なら書き方を示す
+    /// 呼んでは作れない名前。builtin の型なら書き方を示す
     fn cannot_construct(&self, kind: &str) -> Result<Value> {
         let Some(t) = crate::docs::TYPES.iter().find(|t| t.name == kind) else {
             return match self.types.contains_key(kind) {
@@ -1103,7 +1103,7 @@ impl Interp {
         out
     }
 
-    /// 組み込みの型の名前か
+    /// builtin の型の名前か
     fn is_builtin_type(name: &str) -> bool {
         crate::docs::TYPES.iter().any(|t| t.name == name)
     }
@@ -1864,8 +1864,8 @@ fn deep_copy(v: &Value) -> Value {
 }
 
 /// record のフィールドを読む
-/// いちばん外側のスコープ。組み込み関数も、ふつうの束縛として置く。
-/// 名前で分岐しないので、同じ名前を書いたときに黙って組み込みが勝つことがない
+/// いちばん外側のスコープ。builtin関数も、ふつうの束縛として置く。
+/// 名前で分岐しないので、同じ名前を書いたときに黙ってbuiltinが勝つことがない
 fn root_scope() -> Rc<RefCell<HashMap<String, Value>>> {
     let scope = new_scope();
     for b in crate::docs::BUILTINS {
@@ -1874,7 +1874,7 @@ fn root_scope() -> Rc<RefCell<HashMap<String, Value>>> {
     scope
 }
 
-/// 組み込み関数。log と type_of は本体、ほかは math
+/// builtin関数。log と type_of は本体、ほかは math
 fn call_builtin(name: &'static str, values: Vec<Value>) -> Result<Value> {
     match name {
         "log" => {
@@ -1908,12 +1908,12 @@ fn same_place(before: &Value, after: &Value) -> bool {
     }
 }
 
-/// 属性の型に値が合うか。組み込みの Union (Paint = Color | Shader) もここで見る
-/// 組み込み型の名前 (補完用)
+/// 属性の型に値が合うか。builtin の Union (Paint = Color | Shader) もここで見る
+/// builtin型の名前 (補完用)
 pub const KINDS: &[&str] = &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "View", "Timeline", "Subtitle", "Shader", "Gradient", "Color"];
 
-/// 組み込み型の属性と型
-/// 型の名前は大文字で始まり、組み込みの型と union の名前は使えない
+/// builtin型の属性と型
+/// 型の名前は大文字で始まり、builtin の型と union の名前は使えない
 fn check_free_name(name: &str) -> Result<()> {
     if !name.starts_with(char::is_uppercase) {
         return err(Kind::Reserved, format!("a type name must start with an uppercase letter; \"{name}\" does not"));

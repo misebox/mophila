@@ -123,16 +123,21 @@ export const BuiltinContent: Component<{ id: string }> = (props) => (
 const typeLinks = (category: string): IndexItem[] =>
   data.types.filter((t) => t.category === category).map((t) => ({ label: t.name, href: href("builtins", t.name), active: current() === t.name }));
 
-/** 組み込みの目次: 関数と、分類ごとの型 */
+/** builtin の目次: 関数と、分類ごとの型 */
 export const builtinGroups = (): IndexGroup[] => [
-  { title: "組み込み", items: [] },
   {
-    items: [
-      { label: "Function", href: href("builtins", "functions"), active: current() === "functions" },
-      { label: "Error", href: href("builtins", "errors"), active: current() === "errors" },
+    title: "builtin",
+    items: [],
+    children: [
+      {
+        items: [
+          { label: "Function", href: href("builtins", "functions"), active: current() === "functions" },
+          { label: "Error", href: href("builtins", "errors"), active: current() === "errors" },
+        ],
+      },
+      ...data.categories.map((c) => ({ title: c, items: typeLinks(c) })),
     ],
   },
-  ...data.categories.map((c) => ({ title: c, items: typeLinks(c) })),
 ];
 
 export const builtinLabel = currentLabel;

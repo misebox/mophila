@@ -4,7 +4,7 @@ import { Heading, Link } from "@/components/ui";
 import { data } from "@/data";
 import { href, route } from "@/route";
 
-/** 文中の型名を、その型のページへのリンクにする。組み込みの型として載っている名前だけ */
+/** 文中の型名を、その型のページへのリンクにする。builtin の型として載っている名前だけ */
 export const TypeText: Component<{ text: string }> = (props) => (
   <Index each={props.text.split(/([A-Za-z_][A-Za-z0-9_]*)/)}>
     {(part) => (
@@ -63,7 +63,7 @@ export const groupBy = <T,>(items: T[], key: (item: T) => string): [string, T[]]
 };
 
 export interface IndexItem { label: string; href: string; active?: boolean; depth?: number }
-export interface IndexGroup { title?: string; href?: string; active?: boolean; items: IndexItem[] }
+export interface IndexGroup { title?: string; href?: string; active?: boolean; items: IndexItem[]; /** 見出しの下にぶら下げる group。ここに入れると 1 本の縦線でまとまる */ children?: IndexGroup[] }
 
 // 題のある group は畳める。中の項目が選ばれたら開く
 const Caret: Component<{ open: boolean }> = (props) => (
@@ -86,6 +86,16 @@ const SideGroup: Component<{ group: IndexGroup }> = (props) => {
   const toggle = (): void => {
     setOpened({ ...opened(), [key()]: !open() });
   };
+  if (props.group.children) {
+    return (
+      <div class="side-section">
+        <div class="side-section-title">{props.group.title}</div>
+        <div class="side-section-body">
+          <For each={props.group.children}>{(g) => <SideGroup group={g} />}</For>
+        </div>
+      </div>
+    );
+  }
   return (
     <div class="side-group">
       <Show when={props.group.title}>

@@ -4,7 +4,7 @@ import { route } from "@/route";
 import { BuiltinContent, builtinGroups, builtinLabel } from "@/pages/Builtins";
 import { LibraryContent, libraryGroups, libraryLabel } from "@/pages/Library";
 
-// 組み込みとライブラリは同じページ。目次は続けて並べ、URL は #/builtins/… と #/lib/… のまま
+// builtin と module は同じページ。目次は続けて並べ、URL は #/builtins/… と #/lib/… のまま
 const isLib = (): boolean => route().page === "lib";
 
 export const Reference: Component = () => (

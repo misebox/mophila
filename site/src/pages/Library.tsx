@@ -7,7 +7,7 @@ import { blob } from "@/repo";
 
 const itemId = (lib: Lib, name: string): string => `${lib.name}.${name}`;
 const namesOf = (lib: Lib): string[] => [...lib.entries.map((e) => e.name), ...lib.items.map((it) => it.name)];
-// ライブラリのページを見ているときだけ、どれかが選ばれている
+// module のページを見ているときだけ、どれかが選ばれている
 const current = (): string => (route().page === "lib" ? route().sub || data.libs[0].name : "");
 
 // 目次: module ごとに export。module 名を選ぶとその一覧
@@ -33,7 +33,7 @@ const ImportLine: Component<{ lib: Lib; names?: string[] }> = (props) => (
 // module の一覧: Rust のものは表、.moph のものは分類ごとの export の一覧
 const ModulePage: Component<{ lib: Lib }> = (props) => (
   <Stack gap={3}>
-    <Text size="sm" tone="muted">標準ライブラリ</Text>
+    <Text size="sm" tone="muted">module</Text>
     <Heading level={1} size="xl">{props.lib.name}</Heading>
     <ImportLine lib={props.lib} />
     <GitHubLink href={blob(props.lib.path)} />
@@ -129,7 +129,7 @@ export const LibraryContent: Component<{ id: string }> = (props) => {
   );
 };
 
-/** ライブラリの目次: module ごと */
-export const libraryGroups = (): IndexGroup[] => [{ title: "ライブラリ", items: [] }, ...groups()];
+/** module の目次 */
+export const libraryGroups = (): IndexGroup[] => [{ title: "module", items: [], children: groups() }];
 
 export const libraryLabel = current;

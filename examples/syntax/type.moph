@@ -22,7 +22,7 @@ let double: (Number) -> Number = func (x) { x * 2 }
 let add:    (Number, Number) -> Number = func (a, b) { a + b }
 let mk:     (Pos) -> Circle = func (p) { Circle(position = p) }
 let noret:  (String) -> Nothing = func (s) { log(s) }
-# 組み込みの log と type_of は、どの型でも受け取るので型を書けない
+# builtin の log と type_of は、どの型でも受け取るので型を書けない
 
 # ---- Module ----
 # import で束縛される。標準ライブラリは math のみ
@@ -59,7 +59,7 @@ log(c.next(), c.next(), type_of(c))          # 11 12 Counter
 
 # ---- Union 型 ----
 # Shape (図形すべて)、Placeable (Shape | View)、Paint (Color | Shader | Gradient) は言語が持っている。
-# 自分で作るときは type 名 = A | B。組み込みの型名では宣言できない
+# 自分で作るときは type 名 = A | B。builtin の型名では宣言できない
 type Fill = Color | Gradient
 
 # ---- 決まった値しか取らない型 ----

@@ -1,4 +1,4 @@
-//! 組み込みの値が持つメソッドの表。
+//! builtin の値が持つメソッドの表。
 //!
 //! 1 つのメソッドにつき、呼び出し先と説明を同じ場所に書く。ここが唯一の定義で、
 //! 実行時の呼び出しも `mophila doc` が出す説明も同じ表を引く。片方だけ増えたり、
@@ -423,7 +423,7 @@ mod tests {
     fn every_receiver_is_a_known_type() {
         for m in METHODS {
             for r in m.receivers {
-                assert!(crate::docs::TYPES.iter().any(|t| t.name == *r), "{}.{} の受け手 \"{r}\" は組み込みの型ではない", r, m.name);
+                assert!(crate::docs::TYPES.iter().any(|t| t.name == *r), "{}.{} の受け手 \"{r}\" はbuiltin の型ではない", r, m.name);
                 assert!(find(r, m.name).is_some(), "{r}.{} を引けない", m.name);
             }
         }

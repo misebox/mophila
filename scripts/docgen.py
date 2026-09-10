@@ -2,7 +2,7 @@
 """ドキュメントページの元データ (site/src/data.json) を作る。ページ自体は site/ の SolidJS アプリ。
 
 元にするもの:
-- `mophila doc` の JSON (組み込み、math、メソッド、型)
+- `mophila doc` の JSON (builtin、math、メソッド、型)
 - src/stdlib/*.moph の `##` ドキュメントコメント (export の直前の行。1 行目が要約、@category / @param 名前 説明 / @returns 説明)。
   引数と戻り値の型は署名から読む。値の export だけ @type {型} で書く
 - examples/gallery/*.moph (先頭のコメントが説明。--media を付けると site/public/media/<name>.mp4 を render する)

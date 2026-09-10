@@ -51,9 +51,9 @@ output v
 - `context obj as o { ... }` は長い名前を短く参照するための式。最後の式が値になる。無くても motion の行に元の名前を書けばよい。`if` も式
 - `T(a = 1)` は属性を型で検査する。無い属性は `NameError.UndefinedAttribute`
 - 図形: Circle(position, radius) / Rect(position, w, h, radius) / Line(from, to) / Polygon(points) / TextArea(text, position, w, fontSize, font, align)。共通: fill, stroke, strokeWidth, opacity
-- `math.sin` などは `import math` が要る。組み込みの関数は `log` と `type_of` だけ。値は型名を呼んで作る (`Vector(8, 4.5)` `Pos(8, 4.5)` `Color(224, 96, 74)`)
+- `math.sin` などは `import math` が要る。builtin の関数は `log` と `type_of` だけ。値は型名を呼んで作る (`Vector(8, 4.5)` `Pos(8, 4.5)` `Color(224, 96, 74)`)
 - リテラルは型名を呼ぶのと同じ。`[1, 2, 3]` = `List(1, 2, 3)`、`{ "k": v }` = `Dict(k = v)`、`(1, 2)` = `Tuple(1, 2)`、`0..5` = `Range(0, 5)`、`0..=5` = `Range(0, 6)`。`Number` `Duration` `Bool` `String` `Symbol` `Func` はリテラルだけ
-- 組み込みの型の名前は予約されている。`struct List { ... }` は `NameError.Reserved`
+- builtin の型の名前は予約されている。`struct List { ... }` は `NameError.Reserved`
 - `import .other` で同じ場所の `other.moph` を読み、`other` に束縛する (`as m` で別名)。`import { a, b } from .other` で名前を直接持ち込む。見えるのは `export let` / `export func` した名前と `other.output` (output した View) だけ。同じファイルは 1 度しか実行されない (実体は共有)。`import ..parent` は文法上通るが、ディレクトリをまたぐ設計は避ける
 - 文字列は `+` で連結。`\"` `\n` のエスケープあり
 

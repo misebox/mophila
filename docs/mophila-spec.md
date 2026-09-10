@@ -93,7 +93,7 @@ let now:    () -> Duration     = func () { 3s }
 let apply:  ((Number) -> Number, Number) -> Number = func (f, x) { f(x) }
 ```
 
-引数を書かずに `Func` とだけ書いてもよい。可変長は型の後ろに `...` (`(Number...) -> Number`)。組み込みの `log` と `type_of` はどの型でも受け取るので、型を書けない。
+引数を書かずに `Func` とだけ書いてもよい。可変長は型の後ろに `...` (`(Number...) -> Number`)。builtin の `log` と `type_of` はどの型でも受け取るので、型を書けない。
 
 ### 3.4 リテラルと型名
 
@@ -114,7 +114,7 @@ let apply:  ((Number) -> Number, Number) -> Number = func (f, x) { f(x) }
 
 `Number` `Duration` `Bool` `String` `Symbol` `Func` はリテラルだけで、呼んでは作れない。呼ぶと `TypeError.ArgumentType` で書き方を返す。
 
-組み込みの型の名前は予約されていて、`struct` / `record` / `type` で宣言し直すと `NameError.Reserved`。
+builtin の型の名前は予約されていて、`struct` / `record` / `type` で宣言し直すと `NameError.Reserved`。
 
 ### 3.5 Union 型
 
@@ -216,7 +216,7 @@ record Vec2 {
 | Blend | 下にある絵との混ぜ方 |
 | GradientKind | Gradient の stops を並べる向き |
 
-値と、それぞれが何をするかは「組み込み」のページにある。言語が検査に使っている表から作っているので、ここには写しを置かない。
+値と、それぞれが何をするかは「builtin」のページにある。言語が検査に使っている表から作っているので、ここには写しを置かない。
 
 同じものを自分でも書ける。
 
@@ -368,7 +368,7 @@ motion (t) {
 }
 ```
 
-`:linear` `:ease_in` `:ease_out` `:ease` の 4 つで、書かなければ `:linear`。Easing は属性の型ではなく、この行末にだけ書ける。値の意味は「組み込み」のページにある。
+`:linear` `:ease_in` `:ease_out` `:ease` の 4 つで、書かなければ `:linear`。Easing は属性の型ではなく、この行末にだけ書ける。値の意味は「builtin」のページにある。
 
 置く。`Timeline.place` は Timeline の中へ、`View.addTrack` はその View の動きとして付ける。引数は同じで、`output` した View に付いたものが動画になる。
 
@@ -520,16 +520,16 @@ output v      # この View が動画になる。1 つのファイルに 1 つ
 - `view.addTrack(x)` で、その View の動きとして付ける。`output` した View に付けたものが動画になる。`x` は Timeline、View、Audio、Subtitle のどれかで、引数は `Timeline.place` と同じ
 - クロージャと Timeline はスコープを共有する (複製しない)。定義後に変数を変えれば、その値が見える
 
-## 6. 組み込みと標準ライブラリ
+## 6. builtinと標準ライブラリ
 
-`import` なしで使えるのは、組み込みの型の名前と、次の 2 つだけ。どちらも呼び出しの形でしか書けず、値として取り出すことはできない。
+`import` なしで使えるのは、builtin の型の名前と、次の 2 つだけ。どちらも呼び出しの形でしか書けず、値として取り出すことはできない。
 
 | 名前 | 内容 |
 |---|---|
 | `log(値, ...)` | 引数を空白区切りで stderr へ出す。どの型でも受け取る。動画には出ない |
 | `type_of(値)` | その値の型の名前を String で返す |
 
-String / List / Dict / Range のメソッドは組み込みで、`import` は要らない。一覧は「組み込み」のページと examples/syntax/collection.moph。
+String / List / Dict / Range のメソッドはbuiltinで、`import` は要らない。一覧は「builtin」のページと examples/syntax/collection.moph。
 
 `import` で使う標準ライブラリ。関数の一覧と説明は「ライブラリ」のページを正とする (ドキュメントコメントから作っている)。
 
@@ -551,7 +551,7 @@ math だけ Rust で書かれていて、ほかは本体に埋め込んだ `.mop
 | 種別 | 細目 |
 |---|---|
 | SyntaxError | `UnexpectedToken` 構文として読めない / `InvalidLiteral` 色の桁数、Duration の形式など |
-| NameError | `UndefinedVariable` / `UndefinedAttribute` / `AssignWithoutLet` let を書かずに初めて代入した / `Reserved` 組み込みの型の名前を宣言し直した |
+| NameError | `UndefinedVariable` / `UndefinedAttribute` / `AssignWithoutLet` let を書かずに初めて代入した / `Reserved` builtin の型の名前を宣言し直した |
 | TypeError | `OperandType` 演算子の左右 / `AttributeType` 属性に入れる値 / `ArgumentType` 引数 / `ArityMismatch` 引数や列の数 / `NotPlaceable` place できない型 |
 | ValueError | `DurationRequired` 時刻の単位が混在、相対時刻なのに duration が無い / `OutOfRange` 型は合うが値が範囲外 |
 | RuntimeError | `DivisionByZero` / `FontNotFound` / `AudioUnreadable` / `ShaderCompile` / `ShaderUnavailable` |

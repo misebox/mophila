@@ -15,10 +15,11 @@ const PAGES: [string, string][] = [
   ["docs", "仕様"],
 ];
 
-// 見出しへ飛ぶのは文書 (#/docs/<鍵>/<見出し>) だけ。他のページは sub で表示する中身を選ぶ
+// 見出しへ飛ぶのは文書 (#/docs/<鍵>/<見出し>) と使い方 (#/start/<節>)。他のページは sub で表示する中身を選ぶ
 const anchorOf = (): string => {
   const r = route();
-  return r.page === "docs" ? r.sub.split("/").slice(1).join("/") : "";
+  if (r.page === "docs") return r.sub.split("/").slice(1).join("/");
+  return r.page === "start" ? r.sub : "";
 };
 
 export const App: Component = (): JSX.Element => {

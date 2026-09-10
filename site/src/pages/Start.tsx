@@ -1,6 +1,7 @@
 import { Show, type Component } from "solid-js";
 import { data } from "@/data";
-import { Code, GitHubLink, Markdown } from "@/parts";
+import { Code, GitHubLink, Markdown, SideIndex, WithSide, type IndexGroup } from "@/parts";
+import { href, route } from "@/route";
 import { blob, repo, repoName } from "@/repo";
 
 const INSTALL = `git clone ${repo}.git
@@ -14,18 +15,34 @@ const COMMANDS = [
   ["mophila timeline first.moph", "何がいつどう変わるかを、時刻順の一覧で表示する"],
 ];
 
+// 目次。id は節に付けたものと同じ
+const SECTIONS: [string, string][] = [
+  ["requirements", "必要なもの"],
+  ["install", "インストール"],
+  ["circle", "丸を 1 つ置いて、大きくする"],
+  ["first", "複数のオブジェクトを動かす"],
+  ["editors", "エディタ"],
+  ["commands", "コマンド"],
+];
+
+const current = (): string => SECTIONS.find(([id]) => id === route().sub)?.[1] ?? "使い方";
+
+const groups = (): IndexGroup[] => [
+  { items: SECTIONS.map(([id, label]) => ({ label, href: href("start", id), active: route().sub === id })) },
+];
+
 export const Start: Component = () => {
   const circle = data.samples.find((s) => s.name === "circle");
   const first = data.samples.find((s) => s.name === "first");
   const editors = data.docs.find((d) => d.key === "editors");
   return (
+    <WithSide current={current()} side={<SideIndex groups={groups()} />}>
     <div class="reading">
       <section>
         <h1>使い方</h1>
-        <p class="lead">mophila のインストールから、スクリプトを書いて動画にするまでの手順です。</p>
       </section>
 
-      <section>
+      <section id="requirements">
         <h2>必要なもの</h2>
         <ul class="plain">
           <li>Rust (edition 2024)</li>
@@ -52,7 +69,7 @@ export const Start: Component = () => {
         </details>
       </section>
 
-      <section>
+      <section id="install">
         <h2>インストール</h2>
         <p>リポジトリを clone して cargo でビルドすると、mophila コマンドが入ります。</p>
         <Code text={INSTALL} />
@@ -60,7 +77,7 @@ export const Start: Component = () => {
 
       <Show when={circle}>
         {(s) => (
-          <section>
+          <section id="circle">
             <h2>丸を 1 つ置いて、大きくする</h2>
             <p>1 秒後から 3 秒かけて、半径を 1 から 3 にします。時刻と値を表に書くだけで、間は補間されます。</p>
             <Show when={s().media}>
@@ -81,7 +98,7 @@ export const Start: Component = () => {
 
       <Show when={first}>
         {(s) => (
-          <section>
+          <section id="first">
             <h2>複数のオブジェクトを動かす</h2>
             <p>丸が右へ動き、四角が横に広がり、文字が現れて、最後に消えます。4 つの motion が、それぞれ別の時刻に動きます。</p>
             <Show when={s().media}>
@@ -101,7 +118,7 @@ export const Start: Component = () => {
 
       <Show when={editors}>
         {(d) => (
-          <section>
+          <section id="editors">
             <h2>エディタ</h2>
             <p>シンタックスハイライトと、補完・ホバー・定義へ移動が使えます。</p>
             <details class="fold">
@@ -113,7 +130,7 @@ export const Start: Component = () => {
         )}
       </Show>
 
-      <section>
+      <section id="commands">
         <h2>コマンド</h2>
         <dl class="commands">
           {COMMANDS.map(([cmd, doc]) => (
@@ -125,5 +142,6 @@ export const Start: Component = () => {
         </dl>
       </section>
     </div>
+    </WithSide>
   );
 };

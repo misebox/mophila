@@ -13,20 +13,20 @@ Phase 1 の検討メモ。すべて仮。
 | Motion | 値の時間変化だけ。対象なし | `motion (t, a, b) { ... }` | 既定は最後の時刻。`m1.duration = 10s` で上書き可 |
 | Timeline | どの対象のどの属性が、いつ、どの値になるかの並び。Timeline の中に Timeline を置ける | `m1.apply(c1, f)` / `context c1 as o { motion (t) { 時刻: o.attr = ... } }` | 同上 |
 
-Timeline は `track.place(tl, at: 3s)` で置ける。Motion は単独では置けない。
+Timeline は `track.place(tl, at = 3s)` で置ける。Motion は単独では置けない。
 
 ## たたき台
 
 ```
 # comment
-let v = new View { box: vector!(4, 3) }
-let redCircle = new Circle { fill: #e04040 }
-let greenRect = new Rect   { fill: #40a040 }
+let v = View(box = Vector(4, 3))
+let redCircle = Circle(fill = #e04040)
+let greenRect = Rect(fill = #40a040)
 
-v.place(redCircle, center: (1, 1.5), w: 1/3)      # サイズ記法は未決
-v.place(greenRect, topLeft: (2, 0.5), w: 1, h: 1) # 基準点の書き方は未決
+v.place(redCircle, center = (1, 1.5), w = 1/3)      # サイズ記法は未決
+v.place(greenRect, topLeft = (2, 0.5), w = 1, h = 1) # 基準点の書き方は未決
 
-let track = new Timeline { duration: 10s }        # 入れ物。中に Timeline を置く
+let track = Timeline(duration = 10s)        # 入れ物。中に Timeline を置く
 
 # Motion: 値の表。t = その行の時刻 (秒)、a = 1 列目、b = 2 列目 (左の列を参照)
 let m1 = motion (t, a, b) {
@@ -36,12 +36,12 @@ let m1 = motion (t, a, b) {
 }
 # m1.duration は 5s。m1.duration = 10s で延ばせる
 
-let c1 = new Circle { fill: #a0a0a0 }
+let c1 = Circle(fill = #a0a0a0)
 
 # Timeline: apply は行ごとに関数を呼び、そこで属性に代入された値を時刻ごとの値にする
 let calc = func (c1, t, [x, r, _]) {
   context c1 as o {
-    o.center, o.radius = vector!(x, 1.5), r / 10
+    o.center, o.radius = Vector(x, 1.5), r / 10
   }
 }
 let tl = m1.apply(c1, calc)
@@ -55,7 +55,7 @@ context c1 as o {
   }
 }
 
-track.place(tl, at: 3s)
+track.place(tl, at = 3s)
 v.addTrack(track)
 
 output v
@@ -85,6 +85,6 @@ output v
 5. timeline の duration — 必須か、省略時は自動 (最後の配置の終わり) か
 6. transition の指定方法 — 配置の属性 (`place(tl, at:, fadeIn:, fadeOut:)`) は実装済み。行末の修飾子は「その行に入る区間」に付く (先頭行に書いた場合は最初の区間)。`reverse()` は区間ごと対応させ、ease_in ↔ ease_out、fade_in ↔ fade_out を入れ替える
 7. 修飾子は `:linear` / `:ease` / `:fade` を基本にする (実装済み)。`:fade` は最初の区間なら 0→1、最後の区間なら 1→0、途中は opacity の値で書く。非対称の加減速のために `:ease_in` / `:ease_out` は残している
-8. Tuple の展開構文 — `apos!(:center, ...pos)` や `f(...args)` のように Tuple / List を引数に展開する記法が要るかもしれない (`...expr` 案)
+8. Tuple の展開構文 — `Pos(...pos)` や `f(...args)` のように Tuple / List を引数に展開する記法が要るかもしれない (`...expr` 案)
 9. キーフレームの時刻は Duration か、0..1 の実数 (`50%` も可)。実数の Timeline は `duration` が必須。`duration` を変えると全キーフレームが比例して伸縮する。行の中の `t` は書いた時刻のまま (実装済み)
-10. 時間の関数で書く区間 — 円軌道などをキーフレームで書くと多角形になる。`0s..8s: b.position = apos!(...)` のように範囲を時刻にした行を「その区間は式を毎フレーム評価する」と定義する案
+10. 時間の関数で書く区間 — 円軌道などをキーフレームで書くと多角形になる。`0s..8s: b.position = Pos(...)` のように範囲を時刻にした行を「その区間は式を毎フレーム評価する」と定義する案

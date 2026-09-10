@@ -7,8 +7,8 @@
 上の 8 秒は `samples/passerby.moph`。木 (`samples/fractal.moph`) と歩く人 (`samples/walker.moph`) を import して置いただけ。
 
 ```
-let v = new View { box: (16, 9) }
-let c = new Circle { position: apos!(:center, 8, 4.5), radius: 1, fill: #ffb454 }
+let v = View(box = (16, 9))
+let c = Circle(position = Pos(8, 4.5), radius = 1, fill = #ffb454)
 v.place(c)
 
 let grow = context c as o {
@@ -17,8 +17,8 @@ let grow = context c as o {
     3s: o.radius = 3 :ease
   }
 }
-let track = new Timeline {}
-track.place(grow, at: 1s)
+let track = Timeline()
+track.place(grow, at = 1s)
 v.addTrack(track)
 output v
 ```

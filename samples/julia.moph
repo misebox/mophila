@@ -3,23 +3,23 @@
 import math
 import { escape_time, julia, plain, smooth } from fractal
 
-let v = new View { box: (16, 9) }
+let v = View(box = (16, 9))
 let total = 40s
 
 let stops = [#061a3f, #1c4f9c, #5c9be6, #cfe6ff, #ffffff, #cfe6ff, #5c9be6, #1c4f9c, #061a3f]
 
 let set = escape_time(
   # c = 0.7885 e^(iθ)。θ は π から始めて 40 秒で 1 周 (最初はつながった形)
-  formula: julia(func (t) { vector!(0.7885 * math.cos(math.PI + t / 40 * math.TAU), 0.7885 * math.sin(math.PI + t / 40 * math.TAU)) }),
-  precision: plain,
-  coloring: smooth(stops, 48, inside: #061a3f),
-  center: vector!(0, 0),
-  span: 3.6,
-  max_iter: func (zoom) { 300 },
-  samples: 4,
+  formula = julia(func (t) { Vector(0.7885 * math.cos(math.PI + t / 40 * math.TAU), 0.7885 * math.sin(math.PI + t / 40 * math.TAU)) }),
+  precision = plain,
+  coloring = smooth(stops, 48, inside = #061a3f),
+  center = Vector(0, 0),
+  span = 3.6,
+  max_iter = func (zoom) { 300 },
+  samples = 4,
 )
-v.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 9, fill: set })
+v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = set))
 
-let track = new Timeline { duration: total }
+let track = Timeline(duration = total)
 v.addTrack(track)
 output v

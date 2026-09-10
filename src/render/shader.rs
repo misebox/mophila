@@ -342,6 +342,7 @@ impl Gen {
                 }
                 match callee.as_ref() {
                     Expr::Attr(m, fname) if matches!(m.as_ref(), Expr::Ident(n) if n == "math") => math_call(fname, &values)?,
+                    Expr::Ident(name) if name == "Vector" || name == "Color" => build(name, values)?,
                     Expr::Ident(fname) => {
                         if lookup(env, fname).is_some() {
                             return err(KIND, format!("\"{fname}\" is a variable, not a function"));
@@ -371,34 +372,7 @@ impl Gen {
                 };
                 (format!("{tv}[u32({iv})]"), elem)
             }
-            Expr::Specific(name, args) if name == "vector" => {
-                let mut parts = Vec::new();
-                for a in args {
-                    let (v, ty) = self.expr(a, out, env, closure, ret)?;
-                    if ty != Ty::Num {
-                        return err("TypeError.ArgumentType", format!("vector! expects Number, found {}", ty.name()));
-                    }
-                    parts.push(v);
-                }
-                let [x, y] = parts.as_slice() else { return err("TypeError.ArityMismatch", "vector! takes 2 arguments") };
-                (format!("vec2<f32>({x}, {y})"), Ty::Vec)
-            }
-            Expr::Tuple(_) => return err(KIND, "a plain tuple is not available in a shader; write vector!(x, y)"),
-            Expr::Specific(name, args) if name == "rgb" || name == "rgba" => {
-                let mut parts = Vec::new();
-                for a in args {
-                    let (v, ty) = self.expr(a, out, env, closure, ret)?;
-                    if ty != Ty::Num {
-                        return err("TypeError.ArgumentType", format!("{name}! expects Number, found {}", ty.name()));
-                    }
-                    parts.push(v);
-                }
-                match (name.as_str(), parts.as_slice()) {
-                    ("rgb", [r, g, b]) => (format!("vec4<f32>({r} / 255.0, {g} / 255.0, {b} / 255.0, 1.0)"), Ty::Color),
-                    ("rgba", [r, g, b, a]) => (format!("vec4<f32>({r} / 255.0, {g} / 255.0, {b} / 255.0, {a})"), Ty::Color),
-                    _ => return err("TypeError.ArityMismatch", format!("{name}! takes {} arguments", if name == "rgb" { 3 } else { 4 })),
-                }
-            }
+            Expr::Tuple(_) => return err(KIND, "a plain tuple is not available in a shader; write Vector(x, y)"),
             Expr::If(cond, then, otherwise) => {
                 let value = self.if_(cond, then, otherwise.as_deref(), out, env, closure, ret, true)?;
                 value.ok_or_else(|| MophError::new(KIND, "an if used as a value needs both branches to end with a value of the same type"))?
@@ -543,6 +517,24 @@ fn sym(op: BinOp) -> &'static str {
         BinOp::Eq => "==",
         BinOp::Ne => "!=",
         _ => "?",
+    }
+}
+
+/// シェーダの中で Vector(x, y) と Color(r, g, b [, a]) を作る
+fn build(name: &str, values: Vec<(String, Ty)>) -> Result<(String, Ty)> {
+    let mut parts = Vec::new();
+    for (v, ty) in values {
+        if ty != Ty::Num {
+            return err("TypeError.ArgumentType", format!("{name} expects Number, found {}", ty.name()));
+        }
+        parts.push(v);
+    }
+    match (name, parts.as_slice()) {
+        ("Vector", [x, y]) => Ok((format!("vec2<f32>({x}, {y})"), Ty::Vec)),
+        ("Color", [r, g, b]) => Ok((format!("vec4<f32>({r} / 255.0, {g} / 255.0, {b} / 255.0, 1.0)"), Ty::Color)),
+        ("Color", [r, g, b, a]) => Ok((format!("vec4<f32>({r} / 255.0, {g} / 255.0, {b} / 255.0, {a})"), Ty::Color)),
+        ("Vector", _) => err("TypeError.ArityMismatch", "Vector takes 2 arguments"),
+        _ => err("TypeError.ArityMismatch", "Color takes 3 or 4 arguments"),
     }
 }
 

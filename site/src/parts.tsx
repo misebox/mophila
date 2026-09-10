@@ -1,7 +1,19 @@
-import { For, Show, createEffect, createSignal, on, untrack, type Component, type JSX } from "solid-js";
+import { For, Index, Show, createEffect, createSignal, on, untrack, type Component, type JSX } from "solid-js";
 import { marked, type Tokens } from "marked";
 import { Heading, Link } from "@/components/ui";
-import { route } from "@/route";
+import { data } from "@/data";
+import { href, route } from "@/route";
+
+/** 文中の型名を、その型のページへのリンクにする。組み込みの型として載っている名前だけ */
+export const TypeText: Component<{ text: string }> = (props) => (
+  <Index each={props.text.split(/([A-Za-z_][A-Za-z0-9_]*)/)}>
+    {(part) => (
+      <Show when={data.types.some((t) => t.name === part())} fallback={part()}>
+        <a href={href("builtins", part())}>{part()}</a>
+      </Show>
+    )}
+  </Index>
+);
 
 export const Code: Component<{ text: string }> = (props) => (
   <pre class="code"><code>{props.text}</code></pre>

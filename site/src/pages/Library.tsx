@@ -1,7 +1,7 @@
-import { For, Show, type Component } from "solid-js";
+import { For, Show, type Component, type JSX } from "solid-js";
 import { Heading, Stack, Table, Text } from "@/components/ui";
 import { data, type Lib, type LibItem } from "@/data";
-import { Faded, GitHubLink, SideIndex, WithSide, groupBy, type IndexGroup } from "@/parts";
+import { Faded, GitHubLink, SideIndex, TypeText, WithSide, groupBy, type IndexGroup } from "@/parts";
 import { href, route } from "@/route";
 import { blob } from "@/repo";
 
@@ -46,7 +46,7 @@ const ModulePage: Component<{ lib: Lib }> = (props) => (
           <Table
             columns={[
               { key: "name", header: "名前", render: (v, it) => <a href={href("lib", itemId(props.lib, it.name))}><code>{String(v)}</code></a> },
-              { key: "returns", header: "型", render: (v) => <code>{(v as { type: string }).type}</code> },
+              { key: "returns", header: "型", render: (v) => <code><TypeText text={(v as { type: string }).type} /></code> },
               { key: "summary", header: "説明" },
             ]}
             data={items}
@@ -58,33 +58,51 @@ const ModulePage: Component<{ lib: Lib }> = (props) => (
   </Stack>
 );
 
+const Part: Component<{ title: string; children: JSX.Element }> = (props) => (
+  <Stack gap={1}>
+    <Heading level={2} size="sm" class="sub">{props.title}</Heading>
+    {props.children}
+  </Stack>
+);
+
+const signature = (item: LibItem): string =>
+  item.returns.type ? `${item.call}${item.isFunc ? ` -> ${item.returns.type}` : `: ${item.returns.type}`}` : item.call;
+
 const ItemPage: Component<{ lib: Lib; item: LibItem }> = (props) => (
   <Stack gap={3}>
     <Text size="sm" tone="muted"><a href={href("lib", props.lib.name)}>{props.lib.name}</a> / {props.item.category}</Text>
     <Heading level={1} size="xl">{props.item.name}</Heading>
     <Text>{props.item.summary}</Text>
-    <pre class="code"><code>{`import { ${props.item.name} } from ${props.lib.name}\n\n`}{props.item.call}{props.item.returns.type ? (props.item.isFunc ? ` -> ${props.item.returns.type}` : `: ${props.item.returns.type}`) : ""}</code></pre>
-    <Show when={props.item.returns.type || props.item.returns.doc}>
-      <Stack gap={1}>
-        <Heading level={2} size="sm" class="sub">{props.item.isFunc ? "戻り値" : "型"}</Heading>
-        <Text><code>{props.item.returns.type}</code>{props.item.returns.doc ? ` — ${props.item.returns.doc}` : ""}</Text>
-      </Stack>
-    </Show>
+    <Part title={props.item.isFunc ? "呼び方" : "型"}>
+      <pre class="code"><code><TypeText text={signature(props.item)} /></code></pre>
+    </Part>
     <Show when={props.item.params.length > 0}>
-      <Stack gap={1}>
-        <Heading level={2} size="sm" class="sub">引数</Heading>
+      <Part title="引数">
         <Table
           columns={[
             { key: "name", header: "名前", render: (v) => <code>{String(v)}</code> },
-            { key: "type", header: "型", render: (v) => <code>{String(v)}</code> },
+            { key: "type", header: "型", render: (v) => <code><TypeText text={String(v)} /></code> },
             { key: "default", header: "既定", render: (v) => (v ? <code>{String(v)}</code> : <span class="none">なし</span>) },
             { key: "doc", header: "説明" },
           ]}
           data={props.item.params}
           rowKey={(r) => r.name}
         />
-      </Stack>
+      </Part>
     </Show>
+    <Show when={props.item.returns.type || props.item.returns.doc}>
+      <Part title={props.item.isFunc ? "戻り値" : "中身"}>
+        <Text><code><TypeText text={props.item.returns.type} /></code>{props.item.returns.doc ? ` — ${props.item.returns.doc}` : ""}</Text>
+      </Part>
+    </Show>
+    <Show when={props.item.example}>
+      <Part title="使用例">
+        <pre class="code"><code>{props.item.example}</code></pre>
+      </Part>
+    </Show>
+    <Part title="読み込み">
+      <pre class="code"><code>{`import { ${props.item.name} } from ${props.lib.name}`}</code></pre>
+    </Part>
     <GitHubLink href={blob(props.lib.path)} />
   </Stack>
 );

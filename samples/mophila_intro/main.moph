@@ -45,6 +45,6 @@ now = commands.run(now)
 now = ending.run(now)
 log("total:", now)
 
-track.place(bgm, at: 0s, loop: true, volume: 0.5, fadeOut: 3s)
+track.place(bgm, at = 0s, loop = true, volume = 0.5, fadeOut = 3s)
 v.addTrack(track)
 output v

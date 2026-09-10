@@ -26,9 +26,9 @@ xs.enumerate()                   # [(0, 1), (1, 2), (2, 3)]
 xs.zip([10, 20, 30])             # [(1, 10), (2, 20), (3, 30)]
 
 # 図形の List
-let v = new View { box: vector!(4, 3) }
+let v = View(box = Vector(4, 3))
 let circles = [1, 2, 3].map(func (i) {
-  new Circle { position: apos!(:center, i, 1.5), radius: 0.3, fill: #e04040 }
+  Circle(position = Pos(i, 1.5), radius = 0.3, fill = #e04040)
 })
 for c in circles {
   v.place(c)

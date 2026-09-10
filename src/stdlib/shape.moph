@@ -8,38 +8,45 @@ func tidy(x) { math.floor(x * scale + 0.5) / scale }
 
 ## 中心から距離 r、角度 degrees の点。0 が真上で、時計回り
 ## @category 位置
-## @param {Number} cx 中心の x
-## @param {Number} cy 中心の y
-## @param {Number} r 中心からの距離
-## @param {Number} degrees 角度 (度)
-## @returns {Vector}
-export func polar(cx, cy, r, degrees) {
+## @param cx 中心の x
+## @param cy 中心の y
+## @param r 中心からの距離
+## @param degrees 角度 (度)
+## @example
+## # 中心 (8, 4.5) から半径 3、真上から時計回りに 30 度の点
+## let p = polar(8, 4.5, 3, 30)
+export func polar(cx: Number, cy: Number, r: Number, degrees: Number) -> Vector {
   let a = (degrees - 90) * math.PI / 180
-  vector!(tidy(cx + r * math.cos(a)), tidy(cy + r * math.sin(a)))
+  Vector(tidy(cx + r * math.cos(a)), tidy(cy + r * math.sin(a)))
 }
 
 ## 正多角形の頂点
 ## @category 多角形
-## @param {Number} cx 中心の x
-## @param {Number} cy 中心の y
-## @param {Number} r 中心から頂点までの距離
-## @param {Number} n 頂点の数 (3 以上)
-## @param {Number} rotation 時計回りの回転 (度。既定 0 で最初の頂点が真上)
-## @returns {List<Vector>} new Polygon { points: ... } に入れる
-export func regular_polygon(cx, cy, r, n, rotation = 0) {
+## @param cx 中心の x
+## @param cy 中心の y
+## @param r 中心から頂点までの距離
+## @param n 頂点の数 (3 以上)
+## @param rotation 時計回りの回転 (度。既定 0 で最初の頂点が真上)
+## @returns Polygon(points = ...) に入れる
+## @example
+## # 正六角形
+## Polygon(points = regular_polygon(8, 4.5, 2, 6), fill = #3f9b6d)
+export func regular_polygon(cx: Number, cy: Number, r: Number, n: Number, rotation: Number = 0) -> List<Vector> {
   (0..n).to_list().map(func (i) { polar(cx, cy, r, rotation + i * 360 / n) })
 }
 
 ## 星の頂点。外側と内側の半径を交互に
 ## @category 多角形
-## @param {Number} cx 中心の x
-## @param {Number} cy 中心の y
-## @param {Number} outer 外側の半径 (とがった先)
-## @param {Number} inner 内側の半径 (くぼみ)
-## @param {Number} n とがった先の数 (既定 5)
-## @param {Number} rotation 時計回りの回転 (度。既定 0 で最初の先が真上)
-## @returns {List<Vector>}
-export func star(cx, cy, outer, inner, n = 5, rotation = 0) {
+## @param cx 中心の x
+## @param cy 中心の y
+## @param outer 外側の半径 (とがった先)
+## @param inner 内側の半径 (くぼみ)
+## @param n とがった先の数 (既定 5)
+## @param rotation 時計回りの回転 (度。既定 0 で最初の先が真上)
+## @example
+## # 5 つの先を持つ星
+## Polygon(points = star(8, 4.5, 2, 0.9), fill = #e0a53a)
+export func star(cx: Number, cy: Number, outer: Number, inner: Number, n: Number = 5, rotation: Number = 0) -> List<Vector> {
   (0..(n * 2)).to_list().map(func (i) {
     let r = if i % 2 == 0 { outer } else { inner }
     polar(cx, cy, r, rotation + i * 180 / n)
@@ -48,18 +55,19 @@ export func star(cx, cy, outer, inner, n = 5, rotation = 0) {
 
 ## 矢印の輪郭 (7 点)。from から to へ向く
 ## @category 矢印
-## @param {Vector} from 始点 (Vector)
-## @param {Vector} to 終点 (Vector。矢じりの先)
-## @param {Number} width 軸の太さ
-## @param {Number} head 矢じりの長さ
-## @param {Number} head_width 矢じりの幅 (既定は width の 3 倍)
-## @returns {List<Vector>}
-export func arrow(from, to, width, head, head_width = 0) {
+## @param from 始点 (Vector)
+## @param to 終点 (Vector。矢じりの先)
+## @param width 軸の太さ
+## @param head 矢じりの長さ
+## @param head_width 矢じりの幅 (既定は width の 3 倍)
+## @example
+## Polygon(points = arrow(Vector(2, 4.5), Vector(10, 4.5), 0.2, 0.6), fill = #303030)
+export func arrow(from: Vector, to: Vector, width: Number, head: Number, head_width: Number = 0) -> List<Vector> {
   let hw = if head_width == 0 { width * 3 } else { head_width }
   let d = to - from
   let len = math.sqrt(d.x * d.x + d.y * d.y)
   let u = d / len
-  let n = vector!(-u.y, u.x)
+  let n = Vector(-u.y, u.x)
   let neck = to - u * head
   [
     from + n * (width / 2),

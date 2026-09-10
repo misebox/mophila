@@ -8,30 +8,30 @@
 import { make, speed, floor } from .walker
 import .fractal
 
-let v = new View { box: (16, 9) }
-let track = new Timeline {}
+let v = View(box = (16, 9))
+let track = Timeline()
 let total = 8s
 
 # 木は fractal.moph の View をそのまま置く (背景も木のもの)。木の Timeline は 14 秒あるので total で切る
-v.place(fractal.output, at: apos!(:topLeft, 0, 0), w: 16)
-let tree = new Timeline { duration: total }
-tree.place(fractal.output, at: 0s)
-track.place(tree, at: 0s)
+v.place(fractal.output, at = Pos(0, 0, anchor = :topLeft), w = 16)
+let tree = Timeline(duration = total)
+tree.place(fractal.output, at = 0s)
+track.place(tree, at = 0s)
 
 # 人は左から右へ。幅 5 で置くので、足が滑らない速さは speed * 5 / 6
 let w = 5
 let person = make(#e8ecf7, #8b93a7, total)
-v.place(person, at: apos!(:bottomLeft, -w, 8.6 + (6 - floor) * w / 6), w: w)
+v.place(person, at = Pos(-w, 8.6 + (6 - floor) * w / 6, anchor = :bottomLeft), w = w)
 let cross = context person as p {
   motion (t) {
     0s: p.position.x = -w
     8s: p.position.x = -w + speed * w / 6 * 8
   }
 }
-track.place(person, at: 0s)
-track.place(cross, at: 0s)
+track.place(person, at = 0s)
+track.place(cross, at = 0s)
 
-let clock = new Timeline { duration: total }
+let clock = Timeline(duration = total)
 v.addTrack(clock)
 v.addTrack(track)
 output v

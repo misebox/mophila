@@ -37,6 +37,10 @@ pub enum Value {
     Func(Rc<Closure>),
     /// record (name!(...) が作る値)
     Record(Rc<Record>),
+    /// 型そのもの。呼ぶと値を作る
+    Type(Rc<UserType>),
+    /// 組み込みの型の名前
+    BuiltinType(String),
     /// import で束縛されるモジュール
     Module(Rc<Module>),
     /// 組み込み関数 (math.sin など)
@@ -63,7 +67,15 @@ pub struct Module {
 
 pub struct Record {
     pub name: String,
+    /// ユーザーが宣言した型なら、その宣言
+    pub decl: Option<Rc<UserType>>,
     pub fields: Vec<(String, Value)>,
+}
+
+/// struct / record の宣言と、宣言した場所のスコープ (メソッドの本体が外の名前を見るため)
+pub struct UserType {
+    pub decl: Rc<crate::lang::ast::TypeDecl>,
+    pub scopes: Scopes,
 }
 
 /// 関数と、定義時のスコープ
@@ -76,6 +88,8 @@ pub struct Closure {
 
 pub struct Object {
     pub kind: String,
+    /// ユーザーが宣言した型なら、その宣言
+    pub decl: Option<Rc<UserType>>,
     pub attrs: HashMap<String, Value>,
     pub children: Vec<ObjRef>,
     /// View / Timeline に置かれた Timeline
@@ -319,7 +333,7 @@ impl Value {
             Value::Duration(_) => "Duration".into(),
             Value::Color(_) => "Color".into(),
             Value::Vector(..) => "Vector".into(),
-            Value::Apos(..) => "AnchoredPosition".into(),
+            Value::Apos(..) => "Pos".into(),
             Value::Tuple(_) => "Tuple".into(),
             Value::List(_) => "List".into(),
             Value::Range(..) => "Range".into(),
@@ -329,6 +343,7 @@ impl Value {
             Value::Motion(_) => "Motion".into(),
             Value::Func(c) => c.type_text.clone().unwrap_or_else(|| "Func".into()),
             Value::Record(r) => r.name.clone(),
+            Value::Type(_) | Value::BuiltinType(_) => "Type".into(),
             Value::Module(_) => "Module".into(),
             Value::Builtin(_) => "Func".into(),
             Value::Audio(_) => "Audio".into(),
@@ -350,8 +365,10 @@ impl fmt::Display for Value {
                 write!(f, "#{:02x}{:02x}{:02x}", ch(*r), ch(*g), ch(*b))?;
                 if *a < 1.0 { write!(f, "{:02x}", ch(*a)) } else { Ok(()) }
             }
-            Value::Vector(x, y) => write!(f, "vector!({x}, {y})"),
-            Value::Apos(a, x, y) => write!(f, "apos!(:{a}, {x}, {y})"),
+            Value::Vector(x, y) => write!(f, "Vector({x}, {y})"),
+            Value::Apos(a, x, y) => {
+                if a == "center" { write!(f, "Pos({x}, {y})") } else { write!(f, "Pos({x}, {y}, anchor = :{a})") }
+            }
             Value::Tuple(items) => {
                 let parts: Vec<String> = items.iter().map(|v| v.to_string()).collect();
                 write!(f, "({})", parts.join(", "))
@@ -395,8 +412,10 @@ impl fmt::Display for Value {
             Value::Func(c) => write!(f, "func ({} params)", c.def.params.len()),
             Value::Record(r) => {
                 let parts: Vec<String> = r.fields.iter().map(|(_, v)| v.to_string()).collect();
-                write!(f, "{}!({})", r.name, parts.join(", "))
+                write!(f, "{}({})", r.name, parts.join(", "))
             }
+            Value::Type(t) => write!(f, "type {}", t.decl.name),
+            Value::BuiltinType(n) => write!(f, "type {n}"),
             Value::Module(m) => write!(f, "module {}", m.name),
             Value::Builtin(name) => write!(f, "builtin {name}"),
             Value::Audio(a) => write!(f, "Audio {{ file: {:?}, duration: {}s }}", a.name, a.length),

@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::lang::ast::{Arg, BinOp, DictKey, Expr, FuncDef, ImportKind, ImportSource, MotionDef, MotionRow, Param, Pattern, RowItem, Stmt, StmtKind, TypeAnn};
+use crate::lang::ast::{Arg, BinOp, DictKey, Expr, FieldDecl, FuncDef, ImportKind, ImportSource, MemberDecl, MotionDef, MotionRow, Param, Pattern, RowItem, Stmt, StmtKind, TypeAnn, TypeDecl};
 use crate::lang::error::{Result, err};
 use crate::lang::lexer::{Tok, Token, lex};
 
@@ -118,10 +118,13 @@ impl Parser {
             }
             Tok::Export => {
                 self.next();
+                if *self.peek() == Tok::AliasKw {
+                    return err("SyntaxError.UnexpectedToken", format!("line {}: alias はそのファイルの中だけの短い名前なので export できない", self.line()));
+                }
                 let inner = self.stmt()?;
                 match inner.kind {
-                    StmtKind::Let(..) => Ok(StmtKind::Export(Box::new(inner))),
-                    _ => err("SyntaxError.UnexpectedToken", format!("line {}: export must be followed by let or func", inner.line)),
+                    StmtKind::Let(..) | StmtKind::TypeDecl(..) => Ok(StmtKind::Export(Box::new(inner))),
+                    _ => err("SyntaxError.UnexpectedToken", format!("line {}: export must be followed by let, func, struct or record", inner.line)),
                 }
             }
             Tok::Import => {
@@ -160,28 +163,41 @@ impl Parser {
                 let alias = self.import_alias(default)?;
                 Ok(StmtKind::Import(ImportKind::Module { source, alias }))
             }
-            Tok::RecordKw => {
+            Tok::RecordKw | Tok::StructKw => {
+                let immutable = *self.peek() == Tok::RecordKw;
+                self.next();
+                self.type_decl(immutable, Vec::new())
+            }
+            Tok::At => {
+                let mut anns: Vec<(String, Vec<Expr>)> = Vec::new();
+                while *self.peek() == Tok::At {
+                    self.next();
+                    let name = self.ident()?;
+                    let args = if *self.peek() == Tok::LParen {
+                        self.next();
+                        self.args()?.into_iter().map(|a| a.value).collect()
+                    } else {
+                        Vec::new()
+                    };
+                    if anns.iter().any(|(n, _)| *n == name) {
+                        return err("SyntaxError.UnexpectedToken", format!("@{name} is written twice"));
+                    }
+                    anns.push((name, args));
+                    self.skip_newlines();
+                }
+                let immutable = match self.peek() {
+                    Tok::RecordKw => true,
+                    Tok::StructKw => false,
+                    _ => return self.unexpected("struct or record"),
+                };
+                self.next();
+                self.type_decl(immutable, anns)
+            }
+            Tok::AliasKw => {
                 self.next();
                 let name = self.ident()?;
-                self.expect(Tok::LParen)?;
-                let mut fields = Vec::new();
-                loop {
-                    if *self.peek() == Tok::RParen {
-                        self.next();
-                        break;
-                    }
-                    let field = self.ident()?;
-                    self.expect(Tok::Colon)?;
-                    fields.push((field, self.type_ann()?.name));
-                    match self.peek() {
-                        Tok::Comma => {
-                            self.next();
-                        }
-                        Tok::RParen => {}
-                        _ => return self.unexpected("\",\" or \")\""),
-                    }
-                }
-                Ok(StmtKind::TupleDef(name, fields))
+                self.expect(Tok::Eq)?;
+                Ok(StmtKind::Let(Pattern::Name(name), None, self.expr(0)?))
             }
             Tok::Type => {
                 self.next();
@@ -296,16 +312,7 @@ impl Parser {
             Tok::Color(c) => Expr::Color(c),
             Tok::Str(s) => Expr::Str(s),
             Tok::Symbol(s) => Expr::Symbol(s),
-            Tok::Ident(name) => {
-                if *self.peek() == Tok::Bang && *self.peek_at(1) == Tok::LParen {
-                    self.next();
-                    self.next();
-                    let args = self.args()?;
-                    Expr::Specific(name, args.into_iter().map(|a| a.value).collect())
-                } else {
-                    Expr::Ident(name)
-                }
-            }
+            Tok::Ident(name) => Expr::Ident(name),
             Tok::LParen => {
                 let first = self.expr(0)?;
                 if *self.peek() != Tok::Comma {
@@ -344,7 +351,6 @@ impl Parser {
             Tok::If => self.if_expr()?,
             Tok::LBrace => self.dict_expr()?,
             Tok::Func => self.func_expr()?,
-            Tok::New => self.new_expr()?,
             Tok::Context => self.context_expr()?,
             Tok::Motion => self.motion_expr()?,
             _ => {
@@ -401,7 +407,7 @@ impl Parser {
                 return Ok(args);
             }
             let name = match (self.peek(), self.peek_at(1)) {
-                (Tok::Ident(n), Tok::Colon) => {
+                (Tok::Ident(n), Tok::Eq) => {
                     let n = n.clone();
                     self.next();
                     self.next();
@@ -554,6 +560,72 @@ impl Parser {
         Ok(TypeAnn { text: format!("{name}<{text}>"), name })
     }
 
+    /// struct / record の中身。フィールドと func / method
+    fn type_decl(&mut self, immutable: bool, anns: Vec<(String, Vec<Expr>)>) -> Result<StmtKind> {
+        let name = self.ident()?;
+        let mut decl = TypeDecl { name, immutable, nocopy: false, nodeepcopy: false, deprecated: None, fields: Vec::new(), members: Vec::new() };
+        for (ann, args) in &anns {
+            match ann.as_str() {
+                "immutable" if !immutable => decl.immutable = true,
+                "immutable" => return err("SyntaxError.UnexpectedToken", "record is already immutable"),
+                "nocopy" => decl.nocopy = true,
+                "nodeepcopy" => decl.nodeepcopy = true,
+                "deprecated" => {
+                    decl.deprecated = Some(match args.first() {
+                        Some(Expr::Str(text)) => text.clone(),
+                        Some(_) => return err("TypeError.ArgumentType", "@deprecated takes a String"),
+                        None => String::new(),
+                    });
+                }
+                other => return err("NameError.UndefinedVariable", format!("unknown property @{other}")),
+            }
+        }
+        self.expect(Tok::LBrace)?;
+        loop {
+            self.skip_newlines();
+            if *self.peek() == Tok::RBrace {
+                self.next();
+                break;
+            }
+            let private = *self.peek() == Tok::PrivateKw;
+            if private {
+                self.next();
+            }
+            match self.peek() {
+                Tok::Func | Tok::MethodKw => {
+                    let receiver = *self.peek() == Tok::MethodKw;
+                    self.next();
+                    let member = self.ident()?;
+                    let Expr::Func(def) = self.func_expr()? else {
+                        return self.unexpected("func body");
+                    };
+                    let has_self = matches!(def.params.first().map(|p| &p.pattern), Some(Pattern::Name(n)) if n == "self" || n == "_");
+                    if receiver && !has_self {
+                        return err("SyntaxError.UnexpectedToken", format!("method {member} needs self (or _) as its first parameter"));
+                    }
+                    if !receiver && has_self {
+                        return err("SyntaxError.UnexpectedToken", format!("func {member} must not take self; use method"));
+                    }
+                    decl.members.push(MemberDecl { name: member, private, receiver, def });
+                }
+                _ => {
+                    let field = self.ident()?;
+                    self.expect(Tok::Colon)?;
+                    let ann = self.type_ann()?;
+                    let default = if *self.peek() == Tok::Eq {
+                        self.next();
+                        Some(self.expr(0)?)
+                    } else {
+                        None
+                    };
+                    decl.fields.push(FieldDecl { name: field, ann, default, private });
+                }
+            }
+            self.skip_newlines();
+        }
+        Ok(StmtKind::TypeDecl(Rc::new(decl)))
+    }
+
     /// `func` の直後から。(params) { body }
     fn func_expr(&mut self) -> Result<Expr> {
         self.expect(Tok::LParen)?;
@@ -565,13 +637,19 @@ impl Parser {
                 break;
             }
             let pattern = self.pattern()?;
+            let ann = if *self.peek() == Tok::Colon {
+                self.next();
+                Some(self.type_ann()?)
+            } else {
+                None
+            };
             let default = if *self.peek() == Tok::Eq {
                 self.next();
                 Some(self.expr(0)?)
             } else {
                 None
             };
-            params.push(Param { pattern, default });
+            params.push(Param { pattern, ann, default });
             self.skip_newlines();
             match self.peek() {
                 Tok::Comma => {
@@ -581,56 +659,15 @@ impl Parser {
                 _ => return self.unexpected("\",\" or \")\""),
             }
         }
+        let returns = if *self.peek() == Tok::Arrow {
+            self.next();
+            Some(self.type_ann()?)
+        } else {
+            None
+        };
         self.expect(Tok::LBrace)?;
         let body = self.stmts_until(&Tok::RBrace)?;
-        Ok(Expr::Func(Rc::new(FuncDef { params, body })))
-    }
-
-    fn new_expr(&mut self) -> Result<Expr> {
-        let kind = self.ident()?;
-        // new T(name=expr, ...) の形
-        if *self.peek() == Tok::LParen {
-            self.next();
-            let mut attrs = Vec::new();
-            loop {
-                self.skip_newlines();
-                if *self.peek() == Tok::RParen {
-                    self.next();
-                    return Ok(Expr::New(kind, attrs));
-                }
-                let name = self.ident()?;
-                self.expect(Tok::Eq)?;
-                attrs.push((name, self.expr(0)?));
-                self.skip_newlines();
-                match self.peek() {
-                    Tok::Comma => {
-                        self.next();
-                    }
-                    Tok::RParen => {}
-                    _ => return self.unexpected("\",\" or \")\""),
-                }
-            }
-        }
-        self.expect(Tok::LBrace)?;
-        let mut attrs = Vec::new();
-        loop {
-            self.skip_newlines();
-            if *self.peek() == Tok::RBrace {
-                self.next();
-                return Ok(Expr::New(kind, attrs));
-            }
-            let name = self.ident()?;
-            self.expect(Tok::Colon)?;
-            attrs.push((name, self.expr(0)?));
-            self.skip_newlines();
-            match self.peek() {
-                Tok::Comma => {
-                    self.next();
-                }
-                Tok::RBrace => {}
-                _ => return self.unexpected("\",\" or \"}\""),
-            }
-        }
+        Ok(Expr::Func(Rc::new(FuncDef { params, returns, body })))
     }
 
     fn context_expr(&mut self) -> Result<Expr> {

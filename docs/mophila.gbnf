@@ -10,7 +10,8 @@ root        ::= (ws stmt)* ws
 stmt        ::= let-stmt
               | func-decl
               | type-def
-              | record-def
+              | type-decl
+              | alias-stmt
               | import-stmt
               | export-stmt
               | output-stmt
@@ -20,13 +21,20 @@ stmt        ::= let-stmt
               | expr
 
 let-stmt    ::= "let" sp pattern (ws ":" ws type-ann)? ws "=" ws expr
-func-decl   ::= "func" sp ident ws "(" params ")" ws block
+func-decl   ::= "func" sp ident ws "(" params ")" (ws "->" ws type-ann)? ws block
 type-def    ::= "type" sp ident ws "=" ws ident (ws "|" ws ident)*
-record-def  ::= "record" sp ident ws "(" (ws ident ws ":" ws type-ann (ws "," ws ident ws ":" ws type-ann)*)? ws ")"
+# struct / record の宣言。直前の行に @注釈 を並べられる
+type-decl   ::= (annotation (sp annotation)* ws)? ("struct" | "record") sp ident ws type-body
+annotation  ::= "@" ident (ws "(" ws (expr (ws "," ws expr)*)? ws ")")?
+type-body   ::= "{" (ws member)* ws "}"
+member      ::= ("private" sp)? (field-decl | method-decl | func-decl)
+field-decl  ::= ident ws ":" ws type-ann (ws "=" ws expr)?
+method-decl ::= "method" sp ident ws "(" params ")" (ws "->" ws type-ann)? ws block
+alias-stmt  ::= "alias" sp ident ws "=" ws expr
 import-stmt ::= "import" sp import-src (sp "as" sp ident)?
               | "import" ws "{" ws ident (ws "," ws ident)* ws "}" sp "from" sp import-src
 import-src  ::= ident | ("." | "..")+ ident ("." ident)* | string
-export-stmt ::= "export" sp (let-stmt | func-decl)
+export-stmt ::= "export" sp (let-stmt | func-decl | type-decl)
 output-stmt ::= "output" sp expr
 return-stmt ::= "return" sp expr
 for-stmt    ::= "for" sp pattern sp "in" sp expr ws block
@@ -41,7 +49,7 @@ pattern     ::= ident
               | "[" ws pattern (ws "," ws pattern)* ws "]"
 
 params      ::= (ws param (ws "," ws param)*)? ws
-param       ::= pattern (ws "=" ws expr)?
+param       ::= pattern (ws ":" ws type-ann)? (ws "=" ws expr)?
 
 # 型注釈。< > の中はトークン列として読む (例: Func<Number, Number -> Number>)
 type-ann    ::= ident ("<" type-tokens ">")?
@@ -65,31 +73,25 @@ postfix     ::= "." ident
               | "[" ws expr ws "]"
 
 primary     ::= number | duration | color | string | symbol | bool
-              | record-lit
               | ident
               | "(" ws expr ws ")"
               | "(" ws expr (ws "," ws expr)+ ws ")"
               | "[" (ws expr (ws "," ws expr)*)? ws "]"
               | dict
-              | new-expr
               | if-expr
               | func-expr
               | context-expr
               | motion-expr
 
 args        ::= (ws arg (ws "," ws arg)*)? ws
-arg         ::= (ident ws ":" ws)? expr
+arg         ::= (ident ws "=" ws)? expr
 
-record-lit  ::= ident "!(" args ")"
 
 dict        ::= "{" (ws dict-entry (ws "," ws dict-entry)*)? ws "}"
 dict-entry  ::= string ws ":" ws expr | ident
 
-new-expr    ::= "new" sp ident ws "{" (ws ident ws ":" ws expr (ws "," ws ident ws ":" ws expr)*)? ws ","? ws "}"
-              | "new" sp ident ws "(" (ws ident ws "=" ws expr (ws "," ws ident ws "=" ws expr)*)? ws ")"
-
 if-expr     ::= "if" sp expr ws block (ws "else" ws (if-expr | block))?
-func-expr   ::= "func" ws "(" params ")" ws block
+func-expr   ::= "func" ws "(" params ")" (ws "->" ws type-ann)? ws block
 context-expr ::= "context" sp expr sp "as" sp ident (ws "," ws expr sp "as" sp ident)* ws block
 
 # motion (t, a, b) { 行 }  /  motion target [:attr.path, ...] { 行 }  /  motion { 行 }

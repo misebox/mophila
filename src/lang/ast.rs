@@ -35,13 +35,10 @@ pub enum Expr {
     Attr(Box<Expr>, String),
     Call(Box<Expr>, Vec<Arg>),
     Index(Box<Expr>, Box<Expr>),
-    /// name!(args)
-    Specific(String, Vec<Expr>),
     Tuple(Vec<Expr>),
     List(Vec<Expr>),
     If(Box<Expr>, Vec<Stmt>, Option<Vec<Stmt>>),
     Func(Rc<FuncDef>),
-    New(String, Vec<(String, Expr)>),
     /// context a as x, b as y { }
     Context(Vec<(Expr, String)>, Vec<Stmt>),
     Dict(Vec<(DictKey, Expr)>),
@@ -51,12 +48,16 @@ pub enum Expr {
 #[derive(Debug)]
 pub struct FuncDef {
     pub params: Vec<Param>,
+    /// -> の後に書いた戻り値の型
+    pub returns: Option<TypeAnn>,
     pub body: Vec<Stmt>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Param {
     pub pattern: Pattern,
+    /// 名前の後に書いた型
+    pub ann: Option<TypeAnn>,
     pub default: Option<Expr>,
 }
 
@@ -120,6 +121,37 @@ pub enum DictKey {
 }
 
 /// 型注釈。name は先頭の型名、text は表示用の全文 (例: "Func<Number -> Number>")
+/// struct Name { フィールド、func、method }
+#[derive(Debug, Clone)]
+pub struct TypeDecl {
+    pub name: String,
+    /// record または @immutable。値になる
+    pub immutable: bool,
+    pub nocopy: bool,
+    pub nodeepcopy: bool,
+    /// @deprecated("代わりの書き方")。作るときに一度だけ警告を出す
+    pub deprecated: Option<String>,
+    pub fields: Vec<FieldDecl>,
+    pub members: Vec<MemberDecl>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FieldDecl {
+    pub name: String,
+    pub ann: TypeAnn,
+    pub default: Option<Expr>,
+    pub private: bool,
+}
+
+/// func は受け手なし、method は第 1 引数が受け手
+#[derive(Debug, Clone)]
+pub struct MemberDecl {
+    pub name: String,
+    pub private: bool,
+    pub receiver: bool,
+    pub def: Rc<FuncDef>,
+}
+
 #[derive(Debug, Clone)]
 pub struct TypeAnn {
     pub name: String,
@@ -139,7 +171,8 @@ pub enum StmtKind {
     /// type Name = A | B
     TypeDef(String, Vec<String>),
     /// record name(field: Type, ...)
-    TupleDef(String, Vec<(String, String)>),
+    /// struct / record の宣言
+    TypeDecl(Rc<TypeDecl>),
     /// import name  /  import "file.moph" as name
     Import(ImportKind),
     /// export let / export func。import した側に公開する
@@ -173,10 +206,16 @@ impl Expr {
             Value::Str(s) => Expr::Str(s.clone()),
             Value::Symbol(s) => Expr::Symbol(s.clone()),
             Value::Bool(b) => Expr::Bool(*b),
-            Value::Vector(x, y) => Expr::Specific("vector".into(), vec![Expr::Number(*x), Expr::Number(*y)]),
-            Value::Apos(a, x, y) => Expr::Specific("apos".into(), vec![Expr::Symbol(a.clone()), Expr::Number(*x), Expr::Number(*y)]),
+            Value::Vector(x, y) => construct("Vector", vec![Expr::Number(*x), Expr::Number(*y)]),
+            Value::Apos(a, x, y) => construct("Pos", vec![Expr::Number(*x), Expr::Number(*y), Expr::Symbol(a.clone())]),
             Value::Tuple(items) => Expr::Tuple(items.iter().map(Expr::from_value).collect()),
             _ => Expr::Ident(format!("<{}>", v.type_name())),
         }
     }
+}
+
+/// 型名を呼ぶ式
+fn construct(name: &str, args: Vec<Expr>) -> Expr {
+    let args = args.into_iter().map(|value| Arg { name: None, value }).collect();
+    Expr::Call(Box::new(Expr::Ident(name.to_string())), args)
 }

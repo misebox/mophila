@@ -10,12 +10,12 @@ export func run(now) {
   add(sc, card([
     "# 人を出る時刻をずらして置く。渡り切ったらまた置く",
     "for (p, start) in people {",
-    "  track.place(p, at: start)",
-    "  track.place(p, at: start + 18s)",
+    "  track.place(p, at = start)",
+    "  track.place(p, at = start + 18s)",
     "}",
     "# 音楽と字幕も同じ Timeline",
-    "track.place(bgm, at: 0s, loop: true, volume: 0.6)",
-    "track.place(new Subtitle { text: \"…\", duration: 5s },",
+    "track.place(bgm, at = 0s, loop = true, volume = 0.6)",
+    "track.place(Subtitle(text = \"…\", duration = 5s),",
     "            at: 12s)",
   ], 0.7, 1.8, 7.6, 0.28), now + 0.4s)
   # 右: 時間軸に並んだ帯。再生位置の線が渡る
@@ -27,14 +27,14 @@ export func run(now) {
     let (name, color, from, len) = l
     let y = 2.3 + i * 0.95
     objs.push(text(name, x0 - 0.4, y, 0.3, dim, :right))
-    objs.push(place(new Rect { position: apos!(:topLeft, x0 + from, y - 0.25), w: len, h: 0.5, radius: 0.1, fill: color, opacity: 0 }))
+    objs.push(place(Rect(position = Pos(x0 + from, y - 0.25, anchor = :topLeft), w = len, h = 0.5, radius = 0.1, fill = color, opacity = 0)))
     if i == 4 {
-      objs.push(place(new Rect { position: apos!(:topLeft, x0 + 3.6, y - 0.25), w: 1.4, h: 0.5, radius: 0.1, fill: color, opacity: 0 }))
+      objs.push(place(Rect(position = Pos(x0 + 3.6, y - 0.25, anchor = :topLeft), w = 1.4, h = 0.5, radius = 0.1, fill = color, opacity = 0)))
     }
   }
   let t1 = now + 0.5s
   add(sc, objs, t1)
-  let head = place(new Line { from: (x0, 1.9), to: (x0, 6.4), stroke: ink, strokeWidth: 0.05, opacity: 0 })
+  let head = place(Line(from = (x0, 1.9), to = (x0, 6.4), stroke = ink, strokeWidth = 0.05, opacity = 0))
   add(sc, [head], t1)
   let sweep = context head as h {
     motion (t) {

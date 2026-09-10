@@ -413,18 +413,18 @@ fn color(attrs: &Attrs, name: &str, kind: &str) -> Result<Option<Color>> {
     }
 }
 
-/// position (AnchoredPosition) と大きさから中心座標を求める
+/// position (Pos) と大きさから中心座標を求める
 /// position に書いた点そのもの。回転の中心に使う
 fn anchor_point(attrs: &Attrs, kind: &str) -> Result<Point> {
     match attrs.get("position") {
         Some(Value::Apos(_, x, y)) => Ok(Point::new(*x, *y)),
-        _ => err("TypeError.AttributeType", format!("{kind}.position must be an AnchoredPosition")),
+        _ => err("TypeError.AttributeType", format!("{kind}.position must be a Pos")),
     }
 }
 
 fn anchored_center(attrs: &Attrs, w: f64, h: f64, kind: &str) -> Result<(f64, f64)> {
     let Some(Value::Apos(anchor, x, y)) = attrs.get("position") else {
-        return err("TypeError.AttributeType", format!("{kind}.position must be an AnchoredPosition"));
+        return err("TypeError.AttributeType", format!("{kind}.position must be a Pos"));
     };
     let (dx, dy) = match anchor.as_str() {
         "center" => (0.0, 0.0),

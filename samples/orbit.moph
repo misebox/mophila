@@ -2,14 +2,14 @@
 
 import math
 
-let v = new View { box: (16, 9) }
-v.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 9, fill: #101020 })
+let v = View(box = (16, 9))
+v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #101020))
 
 let cx = 8
 let cy = 4.5
 
 # 太陽。脈動は 3 つのキーフレーム
-let sun = new Circle { position: apos!(:center, cx, cy), radius: 0.9, fill: #f0c040 }
+let sun = Circle(position = Pos(cx, cy), radius = 0.9, fill = #f0c040)
 v.place(sun)
 let pulse = context sun as s {
   motion (t) {
@@ -24,7 +24,7 @@ pulse.duration = 4s
 func orbit(body, r, period) {
   let tl = context body as b {
     motion (t) {
-      0..1: b.position = apos!(:center, cx + r * math.cos(math.TAU * t), cy + r * math.sin(math.TAU * t))
+      0..1: b.position = Pos(cx + r * math.cos(math.TAU * t), cy + r * math.sin(math.TAU * t))
     }
   }
   tl.duration = period
@@ -40,49 +40,47 @@ let planets = [
 
 # 軌道の線 (fill なし、stroke だけの Circle)
 for p in planets {
-  v.place(new Circle { position: apos!(:center, cx, cy), radius: p["r"], stroke: #303050, strokeWidth: 0.02 })
+  v.place(Circle(position = Pos(cx, cy), radius = p["r"], stroke = #303050, strokeWidth = 0.02))
 }
 
 let total = 15s
-let track = new Timeline { duration: total }
+let track = Timeline(duration = total)
 for i in 0..4 {
-  track.place(pulse, at: i * 4s)
+  track.place(pulse, at = i * 4s)
 }
 
 for p in planets {
-  let body = new Circle { position: apos!(:center, cx + p["r"], cy), radius: p["size"], fill: p["color"] }
+  let body = Circle(position = Pos(cx + p["r"], cy), radius = p["size"], fill = p["color"])
   v.place(body)
   # 公転を total の間繰り返す
   let tl = orbit(body, p["r"], p["period"])
   let n = total / p["period"]
   for i in 0..math.ceil(n) {
-    track.place(tl, at: i * p["period"])
+    track.place(tl, at = i * p["period"])
   }
 }
 
 # 地球 (r = 3.4, 8 秒で 1 周) の月。地球の位置に、6 倍速の小さな円運動を足す
-let moon = new Circle { position: apos!(:center, cx + 3.4 + 0.5, cy), radius: 0.08, fill: #d0d0d0 }
+let moon = Circle(position = Pos(cx + 3.4 + 0.5, cy), radius = 0.08, fill = #d0d0d0)
 v.place(moon)
 let moon_tl = context moon as m {
   motion (t) {
-    0..1: m.position = apos!(:center,
-      cx + 3.4 * math.cos(math.TAU * t) + 0.5 * math.cos(math.TAU * t * 6),
-      cy + 3.4 * math.sin(math.TAU * t) + 0.5 * math.sin(math.TAU * t * 6))
+    0..1: m.position = Pos(cx + 3.4 * math.cos(math.TAU * t) + 0.5 * math.cos(math.TAU * t * 6), cy + 3.4 * math.sin(math.TAU * t) + 0.5 * math.sin(math.TAU * t * 6))
   }
 }
 moon_tl.duration = 8s
-track.place(moon_tl, at: 0s)
-track.place(moon_tl, at: 8s)
-track.place(moon_tl, at: 16s)
+track.place(moon_tl, at = 0s)
+track.place(moon_tl, at = 8s)
+track.place(moon_tl, at = 16s)
 
-let title = new TextArea { text: "orbit", position: apos!(:topLeft, 0.4, 0.3), fontSize: 0.6, fill: #e0e0f0 }
+let title = TextArea(text = "orbit", position = Pos(0.4, 0.3, anchor = :topLeft), fontSize = 0.6, fill = #e0e0f0)
 v.place(title)
 track.place(context title as o {
   motion (t) {
     0s:   o.opacity = 0
     1.5s: o.opacity = 1 :fade
   }
-}, at: 0s)
+}, at = 0s)
 
 v.addTrack(track)
 output v

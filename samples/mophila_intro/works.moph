@@ -24,14 +24,14 @@ export func run(now) {
   # crowd はあとの場面で小さく置き直すので、ここでは全画面に戻しておく
   let full = context crowd.output as o {
     motion (t) {
-      0s: o.position = apos!(:topLeft, 0, 0), o.w = 16
+      0s: o.position = Pos(0, 0, anchor = :topLeft), o.w = 16
     }
   }
-  track.place(full, at: at)
+  track.place(full, at = at)
   # Mandelbrot は 40 秒目 (うずまきの所) から見せる。置く時刻を前にずらすと、その分進んだ所から始まる
-  let deep = new Timeline { duration: 47s }
-  deep.place(mandelbrot.output, at: 0s)
-  track.place(deep, at: at + 6s - 40s)
+  let deep = Timeline(duration = 47s)
+  deep.place(mandelbrot.output, at = 0s)
+  track.place(deep, at = at + 6s - 40s)
   t = say(sc, "図形の動画も、フラクタルも、歩く人も。", at + 8s)
   t = say(sc, "どれも短いファイルです。", at + 19s)
   # 最後に 2x2

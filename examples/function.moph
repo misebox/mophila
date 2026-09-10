@@ -24,10 +24,10 @@ sum3([1, 2, 3])          # 6
 
 # 既定値と名前付き引数
 func circle_at(pos, r = 0.5, fill = #a0a0a0) {
-  new Circle { position: pos, radius: r, fill: fill }
+  Circle(position = pos, radius = r, fill = fill)
 }
-let c1 = circle_at(apos!(:center, 1, 1))
-let c2 = circle_at(apos!(:center, 2, 1), fill: #e04040)
+let c1 = circle_at(Pos(1, 1))
+let c2 = circle_at(Pos(2, 1), fill = #e04040)
 
 # 関数を返す
 func scaler(k) {
@@ -37,10 +37,10 @@ let half = scaler(1/2)
 half(4)                  # 2
 
 # context: オブジェクトに短い別名を付けて属性を扱う
-let c = new Circle {}
-let variableWithLongName = new Rect {}
+let c = Circle()
+let variableWithLongName = Rect()
 context c as o, variableWithLongName as v {
-  o.position, o.radius = apos!(:center, 1, 1.5), 0.5
+  o.position, o.radius = Pos(1, 1.5), 0.5
   o.fill = #4040e0
   v.w = 1
 }

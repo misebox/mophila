@@ -3,7 +3,8 @@
 
 元にするもの:
 - `mophila doc` の JSON (組み込み、math、メソッド、型)
-- src/stdlib/*.moph の `##` ドキュメントコメント (export の直前の行。1 行目が要約、@category / @param {型} 名前 説明 / @returns {型} 説明 (値なら @type {型} 説明))
+- src/stdlib/*.moph の `##` ドキュメントコメント (export の直前の行。1 行目が要約、@category / @param 名前 説明 / @returns 説明)。
+  引数と戻り値の型は署名から読む。値の export だけ @type {型} で書く
 - samples/*.moph (先頭のコメントが説明。--media を付けると site/public/media/<name>.mp4 を render する)
 - 言語仕様と editors/ の README (本文をそのまま入れる)
 
@@ -45,6 +46,21 @@ def signature_of(line: str) -> str:
 
 
 TAG = re.compile(r"^\{([^}]*)\}\s*")
+
+
+def param_types(head: str) -> tuple[dict, dict]:
+    """署名から、引数の型と既定値を読む"""
+    _, args = split_args(head)
+    types, defaults = {}, {}
+    for a in args:
+        left, _, default = a.partition("=")
+        pname, _, kind = left.partition(":")
+        pname = pname.strip()
+        if kind.strip():
+            types[pname] = kind.strip()
+        if default.strip():
+            defaults[pname] = default.strip()
+    return types, defaults
 
 
 def tagged(rest: str, named: bool) -> dict:
@@ -95,13 +111,23 @@ def library_docs(path: Path) -> list[dict]:
     items, block = [], []
     for line in path.read_text().splitlines():
         if line.startswith("##"):
-            block.append(line[2:].strip())
+            body = line[2:]
+            block.append(body[1:] if body.startswith(" ") else body)
             continue
         if block and line.startswith("export "):
             head = signature_of(line)
             name = re.match(r"[A-Za-z_][A-Za-z0-9_]*", head).group(0)
-            params, returns, category, summary = [], {"type": "", "doc": ""}, "", []
-            for b in block:
+            params, returns, category, summary, example = [], {"type": "", "doc": ""}, "", [], []
+            in_example = False
+            for raw in block:
+                b = raw.strip()
+                if b == "@example":
+                    in_example = True
+                    continue
+                if in_example and not b.startswith("@"):
+                    example.append(raw)
+                    continue
+                in_example = False
                 if b.startswith("@param "):
                     params.append(tagged(b[len("@param "):], named=True))
                 elif b.startswith("@returns ") or b.startswith("@type "):
@@ -111,10 +137,15 @@ def library_docs(path: Path) -> list[dict]:
                     category = b[len("@category "):]
                 else:
                     summary.append(b)
-            defaults = {a.split("=")[0].strip(): a.split("=", 1)[1].strip() for _, args in [split_args(head)] for a in args if "=" in a}
+            types, defaults = param_types(head)
             for prm in params:
                 prm["default"] = defaults.get(prm["name"], "")
-            items.append({"name": name, "category": category, "isFunc": "(" in head, "signature": head, "call": call_form(head), "summary": " ".join(summary), "params": params, "returns": returns})
+                # 型は署名から。書いていなければドキュメントコメントの {型}
+                prm["type"] = types.get(prm["name"], prm["type"])
+            if not returns["type"]:
+                if m := re.search(r"\)\s*->\s*([^{]+?)\s*\{", line):
+                    returns["type"] = m.group(1)
+            items.append({"name": name, "category": category, "isFunc": "(" in head, "signature": head, "call": call_form(head), "summary": " ".join(summary), "params": params, "returns": returns, "example": "\n".join(example)})
         block = []
     return items
 
@@ -191,7 +222,7 @@ def main() -> None:
         s["listed"] = s["name"] not in ONLY_START
     docs = [{"path": path, "key": key, "title": title, "text": (ROOT / path).read_text()} for path, key, title in DOCS]
     examples = [{"name": p.name, "code": p.read_text()} for p in sorted((ROOT / "examples").glob("*.moph"))]
-    data = {"builtins": d["builtins"], "types": d["types"], "libs": libs, "samples": samples, "docs": docs, "examples": examples}
+    data = {"builtins": d["builtins"], "types": d["types"], "categories": d["categories"], "libs": libs, "samples": samples, "docs": docs, "examples": examples}
     out = SITE / "src" / "data.json"
     out.write_text(json.dumps(data, ensure_ascii=False, indent=1))
     have = sum(1 for s in samples if s["media"])

@@ -4,10 +4,10 @@ import { W, H, v, track, ink, dim, accent, blue, green, panel, line, review, dwe
 import { place, text, heading, card, scene, add, say, close } from .slides
 
 func pillar(title, lines, cx, color, at, sc) {
-  let objs = [place(new Rect { position: apos!(:topLeft, cx - 2.3, 2.0), w: 4.6, h: 4.6, radius: 0.2, fill: panel, stroke: color, strokeWidth: 0.05, opacity: 0 }),
+  let objs = [place(Rect(position = Pos(cx - 2.3, 2.0, anchor = :topLeft), w = 4.6, h = 4.6, radius = 0.2, fill = panel, stroke = color, strokeWidth = 0.05, opacity = 0)),
               text(title, cx, 2.7, 0.5, color, :center)]
   for (i, s) in lines.enumerate() {
-    objs.push(place(new TextArea { text: s, position: apos!(:topLeft, cx - 2.0, 3.4 + i * 0.62), w: 4.0, fontSize: 0.3, fill: ink, align: :left, opacity: 0 }))
+    objs.push(place(TextArea(text = s, position = Pos(cx - 2.0, 3.4 + i * 0.62, anchor = :topLeft), w = 4.0, fontSize = 0.3, fill = ink, align = :left, opacity = 0)))
   }
   add(sc, objs, at)
 }

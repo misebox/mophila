@@ -18,7 +18,7 @@ export func run(now) {
     let (cmd, desc, narration) = c
     let y = 1.9 + i * 1.3
     let objs = card(["$ " + cmd], 1.2, y, 13.6, 0.36)
-    objs.push(place(new TextArea { text: desc, position: apos!(:topLeft, 1.7, y + 0.95), w: 12.5, fontSize: 0.28, fill: dim, align: :left, opacity: 0 }))
+    objs.push(place(TextArea(text = desc, position = Pos(1.7, y + 0.95, anchor = :topLeft), w = 12.5, fontSize = 0.28, fill = dim, align = :left, opacity = 0)))
     add(sc, objs, t)
     for line in narration { t = say(sc, line, t + 0.3s) }
   }

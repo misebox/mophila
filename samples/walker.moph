@@ -18,10 +18,10 @@ let swing   = 0.35         # 腿の振れ幅 (rad)
 let width   = 0.13
 
 # 角度 0 が真下、正が前 (x が増える向き)
-func direction(a) { vector!(math.sin(a), math.cos(a)) }
+func direction(a) { Vector(math.sin(a), math.cos(a)) }
 # 歩行の位相。side は 0 (手前) か 1 (奥) で半周期ずれる
 func phase(t, side, long) { math.TAU * t * (long / 1s) / period + side * math.PI }
-func hip_at(t, long) { vector!(3, floor - thigh - shin + 0.15 - 0.07 * math.cos(2 * phase(t, 0, long))) }
+func hip_at(t, long) { Vector(3, floor - thigh - shin + 0.15 - 0.07 * math.cos(2 * phase(t, 0, long))) }
 func thigh_angle(p) { swing * math.sin(p) }
 # 前に振れている間 (cos > 0) だけ膝を曲げる
 func shin_angle(p) { thigh_angle(p) - 0.1 - 0.9 * math.max(0, math.cos(p)) }
@@ -29,12 +29,12 @@ func upper_angle(p) { -0.6 * math.sin(p) }
 func fore_angle(p) { upper_angle(p) + 0.55 }
 
 func limb(box, color) {
-  let l = new Line { from: (0, 0), to: (0, 0), stroke: color, strokeWidth: width }
+  let l = Line(from = (0, 0), to = (0, 0), stroke = color, strokeWidth = width)
   box.place(l)
   l
 }
 func joint(box, color, r) {
-  let c = new Circle { position: apos!(:center, 0, 0), radius: r, fill: color }
+  let c = Circle(position = Pos(0, 0), radius = r, fill = color)
   box.place(c)
   c
 }
@@ -58,14 +58,14 @@ func side_of(box, side, color, long) {
       0..1: b.to = b.from + direction(shin_angle(phase(t, side, long))) * shin
       0..1: c.from = b.to
       0..1: c.to = c.from + direction(shin_angle(phase(t, side, long)) + math.PI / 2) * 0.35
-      0..1: k.position = apos!(:center, a.to)
-      0..1: n.position = apos!(:center, b.to)
-      0..1: d.from = hip_at(t, long) + vector!(0.12, -torso)
+      0..1: k.position = Pos(a.to)
+      0..1: n.position = Pos(b.to)
+      0..1: d.from = hip_at(t, long) + Vector(0.12, -torso)
       0..1: d.to = d.from + direction(upper_angle(phase(t, side, long))) * upper
       0..1: e.from = d.to
       0..1: e.to = e.from + direction(fore_angle(phase(t, side, long))) * fore
-      0..1: m.position = apos!(:center, d.to)
-      0..1: h.position = apos!(:center, e.to)
+      0..1: m.position = Pos(d.to)
+      0..1: h.position = Pos(e.to)
     }
   }
   tl.duration = long
@@ -74,10 +74,10 @@ func side_of(box, side, color, long) {
 
 # その場で long の間歩く人。near は手前の手足と胴の色、far は奥の手足の色
 export func make(near, far, long) {
-  let box = new View { box: (6, 6) }
-  let tl = new Timeline {}
+  let box = View(box = (6, 6))
+  let tl = Timeline()
   # 奥 → 胴 → 手前 の順に置き、同じ順に当てる (親の値を読む行は、親の行が先に当たっている必要がある)
-  tl.place(side_of(box, 1, far, long), at: 0s)
+  tl.place(side_of(box, 1, far, long), at = 0s)
   let body = limb(box, near)
   let hip = joint(box, near, width * 0.8)
   let neck = joint(box, near, width / 2)
@@ -85,35 +85,35 @@ export func make(near, far, long) {
   let trunk = context body as b, hip as p, neck as n, head as h {
     motion (t) {
       0..1: b.from = hip_at(t, long)
-      0..1: b.to = b.from + vector!(0.12, -torso)
-      0..1: p.position = apos!(:center, b.from)
-      0..1: n.position = apos!(:center, b.to)
-      0..1: h.position = apos!(:center, b.to + vector!(0.08, -0.5))
+      0..1: b.to = b.from + Vector(0.12, -torso)
+      0..1: p.position = Pos(b.from)
+      0..1: n.position = Pos(b.to)
+      0..1: h.position = Pos(b.to + Vector(0.08, -0.5))
     }
   }
   trunk.duration = long
-  tl.place(trunk, at: 0s)
-  tl.place(side_of(box, 0, near, long), at: 0s)
+  tl.place(trunk, at = 0s)
+  tl.place(side_of(box, 0, near, long), at = 0s)
   box.addTrack(tl)
   box
 }
 
 # ---------- 単体で見るとき: 1 人が左から右へ横切る ----------
-let v = new View { box: (16, 9) }
-let track = new Timeline {}
-v.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 9, fill: #14161c })
+let v = View(box = (16, 9))
+let track = Timeline()
+v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #14161c))
 let ground_y = 8
-v.place(new Line { from: (0, ground_y), to: (16, ground_y), stroke: #3a4560, strokeWidth: 0.04 })
+v.place(Line(from = (0, ground_y), to = (16, ground_y), stroke = #3a4560, strokeWidth = 0.04))
 let total = 7s
 let one = make(#e8ecf7, #8b93a7, total)
-v.place(one, at: apos!(:bottomLeft, -5, ground_y + 6 - floor), w: 6)
+v.place(one, at = Pos(-5, ground_y + 6 - floor, anchor = :bottomLeft), w = 6)
 let travel = context one as o {
   motion (t) {
     0s: o.position.x = -5
     7s: o.position.x = -5 + speed * 7
   }
 }
-track.place(one, at: 0s)
-track.place(travel, at: 0s)
+track.place(one, at = 0s)
+track.place(travel, at = 0s)
 v.addTrack(track)
 output v

@@ -3,9 +3,9 @@
 
 import math
 
-let v = new View { box: (16, 9) }
-let track = new Timeline {}
-v.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 9, fill: #0d1117 })
+let v = View(box = (16, 9))
+let track = Timeline()
+v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #0d1117))
 
 # ---------- 形と時間の決まり ----------
 let levels     = 8            # 枝分かれの回数 (枝は 2^(levels+1) - 1 本)
@@ -34,11 +34,11 @@ func sway(t, level, phase) {
   sway_amp * level * math.sin(t * seconds / sway_period * math.TAU + phase)
 }
 
-func direction(angle) { vector!(math.cos(angle), -math.sin(angle)) }
+func direction(angle) { Vector(math.cos(angle), -math.sin(angle)) }
 
 # 親の先端から角度 angle に伸びる枝を作り、その先にさらに 2 本作る
 func branch(parent, angle, len, level, phase) {
-  let line = new Line { from: (0, 0), to: (0, 0), stroke: colors[level], strokeWidth: 0.18 * shrink ^ level, opacity: 0.95 }
+  let line = Line(from = (0, 0), to = (0, 0), stroke = colors[level], strokeWidth = 0.18 * shrink ^ level, opacity = 0.95)
   v.place(line)
   let tl = context line as b, parent as p {
     motion (t) {
@@ -53,11 +53,11 @@ func branch(parent, angle, len, level, phase) {
     branch(line, angle - spread, len * shrink, level + 1, phase - 0.4)
   } else {
     # 先端の葉。枝が伸び切ってから出る
-    let leaf = new Circle { position: apos!(:center, 0, 0), radius: 0.06, fill: #b9e88a, opacity: 0 }
+    let leaf = Circle(position = Pos(0, 0), radius = 0.06, fill = #b9e88a, opacity = 0)
     v.place(leaf)
     let ltl = context leaf as f, line as b {
       motion (t) {
-        0..1: f.position = apos!(:center, b.to)
+        0..1: f.position = Pos(b.to)
         0..1: f.opacity = growth(t, level + 1) * 0.9
       }
     }
@@ -68,7 +68,7 @@ func branch(parent, angle, len, level, phase) {
 
 # 幹は地面から。先端は伸びるだけで揺れない
 let root = (8, 8.6)
-let trunk = new Line { from: root, to: root, stroke: colors[0], strokeWidth: 0.18, opacity: 0.95 }
+let trunk = Line(from = root, to = root, stroke = colors[0], strokeWidth = 0.18, opacity = 0.95)
 v.place(trunk)
 let trunk_tl = context trunk as b {
   motion (t) {

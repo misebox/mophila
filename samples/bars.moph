@@ -2,15 +2,15 @@
 
 import { fade_in } from transition
 
-let v = new View { box: (16, 9) }
-v.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 9, fill: #f7f7f2 })
+let v = View(box = (16, 9))
+v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #f7f7f2))
 
-let title = new TextArea { text: "Monthly visitors", position: apos!(:topLeft, 1, 0.6), fontSize: 0.7, fill: #202020, opacity: 0 }
+let title = TextArea(text = "Monthly visitors", position = Pos(1, 0.6, anchor = :topLeft), fontSize = 0.7, fill = #202020, opacity = 0)
 v.place(title)
 
 # 軸
-let x_axis = new Line { from: (1.5, 7.5), to: (15, 7.5), stroke: #808080, strokeWidth: 0.03, opacity: 0 }
-let y_axis = new Line { from: (1.5, 2), to: (1.5, 7.5), stroke: #808080, strokeWidth: 0.03, opacity: 0 }
+let x_axis = Line(from = (1.5, 7.5), to = (15, 7.5), stroke = #808080, strokeWidth = 0.03, opacity = 0)
+let y_axis = Line(from = (1.5, 2), to = (1.5, 7.5), stroke = #808080, strokeWidth = 0.03, opacity = 0)
 v.place(x_axis)
 v.place(y_axis)
 
@@ -27,11 +27,11 @@ let chart_h = 5
 let bar_w = 1.4
 let gap = 0.8
 
-let track = new Timeline {}
+let track = Timeline()
 
-track.place(fade_in(title, 0.6s), at: 0s)
-track.place(fade_in(x_axis, 0.6s), at: 1s)
-track.place(fade_in(y_axis, 0.6s), at: 1s)
+track.place(fade_in(title, 0.6s), at = 0s)
+track.place(fade_in(x_axis, 0.6s), at = 1s)
+track.place(fade_in(y_axis, 0.6s), at = 1s)
 
 # 棒は下端を固定 (bottom を基準点にする) して h だけ伸ばす
 func grow(bar, h, delay) {
@@ -41,22 +41,22 @@ func grow(bar, h, delay) {
       1.5s: b.h = h :ease_out
     }
   }
-  track.place(tl, at: delay)
+  track.place(tl, at = delay)
 }
 
 for (i, d) in data.enumerate() {
   let x = 2.2 + i * (bar_w + gap)
   let h = chart_h * d["value"] / max
-  let bar = new Rect { position: apos!(:bottom, x + bar_w / 2, 7.5), w: bar_w, h: 0.01, fill: d["color"] }
+  let bar = Rect(position = Pos(x + bar_w / 2, 7.5, anchor = :bottom), w = bar_w, h = 0.01, fill = d["color"])
   v.place(bar)
   grow(bar, h, 2s + i * 0.9s)
 
-  let name = new TextArea { text: d["label"], position: apos!(:top, x + bar_w / 2, 7.7), fontSize: 0.4, fill: #404040, align: :center }
+  let name = TextArea(text = d["label"], position = Pos(x + bar_w / 2, 7.7, anchor = :top), fontSize = 0.4, fill = #404040, align = :center)
   v.place(name)
 
-  let value = new TextArea { text: "{v}".format(d["value"]), position: apos!(:bottom, x + bar_w / 2, 7.5 - h - 0.15), fontSize: 0.4, fill: #202020, align: :center, opacity: 0 }
+  let value = TextArea(text = "{v}".format(d["value"]), position = Pos(x + bar_w / 2, 7.5 - h - 0.15, anchor = :bottom), fontSize = 0.4, fill = #202020, align = :center, opacity = 0)
   v.place(value)
-  track.place(fade_in(value, 0.4s), at: 2s + i * 0.9s + 1.5s)
+  track.place(fade_in(value, 0.4s), at = 2s + i * 0.9s + 1.5s)
 
   # 最大の棒は最後に色を変えて強調する
   if d["value"] == 80 {
@@ -65,7 +65,7 @@ for (i, d) in data.enumerate() {
         0s:   b.fill = d["color"]
         0.8s: b.fill = #e04040 :ease
       }
-    }, at: 10.5s)
+    }, at = 10.5s)
   }
 }
 

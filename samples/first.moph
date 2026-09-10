@@ -1,11 +1,11 @@
 # first.moph — 最初の 1 本。丸が右へ動き、四角が横に広がり、文字が現れる
 
-let v = new View { box: (16, 9) }
-v.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 9, fill: #f4f1ea })
+let v = View(box = (16, 9))
+v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #f4f1ea))
 
-let ball = new Circle { position: apos!(:center, 3, 2.5), radius: 1, fill: #e0604a }
-let bar = new Rect { position: apos!(:bottomLeft, 2, 8), w: 0.5, h: 2, fill: #3a6fb0 }
-let label = new TextArea { text: "mophila", position: apos!(:center, 8, 5), fontSize: 1.2, fill: #222222, opacity: 0 }
+let ball = Circle(position = Pos(3, 2.5), radius = 1, fill = #e0604a)
+let bar = Rect(position = Pos(2, 8, anchor = :bottomLeft), w = 0.5, h = 2, fill = #3a6fb0)
+let label = TextArea(text = "mophila", position = Pos(8, 5), fontSize = 1.2, fill = #222222, opacity = 0)
 v.place(ball)
 v.place(bar)
 v.place(label)
@@ -34,9 +34,9 @@ let appear = context label as l {
   }
 }
 
-let track = new Timeline {}
-track.place(move, at: 0s)
-track.place(widen, at: 0.5s)
-track.place(appear, at: 3s)
+let track = Timeline()
+track.place(move, at = 0s)
+track.place(widen, at = 0.5s)
+track.place(appear, at = 3s)
 v.addTrack(track)
 output v

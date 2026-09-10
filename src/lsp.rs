@@ -21,7 +21,7 @@ use crate::lang::lexer::{Tok, Token, lex};
 use crate::lang::value::Value;
 
 const KEYWORDS: &[&str] = &[
-    "let", "func", "if", "else", "for", "in", "and", "or", "not", "true", "false", "return", "new", "context", "as", "motion", "output",
+    "let", "func", "if", "else", "for", "in", "and", "or", "not", "true", "false", "return", "context", "as", "motion", "output",
     "import", "export", "from", "type", "record",
 ];
 const SYMBOLS: &[&str] = &[
@@ -280,10 +280,6 @@ fn complete(uri: &Uri, text: &str, pos: Position) -> Vec<CompletionItem> {
             return SYMBOLS.iter().map(|s| item(s, CompletionItemKind::ENUM_MEMBER, "")).collect();
         }
     }
-    // new の後 → 型名
-    if trimmed.trim_end().ends_with("new") {
-        return KINDS.iter().map(|k| item(k, CompletionItemKind::CLASS, &attrs_doc(k))).collect();
-    }
     let tokens = lex(text).unwrap_or_default();
     // module. → import 先の export
     if trimmed.ends_with('.') {
@@ -330,28 +326,27 @@ fn complete(uri: &Uri, text: &str, pos: Position) -> Vec<CompletionItem> {
     items
 }
 
-/// カーソルが `new T {` の中なら T
+/// カーソルが `T(` の中なら T (型の生成の途中)
 fn enclosing_new(text: &str, pos: Position) -> Option<String> {
     let upto: String = text.lines().take(pos.line as usize).map(|l| format!("{l}\n")).collect::<String>() + &line_before(text, pos);
     let tokens = lex(&upto).ok()?;
     let mut depth: i32 = 0;
-    let mut kind = None;
-    for w in tokens.windows(3).rev() {
-        match &w[2].tok {
-            Tok::RBrace => depth += 1,
-            Tok::LBrace => {
+    for w in tokens.windows(2).rev() {
+        match &w[1].tok {
+            Tok::RParen => depth += 1,
+            Tok::LParen => {
                 if depth == 0 {
-                    if let (Tok::New, Tok::Ident(k)) = (&w[0].tok, &w[1].tok) {
-                        kind = Some(k.clone());
-                    }
-                    break;
+                    return match &w[0].tok {
+                        Tok::Ident(k) if k.starts_with(char::is_uppercase) => Some(k.clone()),
+                        _ => None,
+                    };
                 }
                 depth -= 1;
             }
             _ => {}
         }
     }
-    kind
+    None
 }
 
 /// import 先のソース。ファイルか、本体に埋め込んだ標準ライブラリの .moph

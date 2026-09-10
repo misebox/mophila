@@ -3,16 +3,16 @@
 import math
 import { regular_polygon } from shape
 
-let v = new View { box: (16, 9) }
-v.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 9, fill: #f5f4f0 })
+let v = View(box = (16, 9))
+v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #f5f4f0))
 
 let total = 6s
 let cx = 8
 let swing = 3.2
-let track = new Timeline {}
+let track = Timeline()
 
 # 丸。止まる、動く、止まる。行末の :ease で動き出しと止まり際がなめらかになる
-let ball = new Circle { position: apos!(:center, cx - swing, 2.5), radius: 0.65, fill: #e0604a }
+let ball = Circle(position = Pos(cx - swing, 2.5), radius = 0.65, fill = #e0604a)
 v.place(ball)
 let roll = context ball as c {
   motion (t) {
@@ -24,10 +24,10 @@ let roll = context ball as c {
   }
 }
 roll.duration = total
-track.place(roll, at: 0s)
+track.place(roll, at = 0s)
 
 # 四角。rotation は時計回りの角度。Polygon は頂点の重心を中心に回る
-let square = new Polygon { points: regular_polygon(cx, 4.6, 0.95, 4), fill: #3a6fb0 }
+let square = Polygon(points = regular_polygon(cx, 4.6, 0.95, 4), fill = #3a6fb0)
 v.place(square)
 let spin = context square as s {
   motion (t) {
@@ -36,23 +36,23 @@ let spin = context square as s {
   }
 }
 spin.duration = total
-track.place(spin, at: 0s)
+track.place(spin, at = 0s)
 
 # 五角形。頂点ごとに中心からの距離を変えて、うねらせる。0..1 の行は毎フレーム評価される
 let py = 6.7
-let penta = new Polygon { points: regular_polygon(cx, py, 0.95, 5), fill: #3f9b6d }
+let penta = Polygon(points = regular_polygon(cx, py, 0.95, 5), fill = #3f9b6d)
 v.place(penta)
 let wobble = context penta as p {
   motion (t) {
     0..1: p.points = (0..5).to_list().map(func (i) {
       let a = (i * 72 - 90) * math.PI / 180
       let r = 0.95 + 0.3 * math.sin(math.TAU * t * 2 + i * 1.5)
-      vector!(cx + r * math.cos(a), py + r * math.sin(a))
+      Vector(cx + r * math.cos(a), py + r * math.sin(a))
     })
   }
 }
 wobble.duration = total
-track.place(wobble, at: 0s)
+track.place(wobble, at = 0s)
 
 v.addTrack(track)
 output v

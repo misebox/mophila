@@ -4,7 +4,7 @@
 import math
 import { escape_time, mandelbrot, perturbation, smooth } from fractal
 
-let v = new View { box: (16, 9) }
+let v = View(box = (16, 9))
 let total = 2m
 let seconds = total / 1s
 let end_zoom = 1000000000000    # 1e12。64 bit の基準軌道で 10 兆倍あたりまで持つ
@@ -13,18 +13,18 @@ let end_zoom = 1000000000000    # 1e12。64 bit の基準軌道で 10 兆倍あ�
 let stops = [#061a3f, #1c4f9c, #5c9be6, #cfe6ff, #ffffff, #cfe6ff, #5c9be6, #1c4f9c, #061a3f]
 
 let set = escape_time(
-  formula: mandelbrot,
-  precision: perturbation,
-  coloring: smooth(stops, 96, inside: #061a3f),
-  center: vector!(-0.7436438870371587, 0.1318259042053120),   # タツノオトシゴの谷の奥
-  span: 4.0,
+  formula = mandelbrot,
+  precision = perturbation,
+  coloring = smooth(stops, 96, inside = #061a3f),
+  center = Vector(-0.7436438870371587, 0.1318259042053120),   # タツノオトシゴの谷の奥
+  span = 4.0,
   # 1 秒止まってから一定の速さで寄る (倍率は指数で増える)。最後の 3 秒は止まる
-  zoom: func (t) { math.exp(math.ln(end_zoom) * math.min(1, math.max(0, (t - 1) / (seconds - 4)))) },
-  max_iter: func (zoom) { 150 + 110 * math.ln(zoom) },
-  samples: 4,
+  zoom = func (t) { math.exp(math.ln(end_zoom) * math.min(1, math.max(0, (t - 1) / (seconds - 4)))) },
+  max_iter = func (zoom) { 150 + 110 * math.ln(zoom) },
+  samples = 4,
 )
-v.place(new Rect { position: apos!(:topLeft, 0, 0), w: 16, h: 9, fill: set })
+v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = set))
 
-let track = new Timeline { duration: total }
+let track = Timeline(duration = total)
 v.addTrack(track)
 output v

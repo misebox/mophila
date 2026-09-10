@@ -10,41 +10,50 @@ import math
 
 ## エスケープタイム系フラクタルの Shader を作る。図形の fill に入れる
 ## @category 描く
-## @param {Dict} formula 反復式 (mandelbrot / julia(c) / burning_ship / multibrot(n))
-## @param {Func<Number, Vector -> Color>} coloring 色付け。func (mu, z) -> Color (smooth など)
-## @param {Vector} center 複素平面の中心 (Vector)
-## @param {Number} span 最初に見える横幅 (複素平面の単位)
-## @param {Symbol} precision plain か perturbation
-## @param {Func<Number -> Number>} zoom 倍率の時間変化。func (t) -> Number
-## @param {Func<Number -> Number>} max_iter 反復の上限。func (zoom) -> Number
-## @param {Number} samples 1 ピクセルあたりの評価点の数 (4 で 2x2 のアンチエイリアス)
-## @param {Vector} at 塗る図形の左上 (箱の座標)
-## @param {Vector} box 塗る図形の大きさ (箱の座標)
-## @param {Bool} flip true で虚軸を下向きにする
-## @param {Number} bailout 脱出とみなす |z|² の閾値
-## @param {Number} ref_iter 基準軌道の長さの上限
-## @returns {Shader} 図形の fill に入れる
-export func escape_time(formula, coloring, center, span, precision = :perturbation, zoom = func (t) { 1 }, max_iter = func (zoom) { 200 }, samples = 1, at = vector!(0, 0), box = vector!(16, 9), flip = false, bailout = 256, ref_iter = 8000) {
+## @param formula 反復式 (mandelbrot / julia(c) / burning_ship / multibrot(n))
+## @param coloring 色付け。func (mu, z) -> Color (smooth など)
+## @param center 複素平面の中心 (Vector)
+## @param span 最初に見える横幅 (複素平面の単位)
+## @param precision plain か perturbation
+## @param zoom 倍率の時間変化。func (t) -> Number
+## @param max_iter 反復の上限。func (zoom) -> Number
+## @param samples 1 ピクセルあたりの評価点の数 (4 で 2x2 のアンチエイリアス)
+## @param at 塗る図形の左上 (箱の座標)
+## @param box 塗る図形の大きさ (箱の座標)
+## @param flip true で虚軸を下向きにする
+## @param bailout 脱出とみなす |z|² の閾値
+## @param ref_iter 基準軌道の長さの上限
+## @returns 図形の fill に入れる
+## @example
+## import { escape_time, mandelbrot, smooth } from fractal
+##
+## let set = escape_time(
+##   formula = mandelbrot,
+##   coloring = smooth([#061a3f, #5c9be6, #ffffff, #061a3f], 48),
+##   center = Vector(-0.743, 0.126),
+##   span = 0.02,
+## )
+## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = set))
+export func escape_time(formula: Dict, coloring: Func<Number, Vector -> Color>, center: Vector, span: Number, precision: Symbol = :perturbation, zoom: Func<Number -> Number> = func (t) { 1 }, max_iter: Func<Number -> Number> = func (zoom) { 200 }, samples: Number = 1, at: Vector = Vector(0, 0), box: Vector = Vector(16, 9), flip: Bool = false, bailout: Number = 256, ref_iter: Number = 8000) -> Shader {
   let seed = formula["seed"]
   let step = formula["step"]
   let start = formula["start"]
   let ln_degree = math.ln(formula["degree"])
-  let param = if formula.has("param") { formula["param"] } else { func (t) { vector!(0, 0) } }
+  let param = if formula.has("param") { formula["param"] } else { func (t) { Vector(0, 0) } }
   let limit_of = max_iter
   let zoom_of = zoom
   # ピクセルの箱の座標 → 中心からの複素座標の差
   let up = if flip { 1 } else { -1 }
   func offset(x, y, zm) {
     let scale = span / zm / box.x
-    vector!((x - at.x - box.x / 2) * scale, (y - at.y - box.y / 2) * scale * up)
+    Vector((x - at.x - box.x / 2) * scale, (y - at.y - box.y / 2) * scale * up)
   }
   # 滑らかな脱出回数
   func escaped(n, r2) { n + 1 - math.ln(math.ln(r2) / 2) / ln_degree }
 
   if precision == :plain {
-    return new Shader {
-      samples: samples,
-      color: func (x, y, t) {
+    return Shader(samples = samples,
+      color = func (x, y, t) {
         let zm = zoom_of(t)
         let k = param(t)
         let p = center + offset(x, y, zm)
@@ -56,8 +65,7 @@ export func escape_time(formula, coloring, center, span, precision = :perturbati
           z = step(z, p, k)
         }
         coloring(-1, z)
-      },
-    }
+      })
   }
   if precision != :perturbation {
     log("escape_time: precision must be :plain or :perturbation")
@@ -81,10 +89,9 @@ export func escape_time(formula, coloring, center, span, precision = :perturbati
   }
   let orbit = reference()
   let ref_len = orbit.len() / 2
-  new Shader {
-    samples: samples,
-    args: orbit,
-    color: func (x, y, t, ref) {
+  Shader(samples = samples,
+    args = orbit,
+    color = func (x, y, t, ref) {
       let zm = zoom_of(t)
       let k = param(t)
       let dp = offset(x, y, zm)
@@ -92,7 +99,7 @@ export func escape_time(formula, coloring, center, span, precision = :perturbati
       let d = start(dp)
       let m = 0
       for n in 0..limit {
-        let Z = vector!(ref[2 * m], ref[2 * m + 1])
+        let Z = Vector(ref[2 * m], ref[2 * m + 1])
         let z = Z + d
         let r2 = cabs2(z)
         if r2 > bailout { return coloring(escaped(n, r2), z) }
@@ -100,14 +107,13 @@ export func escape_time(formula, coloring, center, span, precision = :perturbati
         if r2 < cabs2(d) or m + 1 >= ref_len {
           d = z
           m = 0
-          Z = vector!(ref[0], ref[1])
+          Z = Vector(ref[0], ref[1])
         }
         d = delta(Z, d, dp, k)
         m = m + 1
       }
-      coloring(-1, vector!(0, 0))
-    },
-  }
+      coloring(-1, Vector(0, 0))
+    })
 }
 
 # Dict で表す。p はピクセルの複素座標、k は param(t) (Julia の c など)、Z は基準軌道、d は差分、dp は中心からの差
@@ -116,10 +122,12 @@ export func escape_time(formula, coloring, center, span, precision = :perturbati
 ## escape_time の formula に渡す。摂動法にも対応している
 ## @category 反復式
 ## @type {Dict} 反復式
+## @example
+## escape_time(formula = mandelbrot, coloring = coloring, center = Vector(-0.5, 0), span = 3)
 export let mandelbrot = {
-  "seed": func (p, k) { vector!(0, 0) },
+  "seed": func (p, k) { Vector(0, 0) },
   "step": func (z, p, k) { cmul(z, z) + p },
-  "start": func (dp) { vector!(0, 0) },
+  "start": func (dp) { Vector(0, 0) },
   "delta": func (Z, d, dp, k) { cmul(Z, d) * 2 + cmul(d, d) + dp },
   "degree": 2,
 }
@@ -127,9 +135,15 @@ export let mandelbrot = {
 ## Julia 集合の反復式 z' = z² + c を作る。z はピクセルの複素座標から始まり、c は全ピクセルで共通。
 ## escape_time の formula に渡す
 ## @category 反復式
-## @param {Vector | Func<Number -> Vector>} c 定数。Vector か、時刻から Vector を返す func (t)。摂動法は c が一定のときだけ正しい
-## @returns {Dict} 反復式
-export func julia(c) {
+## @param c 定数。Vector か、時刻から Vector を返す func (t)。摂動法は c が一定のときだけ正しい
+## @returns 反復式
+## @example
+## # c を固定する
+## escape_time(formula = julia(Vector(-0.8, 0.156)), coloring = coloring, center = Vector(0, 0), span = 3.6)
+##
+## # c を時刻で動かすと、形が移り変わる
+## julia(func (t) { Vector(0.7885 * math.cos(t), 0.7885 * math.sin(t)) })
+export func julia(c) -> Dict {
   let param = if type_of(c) == "Func" { c } else { func (t) { c } }
   {
     "seed": func (p, k) { p },
@@ -145,16 +159,18 @@ export func julia(c) {
 ## escape_time の formula に渡す。escape_time に flip: true を付けると、慣習どおり船が上を向く
 ## @category 反復式
 ## @type {Dict} 反復式
+## @example
+## escape_time(formula = burning_ship, coloring = coloring, center = Vector(-1.75, -0.03), span = 0.2, flip = true)
 export let burning_ship = {
-  "seed": func (p, k) { vector!(0, 0) },
+  "seed": func (p, k) { Vector(0, 0) },
   "step": func (z, p, k) {
-    let a = vector!(math.abs(z.x), math.abs(z.y))
+    let a = Vector(math.abs(z.x), math.abs(z.y))
     cmul(a, a) + p
   },
-  "start": func (dp) { vector!(0, 0) },
+  "start": func (dp) { Vector(0, 0) },
   "delta": func (Z, d, dp, k) {
-    let a = vector!(math.abs(Z.x), math.abs(Z.y))
-    let e = vector!(diffabs(Z.x, d.x), diffabs(Z.y, d.y))
+    let a = Vector(math.abs(Z.x), math.abs(Z.y))
+    let e = Vector(diffabs(Z.x, d.x), diffabs(Z.y, d.y))
     cmul(a, e) * 2 + cmul(e, e) + dp
   },
   "degree": 2,
@@ -163,16 +179,19 @@ export let burning_ship = {
 ## Multibrot の反復式 z' = z^n + p を作る。n が 2 なら Mandelbrot と同じで、大きいほど腕の数が増える。
 ## escape_time の formula に渡す
 ## @category 反復式
-## @param {Number} n 次数。2 以上の整数
-## @returns {Dict} 反復式
-export func multibrot(n) {
+## @param n 次数。2 以上の整数
+## @returns 反復式
+## @example
+## # 腕が 3 本
+## escape_time(formula = multibrot(3), coloring = coloring, center = Vector(0, 0), span = 3)
+export func multibrot(n: Number) -> Dict {
   {
-    "seed": func (p, k) { vector!(0, 0) },
+    "seed": func (p, k) { Vector(0, 0) },
     "step": func (z, p, k) { cpow(z, n) + p },
-    "start": func (dp) { vector!(0, 0) },
+    "start": func (dp) { Vector(0, 0) },
     "delta": func (Z, d, dp, k) {
       # (Z + d)^n - Z^n = Σ C(n, j) Z^(n-j) d^j  (j = 1..n)
-      let sum = vector!(0, 0)
+      let sum = Vector(0, 0)
       for j in 1..=n { sum = sum + cmul(cpow(Z, n - j), cpow(d, j)) * binom(n, j) }
       sum + dp
     },
@@ -184,21 +203,29 @@ export func multibrot(n) {
 ## 数万倍あたりまでなら、これで足りる
 ## @category 精度
 ## @type {Symbol} 精度の選び方
+## @example
+## escape_time(formula = mandelbrot, coloring = coloring, center = Vector(0, 0), span = 3, precision = plain)
 export let plain = :plain
 ## 中心の点の軌道をスクリプト側の 64 bit で計算し、GPU はそこからの差分だけ反復する (摂動法)。
 ## escape_time の precision に渡す。10 兆倍あたりまで寄れる
 ## @category 精度
 ## @type {Symbol} 精度の選び方
+## @example
+## # 既定はこちら。深く寄るときに要る
+## escape_time(formula = mandelbrot, coloring = coloring, center = deep, span = 1e-9, precision = perturbation)
 export let perturbation = :perturbation
 
 ## 脱出の速さから色を決める関数を作る。stops を period 回の反復ごとに 1 周する。
 ## escape_time の coloring に渡す
 ## @category 色付け
-## @param {List<Color>} stops Color の List。最初と最後を同じ色にすると継ぎ目が出ない
-## @param {Number} period 何回の反復で 1 周するか
-## @param {Color} inside 集合の中の色 (既定は黒)
-## @returns {Func<Number, Vector -> Color>} 色付け
-export func smooth(stops, period, inside = #000000) {
+## @param stops Color の List。最初と最後を同じ色にすると継ぎ目が出ない
+## @param period 何回の反復で 1 周するか
+## @param inside 集合の中の色 (既定は黒)
+## @returns 色付け
+## @example
+## # 48 回の反復で 1 周する色。最初と最後が同じ色なので継ぎ目が出ない
+## let coloring = smooth([#061a3f, #5c9be6, #ffffff, #061a3f], 48, inside = #061a3f)
+export func smooth(stops: List<Color>, period: Number, inside: Color = #000000) -> Func<Number, Vector -> Color> {
   let last = stops.len() - 1
   func (mu, z) {
     if mu < 0 { return inside }
@@ -211,17 +238,21 @@ export func smooth(stops, period, inside = #000000) {
 
 ## 複素数の積。複素数は Vector (x が実部、y が虚部)
 ## @category 複素数
-## @param {Vector} a 複素数 (x が実部、y が虚部)
-## @param {Vector} b 複素数
-## @returns {Vector} 積
-export func cmul(a, b) { vector!(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x) }
+## @param a 複素数 (x が実部、y が虚部)
+## @param b 複素数
+## @returns 積
+## @example
+## cmul(Vector(0, 1), Vector(0, 1))   # Vector(-1, 0) — i × i = -1
+export func cmul(a: Vector, b: Vector) -> Vector { Vector(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x) }
 ## 複素数の絶対値の 2 乗
 ## @category 複素数
-## @param {Vector} z 複素数
-## @returns {Number} |z|²
-export func cabs2(z) { z.x * z.x + z.y * z.y }
+## @param z 複素数
+## @returns |z|²
+## @example
+## cabs2(Vector(3, 4))   # 25
+export func cabs2(z: Vector) -> Number { z.x * z.x + z.y * z.y }
 func cpow(z, n) {
-  let r = vector!(1, 0)
+  let r = Vector(1, 0)
   for i in 0..n { r = cmul(r, z) }
   r
 }

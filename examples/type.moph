@@ -1,27 +1,28 @@
 # type.moph — 型の一覧 (すべて仮)。examples/ に登場する型をすべて載せる
 
 # ---- 基本型 ----
-# Number    1, 1.5, 1/3, 25% (= 0.25)。整数と実数を区別しない
-# Duration  83s, 1m23s, 500ms, 01:23, 01:23:45.678
-# Color     #e04040, #e04040cc, #e44 (= #ee4444), #e448, rgb!(224, 64, 64), rgba!(224, 64, 64, 1), new Color(r=224, g=64, b=64, a=1)
+# 型名を呼ぶ形が実体で、リテラルはその短い書き方。両方書ける型は == で等しい
+# Number    1  1.5  1/3  25% (= 0.25)。整数と実数を区別しない
+# Duration  83s  1m23s  500ms  01:23  01:23:45.678
+# Bool      true  false
+# String    "hello"
+# Symbol    :center  :linear    名前そのものが値
+# Color     #e04040  #e04040cc  #e44 (= #ee4444)  #e448  Color(224, 64, 64)  Color(224, 64, 64, 1)
 #           r/g/b 0..255, a 0..1
-# String    "hello", "n = {n}"
-# Bool      true, false
-# Tuple     (1, 1.5)         要素ごとに型を持つ
-# List      [1, 2, 3]        要素は同じ型
-# Range     0..5, 0..=5      for の対象
-# Dict      { "red": #e04040 }  キーは String
-# Func      func (x) { x }   下記
+# Tuple     (1, 1.5)            = Tuple(1, 1.5)      要素ごとに型が違ってよい
+# List      [1, 2, 3]           = List(1, 2, 3)      要素は同じ型
+# Dict      { "red": #e04040 }  = Dict(red = #e04040)  キーは String
+# Range     0..5                = Range(0, 5)        0..=5 は Range(0, 6)
+# Func      func (x) { x }      下記
+log([1, 2, 3] == List(1, 2, 3), { "a": 1 } == Dict(a = 1), (0..5) == Range(0, 5))
 
 # ---- Func ----
 # 型の表記: Func<引数の型... -> 戻り値の型>
 let double: Func<Number -> Number> = func (x) { x * 2 }
 let add:    Func<Number, Number -> Number> = func (a, b) { a + b }
-let mk:     Func<AnchoredPosition -> Circle> = func (p) { new Circle { position: p } }
+let mk:     Func<Pos -> Circle> = func (p) { Circle(position = p) }
 let noret:  Func<String -> Nothing> = func (s) { log(s) }
-# 組み込み関数も Func
-# log:      Func<Any>                どの型でも受け取る。Any は型ではなくこの表記だけの記号
-# type_of:  Func<Any>
+# 組み込みの log と type_of は、どの型でも受け取るので型を書けない
 
 # ---- Module ----
 # import で束縛される。標準ライブラリは math のみ
@@ -31,97 +32,112 @@ import math
 # math.sin:   Func<Number -> Number>   (cos, floor, ceil, abs, sqrt も同じ)
 # math.max:   Func<Number... -> Number> (min も)
 
-# ---- record (ユーザー定義) ----
-# 同じ名前で複数の signature を定義できる。呼び出し時に引数の数と型で選ぶ
-record size(w: Number, h: Number)
-record size(w: Number, h: Duration)
-let s1 = size!(1, 2)          # 1 つ目
-let s2 = size!(1, 2s)         # 2 つ目
-s1.w                          # 1
-log(s1, s2, type_of(s1))      # size!(1, 2) size!(1, 2s) size
+# ---- record と struct (ユーザー定義) ----
+# record は値。書き換えられず、中身が同じなら等しい
+record Size {
+  w: Number
+  h: Number
+  method area(self) -> Number { self.w * self.h }
+}
+let s1 = Size(1, 2)           # 位置で渡す
+let s2 = Size(w = 3, h = 4)   # 名前で渡す
+log(s1, s1.w, s1.area(), s1 == Size(1, 2))   # Size(1, 2) 1 2 true
+log(s1.copy(h = 9))                          # Size(1, 9)
+
+# struct は実体。属性を書き換えられる
+struct Counter {
+  n: Number = 0
+  private step: Number = 1
+  func new(start: Number) -> Counter { Counter(n = start) }
+  method next(self) -> Number {
+    self.n = self.n + self.step
+    self.n
+  }
+}
+let c = Counter(10)
+log(c.next(), c.next(), type_of(c))          # 11 12 Counter
 
 # ---- Union 型 ----
-type Shape = Circle | Rect | Line | Polygon | TextArea
-type Placeable = Shape | View
+# Shape (図形すべて)、Placeable (Shape | View)、Paint (Color | Shader | Gradient) は言語が持っている。
+# 自分で作るときは type 名 = A | B。組み込みの型名では宣言できない
+type Fill = Color | Gradient
 
-# ---- 列挙 ----
-# Ease      :linear :ease_in :ease_out :ease  キーフレーム行末に書く
-# Effect    :fade :fade                       同上
-# Align     :left :center :right                     TextArea.align
-# Anchor    :center :topLeft :topRight :bottomLeft :bottomRight :top :bottom :left :right
-#           基準点の種類。列挙値は :name で書く
+# ---- 決まった値しか取らない型 ----
+# 値はすべて Symbol。呼んでは作れない
+# Ease         :linear :ease_in :ease_out :ease      motion の行末。値の変わり方
+# Effect       :fade                                 motion の行末。区間の間の見え方
+# Align        :left :center :right                  TextArea.align
+# Anchor       :center :topLeft :topRight :bottomLeft :bottomRight :top :bottom :left :right
+# StrokeCap    :butt :round :square                  線の端の形
+# StrokeJoin   :miter :round :bevel                  線の角の形
+# Blend        :normal :multiply :screen :overlay :darken :lighten :difference :add
+# GradientKind :linear :radial :sweep
 
 # ---- 位置 ----
-# Vector            vector!(1, 1.5)               .x .y で参照できる。(1, 1.5) は Tuple であって Vector ではない
-# AnchoredPosition  apos!(:center, 1, 1.5)     Anchor + Vector。apos!(:center, vector!(1, 1.5)) も同じ
+# Vector  Vector(1, 1.5)   .x .y で参照できる
+# Pos     Pos(1, 1.5)      x, y, anchor (既定 :center)。Pos(Vector(1, 1.5)) も同じ
 #
-# ただし「Vector と決まっている場所」(属性、record の引数) に signature に合う素の Tuple を書くと、その型に変換される
-#   new Line { from: (0, 0), to: (4, 3) }            # from / to は Vector
-#   new Circle { position: (:center, 1, 2) }         # position は AnchoredPosition
-#   apos!(:center, (1, 2))                           # apos! の Vector 引数
-#   size!((1, 2))                                    # signature 全体に合う Tuple
+# (1, 1.5) は Tuple であって Vector でも Pos でもない。
+# ただし型が Vector か Pos と決まっている場所に書くと、その型に変換される
+#   Line(from = (0, 0), to = (4, 3))   # from / to は Vector
+#   Circle(position = (1, 2))          # position は Pos
+#   Size((1, 2))                       # record のフィールドの型に合う Tuple
 # 合わなければ TypeError。変換は型の決まった場所だけで、(1, 2) そのものは Tuple のまま
-let pos = apos!(:center, 1, 1.5)
+let pos = Pos(1, 1.5)
 pos.anchor                                 # :center
-pos.vector                                 # vector!(1, 1.5)
-# 基準点の違う AnchoredPosition 同士の変換には図形のサイズが要るので、place された後にしかできない
+pos.vector                                 # Vector(1, 1.5)
+# 基準点の違う Pos 同士の変換には図形のサイズが要るので、place された後にしかできない
 
 # ---- 図形 (Shape) ----
-# 共通属性: fill: Color, stroke: Color, strokeWidth: Number, opacity: Number
-let c = new Circle {
-  position: apos!(:center, 1, 1.5),   # AnchoredPosition
-  radius: 0.5,          # Number
-  fill:   #e04040,
-}
+# 共通属性: fill: Color, stroke = Color, strokeWidth = Number, opacity = Number
+let c = Circle(position = Pos(1, 1.5),   # Pos
+  radius = 0.5,          # Number
+  fill =   #e04040)
 
-let r = new Rect {
-  position: apos!(:topLeft, 0, 0),
-  w: 1,                 # Number
-  h: 1/2,               # Number
-  radius: 0.1,          # Number。角の丸み。省略なら 0
-  fill: #40a040,
-  stroke: #000000,
-  strokeWidth: 0.02,
-}
+let r = Rect(position = Pos(0, 0, anchor = :topLeft),
+  w = 1,                 # Number
+  h = 1/2,               # Number
+  radius = 0.1,          # Number。角の丸み。省略なら 0
+  fill = #40a040,
+  stroke = #000000,
+  strokeWidth = 0.02)
 
-let l = new Line {
-  from: vector!(0, 0),     # Vector
-  to:   vector!(4, 3),     # Vector
-  stroke: #000000,
-  strokeWidth: 0.05,
-}
+let l = Line(from = Vector(0, 0),     # Vector
+  to =   Vector(4, 3),     # Vector
+  stroke = #000000,
+  strokeWidth = 0.05)
 
-let p = new Polygon {
-  points: [vector!(0, 0), vector!(1, 0), vector!(0.5, 1)],   # List<Vector>
-  fill: #4040e0,
-}
+let p = Polygon(points = [Vector(0, 0), Vector(1, 0), Vector(0.5, 1)],   # List<Vector>
+  fill = #4040e0)
 
-let t = new TextArea {
-  text: "hello",        # String
-  position: apos!(:topLeft, 0, 0),
-  w: 2,                 # Number。幅に合わせて折り返す
-  font: "Noto Sans JP", # String。フォントの指定方法は未決
-  fontSize: 0.3,        # Number。箱の座標単位
-  fill: #000000,
-  align: :left,         # Align
-}
+let t = TextArea(text = "hello",        # String
+  position = Pos(0, 0, anchor = :topLeft),
+  w = 2,                 # Number。幅に合わせて折り返す
+  font = "Noto Sans JP", # String。フォントの指定方法は未決
+  fontSize = 0.3,        # Number。箱の座標単位
+  fill = #000000,
+  align = :left,         # Align
+)
 
 # ---- 箱 ----
-let v = new View { box: vector!(4, 3) }  # box: Vector。座標系 0..4 × 0..3。ピクセルは持たない
-# v.place(target: Placeable) -> Nothing   (位置は target の position。w / h の扱いは未決)
-# v.addTrack(t: Timeline) -> Nothing
+let v = View(box = Vector(4, 3))  # box: Vector。座標系 0..4 × 0..3。ピクセルは持たない
+# v.place(target = Placeable) -> Nothing   (位置は target の position。w / h の扱いは未決)
+# v.addTrack(t = Timeline) -> Nothing
 
 # ---- 時間 ----
 let m  = motion { 0s: 0, 1s: 1 }             # Motion。値の時間変化。対象なし
 #   m.duration: Duration
-#   m.apply(target: Shape, f: Func<Shape, Duration, List -> Nothing>) -> Timeline
+#   m.apply(target = Shape, f = Func<Shape, Duration, List -> Nothing>) -> Timeline
 let tl = m.apply(c, func (c, t, [x]) { c.radius = x })   # Timeline。対象 + 割り当て
-let tr = new Timeline { duration: 10s }      # Timeline。入れ物にもなる
+let tr = Timeline(duration = 10s)      # Timeline。入れ物にもなる
 #   tr.duration: Duration
-#   tr.place(t: Timeline, at: Duration, fadeIn: Duration, fadeOut: Duration) -> Nothing
+#   tr.place(t = Timeline, at = Duration, fadeIn = Duration, fadeOut = Duration) -> Nothing
 
 # ---- その他 ----
-# Nothing   戻り値のない関数の戻り値
+# Nothing   値を返さなかった関数の戻り値。書き方は無い
+# Type      型そのもの。型名を書くとこの値になり、呼ぶとその型の値を作る
+# Module    import が束縛するもの
+log(type_of(log(1)), type_of(Circle), type_of(math))
 
 # ---- 型の確認 ----
 type_of(c)        # "Circle"

@@ -21,15 +21,15 @@ export func run(now) {
   let x0 = 9.4
   let x1 = 15.0
   let ay = 6.3
-  let axis = [place(new Line { from: (x0, ay), to: (x1, ay), stroke: line, strokeWidth: 0.05, opacity: 0 })]
+  let axis = [place(Line(from = (x0, ay), to = (x1, ay), stroke = line, strokeWidth = 0.05, opacity = 0))]
   for i in 0..=4 {
     let x = x0 + i * (x1 - x0) / 4
-    axis.push(place(new Line { from: (x, ay - 0.12), to: (x, ay + 0.12), stroke: line, strokeWidth: 0.04, opacity: 0 }))
+    axis.push(place(Line(from = (x, ay - 0.12), to = (x, ay + 0.12), stroke = line, strokeWidth = 0.04, opacity = 0)))
     axis.push(text("{s}s".format(i), x, ay + 0.4, 0.26, dim, :center))
   }
-  let marker = place(new Circle { position: apos!(:center, x0, ay), radius: 0.13, fill: ink, opacity: 0 })
+  let marker = place(Circle(position = Pos(x0, ay), radius = 0.13, fill = ink, opacity = 0))
   let frame = outline(x0, 1.8, x1 - x0, 3.9)
-  let ball = place(new Circle { position: apos!(:center, x0 + 0.5, 3.75), radius: 0.35, fill: accent, opacity: 0 })
+  let ball = place(Circle(position = Pos(x0 + 0.5, 3.75), radius = 0.35, fill = accent, opacity = 0))
   let t1 = now + 0.5s
   add(sc, axis + [marker, frame, ball], t1)
   # 印は進んだり飛んだりする。ボールは印の時刻 (0..4 秒) だけから位置を決める
@@ -47,14 +47,14 @@ export func run(now) {
   }
   let follow = context ball as b, marker as m {
     motion (t) {
-      0..1: b.position = apos!(:center, x0 + 0.5 + (x1 - x0 - 1) * (m.position.x - x0) / (x1 - x0), 3.75 - 1.4 * math.abs(math.sin(math.PI * (m.position.x - x0) / (x1 - x0) * 2)))
+      0..1: b.position = Pos(x0 + 0.5 + (x1 - x0 - 1) * (m.position.x - x0) / (x1 - x0), 3.75 - 1.4 * math.abs(math.sin(math.PI * (m.position.x - x0) / (x1 - x0) * 2)))
     }
   }
   let end = t1 + 20s
   follow.duration = end - t1
-  track.place(jump, at: t1)
-  track.place(jump, at: t1 + 10s)
-  track.place(follow, at: t1)
+  track.place(jump, at = t1)
+  track.place(jump, at = t1 + 10s)
+  track.place(follow, at = t1)
   let t = say(sc, "どの時刻の絵も、その時刻だけから決まります。", t1)
   t = say(sc, "前のフレームには依存しないので、途中へ飛んでも同じ絵です。", t)
   t = say(sc, "preview で戻しても、1 枚だけ画像にしても、同じになります。", t)

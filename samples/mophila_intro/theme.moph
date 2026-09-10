@@ -4,8 +4,8 @@ import math
 
 export let W = 16
 export let H = 9
-export let v = new View { box: (W, H) }
-export let track = new Timeline {}
+export let v = View(box = (W, H))
+export let track = Timeline()
 
 export let bg     = #0f1218
 export let ink    = #f2f4f8
@@ -17,7 +17,7 @@ export let blue   = #6fa4ff
 export let green  = #5fcf9a
 export let mono   = #cfd6ea
 
-v.place(new Rect { position: apos!(:topLeft, 0, 0), w: W, h: H, fill: bg })
+v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = W, h = H, fill = bg))
 
 # ---------- 時間の決まり (テンポを変えるときはここだけ触る) ----------
 export let fade_time = 0.4s    # 出し入れのフェード

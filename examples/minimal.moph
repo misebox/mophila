@@ -1,7 +1,7 @@
 # minimal.moph — 最初に動かす対象
 
-let view = new View { box: vector!(200, 200) }
-let redCircle = new Circle { position: apos!(:center, 100, 100), radius: 10, fill: #e04040 }
+let view = View(box = Vector(200, 200))
+let redCircle = Circle(position = Pos(100, 100), radius = 10, fill = #e04040)
 
 # context は式。最後の式 (motion) が値になる
 let grow = context redCircle as c {

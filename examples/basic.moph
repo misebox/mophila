@@ -21,9 +21,9 @@ let red   = #e04040
 let half  = #e04040cc            # 8 桁目までで不透明度
 let short = #e44                 # 3 桁 = #ee4444。4 桁なら不透明度付き
 let named = red
-let plain = new Color(r=224, g=64, b=64, a=1)   # 糖衣なしの形
-let t1 = rgb!(224, 64, 64)                     # record。Color を返す
-let t2 = rgba!(224, 64, 64, 1)
+let plain = Color(r = 224, g = 64, b = 64, a = 1)   # 名前で渡す形
+let t1 = Color(224, 64, 64)                     # record。Color を返す
+let t2 = Color(224, 64, 64, 1)
 
 # パーセント。100% は 1.0
 let full = 100%
@@ -41,7 +41,7 @@ let p  = (1, 1.5)        # 座標などに使う
 let xs = [1, 2, 3]
 
 # オブジェクト生成
-let c = new Circle { fill: red, radius: 0.5 }
+let c = Circle(fill = red, radius = 0.5)
 
 # 属性の参照と更新
 let r = c.radius

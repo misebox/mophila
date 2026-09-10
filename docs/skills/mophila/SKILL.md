@@ -29,8 +29,8 @@ release ビルドは作らない。計測は小さいサイズと短い尺で。
 
 ```
 import math
-let v = new View { box: vector!(16, 9) }          # 座標系。ピクセルは持たない
-let c = new Circle { position: apos!(:center, 8, 4.5), radius: 1, fill: #e04040 }
+let v = View(box = Vector(16, 9))          # 座標系。ピクセルは持たない
+let c = Circle(position = Pos(8, 4.5), radius = 1, fill = #e04040)
 v.place(c)
 v.addTrack(context c as o {
   motion (t) {
@@ -43,26 +43,57 @@ output v
 
 ## 他の言語と違うところ
 
-- `(1, 2)` は Tuple。座標の型は Vector (`vector!(1, 2)`)、位置は AnchoredPosition (`apos!(:center, 1, 2)`)。ただし型の決まった場所 (属性など) では `box: (4, 3)` `position: (:center, 1, 2)` と素の Tuple で書けて、その型に変換される。図形の位置は `position` 属性
+- `(1, 2)` は Tuple。座標の型は Vector (`Vector(1, 2)`)、位置は Pos (`Pos(1, 2)`)。ただし型の決まった場所 (属性など) では `box = (4, 3)` `position = (1, 2)` と素の Tuple で書けて、その型に変換される。図形の位置は `position` 属性
 - 列挙値は `:center` `:topLeft` `:left` のように `:name`
 - `1/3` は演算。`10s` `500ms` `1m23s` `01:23` は Duration。`25%` は Number (0.25) であって Duration ではない
 - 文字列に埋め込みは無い。`"x = {x}".format(x)` (位置で置き換え)
 - コメントは `# ` (空白必須)。`#e04040` は色
 - `context obj as o { ... }` は長い名前を短く参照するための式。最後の式が値になる。無くても motion の行に元の名前を書けばよい。`if` も式
-- `new T { a: 1 }` は属性を型で検査する。無い属性は `NameError.UndefinedAttribute`
+- `T(a = 1)` は属性を型で検査する。無い属性は `NameError.UndefinedAttribute`
 - 図形: Circle(position, radius) / Rect(position, w, h, radius) / Line(from, to) / Polygon(points) / TextArea(text, position, w, fontSize, font, align)。共通: fill, stroke, strokeWidth, opacity
-- `math.sin` などは `import math` が要る。組み込みは `log` `type_of` と record (`vector!` `apos!` `rgb!` `rgba!`) だけ
+- `math.sin` などは `import math` が要る。組み込みの関数は `log` と `type_of` だけ。値は型名を呼んで作る (`Vector(8, 4.5)` `Pos(8, 4.5)` `Color(224, 96, 74)`)
+- リテラルは型名を呼ぶのと同じ。`[1, 2, 3]` = `List(1, 2, 3)`、`{ "k": v }` = `Dict(k = v)`、`(1, 2)` = `Tuple(1, 2)`、`0..5` = `Range(0, 5)`、`0..=5` = `Range(0, 6)`。`Number` `Duration` `Bool` `String` `Symbol` `Func` はリテラルだけ
+- 組み込みの型の名前は予約されている。`struct List { ... }` は `NameError.Reserved`
 - `import .other` で同じ場所の `other.moph` を読み、`other` に束縛する (`as m` で別名)。`import { a, b } from .other` で名前を直接持ち込む。見えるのは `export let` / `export func` した名前と `other.output` (output した View) だけ。同じファイルは 1 度しか実行されない (実体は共有)。`import ..parent` は文法上通るが、ディレクトリをまたぐ設計は避ける
 - 文字列は `+` で連結。`\"` `\n` のエスケープあり
+
+## 自分の型を作る
+
+トップレベルに `record` (値。書き換えられない) か `struct` (実体。属性を書き換えられる) を書く。
+
+```
+record Size {
+  w: Number
+  h: Number
+  method area(self) -> Number { self.w * self.h }
+}
+
+struct Counter {
+  n: Number = 0
+  private step: Number = 1
+  func new(start: Number) -> Counter { Counter(n = start) }
+  method next(self) -> Number {
+    self.n = self.n + self.step
+    self.n
+  }
+}
+```
+
+- `func` は受け手なしで型名から呼ぶ (`Counter.new(10)`)。`method` は第 1 引数が受け手 (使わないなら `_`)
+- `func new` が無ければ、`private` でないフィールドを宣言順に受け取る。位置で渡せるのは既定値の無いフィールドまでで、それ以外は `名前 = 値`
+- 複製は record が `copy(field = 値)`、struct が `shallowCopy()` / `deepCopy()`
+- 宣言の前の行に `@immutable` `@nocopy` `@nodeepcopy` `@deprecated("説明")` を空白区切りで並べられる
+- `alias P = Pos` はそのファイルの中だけの短い名前。`export` できない
+- `export struct` / `export record` で公開する
 
 ## 時間
 
 - `motion (t) { 時刻: o.attr = 式 }` が Timeline。時刻は Duration か 0..1 の実数 (`50%` 可)。1 つの motion で混ぜない
 - 実数時刻の Timeline は `tl.duration = 8s` が必須。`duration` を変えると全体が比例して伸縮する
-- `0..1: o.position = apos!(..., math.cos(math.TAU * t), ...)` のように範囲を書くと、その区間は補間せず毎フレーム式を評価する。円運動・振動はこれで書く。行を刻んで近似しない
+- `0..1: o.position = Pos(math.cos(math.TAU * t), ...)` のように範囲を書くと、その区間は補間せず毎フレーム式を評価する。円運動・振動はこれで書く。行を刻んで近似しない
 - 行末の修飾子はその行に入る区間に効く: `:ease` (加減速) `:ease_in` `:ease_out` `:linear`。`:fade` は最初の区間なら 0→1、最後の区間なら 1→0。途中は `o.opacity` の値で書く
 - `tl.reverse()` で逆再生
-- 入れ物: `let track = new Timeline {}` に `track.place(tl, at: 3s, fadeIn: 1s)`。`v.addTrack(track)`。Timeline は終わった後も最後の状態を保つ。始まる前は何もしない
+- 入れ物: `let track = Timeline()` に `track.place(tl, at = 3s, fadeIn = 1s)`。`v.addTrack(track)`。Timeline は終わった後も最後の状態を保つ。始まる前は何もしない
 - 後から place した Timeline が同じ属性を書けば勝つ
 - 動画の長さは View に置いた Timeline の終わり
 
@@ -74,9 +105,9 @@ output v
 func show(objs, at, dur) {
   for o in objs {
     let tl = context o as x { motion (t) { 0s: x.opacity = 0 \  0.4s: x.opacity = 1 } }
-    track.place(tl, at: at)
+    track.place(tl, at = at)
     let out = context o as x { motion (t) { 0s: x.opacity = 1 \  0.4s: x.opacity = 0 } }
-    track.place(out, at: at + dur)
+    track.place(out, at = at + dur)
   }
 }
 ```
@@ -84,17 +115,17 @@ func show(objs, at, dur) {
 
 矢印: `Line` と 3 点の `Polygon`。角度は `math.atan2` が無いので、向きを `(dx, dy)` から計算する。
 
-View の入れ子: `v.place(sub, at: apos!(:topLeft, x, y), w: 7)` で別の View を比率を保って置く。`track.place(sub, at: 0s)` でその View の Timeline を動かす。`sub.opacity` で全体をフェードできる。samples/grid.moph が例。
+View の入れ子: `v.place(sub, at = Pos(x, y, anchor = :topLeft), w = 7)` で別の View を比率を保って置く。`track.place(sub, at = 0s)` でその View の Timeline を動かす。`sub.opacity` で全体をフェードできる。samples/grid.moph が例。
 
 部品が互いに依存して動くもの (多関節、木): 範囲行 `0..1: child.from = parent.to` は毎フレーム評価されるので、親の属性を読む行を書けば子が追従する。Timeline を置いた順に当たるので、親の行を先に置く。samples/fractal.moph が例 (枝が親の先端を読み、再帰で 2^n 本作る。Vector は `+` `-` `* Number` が使える)。多関節の人物は samples/walker.moph (腰 → 腿 → 脛 → 足を親の先端で順につなぎ、角度は歩行周期の sin。奥 → 胴 → 手前の順に Timeline を置く)。`import { make, speed, floor } from .walker` の `make(near, far, long)` で「その場で long の間歩く人」の View (箱 6 x 6) を作れる。置く側が position.x を動かし、幅 w のとき 1 秒に `speed * w / 6` 進めると足が滑らない。samples/crowd.moph が奥行きを付けて並べた例。
 
-ピクセル単位の絵 (グラデーション、模様、フラクタル): 図形の `fill` に `new Shader { color: func (x, y, t) { ... Color } }` を入れる。x, y は箱の座標、t は秒。関数は GPU で全ピクセル分走るので数値の計算だけ (文字列・図形・Dict は不可、再帰不可)。外側の List (Number か Color だけ) と関数は使える。時間で変える値は t から計算するか、`args: [..]` を motion の行で変える。`samples: 4` で 2x2 のアンチエイリアス (計算は 4 倍)。複素数は Vector で書ける (`.x` `.y`、`+`、Number との `*`)。
+ピクセル単位の絵 (グラデーション、模様、フラクタル): 図形の `fill` に `Shader(color = func (x, y, t) { ... Color) }` を入れる。x, y は箱の座標、t は秒。関数は GPU で全ピクセル分走るので数値の計算だけ (文字列・図形・Dict は不可、再帰不可)。外側の List (Number か Color だけ) と関数は使える。時間で変える値は t から計算するか、`args: [..]` を motion の行で変える。`samples: 4` で 2x2 のアンチエイリアス (計算は 4 倍)。複素数は Vector で書ける (`.x` `.y`、`+`、Number との `*`)。
 
-曲線は `new Path { from:, segments: [(:curve, 制御点, 制御点, 終点), (:line, 点)], closed: true }`、楕円は `new Ellipse { position:, rx:, ry: }`。塗りは Color のほかに `new Gradient { from:, to:, stops: [...] }` (`kind: :radial` なら from を中心に radius まで) が使える。線は `strokeCap` `strokeJoin` `dash` で形を変えられ、`dashOffset` を motion で動かすと破線が流れる。重ね方は `blend` (`:multiply` `:screen` `:add` など)。図形を回すときは `rotation` (度、時計回り。中心は position、Line は from、Polygon は重心) を使う。頂点を計算し直す必要はない。標準ライブラリは名前で import する。`transition` (`fade_in(o, duration)` / `fade_out` / `fade_to` / `slide_in(o, dx, dy)` / `slide_out` / `move_by` / `show(track, objs, at, end)` が Timeline を返すので `track.place(tl, at:)` に置く)、`color` (`mix` `lighten` `darken` `alpha` `hsl` `gray`)、`shape` (Polygon の points: `regular_polygon` `star` `arrow`)、`layout` (`grid` `cell` `along` `fit`)。自分で opacity の motion を書く前にこれらを使う。エスケープタイム系フラクタル (Mandelbrot、Julia、Burning Ship、Multibrot) は標準ライブラリ fractal を使う: `import { escape_time, mandelbrot, julia, perturbation, plain, smooth } from fractal` して `escape_time(formula:, precision:, coloring:, center:, span:, zoom:, max_iter:, samples:)` が Shader を返す。反復式は Dict (seed / step / start / delta / degree)、色付けは `func (mu, z) -> Color` で、どちらも自作できる。深く寄るなら `perturbation` (基準軌道をスクリプト側の 64 bit で計算し GPU は差分だけ。10 兆倍あたりまで)。samples/mandelbrot.moph、julia.moph、burning_ship.moph が例。
+曲線は `Path(from =, segments = [(:curve, 制御点, 制御点, 終点), (:line, 点)], closed = true)`、楕円は `Ellipse(position =, rx =, ry =)`。塗りは Color のほかに `Gradient(from =, to =, stops = [...])` (`kind = :radial` なら from を中心に radius まで) が使える。線は `strokeCap` `strokeJoin` `dash` で形を変えられ、`dashOffset` を motion で動かすと破線が流れる。重ね方は `blend` (`:multiply` `:screen` `:add` など)。図形を回すときは `rotation` (度、時計回り。中心は position、Line は from、Polygon は重心) を使う。頂点を計算し直す必要はない。標準ライブラリは名前で import する。`transition` (`fade_in(o, duration)` / `fade_out` / `fade_to` / `slide_in(o, dx, dy)` / `slide_out` / `move_by` / `show(track, objs, at, end)` が Timeline を返すので `track.place(tl, at =)` に置く)、`color` (`mix` `lighten` `darken` `alpha` `hsl` `gray`)、`shape` (Polygon の points = `regular_polygon` `star` `arrow`)、`layout` (`grid` `cell` `along` `fit`)。自分で opacity の motion を書く前にこれらを使う。エスケープタイム系フラクタル (Mandelbrot、Julia、Burning Ship、Multibrot) は標準ライブラリ fractal を使う: `import { escape_time, mandelbrot, julia, perturbation, plain, smooth } from fractal` して `escape_time(formula =, precision =, coloring =, center =, span =, zoom =, max_iter =, samples =)` が Shader を返す。反復式は Dict (seed / step / start / delta / degree)、色付けは `func (mu, z) -> Color` で、どちらも自作できる。深く寄るなら `perturbation` (基準軌道をスクリプト側の 64 bit で計算し GPU は差分だけ。10 兆倍あたりまで)。samples/mandelbrot.moph、julia.moph、burning_ship.moph が例。
 
-音声: `import "bgm.m4a" as bgm` して `track.place(bgm, at: 0s, loop: true, volume: 0.6, fadeOut: 3s)` (samples/mophila_intro/main.moph)。`loop: true` は動画の終わりまで繰り返す。`duration:` で切る。preview でも鳴る。
+音声: `import "bgm.m4a" as bgm` して `track.place(bgm, at = 0s, loop = true, volume = 0.6, fadeOut = 3s)` (samples/mophila_intro/main.moph)。`loop = true` は動画の終わりまで繰り返す。`duration:` で切る。preview でも鳴る。
 
-字幕: `new Subtitle { text: s, duration: }` を `track.place(sub, at:)`。画面には描かれず、動画の字幕トラックになる (プレイヤーで表示)。preview と sheet では下に重ねて見える。字幕を TextArea で描かない。examples/media.moph が例。
+字幕: `Subtitle(text = s, duration =)` を `track.place(sub, at =)`。画面には描かれず、動画の字幕トラックになる (プレイヤーで表示)。preview と sheet では下に重ねて見える。字幕を TextArea で描かない。examples/media.moph が例。
 
 
 ## 見やすい動画にする (説明的な動画の tips)
@@ -158,7 +189,7 @@ for line in lines {
 
 intro は `main.moph` (章の順番と output) / `theme.moph` (画面、色、時間の決まり) / `slides.moph` (部品) / 場面ごとのファイル (`export func run(now)` が場面を組んで次の開始時刻を返す) に分かれている。新しく書くときは theme と slides を写す。場面の基本形は「左にコード、右にそのコードが実際に動く箱、下にナレーションの字幕」:
 
-- `place(o)` — View に置いて返す。図形は `opacity: 0` で作る
+- `place(o)` — View に置いて返す。図形は `opacity = 0` で作る
 - `fade(o, at, from, to)` / `show(objs, at, end)` — 出し入れ。`show` は順に 0.08 秒ずらす
 - `text(s, x, y, size, color, anchor)` / `heading(s)` / `chapter(title, at)` — 文字、上の見出し、章の見出し
 - `card(lines, x, y, w, size)` — コードのカード。行数から高さが決まる。1 行は幅に収まる長さに折り返す (幅 7.6、文字 0.28 なら 40 字程度)
@@ -182,6 +213,6 @@ intro は `main.moph` (章の順番と output) / `theme.moph` (画面、色、�
 ## エラー
 
 `種別.細目: line N: message`。種別のツリーは `examples/error.moph`。よくあるもの:
-- `TypeError.ArgumentType: Circle.position expects AnchoredPosition, found Tuple` → `apos!` を忘れている
+- `TypeError.ArgumentType: Circle.position expects Pos, found Tuple` → 要素の数が Pos に合っていない
 - `ValueError.DurationRequired` → 実数時刻の Timeline に duration が無い、または時刻の単位が混在
 - `NameError.UndefinedVariable: "math" is not defined; add "import math"`

@@ -15,8 +15,8 @@ export func run(now) {
     "# その場で歩く人の View を返す",
     "for (x, w, color) in sizes {",
     "  let p = make(color, #8b93a7, 20s)",
-    "  v.place(p, at: apos!(:bottomLeft, x, 7), w: w)",
-    "  track.place(p, at: 0s)",
+    "  v.place(p, at = Pos(x, 7, anchor = :bottomLeft), w = w)",
+    "  track.place(p, at = 0s)",
     "}",
   ], 0.7, 1.8, 7.6, 0.28), now + 0.4s)
   let t1 = now + 0.5s

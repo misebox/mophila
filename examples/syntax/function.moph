@@ -45,6 +45,12 @@ context c as o, variableWithLongName as v {
   v.w = 1
 }
 
+# ---- ... で引数に広げる ----
+let pair = (1, 2)
+log(add(...pair))                       # 3。add(1, 2) と同じ
+log(add(...[1], 5))                     # 6。ほかの引数と混ぜてよい
+log(add(...{ "a": 1, "b": 9 }))         # 10。Dict は名前付き引数になる
+
 log(double(3), add(1, 2), triple(3), sum3([1, 2, 3]), half(4))   # 6 3 9 6 2
 log(sign(-5), sign(3))   # -1 1
 log(c1, c2)

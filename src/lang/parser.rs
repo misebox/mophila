@@ -434,7 +434,15 @@ impl Parser {
                 }
                 _ => None,
             };
-            args.push(Arg { name, value: self.expr(0)? });
+            // ...xs は並びを引数に広げる。名前付きには書けない
+            let spread = *self.peek() == Tok::DotDotDot;
+            if spread {
+                self.next();
+                if name.is_some() {
+                    return err(Kind::UnexpectedToken, format!("line {}:{}: \"...\" cannot be given a name", self.line(), self.col()));
+                }
+            }
+            args.push(Arg { name, value: self.expr(0)?, spread });
             self.skip_newlines();
             match self.peek() {
                 Tok::Comma => {

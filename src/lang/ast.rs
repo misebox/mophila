@@ -69,6 +69,8 @@ pub struct Param {
 pub struct Arg {
     pub name: Option<String>,
     pub value: Expr,
+    /// f(...xs) の形。Tuple / List / Range を並びのまま引数に広げる
+    pub spread: bool,
 }
 
 /// motion 式。3 つの形がある:
@@ -219,7 +221,7 @@ impl Expr {
 
 /// 型名を呼ぶ式
 fn construct(name: &str, args: Vec<Expr>) -> Expr {
-    let args = args.into_iter().map(|value| Arg { name: None, value }).collect();
+    let args = args.into_iter().map(|value| Arg { name: None, value, spread: false }).collect();
     Expr::Call(Box::new(Expr::Ident(name.to_string())), args)
 }
 

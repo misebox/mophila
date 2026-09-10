@@ -665,10 +665,31 @@ impl Interp {
     /// 名前を付けずに並べた引数だけを取る
     fn positional(&mut self, kind: &str, args: &[Arg]) -> Result<Vec<Value>> {
         let mut out = Vec::with_capacity(args.len());
-        for a in args {
-            match &a.name {
+        for (name, v) in self.eval_args(args)? {
+            match name {
                 Some(n) => return err(Kind::ArgumentType, format!("{kind} takes no named argument \"{n}\"")),
-                None => out.push(self.eval(&a.value)?),
+                None => out.push(v),
+            }
+        }
+        Ok(out)
+    }
+
+    /// 引数を評価する。`...xs` は並びを 1 つずつの引数に広げる
+    fn eval_args(&mut self, args: &[Arg]) -> Result<Vec<(Option<String>, Value)>> {
+        let mut out = Vec::new();
+        for arg in args {
+            let v = self.eval(&arg.value)?;
+            if !arg.spread {
+                out.push((arg.name.clone(), v));
+                continue;
+            }
+            match &v {
+                Value::List(items) => out.extend(items.borrow().iter().map(|i| (None, i.clone()))),
+                Value::Tuple(items) => out.extend(items.iter().map(|i| (None, i.clone()))),
+                Value::Range(a, b) => out.extend((*a..*b).map(|i| (None, Value::num(i as f64)))),
+                // Dict は キー = 値 の名前付き引数になる
+                Value::Dict(entries) => out.extend(entries.borrow().iter().map(|(k, v)| (Some(k.clone()), v.clone()))),
+                v => return err(Kind::ArgumentType, format!("... expects List, Tuple, Range or Dict, found {}", v.type_name())),
             }
         }
         Ok(out)
@@ -677,9 +698,8 @@ impl Interp {
     fn resolve_args(&mut self, kind: &str, fields: &[&str], args: &[Arg]) -> Result<HashMap<String, Value>> {
         let mut map: HashMap<String, Value> = HashMap::new();
         let mut next = 0;
-        for arg in args {
-            let v = self.eval(&arg.value)?;
-            let name = match &arg.name {
+        for (given, v) in self.eval_args(args)? {
+            let name = match &given {
                 Some(n) => {
                     if !fields.contains(&n.as_str()) {
                         return err(Kind::UndefinedAttribute, format!("{kind} has no field \"{n}\""));
@@ -807,7 +827,7 @@ impl Interp {
             }
             "Pos" => {
                 // Pos(x, y, anchor = :center) と Pos(v: Vector, anchor = :center)
-                if let Some(Arg { name: None, value }) = args.first() {
+                if let Some(Arg { name: None, value, spread: false }) = args.first() {
                     if let Value::Vector(x, y) = self.eval(value)? {
                         let rest = self.resolve_args(kind, &["anchor"], &args[1..])?;
                         let anchor = self.anchor_of(rest.get("anchor"))?;
@@ -933,9 +953,7 @@ impl Interp {
         if let Some(v) = self_value {
             values.push((None, v));
         }
-        for a in args {
-            values.push((a.name.clone(), self.eval(&a.value)?));
-        }
+        values.extend(self.eval_args(args)?);
         let closure = Closure { def: member.def.clone(), scopes: ty.scopes.clone() };
         // 型名から new を呼んだときも、その中の型名はフィールドから作る (new を呼び直さない)
         let is_new = !member.receiver && name == "new";
@@ -1082,10 +1100,10 @@ impl Interp {
         let news: Vec<&crate::lang::ast::MemberDecl> = ty.decl.members.iter().filter(|m| !m.receiver && m.name == "new").collect();
         // func new の中で型名を呼んだら、フィールドから作る (new を呼び直さない)
         if news.is_empty() || self.constructing.last().is_some_and(|n| *n == ty.decl.name) {
-            let values = args.iter().map(|a| self.eval(&a.value).map(|v| (a.name.clone(), v))).collect::<Result<Vec<_>>>()?;
+            let values = self.eval_args(args)?;
             return self.build_from_fields(ty, values);
         }
-        let values = args.iter().map(|a| self.eval(&a.value).map(|v| (a.name.clone(), v))).collect::<Result<Vec<_>>>()?;
+        let values = self.eval_args(args)?;
         // 必須の数が合うものを選ぶ
         let count = values.iter().filter(|(n, _)| n.is_none()).count();
         let fits = |m: &&&crate::lang::ast::MemberDecl| {
@@ -1138,14 +1156,14 @@ impl Interp {
                         let name = name.clone();
                         return self.construct(&name, args);
                     }
-                    let values = args.iter().map(|a| self.eval(&a.value)).collect::<Result<Vec<_>>>()?;
+                    let values = self.eval_args(args)?.into_iter().map(|(_, v)| v).collect::<Vec<_>>();
                     return match item {
                         Value::Builtin(name) => call_builtin(name, values),
                         Value::Func(closure) => self.apply(&closure, values.into_iter().map(|v| (None, v)).collect()),
                         v => err(Kind::ArgumentType, format!("{} is not callable", v.type_name())),
                     };
                 }
-                let values = args.iter().map(|a| self.eval(&a.value).map(|v| (a.name.clone(), v))).collect::<Result<Vec<_>>>()?;
+                let values = self.eval_args(args)?;
                 if let Value::Object(obj) = &receiver {
                     let obj = obj.clone();
                     return self.method(&obj, method, values);
@@ -1159,11 +1177,11 @@ impl Interp {
                 Value::BuiltinType(name) => self.construct(&name, args),
                 Value::Type(ty) => self.construct_user(&ty, args),
                 Value::Func(closure) => {
-                    let values = args.iter().map(|a| self.eval(&a.value).map(|v| (a.name.clone(), v))).collect::<Result<Vec<_>>>()?;
+                    let values = self.eval_args(args)?;
                     self.apply(&closure, values)
                 }
                 Value::Builtin(name) => {
-                    let values = args.iter().map(|a| self.eval(&a.value)).collect::<Result<Vec<_>>>()?;
+                    let values = self.eval_args(args)?.into_iter().map(|(_, v)| v).collect::<Vec<_>>();
                     call_builtin(name, values)
                 }
                 v => err(Kind::ArgumentType, format!("{} is not callable", v.type_name())),

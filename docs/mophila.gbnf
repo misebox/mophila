@@ -91,7 +91,8 @@ tuple       ::= "(" ws ")"
               | "(" ws expr (ws "," ws expr)+ (ws ",")? ws ")"
 
 args        ::= (ws arg (ws "," ws arg)* (ws ",")?)? ws
-arg         ::= (ident ws "=" ws)? expr
+# ... は Tuple / List / Range / Dict を引数に広げる。名前は付けられない
+arg         ::= (ident ws "=" ws)? expr | "..." ws expr
 
 
 dict        ::= "{" (ws dict-entry (ws "," ws dict-entry)* (ws ",")?)? ws "}"

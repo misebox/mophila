@@ -43,6 +43,8 @@ pub enum Tok {
     Colon,
     Dot,
     DotDot,
+    /// 引数への展開 (f(...xs))
+    DotDotDot,
     DotDotEq,
     Eq,
     Bang,
@@ -182,6 +184,7 @@ pub fn lex(src: &str) -> Result<Vec<Token>> {
                 let three: String = chars[i..(i + 3).min(chars.len())].iter().collect();
                 let two: String = chars[i..(i + 2).min(chars.len())].iter().collect();
                 let (tok, len) = match (three.as_str(), two.as_str()) {
+                    ("...", _) => (Tok::DotDotDot, 3),
                     ("..=", _) => (Tok::DotDotEq, 3),
                     (_, "..") => (Tok::DotDot, 2),
                     (_, "->") => (Tok::Arrow, 2),

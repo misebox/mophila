@@ -795,7 +795,25 @@ impl Parser {
                 self.expect(Tok::RParen)?;
             }
             Tok::Ident(_) => {
-                let obj = Expr::Ident(self.ident()?);
+                // 対象は名前・属性・添字で書ける (g.ball、xs[0] など)。[ の前までを式として読む
+                let mut obj = Expr::Ident(self.ident()?);
+                loop {
+                    match self.peek() {
+                        Tok::Dot => {
+                            self.next();
+                            obj = Expr::Attr(Box::new(obj), self.ident()?);
+                        }
+                        // "[" は属性の並びの始まりでもある。中が Symbol でなければ添字
+                        Tok::LBracket if matches!(self.tokens.get(self.pos + 1).map(|t| &t.tok), Some(Tok::Symbol(_))) => break,
+                        Tok::LBracket => {
+                            self.next();
+                            let index = self.expr(0)?;
+                            self.expect(Tok::RBracket)?;
+                            obj = Expr::Index(Box::new(obj), Box::new(index));
+                        }
+                        _ => break,
+                    }
+                }
                 self.expect(Tok::LBracket)?;
                 let mut paths = Vec::new();
                 loop {

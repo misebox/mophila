@@ -37,6 +37,7 @@ let n = 1
 
 # ---- NameError ----
 let y = z + 1                  # NameError.UndefinedVariable: "z" is not defined
+let ann: Numbr = 1             # NameError.UndefinedVariable: "Numbr" is not a type
 import "nope.m4a" as bgm       # NameError.UndefinedVariable: cannot read "nope.m4a": ... is not a file
 w = 1                          # NameError.AssignWithoutLet: "w" is not defined; use "let w = ..."
 record List { a: Number }      # NameError.Reserved: "List" is a builtin type and cannot be redeclared
@@ -58,6 +59,7 @@ let m = motion { 0s: 0, 0.5: 1 }   # ValueError.DurationRequired: keyframe times
 let m2 = motion { 5: 0 }       # ValueError.OutOfRange: relative keyframe time must be within 0..1
 tr.place(Subtitle(text = "a"), at = 0s)   # ValueError.DurationRequired: a Subtitle needs duration before it is placed
 v.place(1)                     # TypeError.ArgumentType: View.place expects Placeable, found Number
+output Circle(radius = 1)      # TypeError.ArgumentType: output takes a View, found Circle
 let h = #e04040 * 2            # ValueError.OutOfRange: color channel exceeds 1.0
 
 # ---- RuntimeError ----

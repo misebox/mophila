@@ -104,7 +104,9 @@ context-expr ::= "context" sp expr sp "as" sp ident (ws "," ws expr sp "as" sp i
 # motion (t, a, b) { 行 }  /  motion target [:attr.path, ...] { 行 }  /  motion { 行 }
 motion-expr ::= "motion" ws motion-head? ws "{" (ws motion-row)* ws "}"
 motion-head ::= "(" ws ident (ws "," ws ident)* ws ")"
-              | ident ws "[" ws attr-path (ws "," ws attr-path)* ws "]"
+              | motion-target ws "[" ws attr-path (ws "," ws attr-path)* ws "]"
+# 対象は名前・属性・添字で書ける (c、g.ball、balls[0])
+motion-target ::= ident ("." ident | "[" ws expr ws "]")*
 attr-path   ::= symbol ("." ident)*
 
 # 時刻は Duration か 0..1 の実数。範囲 (0..1:) は補間せず毎フレーム式を評価する

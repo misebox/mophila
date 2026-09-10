@@ -22,6 +22,8 @@ pub enum BinOp {
 
 #[derive(Debug, Clone)]
 pub enum Expr {
+    /// 式に書けない値 (List や図形など) を、そのままキーフレームに持たせるためのもの
+    Value(Box<crate::lang::value::Value>),
     Number(f64),
     Duration(f64),
     Color([f32; 4]),
@@ -210,7 +212,7 @@ impl Expr {
             Value::Vector(x, y) => construct("Vector", vec![Expr::Number(*x), Expr::Number(*y)]),
             Value::Apos(a, x, y) => construct("Pos", vec![Expr::Number(*x), Expr::Number(*y), Expr::Symbol(a.clone())]),
             Value::Tuple(items) => Expr::Tuple(items.iter().map(Expr::from_value).collect()),
-            _ => Expr::Ident(format!("<{}>", v.type_name())),
+            other => Expr::Value(Box::new(other.clone())),
         }
     }
 }

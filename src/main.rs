@@ -273,7 +273,7 @@ fn load(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Source
     }
     interp.run(&stmts)?;
     let view = interp.output.clone().ok_or("no output: add \"output <view>\" to the script")?;
-    let duration = view.borrow().tracks.iter().map(|p| p.end()).fold(0.0, f64::max);
+    let duration = lang::eval::all_tracks(&view).iter().map(|p| p.end()).fold(0.0, f64::max);
     interp.snapshot(&view);
     Ok((interp, view, duration))
 }
@@ -324,7 +324,7 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
     for (i, t) in times.into_iter().enumerate() {
         timing.measure("eval", || -> Result<(), Box<dyn Error>> {
             interp.begin_frame(t);
-            let tracks = view.borrow().tracks.clone();
+            let tracks = lang::eval::all_tracks(&view);
             for placed in &tracks {
                 interp.apply_track(placed, t)?;
             }
@@ -371,7 +371,7 @@ fn sheet(src: &str, base_dir: std::path::PathBuf, output: &str, every: f64, time
     let mut progress = render::progress::Progress::new("sheet", times.len());
     for (i, &t) in times.iter().enumerate() {
         interp.begin_frame(t);
-        let tracks = view.borrow().tracks.clone();
+        let tracks = lang::eval::all_tracks(&view);
         for placed in &tracks {
             interp.apply_track(placed, t)?;
         }

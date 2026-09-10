@@ -167,7 +167,7 @@ c.next()                         # method は受け手を書かずに呼ぶ
 let a = Size(3, 4)
 let b = a
 a.w = 9        # a に新しい Size を入れ直す。b は Size(3, 4) のまま
-b.copy(w = 9)  # 入れ直さずに、w だけ違う Size を作る
+b.copy(w = 9)  # 入れ直さずに、w だけ違う Size を作る (func new を書いた型では、フィールドを変える copy はできない)
 
 let c = Counter(0)
 let d = c
@@ -247,7 +247,7 @@ type Mode = :fast | :slow
 
 `Path` の `segments` は `(:move | :line | :quad | :curve, 点...)` の並び。`:quad` は制御点 1 つ、`:curve` は 2 つを、終点より前に書く。`closed = true` なら始点に戻って閉じる。
 
-どの図形も持つ属性。効きようがないものは、その図形が持たない (書くと `NameError.UndefinedAttribute`):
+どの図形も持つ属性。効きようがないものは、その図形が持たない (書くと `NameError.UndefinedAttribute`)。既定のあるものは、書かなくてもその値で読める:
 
 | 属性 | 型 | 意味 |
 |---|---|---|

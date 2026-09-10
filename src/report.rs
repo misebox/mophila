@@ -76,7 +76,7 @@ impl Filter {
 /// View に置かれた Timeline を辿り、絶対時刻の変化の列にする
 pub fn collect(interp: &mut Interp, view: &ObjRef) -> Vec<Event> {
     let mut events = Vec::new();
-    let tracks = view.borrow().tracks.clone();
+    let tracks = crate::lang::eval::all_tracks(view);
     for placed in &tracks {
         walk(interp, placed, 0.0, &mut events);
     }

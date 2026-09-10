@@ -197,7 +197,7 @@ impl Player<'_> {
         ));
 
         self.interp.begin_frame(t);
-        let tracks = self.view.borrow().tracks.clone();
+        let tracks = crate::lang::eval::all_tracks(&self.view);
         for placed in &tracks {
             self.interp.apply_track(placed, t)?;
         }

@@ -59,6 +59,8 @@ pub struct Interp {
     inside: Vec<String>,
     /// 次の apply がどの型のメンバーか。apply がこれを inside に積む
     calling: Option<String>,
+    /// Motion.apply の実行中だけ Some。属性への代入を書かれた順に記録する
+    assigned: RefCell<Option<Vec<(ObjRef, String)>>>,
 }
 
 impl Interp {
@@ -72,7 +74,7 @@ impl Interp {
                 types.insert(t.name.to_string(), t.values.iter().map(|(v, _)| v.to_string()).collect());
             }
         }
-        Self { scopes: vec![root_scope()], output: None, types, cache: None, finished: HashMap::new(), last_t: f64::NEG_INFINITY, base_dir: PathBuf::from("."), exports: Vec::new(), sources: HashMap::new(), assets: HashMap::new(), initial: Vec::new(), modules: HashMap::new(), loading: Vec::new(), returning: None, constructing: Vec::new(), warned: std::collections::HashSet::new(), inside: Vec::new(), calling: None }
+        Self { scopes: vec![root_scope()], output: None, types, cache: None, finished: HashMap::new(), last_t: f64::NEG_INFINITY, base_dir: PathBuf::from("."), exports: Vec::new(), sources: HashMap::new(), assets: HashMap::new(), initial: Vec::new(), modules: HashMap::new(), loading: Vec::new(), returning: None, constructing: Vec::new(), warned: std::collections::HashSet::new(), inside: Vec::new(), calling: None, assigned: RefCell::new(None) }
     }
 
     /// トップレベルの束縛 (LSP のホバー用)
@@ -129,19 +131,19 @@ impl Interp {
                 Ok(Flow::Next(Value::Nothing))
             }
             StmtKind::TypeDef(name, members) => {
-                if self.scopes.len() != 1 {
-                    return err(Kind::UnexpectedToken, "type is only allowed at the top level");
-                }
+                self.top_level("type")?;
                 check_free_name(name)?;
                 self.types.insert(name.clone(), members.clone());
                 Ok(Flow::Next(Value::Nothing))
             }
             StmtKind::Import(ImportKind::Module { source, alias }) => {
+                self.top_level("import")?;
                 let module = self.load_module(source)?;
                 self.scopes.first().expect("global scope").borrow_mut().insert(alias.clone(), module);
                 Ok(Flow::Next(Value::Nothing))
             }
             StmtKind::Import(ImportKind::Names { source, names }) => {
+                self.top_level("import")?;
                 let Value::Module(module) = self.load_module(source)? else {
                     return err(Kind::ArgumentType, "import { ... } from needs a module, not a file asset");
                 };
@@ -222,7 +224,11 @@ impl Interp {
                 err(Kind::UnexpectedToken, "a file can have only one output")
             }
             StmtKind::Output(e) => {
-                self.output = Some(self.eval_object(e)?);
+                let view = self.eval_object(e)?;
+                if view.borrow().kind != "View" {
+                    return err(Kind::ArgumentType, format!("output takes a View, found {}", view.borrow().kind));
+                }
+                self.output = Some(view);
                 Ok(Flow::Next(Value::Nothing))
             }
             StmtKind::For(pat, iter, body) => {
@@ -250,9 +256,46 @@ impl Interp {
         }
     }
 
+    /// 文がいちばん外側にあるか。import と type は中に書けない
+    fn top_level(&self, what: &str) -> Result<()> {
+        match self.scopes.len() {
+            1 => Ok(()),
+            _ => err(Kind::UnexpectedToken, format!("{what} is only allowed at the top level")),
+        }
+    }
+
+    /// その名前が型として存在するか。書き間違いをここで止める
+    fn known_type(&self, name: &str) -> bool {
+        // 関数の型と、決まった Symbol は名前で引かない
+        name.contains("->")
+            || name.starts_with(':')
+            || name == "Func"
+            || self.types.contains_key(name)
+            || crate::docs::TYPES.iter().any(|t| t.name == name)
+            || matches!(self.scopes.iter().rev().find_map(|s| s.borrow().get(name).cloned()), Some(Value::Type(_) | Value::BuiltinType(_)))
+    }
+
+    /// フィールドに入れる値。エラーには型名とフィールド名を出す
+    fn check_field(&self, owner: &str, field: &str, v: &Value, ann: &str) -> Result<()> {
+        let name = &self.real_type_name(ann);
+        let head = name.split_once('<').map_or(name.as_str(), |(h, _)| h);
+        if !self.known_type(head) {
+            return err(Kind::UndefinedVariable, format!("{owner}.{field}: \"{head}\" is not a type"));
+        }
+        if self.matches_type(v, name) {
+            return Ok(());
+        }
+        Err(self.wrong_type(Kind::AttributeType, &format!("{owner}.{field}"), name, v))
+    }
+
     /// 値が型名に合うか。Union は定義をたどる
     fn check_type(&self, v: &Value, name: &str) -> Result<()> {
         let name = &self.real_type_name(name);
+        // List<Number> のような書き方は、外側の名前だけ見る
+        let head = name.split_once('<').map_or(name.as_str(), |(h, _)| h);
+        if !self.known_type(head) {
+            return err(Kind::UndefinedVariable, format!("\"{head}\" is not a type"));
+        }
         if self.matches_type(v, name) {
             return Ok(());
         }
@@ -287,6 +330,11 @@ impl Interp {
             return Err(self.wrong_type(Kind::AttributeType, &format!("{}.{attr}", o.kind), &expected, &value));
         }
         o.attrs.insert(attr.to_string(), value);
+        drop(o);
+        // Motion.apply は「代入が書かれたか」で拾うので、値が変わらない代入も記録する
+        if let Some(log) = self.assigned.borrow_mut().as_mut() {
+            log.push((obj.clone(), attr.to_string()));
+        }
         Ok(())
     }
 
@@ -492,6 +540,7 @@ impl Interp {
 
     pub fn eval(&mut self, e: &Expr) -> Result<Value> {
         match e {
+            Expr::Value(v) => Ok((**v).clone()),
             Expr::Number(v) => Ok(Value::num(*v)),
             Expr::Duration(v) => Ok(Value::Duration(*v)),
             Expr::Color(c) => Ok(Value::Color(*c)),
@@ -841,6 +890,10 @@ impl Interp {
                         }
                         attrs.insert(name, v);
                     }
+                    // 書かなかった属性も、既定のある分は入れておく。描く側と読む側が同じ値を見る
+                    for (name, value) in defaults(kind) {
+                        attrs.entry((*name).to_string()).or_insert_with(|| value.clone());
+                    }
                     return Ok(Value::Object(Rc::new(RefCell::new(Object { kind: kind.to_string(), decl: None, attrs, children: vec![], tracks: vec![] }))));
                 }
                 let Some(ty) = self.lookup_type(kind) else {
@@ -922,6 +975,13 @@ impl Interp {
         if ty.decl.nocopy {
             return err(Kind::UndefinedAttribute, format!("{} is @nocopy, so it cannot be copied", ty.decl.name));
         }
+        // func new を書いた型は、そこで値を決めている。copy で中身を差し替えると、そこを通らない
+        if !args.is_empty() && ty.decl.members.iter().any(|m| !m.receiver && m.name == "new") {
+            return err(
+                Kind::ArgumentType,
+                format!("{}.{name} cannot change fields because {} declares func new; call {}(...) instead", ty.decl.name, ty.decl.name, ty.decl.name),
+            );
+        }
         match (receiver, name) {
             (Value::Record(r), "copy") => {
                 let changed = self.resolve_args(&ty.decl.name, &r.fields.iter().map(|(f, _)| f.as_str()).collect::<Vec<_>>(), args)?;
@@ -995,7 +1055,7 @@ impl Interp {
                     None => return err(Kind::ArityMismatch, format!("{}.{} is not given", decl.name, f.name)),
                 },
             };
-            self.check_type(&v, &f.ann.name)?;
+            self.check_field(&decl.name, &f.name, &v, &f.ann.name)?;
             fields.push((f.name.clone(), v));
         }
         Ok(if decl.immutable {
@@ -1201,12 +1261,20 @@ impl Interp {
         for row in &motion.rows {
             let before = target.borrow().attrs.clone();
             let cols_value = Value::List(Rc::new(RefCell::new(row.values.clone())));
-            self.apply(f, vec![(None, Value::Object(target.clone())), (None, Value::Duration(row.time)), (None, cols_value)])?;
-            let after = target.borrow().attrs.clone();
-            let assigns = after
+            // 値が変わったかではなく、代入が書かれたかで拾う。今と同じ値を書いた行も残す
+            *self.assigned.borrow_mut() = Some(Vec::new());
+            let result = self.apply(f, vec![(None, Value::Object(target.clone())), (None, Value::Duration(row.time)), (None, cols_value)]);
+            let written = self.assigned.borrow_mut().take().unwrap_or_default();
+            result?;
+            let mut attrs: Vec<String> = Vec::new();
+            for (obj, attr) in written {
+                if Rc::ptr_eq(&obj, target) && !attrs.contains(&attr) {
+                    attrs.push(attr);
+                }
+            }
+            let assigns = attrs
                 .into_iter()
-                .filter(|(k, v)| before.get(k).is_none_or(|old| !equals(old, v)))
-                .map(|(attr, v)| TlAssign { target: target.clone(), path: vec![attr], expr: Expr::from_value(&v), scopes: vec![] })
+                .filter_map(|attr| target.borrow().attrs.get(&attr).map(|v| TlAssign { target: target.clone(), path: vec![attr.clone()], expr: Expr::from_value(v), scopes: vec![] }))
                 .collect();
             target.borrow_mut().attrs = before;
             keyframes.push(TlKeyframe { time: row.time, end: None, assigns, ease: row.ease.clone() });
@@ -1670,6 +1738,37 @@ fn ease(name: Option<&str>, k: f64) -> f64 {
     }
 }
 
+/// View とその子の View が持つ track を、この順に集める。
+/// 子として置いた View の track も、親と同じ時間軸で動く
+pub fn all_tracks(view: &ObjRef) -> Vec<Placed> {
+    let mut out = Vec::new();
+    let mut seen: Vec<ObjRef> = Vec::new();
+    gather_tracks(view, &mut out, &mut seen);
+    out
+}
+
+fn gather_tracks(view: &ObjRef, out: &mut Vec<Placed>, seen: &mut Vec<ObjRef>) {
+    if seen.iter().any(|o| Rc::ptr_eq(o, view)) {
+        return;
+    }
+    seen.push(view.clone());
+    let v = view.borrow();
+    out.extend(v.tracks.iter().cloned());
+    // addTrack した View は、その 1 本が中身も動かす。子として辿ると二重になる
+    for placed in &v.tracks {
+        if let Track::Container(c) = &placed.track {
+            if !seen.iter().any(|o| Rc::ptr_eq(o, c)) {
+                seen.push(c.clone());
+            }
+        }
+    }
+    for child in &v.children {
+        if child.borrow().kind == "View" {
+            gather_tracks(child, out, seen);
+        }
+    }
+}
+
 /// View から辿れるオブジェクト (子、入れ子の View、Timeline の対象) を重複なく集める
 fn collect_objects(obj: &ObjRef, out: &mut Vec<ObjRef>) {
     if out.iter().any(|o| Rc::ptr_eq(o, obj)) {
@@ -1823,6 +1922,44 @@ fn check_free_name(name: &str) -> Result<()> {
         return err(Kind::Reserved, format!("\"{name}\" is a builtin type and cannot be redeclared"));
     }
     Ok(())
+}
+
+/// 書かなくてもその値で描かれる属性。ここが既定の唯一の定義で、構築時に入れておく。
+/// 既定が「何もしない」もの (fill / stroke / pivot / w / h / font) は入れない
+pub fn defaults(kind: &str) -> Vec<(&'static str, Value)> {
+    let num = |n: f64| Value::num(n);
+    let sym = |s: &str| Value::Symbol(s.to_string());
+    let mut out: Vec<(&'static str, Value)> = Vec::new();
+    if schema(kind).is_some_and(|s| s.iter().any(|(n, _)| *n == "opacity")) {
+        out.push(("opacity", num(1.0)));
+    }
+    let has = |name: &str| schema(kind).is_some_and(|s| s.iter().any(|(n, _)| n == &name));
+    if has("rotation") {
+        out.push(("rotation", num(0.0)));
+    }
+    if has("blend") {
+        out.push(("blend", sym("normal")));
+    }
+    if has("strokeWidth") {
+        out.push(("strokeWidth", num(0.01)));
+    }
+    if has("strokeCap") {
+        out.push(("strokeCap", sym("butt")));
+    }
+    if has("strokeJoin") {
+        out.push(("strokeJoin", sym("miter")));
+    }
+    if has("dashOffset") {
+        out.push(("dashOffset", num(0.0)));
+    }
+    match kind {
+        "Rect" => out.push(("radius", num(0.0))),
+        "Path" => out.push(("closed", Value::Bool(false))),
+        "TextArea" => out.push(("align", sym("left"))),
+        "Shader" => out.push(("samples", num(1.0))),
+        _ => {}
+    }
+    out
 }
 
 pub fn schema(kind: &str) -> Option<&'static [(&'static str, &'static str)]> {

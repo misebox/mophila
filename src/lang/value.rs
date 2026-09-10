@@ -457,6 +457,13 @@ impl Timeline {
     }
 }
 
+impl std::fmt::Debug for Value {
+    /// 中身にスコープや関数が入っているので、型名だけ出す
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}({self})", self.type_name())
+    }
+}
+
 impl Value {
     pub fn type_name(&self) -> String {
         match self {

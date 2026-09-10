@@ -274,7 +274,7 @@ impl Interp {
     }
 
     /// 属性に値を書く。型は宣言 (struct / record) か schema から引く
-    fn set_attr(&self, obj: &ObjRef, attr: &str, value: Value) -> Result<()> {
+    pub(crate) fn set_attr(&self, obj: &ObjRef, attr: &str, value: Value) -> Result<()> {
         let mut o = obj.borrow_mut();
         let expected = match &o.decl {
             Some(ty) => ty.decl.fields.iter().find(|f| f.name == attr).map(|f| f.ann.name.clone()),
@@ -292,17 +292,10 @@ impl Interp {
 
     /// 属性パスに値を書く。[position, x] なら position (Pos) の x だけを変える
     fn set_path(&self, obj: &ObjRef, path: &[String], value: Value) -> Result<()> {
-        let [attr, rest @ ..] = path else {
+        if path.is_empty() {
             return err("NameError.UndefinedAttribute", "empty attribute path");
-        };
-        if rest.is_empty() {
-            return self.set_attr(obj, attr, value);
         }
-        let current = obj.borrow().attrs.get(attr).cloned();
-        let Some(current) = current else {
-            return err("NameError.UndefinedAttribute", format!("{}.{attr} is not set", obj.borrow().kind));
-        };
-        self.set_attr(obj, attr, set_field(current, rest, value)?)
+        self.write_path(Value::Object(obj.clone()), path, value).map(|_| ())
     }
 
     fn matches_type(&self, v: &Value, name: &str) -> bool {
@@ -420,27 +413,15 @@ impl Interp {
             Expr::Ident(name) => {
                 self.assign_var(name, v)
             }
-            Expr::Attr(obj, attr) => match self.eval(obj)? {
-                Value::Object(obj) => {
-                    self.field_ok(&obj.borrow().decl, attr)?;
-                    let expected = schema(&obj.borrow().kind).and_then(|s| s.iter().find(|(n, _)| *n == attr)).map(|(_, t)| *t);
-                    let v = match expected {
-                        Some(_) => v,
-                        None => v,
-                    };
-                    self.set_attr(&obj, attr, v)
+            Expr::Attr(obj, attr) => {
+                let target = self.eval(obj)?;
+                let updated = self.write_path(target.clone(), std::slice::from_ref(attr), v)?;
+                // 値型は作り直しになるので、その値を持っている入れ物を更新する
+                match same_place(&target, &updated) {
+                    true => Ok(()),
+                    false => self.assign(obj, updated),
                 }
-                Value::Motion(m) if attr == "duration" => set_duration(&m.duration, v),
-                Value::Timeline(t) if attr == "duration" => set_duration(&t.duration, v),
-                // 値のフィールドへの代入。値は変わらないので、その値を持っている入れ物を更新する
-                other => {
-                    if let Value::Record(r) = &other {
-                        self.field_ok(&r.decl, attr)?;
-                    }
-                    let updated = set_field(other, std::slice::from_ref(attr), v)?;
-                    self.assign(obj, updated)
-                }
-            },
+            }
             _ => err("SyntaxError.UnexpectedToken", "cannot assign to this expression"),
         }
     }
@@ -576,42 +557,13 @@ impl Interp {
                     None => Ok(Value::Nothing),
                 }
             }
-            Expr::Attr(target, attr) if matches!(attr.as_str(), "anchor" | "vector") => match self.eval(target)? {
-                Value::Apos(a, x, y) => Ok(if attr == "anchor" { Value::Symbol(a) } else { Value::Vector(x, y) }),
-                Value::Object(obj) => self.attr_of(&obj, attr),
-                Value::Record(r) => self.record_attr(&r, attr),
-                v => err("NameError.UndefinedAttribute", format!("{} has no attribute \"{attr}\"", v.type_name())),
-            },
-            Expr::Attr(target, attr) if matches!(attr.as_str(), "x" | "y") => {
-                match self.eval(target)? {
-                    Value::Vector(x, y) | Value::Apos(_, x, y) => Ok(Value::num(if attr == "x" { x } else { y })),
-                    Value::Tuple(items) if items.len() == 2 => Ok(items[if attr == "x" { 0 } else { 1 }].clone()),
-                    Value::Object(obj) => self.attr_of(&obj, attr),
-                    Value::Record(r) => self.record_attr(&r, attr),
-                    v => err("NameError.UndefinedAttribute", format!("{} has no attribute \"{attr}\"", v.type_name())),
+            Expr::Attr(target, attr) => {
+                let target = self.eval(target)?;
+                match self.attr(&target, attr) {
+                    Some(found) => found.get(),
+                    None => err("NameError.UndefinedAttribute", no_attr(&target, attr)),
                 }
             }
-            Expr::Attr(target, attr) => match self.eval(target)? {
-                Value::Object(obj) => self.attr_of(&obj, attr),
-                Value::Timeline(t) if attr == "duration" => Ok(Value::Duration(t.duration())),
-                Value::Motion(m) if attr == "duration" => Ok(Value::Duration(m.duration())),
-                Value::Audio(a) if attr == "duration" => Ok(Value::Duration(a.length)),
-                Value::Audio(a) if attr == "file" => Ok(Value::Str(a.name.clone())),
-                // 色の成分。r g b は 0..255、a は 0..1 (new Color { } と同じ単位)
-                Value::Color([r, g, b, a]) if matches!(attr.as_str(), "r" | "g" | "b" | "a") => Ok(Value::num(match attr.as_str() {
-                    "r" => (r as f64 * 255.0 * 1000.0).round() / 1000.0,
-                    "g" => (g as f64 * 255.0 * 1000.0).round() / 1000.0,
-                    "b" => (b as f64 * 255.0 * 1000.0).round() / 1000.0,
-                    _ => (a as f64 * 1000.0).round() / 1000.0,
-                })),
-                Value::Module(m) => m
-                    .items
-                    .get(attr)
-                    .cloned()
-                    .ok_or_else(|| MophError::new("NameError.UndefinedAttribute", format!("module {} has no item \"{attr}\"", m.name))),
-                Value::Record(r) => self.record_attr(&r, attr),
-                v => err("NameError.UndefinedAttribute", format!("{} has no attribute \"{attr}\"", v.type_name())),
-            },
             Expr::Call(callee, args) => self.call(callee, args),
             Expr::Context(bindings, body) => {
                 let scope = new_scope();
@@ -951,7 +903,7 @@ impl Interp {
     }
 
     /// private なフィールドを外から触っていないか
-    fn field_ok(&self, decl: &Option<Rc<UserType>>, field: &str) -> Result<()> {
+    pub(crate) fn field_ok(&self, decl: &Option<Rc<UserType>>, field: &str) -> Result<()> {
         let Some(ty) = decl else { return Ok(()) };
         match ty.decl.fields.iter().find(|f| f.name == field) {
             Some(f) if f.private && !self.is_inside(&ty.decl.name) => {
@@ -959,11 +911,6 @@ impl Interp {
             }
             _ => Ok(()),
         }
-    }
-
-    fn record_attr(&self, r: &Rc<Record>, field: &str) -> Result<Value> {
-        self.field_ok(&r.decl, field)?;
-        record_field(r, field)
     }
 
     /// copy / shallowCopy / deepCopy
@@ -1336,15 +1283,6 @@ impl Interp {
             }
             _ => err("NameError.UndefinedAttribute", format!("{kind} has no method \"{method}\"")),
         }
-    }
-
-    fn attr_of(&self, obj: &ObjRef, attr: &str) -> Result<Value> {
-        let obj = obj.borrow();
-        self.field_ok(&obj.decl, attr)?;
-        obj.attrs
-            .get(attr)
-            .cloned()
-            .ok_or_else(|| MophError::new("NameError.UndefinedAttribute", format!("{} has no attribute \"{attr}\"", obj.kind)))
     }
 
     fn eval_bool(&mut self, e: &Expr) -> Result<bool> {
@@ -1868,16 +1806,6 @@ fn ease(name: Option<&str>, k: f64) -> f64 {
     }
 }
 
-fn set_duration(slot: &Cell<Option<f64>>, v: Value) -> Result<()> {
-    match v {
-        Value::Duration(d) => {
-            slot.set(Some(d));
-            Ok(())
-        }
-        v => err("TypeError.AttributeType", format!("duration expects Duration, found {}", v.type_name())),
-    }
-}
-
 /// View から辿れるオブジェクト (子、入れ子の View、Timeline の対象) を重複なく集める
 fn collect_objects(obj: &ObjRef, out: &mut Vec<ObjRef>) {
     if out.iter().any(|o| Rc::ptr_eq(o, obj)) {
@@ -1973,42 +1901,22 @@ fn deep_copy(v: &Value) -> Value {
 }
 
 /// record のフィールドを読む
-fn record_field(r: &Rc<Record>, field: &str) -> Result<Value> {
-    r.fields
-        .iter()
-        .find(|(f, _)| f == field)
-        .map(|(_, v)| v.clone())
-        .ok_or_else(|| MophError::new("NameError.UndefinedAttribute", format!("{} has no field \"{field}\"", r.name)))
+/// 属性が見つからないときの言い方。module だけ言い方を変える
+fn no_attr(target: &Value, attr: &str) -> String {
+    match target {
+        Value::Module(m) => format!("module {} has no item \"{attr}\"", m.name),
+        Value::Record(r) => format!("{} has no field \"{attr}\"", r.name),
+        v => format!("{} has no attribute \"{attr}\"", v.type_name()),
+    }
 }
 
-fn set_field(current: Value, path: &[String], value: Value) -> Result<Value> {
-    let [field, rest @ ..] = path else { return Ok(value) };
-    let number = |v: &Value| match v {
-        Value::Number(n, _) => Ok(*n),
-        v => err("TypeError.AttributeType", format!("{field} expects Number, found {}", v.type_name())),
-    };
-    match (current, field.as_str()) {
-        (Value::Vector(x, y), "x") => Ok(Value::Vector(number(&set_field(Value::num(x), rest, value)?)?, y)),
-        (Value::Vector(x, y), "y") => Ok(Value::Vector(x, number(&set_field(Value::num(y), rest, value)?)?)),
-        (Value::Apos(a, x, y), "x") => Ok(Value::Apos(a, number(&set_field(Value::num(x), rest, value)?)?, y)),
-        (Value::Apos(a, x, y), "y") => Ok(Value::Apos(a, x, number(&set_field(Value::num(y), rest, value)?)?)),
-        (Value::Apos(a, x, y), "vector") => match set_field(Value::Vector(x, y), rest, value)? {
-            Value::Vector(nx, ny) => Ok(Value::Apos(a, nx, ny)),
-            v => err("TypeError.AttributeType", format!("vector expects Vector, found {}", v.type_name())),
-        },
-        (Value::Record(r), field) if r.fields.iter().any(|(f, _)| f == field) => {
-            let fields = r
-                .fields
-                .iter()
-                .map(|(f, v)| if f == field { set_field(v.clone(), rest, value.clone()).map(|nv| (f.clone(), nv)) } else { Ok((f.clone(), v.clone())) })
-                .collect::<Result<Vec<_>>>()?;
-            Ok(Value::Record(Rc::new(crate::lang::value::Record { name: r.name.clone(), decl: r.decl.clone(), fields })))
-        }
-        (Value::Apos(_, x, y), "anchor") => match set_field(Value::Symbol(String::new()), rest, value)? {
-            Value::Symbol(s) => Ok(Value::Apos(s, x, y)),
-            v => err("TypeError.AttributeType", format!("anchor expects Anchor, found {}", v.type_name())),
-        },
-        (v, _) => err("NameError.UndefinedAttribute", format!("{} has no field \"{field}\"", v.type_name())),
+/// 属性の書き込みが、その場で済んだか (参照型) 作り直しになったか (値型)
+fn same_place(before: &Value, after: &Value) -> bool {
+    match (before, after) {
+        (Value::Object(a), Value::Object(b)) => Rc::ptr_eq(a, b),
+        (Value::Timeline(a), Value::Timeline(b)) => Rc::ptr_eq(a, b),
+        (Value::Motion(a), Value::Motion(b)) => Rc::ptr_eq(a, b),
+        _ => false,
     }
 }
 

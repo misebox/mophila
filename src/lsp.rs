@@ -311,9 +311,7 @@ fn complete(uri: &Uri, text: &str, pos: Position) -> Vec<CompletionItem> {
     // それ以外: キーワード、型名、ファイル内の識別子
     let mut items: Vec<CompletionItem> = KEYWORDS.iter().map(|k| item(k, CompletionItemKind::KEYWORD, "")).collect();
     items.extend(KINDS.iter().map(|k| item(k, CompletionItemKind::CLASS, &attrs_doc(k))));
-    for b in ["log", "type_of", "vector!", "apos!", "rgb!", "rgba!"] {
-        items.push(item(b, CompletionItemKind::FUNCTION, ""));
-    }
+    items.extend(BUILTINS.iter().map(|b| item(b.name, CompletionItemKind::FUNCTION, b.signature)));
     items.extend(crate::stdlib::names().into_iter().map(|n| item(n, CompletionItemKind::MODULE, "標準ライブラリ")));
     let mut seen = std::collections::HashSet::new();
     for t in &tokens {

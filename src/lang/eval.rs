@@ -72,7 +72,7 @@ impl Interp {
                 types.insert(t.name.to_string(), t.values.iter().map(|(v, _)| v.to_string()).collect());
             }
         }
-        Self { scopes: vec![new_scope()], output: None, types, cache: None, finished: HashMap::new(), last_t: f64::NEG_INFINITY, base_dir: PathBuf::from("."), exports: Vec::new(), sources: HashMap::new(), assets: HashMap::new(), initial: Vec::new(), modules: HashMap::new(), loading: Vec::new(), returning: None, constructing: Vec::new(), warned: std::collections::HashSet::new(), inside: Vec::new(), calling: None }
+        Self { scopes: vec![root_scope()], output: None, types, cache: None, finished: HashMap::new(), last_t: f64::NEG_INFINITY, base_dir: PathBuf::from("."), exports: Vec::new(), sources: HashMap::new(), assets: HashMap::new(), initial: Vec::new(), modules: HashMap::new(), loading: Vec::new(), returning: None, constructing: Vec::new(), warned: std::collections::HashSet::new(), inside: Vec::new(), calling: None }
     }
 
     /// トップレベルの束縛 (LSP のホバー用)
@@ -377,7 +377,7 @@ impl Interp {
         }
         self.loading.push(key.clone());
         let stmts = crate::lang::parser::parse(src)?;
-        let saved_scopes = std::mem::replace(&mut self.scopes, vec![new_scope()]);
+        let saved_scopes = std::mem::replace(&mut self.scopes, vec![root_scope()]);
         let saved_output = self.output.take();
         let saved_dir = std::mem::replace(&mut self.base_dir, dir);
         let saved_exports = std::mem::take(&mut self.exports);
@@ -1059,24 +1059,6 @@ impl Interp {
                 let name = name.clone();
                 self.construct(&name, args)
             }
-            Expr::Ident(name) if name == "log" => {
-                let parts = args.iter().map(|a| self.eval(&a.value).map(|v| v.to_string())).collect::<Result<Vec<_>>>()?;
-                eprintln!("{}", parts.join(" "));
-                Ok(Value::Nothing)
-            }
-            Expr::Ident(name) if name == "type_of" => {
-                let [arg] = args else {
-                    return err("TypeError.ArityMismatch", format!("type_of takes 1 argument, {} given", args.len()));
-                };
-                Ok(Value::Str(self.eval(&arg.value)?.type_name()))
-            }
-            Expr::Attr(target, method) if method == "format" => {
-                let Value::Str(template) = self.eval(target)? else {
-                    return err("TypeError.ArgumentType", "format is a method of String");
-                };
-                let values = args.iter().map(|a| self.eval(&a.value)).collect::<Result<Vec<_>>>()?;
-                format(&template, &values)
-            }
             Expr::Attr(target, method) => {
                 let receiver = self.eval(target)?;
                 // 型から func を呼ぶ / 値から method を呼ぶ
@@ -1098,7 +1080,7 @@ impl Interp {
                     }
                     let values = args.iter().map(|a| self.eval(&a.value)).collect::<Result<Vec<_>>>()?;
                     return match item {
-                        Value::Builtin(name) => stdlib::math::call(name, &values),
+                        Value::Builtin(name) => call_builtin(name, values),
                         Value::Func(closure) => self.apply(&closure, values.into_iter().map(|v| (None, v)).collect()),
                         v => err("TypeError.ArgumentType", format!("{} is not callable", v.type_name())),
                     };
@@ -1126,7 +1108,7 @@ impl Interp {
                 }
                 Value::Builtin(name) => {
                     let values = args.iter().map(|a| self.eval(&a.value)).collect::<Result<Vec<_>>>()?;
-                    stdlib::math::call(name, &values)
+                    call_builtin(name, values)
                 }
                 v => err("TypeError.ArgumentType", format!("{} is not callable", v.type_name())),
             },
@@ -1639,6 +1621,7 @@ impl Interp {
         return match (method, args.as_slice()) {
             ("len", []) => Ok(Value::num(text.chars().count() as f64)),
             ("replace", [(None, Value::Str(from)), (None, Value::Str(to))]) => Ok(Value::Str(text.replace(from.as_str(), to))),
+            ("format", values) => format(text, &values.iter().map(|(_, v)| v.clone()).collect::<Vec<_>>()),
             _ => err("NameError.UndefinedAttribute", format!("String has no method \"{method}\" with {} arguments", args.len())),
         };
     }
@@ -1901,6 +1884,31 @@ fn deep_copy(v: &Value) -> Value {
 }
 
 /// record のフィールドを読む
+/// いちばん外側のスコープ。組み込み関数も、ふつうの束縛として置く。
+/// 名前で分岐しないので、同じ名前を書いたときに黙って組み込みが勝つことがない
+fn root_scope() -> Rc<RefCell<HashMap<String, Value>>> {
+    let scope = new_scope();
+    for b in crate::docs::BUILTINS {
+        scope.borrow_mut().insert(b.name.to_string(), Value::Builtin(b.name));
+    }
+    scope
+}
+
+/// 組み込み関数。log と type_of は本体、ほかは math
+fn call_builtin(name: &'static str, values: Vec<Value>) -> Result<Value> {
+    match name {
+        "log" => {
+            eprintln!("{}", values.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(" "));
+            Ok(Value::Nothing)
+        }
+        "type_of" => match values.as_slice() {
+            [v] => Ok(Value::Str(v.type_name())),
+            _ => err("TypeError.ArityMismatch", format!("type_of takes 1 argument, {} given", values.len())),
+        },
+        name => stdlib::math::call(name, &values),
+    }
+}
+
 /// 属性が見つからないときの言い方。module だけ言い方を変える
 fn no_attr(target: &Value, attr: &str) -> String {
     match target {

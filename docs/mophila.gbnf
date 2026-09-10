@@ -48,7 +48,7 @@ pattern     ::= ident
               | "(" ws pattern (ws "," ws pattern)* ws ")"
               | "[" ws pattern (ws "," ws pattern)* ws "]"
 
-params      ::= (ws param (ws "," ws param)*)? ws
+params      ::= (ws param (ws "," ws param)* (ws ",")?)? ws
 param       ::= pattern (ws ":" ws type-ann)? (ws "=" ws expr)?
 
 # 型注釈。関数は宣言と同じ形 ((Number, Number) -> Number)。< > の中はトークン列として読む
@@ -59,9 +59,10 @@ type-tokens ::= (ident | "," | "->" | "..." | "." | "(" | ")" | "<" type-tokens 
 # ---------- 式 (優先順位の低い順) ----------
 expr        ::= or-expr
 or-expr     ::= and-expr (ws "or" ws and-expr)*
-and-expr    ::= eq-expr (ws "and" ws eq-expr)*
-eq-expr     ::= cmp-expr (ws ("==" | "!=") ws cmp-expr)?
-cmp-expr    ::= range-expr (ws ("<=" | ">=" | "<" | ">") ws range-expr)?
+and-expr    ::= cmp-expr (ws "and" ws cmp-expr)*
+# 比較は 6 つとも同じ強さで、続けて書ける。a < b <= c は (a < b) and (b <= c)
+cmp-expr    ::= range-expr (ws cmp-op ws range-expr)*
+cmp-op      ::= "==" | "!=" | "<=" | ">=" | "<" | ">"
 range-expr  ::= add-expr (ws ("..=" | "..") ws add-expr)?
 add-expr    ::= mul-expr (ws ("+" | "-") ws mul-expr)*
 mul-expr    ::= pow-expr (ws ("*" | "/" | "%") ws pow-expr)*
@@ -76,19 +77,24 @@ postfix     ::= "." ident
 primary     ::= number | duration | color | string | symbol | bool
               | ident
               | "(" ws expr ws ")"
-              | "(" ws expr (ws "," ws expr)+ ws ")"
-              | "[" (ws expr (ws "," ws expr)*)? ws "]"
+              | tuple
+              | "[" (ws expr (ws "," ws expr)* (ws ",")?)? ws "]"
               | dict
               | if-expr
               | func-expr
               | context-expr
               | motion-expr
 
-args        ::= (ws arg (ws "," ws arg)*)? ws
+# 組。() は空、(1,) は 1 要素。末尾の "," は書いてもよい
+tuple       ::= "(" ws ")"
+              | "(" ws expr ws "," ws ")"
+              | "(" ws expr (ws "," ws expr)+ (ws ",")? ws ")"
+
+args        ::= (ws arg (ws "," ws arg)* (ws ",")?)? ws
 arg         ::= (ident ws "=" ws)? expr
 
 
-dict        ::= "{" (ws dict-entry (ws "," ws dict-entry)*)? ws "}"
+dict        ::= "{" (ws dict-entry (ws "," ws dict-entry)* (ws ",")?)? ws "}"
 dict-entry  ::= string ws ":" ws expr | ident
 
 if-expr     ::= "if" sp expr ws block (ws "else" ws (if-expr | block))?

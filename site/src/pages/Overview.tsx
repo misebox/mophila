@@ -32,7 +32,7 @@ export const Overview: Component = () => (
       <section>
         <h2>特徴</h2>
         <ul class="plain">
-          <li><strong>変化は、時刻と値の表で書く。</strong>間は補間され、duration を変えると表ごと伸び縮みします</li>
+          <li><strong>変化は、時刻と値の表で書く。</strong>間は補間されます。表は使い回せて、<code>fit</code> で長さを変え、<code>reverse</code> で逆再生にできます</li>
           <li><strong>絵は、時刻の関数。</strong>どのフレームもその時刻だけから決まるので、途中へ飛んでも、1 枚だけ書き出しても同じ絵になります</li>
           <li><strong>塗りを、関数で書ける。</strong>位置と時刻から色を返す関数を Shader に渡すと、GPU が全ピクセルで走らせます。フラクタルもこれで描いています</li>
           <li><strong>作った動画が、部品になる。</strong>ファイルを import すれば、別の動画の中にそのまま置けます</li>

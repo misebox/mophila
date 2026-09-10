@@ -8,10 +8,10 @@ cd ${repoName}
 cargo install --path .`;
 
 const COMMANDS = [
-  ["mophila preview first.moph", "ウィンドウで実時間再生する。Space で一時停止、← → で移動"],
+  ["mophila preview first.moph", "ウィンドウを開いて実時間で再生する。Space で一時停止、← → で移動"],
   ["mophila render first.moph -o first.mp4 --size fhd --fps 30", "動画にする。--size は 幅x高さ か 720p / fhd / 4k など"],
-  ["mophila render first.moph -o first.png --at 2s", "指定した時刻の 1 枚を画像にする"],
-  ["mophila timeline first.moph", "何が、いつ、どう変わるかをテキストで出す"],
+  ["mophila render first.moph -o first.png --at 2s", "その時刻の 1 フレームを画像にする"],
+  ["mophila timeline first.moph", "何がいつどう変わるかを、時刻順の一覧で表示する"],
 ];
 
 export const Start: Component = () => {
@@ -22,7 +22,7 @@ export const Start: Component = () => {
     <div class="reading">
       <section>
         <h1>使い方</h1>
-        <p class="lead">インストールして、最初の 1 本を動かすまで。</p>
+        <p class="lead">mophila のインストールから、スクリプトを書いて動画にするまでの手順です。</p>
       </section>
 
       <section>
@@ -114,7 +114,7 @@ export const Start: Component = () => {
       </Show>
 
       <section>
-        <h2>動かす</h2>
+        <h2>コマンド</h2>
         <dl class="commands">
           {COMMANDS.map(([cmd, doc]) => (
             <div>

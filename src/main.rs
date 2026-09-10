@@ -19,7 +19,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// スクリプトを描画して動画または画像を出す
+    /// スクリプトを描画して、動画または画像のファイルを書く
     Render {
         /// スクリプト (.moph)
         script: String,
@@ -45,7 +45,7 @@ enum Command {
         #[arg(long, value_parser = parse_duration)]
         at: Option<f64>,
     },
-    /// Timeline をテキストで出す (何が、いつ、どう変わるか)。--filter kind=TextArea attr=opacity text=... from=10s to=20s
+    /// 何がいつどう変わるかを、時刻順の一覧で表示する。--filter kind=TextArea attr=opacity text=... from=10s to=20s
     Timeline {
         /// スクリプト (.moph)
         script: String,
@@ -79,7 +79,7 @@ enum Command {
         #[arg(long)]
         stdio: bool,
     },
-    /// 組み込みの説明を JSON で出す (scripts/docgen.py が読む)
+    /// 組み込みの型・関数・メソッドの説明を JSON で表示する (scripts/docgen.py が読む)
     Doc,
     /// スクリプトを埋め込んだ実行ファイルを作る
     Bundle {
@@ -115,7 +115,7 @@ struct OutputArgs {
     /// ウィンドウ再生のとき、最後まで再生したら先頭に戻る
     #[arg(long)]
     r#loop: bool,
-    /// 動画のこの区間だけを出す。00:15..00:30 (15 秒から 30 秒)、00:15 (15 秒以降)、..01:30 (最初から 1 分 30 秒)
+    /// 動画のこの区間だけを書き出す。00:15..00:30 (15 秒から 30 秒)、00:15 (15 秒以降)、..01:30 (最初から 1 分 30 秒)
     #[arg(long, value_parser = parse_trim)]
     trim: Option<Trim>,
 }

@@ -1,4 +1,4 @@
-# first.moph — 最初の 1 本。丸が右へ動き、四角が横に広がり、文字が現れて、最後に消える
+# first.moph — 丸が右へ動き、四角が横に広がり、文字が現れて、最後に消える
 
 import { fade_out } from animation
 

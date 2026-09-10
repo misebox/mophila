@@ -14,7 +14,7 @@ pub struct Entry {
 
 /// import なしで使えるもの
 pub const BUILTINS: &[Entry] = &[
-    Entry { name: "log", signature: "log(値, ...)", returns: "Nothing", doc: "引数を空白区切りで stderr に出す。動画には出ない。引数はどの型でもよいので、型を書けない" },
+    Entry { name: "log", signature: "log(値, ...)", returns: "Nothing", doc: "引数を空白区切りで stderr に表示する。動画には入らない。引数はどの型でもよいので、型を書けない" },
     Entry { name: "type_of", signature: "type_of(値)", returns: "String", doc: "その値の型の名前を返す。引数はどの型でもよいので、型を書けない" },
 ];
 

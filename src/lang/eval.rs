@@ -593,6 +593,8 @@ impl Interp {
             }
             Expr::Attr(target, attr) => match self.eval(target)? {
                 Value::Object(obj) => self.attr_of(&obj, attr),
+                Value::Timeline(t) if attr == "duration" => Ok(Value::Duration(t.duration())),
+                Value::Motion(m) if attr == "duration" => Ok(Value::Duration(m.duration())),
                 Value::Audio(a) if attr == "duration" => Ok(Value::Duration(a.length)),
                 Value::Audio(a) if attr == "file" => Ok(Value::Str(a.name.clone())),
                 // 色の成分。r g b は 0..255、a は 0..1 (new Color { } と同じ単位)

@@ -30,13 +30,13 @@ export const Overview: Component = () => (
         <Show when={data.samples.find((s) => s.name === "circle")}>{(s) => <Code text={s().code} />}</Show>
       </section>
       <section>
-        <h2>考え方</h2>
+        <h2>特徴</h2>
         <ul class="plain">
-          <li>座標は箱 (View) の中の値で書く。ピクセルの大きさは出力のときに決める</li>
-          <li>変化は時刻と値の表 (motion) で書く。間は補間され、duration で全体が伸び縮みする</li>
-          <li>作った View は部品。別の View に、別の大きさで置ける。ファイルも import で部品になる</li>
-          <li>どの時刻の絵も、その時刻だけから決まる。途中へ飛んでも同じ絵になる</li>
-          <li>音声と字幕も同じ Timeline に置く。Shader で位置と時刻から色を決める塗りが書ける</li>
+          <li><strong>変化は、時刻と値の表で書く。</strong>間は補間され、duration を変えると表ごと伸び縮みします</li>
+          <li><strong>絵は、時刻の関数。</strong>どのフレームもその時刻だけから決まるので、途中へ飛んでも、1 枚だけ書き出しても同じ絵になります</li>
+          <li><strong>塗りを、関数で書ける。</strong>位置と時刻から色を返す関数を Shader に渡すと、GPU が全ピクセルで走らせます。フラクタルもこれで描いています</li>
+          <li><strong>作った動画が、部品になる。</strong>ファイルを import すれば、別の動画の中にそのまま置けます</li>
+          <li><strong>音も字幕も、同じ Timeline。</strong>時刻を指定して置くと、render が動画の音声トラックと字幕トラックにします</li>
         </ul>
       </section>
       <section>

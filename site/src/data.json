@@ -1057,10 +1057,10 @@
      "signature": "tl.reverse()"
     },
     {
-     "doc": "全体の長さ。0..1 で書いた表はこれに合わせて伸縮する",
+     "doc": "全体の長さ。読み書きできる。書き込むと、0..1 で書いた表がそれに合わせて伸縮する",
      "name": "duration",
      "returns": "Duration",
-     "signature": "tl.duration = 8s"
+     "signature": "tl.duration"
     }
    ],
    "name": "Timeline",
@@ -1087,10 +1087,10 @@
      "signature": "m.reverse()"
     },
     {
-     "doc": "全体の長さを決める。0..1 で書いた表はこれに合わせて伸縮する。代入だけで、読み出しはできない",
+     "doc": "全体の長さ。読み書きできる。書き込むと、0..1 で書いた表がそれに合わせて伸縮する",
      "name": "duration",
      "returns": "Duration",
-     "signature": "m.duration = 8s"
+     "signature": "m.duration"
     }
    ],
    "name": "Motion",

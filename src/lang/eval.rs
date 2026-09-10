@@ -605,7 +605,7 @@ impl Interp {
 
     /// 引数を、宣言の順に並んだフィールド名へ割り当てる。位置と名前を混ぜられる
     /// 関数として呼ぶ。書いた関数でも math の関数でも同じように呼べる
-    fn call_func(&mut self, f: &Value, args: Vec<Value>) -> Result<Value> {
+    pub(crate) fn call_func(&mut self, f: &Value, args: Vec<Value>) -> Result<Value> {
         match f {
             Value::Func(c) => self.apply(c, args.into_iter().map(|v| (None, v)).collect()),
             Value::Builtin(name) => stdlib::math::call(name, &args),
@@ -653,7 +653,7 @@ impl Interp {
     }
 
     /// place / addTrack の引数から、置くものを組み立てる
-    fn make_placed(&mut self, who: &str, args: &[(Option<String>, Value)]) -> Result<Placed> {
+    pub(crate) fn make_placed(&mut self, who: &str, args: &[(Option<String>, Value)]) -> Result<Placed> {
                 
                 let track = match args.first() {
                     Some((None, Value::Timeline(tl))) if tl.needs_duration() => {
@@ -1086,17 +1086,13 @@ impl Interp {
                     };
                 }
                 let values = args.iter().map(|a| self.eval(&a.value).map(|v| (a.name.clone(), v))).collect::<Result<Vec<_>>>()?;
-                match receiver {
-                    Value::Object(obj) => self.method(&obj, method, values),
-                    Value::Motion(m) if method == "apply" => self.apply_motion(&m, values),
-                    Value::Motion(m) if method == "reverse" && values.is_empty() => Ok(Value::Motion(Rc::new(m.reverse()))),
-                    Value::Timeline(t) if method == "reverse" && values.is_empty() => Ok(Value::Timeline(Rc::new(t.reverse()))),
-                    Value::Timeline(t) if method == "place" => {
-                        let placed = self.make_placed("Timeline.place", &values)?;
-                        t.tracks.borrow_mut().push(placed);
-                        Ok(Value::Nothing)
-                    }
-                    other => self.collection_method(&other, method, values),
+                if let Value::Object(obj) = &receiver {
+                    let obj = obj.clone();
+                    return self.method(&obj, method, values);
+                }
+                match crate::lang::method::find(&receiver.type_name(), method) {
+                    Some(m) => (m.call)(self, receiver, values),
+                    None => err("NameError.UndefinedAttribute", format!("{} has no method \"{method}\"", receiver.type_name())),
                 }
             }
             callee => match self.eval(callee)? {
@@ -1196,7 +1192,7 @@ impl Interp {
     }
 
     /// Motion の各行で f(target, t, [列...]) を呼び、その中で target の属性に代入された値をキーフレームとして記録する
-    fn apply_motion(&mut self, motion: &Motion, args: Vec<(Option<String>, Value)>) -> Result<Value> {
+    pub(crate) fn apply_motion(&mut self, motion: &Motion, args: Vec<(Option<String>, Value)>) -> Result<Value> {
         let [(None, Value::Object(target)), (None, Value::Func(f))] = args.as_slice() else {
             // 中で属性に代入する必要があるので、math の関数は渡せない
             return err("TypeError.ArgumentType", "Motion.apply expects a target and a func written in the script");
@@ -1513,7 +1509,7 @@ impl Interp {
 /// "{name}" を順に引数で置き換える。名前は説明用で、対応は位置で決まる
 /// "{a} {b}".format(...)。Dict を 1 つ渡したときは { } の中の名前で引き、
 /// そうでなければ左から順に引数で置き換える
-fn format(template: &str, values: &[Value]) -> Result<Value> {
+pub(crate) fn format(template: &str, values: &[Value]) -> Result<Value> {
     let by_name = match values {
         [Value::Dict(d)] => Some(d.borrow().clone()),
         _ => None,
@@ -1613,122 +1609,7 @@ fn index_value(target: &Value, index: &Value) -> Result<Value> {
     Ok(items[at as usize].clone())
 }
 
-impl Interp {
-    /// List / Range / Tuple のメソッド
-    fn collection_method(&mut self, receiver: &Value, method: &str, args: Vec<(Option<String>, Value)>) -> Result<Value> {
-    let list = |v: Vec<Value>| Value::List(Rc::new(RefCell::new(v)));
-    if let Value::Str(text) = receiver {
-        return match (method, args.as_slice()) {
-            ("len", []) => Ok(Value::num(text.chars().count() as f64)),
-            ("replace", [(None, Value::Str(from)), (None, Value::Str(to))]) => Ok(Value::Str(text.replace(from.as_str(), to))),
-            ("format", values) => format(text, &values.iter().map(|(_, v)| v.clone()).collect::<Vec<_>>()),
-            _ => err("NameError.UndefinedAttribute", format!("String has no method \"{method}\" with {} arguments", args.len())),
-        };
-    }
-    if let Value::Dict(entries) = receiver {
-        let entries = entries.borrow();
-        return match (method, args.as_slice()) {
-            ("keys", []) => Ok(list(entries.iter().map(|(k, _)| Value::Str(k.clone())).collect())),
-            ("values", []) => Ok(list(entries.iter().map(|(_, v)| v.clone()).collect())),
-            ("has", [(None, Value::Str(key))]) => Ok(Value::Bool(entries.iter().any(|(k, _)| k == key))),
-            ("len", []) => Ok(Value::num(entries.len() as f64)),
-            _ => err("NameError.UndefinedAttribute", format!("Dict has no method \"{method}\" with {} arguments", args.len())),
-        };
-    }
-    // 中身を複製しないで済むもの (長い List に何度も呼ぶ)
-    if let Value::List(target) = receiver {
-        match (method, args.as_slice()) {
-            ("push", [(None, v)]) => {
-                target.borrow_mut().push(v.clone());
-                return Ok(Value::Nothing);
-            }
-            ("len", []) => return Ok(Value::num(target.borrow().len() as f64)),
-            _ => {}
-        }
-    }
-    let items: Vec<Value> = match receiver {
-        Value::List(items) => items.borrow().clone(),
-        Value::Tuple(items) => items.clone(),
-        Value::Range(a, b) => (*a..*b).map(|i| Value::num(i as f64)).collect(),
-        v => return err("NameError.UndefinedAttribute", format!("{} has no method \"{method}\"", v.type_name())),
-    };
-    match (method, args.as_slice()) {
-        ("len", []) => Ok(Value::num(items.len() as f64)),
-        ("enumerate", []) => Ok(list(items.into_iter().enumerate().map(|(i, v)| Value::Tuple(vec![Value::num(i as f64), v])).collect())),
-        ("reverse", []) => Ok(list(items.into_iter().rev().collect())),
-        ("to_list", []) => Ok(list(items)),
-        ("push", [(None, v)]) => match receiver {
-            Value::List(target) => {
-                target.borrow_mut().push(v.clone());
-                Ok(Value::Nothing)
-            }
-            _ => err("TypeError.ArgumentType", "push is a method of List"),
-        },
-        ("contains", [(None, v)]) => Ok(Value::Bool(items.iter().any(|x| equals(x, v)))),
-        ("sum", []) => items.iter().try_fold(0.0, |acc, v| match v {
-            Value::Number(n, _) => Ok(acc + n),
-            v => err("TypeError.OperandType", format!("cannot sum {}", v.type_name())),
-        }).map(Value::num),
-        ("index_of", [(None, v)]) => Ok(Value::num(items.iter().position(|x| equals(x, v)).map_or(-1.0, |i| i as f64))),
-        ("join", [(None, Value::Str(sep))]) => Ok(Value::Str(items.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(sep))),
-        ("map", [(None, f @ (Value::Func(_) | Value::Builtin(_)))]) => {
-            let out = items.into_iter().map(|v| self.call_func(f, vec![v])).collect::<Result<Vec<_>>>()?;
-            Ok(list(out))
-        }
-        ("filter", [(None, f @ (Value::Func(_) | Value::Builtin(_)))]) => {
-            let mut out = vec![];
-            for v in items {
-                match self.call_func(f, vec![v.clone()])? {
-                    Value::Bool(true) => out.push(v),
-                    Value::Bool(false) => {}
-                    other => return err("TypeError.ArgumentType", format!("filter expects Bool, found {}", other.type_name())),
-                }
-            }
-            Ok(list(out))
-        }
-        ("reduce", [(None, init), (None, f @ (Value::Func(_) | Value::Builtin(_)))]) => {
-            let mut acc = init.clone();
-            for v in items {
-                acc = self.call_func(f, vec![acc, v])?;
-            }
-            Ok(acc)
-        }
-        ("sort", []) => {
-            let mut out = items;
-            let mut failed = None;
-            out.sort_by(|a, b| cmp(a, b).unwrap_or_else(|| {
-                failed = Some(format!("cannot compare {} and {}", a.type_name(), b.type_name()));
-                std::cmp::Ordering::Equal
-            }));
-            match failed {
-                Some(msg) => err("TypeError.OperandType", msg),
-                None => Ok(list(out)),
-            }
-        }
-        ("zip", [(None, other)]) => {
-            let other = match other {
-                Value::List(o) => o.borrow().clone(),
-                Value::Tuple(o) => o.clone(),
-                v => return err("TypeError.ArgumentType", format!("zip expects List, found {}", v.type_name())),
-            };
-            Ok(list(items.into_iter().zip(other).map(|(a, b)| Value::Tuple(vec![a, b])).collect()))
-        }
-        ("steps", [(None, Value::Number(n, _))]) => match receiver {
-            Value::Range(a, b) => {
-                // 端を含めて n 等分。Range は end を含まないので、..= で作ったものは b-1 が終端
-                let steps = whole(*n, "steps")?;
-                let (a, b, n) = (*a as f64, (*b - 1) as f64, *n);
-                let out = (0..=steps).map(|i| Value::num(a + (b - a) * i as f64 / n)).collect();
-                Ok(list(out))
-            }
-            _ => err("TypeError.ArgumentType", "steps is a method of Range"),
-        },
-        _ => err("NameError.UndefinedAttribute", format!("{} has no method \"{method}\" with {} arguments", receiver.type_name(), args.len())),
-    }
-    }
-}
-
-fn equals(a: &Value, b: &Value) -> bool {
+pub(crate) fn equals(a: &Value, b: &Value) -> bool {
     match (a, b) {
         (Value::Number(x, _), Value::Number(y, _)) | (Value::Duration(x), Value::Duration(y)) => x == y,
         (Value::Bool(x), Value::Bool(y)) => x == y,
@@ -1851,7 +1732,7 @@ fn fade_factor(placed: &Placed, elapsed: f64, local: f64, duration: f64) -> Opti
 }
 
 /// 整数が要る所。切り捨てずにエラーにする
-fn whole(v: f64, what: &str) -> Result<i64> {
+pub(crate) fn whole(v: f64, what: &str) -> Result<i64> {
     if v.fract() != 0.0 || !v.is_finite() {
         return err("ValueError.OutOfRange", format!("{what} must be a whole number, found {v}"));
     }
@@ -2165,7 +2046,7 @@ fn check_color(v: Option<Value>) -> Result<Option<Value>> {
     Ok(v)
 }
 
-fn cmp(l: &Value, r: &Value) -> Option<std::cmp::Ordering> {
+pub(crate) fn cmp(l: &Value, r: &Value) -> Option<std::cmp::Ordering> {
     match (l, r) {
         (Value::Number(a, _), Value::Number(b, _)) | (Value::Duration(a), Value::Duration(b)) => a.partial_cmp(b),
         _ => None,

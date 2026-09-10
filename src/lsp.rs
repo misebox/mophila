@@ -14,7 +14,8 @@ use lsp_types::{
     ServerCapabilities, SymbolKind, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Uri, WorkspaceEdit,
 };
 
-use crate::docs::{BUILTINS, METHODS};
+use crate::docs::BUILTINS;
+use crate::lang::method::METHODS;
 use crate::stdlib::math::DOCS as MATH;
 use crate::lang::eval::{Interp, KINDS, schema};
 use crate::lang::lexer::{Tok, Token, lex};
@@ -390,8 +391,8 @@ fn hover(uri: &Uri, text: &str, globals: &[(String, Value)], pos: Position) -> O
     } else if let Some(b) = BUILTINS.iter().chain(MATH).find(|b| b.name.trim_end_matches('!') == word) {
         format!("`{}` — {}", b.signature, b.doc)
     } else if let Some(m) = METHODS.iter().find(|m| m.name == word) {
-        let all: Vec<String> = METHODS.iter().filter(|m| m.name == word).map(|m| format!("- `{}` ({}) — {}", m.signature, m.receiver, m.doc)).collect();
-        if all.len() > 1 { format!("**{word}**\n\n{}", all.join("\n")) } else { format!("`{}` ({}) — {}", m.signature, m.receiver, m.doc) }
+        let all: Vec<String> = METHODS.iter().filter(|m| m.name == word).map(|m| format!("- `{}` ({}) — {}", m.signature, m.receivers.join(" / "), m.doc)).collect();
+        if all.len() > 1 { format!("**{word}**\n\n{}", all.join("\n")) } else { format!("`{}` ({}) — {}", m.signature, m.receivers.join(" / "), m.doc) }
     } else if KEYWORDS.contains(&word.as_str()) {
         format!("キーワード `{word}`")
     } else {

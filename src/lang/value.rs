@@ -227,6 +227,31 @@ impl Motion {
     }
 
     /// 時間を逆にする。修飾子は同じ区間に付け直し、in/out を入れ替える
+    /// 行の時刻を k 倍する
+    pub fn scaled(&self, k: f64) -> Motion {
+        let rows = self.rows.iter().map(|r| MotionRowVal { time: r.time * k, values: r.values.clone(), ease: r.ease.clone() }).collect();
+        Motion { rows, relative: self.relative, duration: Cell::new(self.duration.get().map(|d| d * k)) }
+    }
+
+    /// 長さが d になるように行の時刻を伸縮する
+    pub fn fit(&self, d: f64) -> Motion {
+        let now = self.duration();
+        let scaled = self.scaled(if now == 0.0 { 1.0 } else { d / now });
+        scaled.duration.set(Some(d));
+        scaled
+    }
+
+    /// from..to の行だけを取り出し、0 から始まる Motion にする
+    pub fn trim(&self, from: f64, to: f64) -> Motion {
+        let rows = self
+            .rows
+            .iter()
+            .filter(|r| from <= r.time && r.time <= to)
+            .map(|r| MotionRowVal { time: r.time - from, values: r.values.clone(), ease: r.ease.clone() })
+            .collect();
+        Motion { rows, relative: self.relative, duration: Cell::new(Some(to - from)) }
+    }
+
     pub fn reverse(&self) -> Motion {
         let d = natural_span(self.relative, self.rows.iter().map(|r| r.time));
         let n = self.rows.len();
@@ -312,10 +337,86 @@ impl Timeline {
         }
     }
 
-    /// 書かれた時刻 → 実際の時刻 の倍率。duration を変えると全体が伸縮する
+    /// 書かれた時刻 → 実際の時刻 の倍率。0..1 で書いた表だけ、duration が実時間を決める。
+    /// 秒で書いた表はそのままの時刻で動く (duration は長さを決めるだけで、中身を動かさない)
     pub fn time_scale(&self) -> f64 {
-        let span = natural_span(self.relative, self.keyframes.iter().map(|k| k.end.unwrap_or(k.time)));
-        if span == 0.0 { 1.0 } else { self.duration() / span }
+        if !self.relative {
+            return 1.0;
+        }
+        let d = self.duration();
+        if d == 0.0 { 1.0 } else { d }
+    }
+
+    /// キーフレームだけを写した Timeline。時刻は f で移す
+    fn mapped(&self, keep: impl Fn(&TlKeyframe) -> bool, f: impl Fn(f64) -> f64) -> Vec<TlKeyframe> {
+        self.keyframes
+            .iter()
+            .filter(|k| keep(k))
+            .map(|k| TlKeyframe {
+                time: f(k.time),
+                end: k.end.map(&f),
+                assigns: k
+                    .assigns
+                    .iter()
+                    .map(|a| TlAssign { target: a.target.clone(), path: a.path.clone(), expr: a.expr.clone(), scopes: a.scopes.clone() })
+                    .collect(),
+                ease: k.ease.clone(),
+            })
+            .collect()
+    }
+
+    /// 時間の軸を k 倍する。キーフレームの時刻と、中に置いたものの開始時刻が k 倍になる。
+    /// 中に置いた Timeline も同じ倍率で伸縮する。音声と字幕は開始時刻だけ動き、長さは変わらない
+    pub fn scaled(&self, k: f64) -> Timeline {
+        let tracks = self
+            .tracks
+            .borrow()
+            .iter()
+            .map(|p| Placed {
+                track: match &p.track {
+                    Track::Timeline(tl) => Track::Timeline(Rc::new(tl.scaled(k))),
+                    other => other.clone(),
+                },
+                at: p.at * k,
+                fade_in: p.fade_in * k,
+                fade_out: p.fade_out * k,
+            })
+            .collect();
+        Timeline {
+            param: self.param.clone(),
+            keyframes: self.mapped(|_| true, |t| t * k),
+            relative: self.relative,
+            duration: Cell::new(self.duration.get().map(|d| d * k)),
+            tracks: RefCell::new(tracks),
+        }
+    }
+
+    /// 長さが d になるように時間の軸を伸縮した Timeline
+    pub fn fit(&self, d: f64) -> Timeline {
+        let now = self.duration();
+        let scaled = self.scaled(if now == 0.0 { 1.0 } else { d / now });
+        scaled.duration.set(Some(d));
+        scaled
+    }
+
+    /// from..to の区間だけを取り出し、0 から始まる Timeline にする。
+    /// その区間の外にあるキーフレームと、置いたものは入らない
+    pub fn trim(&self, from: f64, to: f64) -> Timeline {
+        let inside = |t: f64| from <= t && t <= to;
+        let tracks = self
+            .tracks
+            .borrow()
+            .iter()
+            .filter(|p| inside(p.at) && inside(p.end()))
+            .map(|p| Placed { track: p.track.clone(), at: p.at - from, fade_in: p.fade_in, fade_out: p.fade_out })
+            .collect();
+        Timeline {
+            param: self.param.clone(),
+            keyframes: self.mapped(|k| inside(k.time) && inside(k.end.unwrap_or(k.time)), |t| t - from),
+            relative: self.relative,
+            duration: Cell::new(Some(to - from)),
+            tracks: RefCell::new(tracks),
+        }
     }
 
     pub fn needs_duration(&self) -> bool {

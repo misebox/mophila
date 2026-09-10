@@ -4,5 +4,6 @@ pub mod attr;
 pub mod error;
 pub mod eval;
 pub mod lexer;
+pub mod method;
 pub mod parser;
 pub mod value;

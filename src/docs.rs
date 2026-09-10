@@ -18,59 +18,6 @@ pub const BUILTINS: &[Entry] = &[
     Entry { name: "type_of", signature: "type_of(値)", returns: "String", doc: "その値の型の名前を返す。引数はどの型でもよいので、型を書けない" },
 ];
 
-/// 値のメソッドと属性。receiver は型名、returns は戻り値の型 (代入だけのものは空)
-pub struct Method {
-    pub receiver: &'static str,
-    pub name: &'static str,
-    pub signature: &'static str,
-    pub returns: &'static str,
-    pub doc: &'static str,
-}
-
-pub const METHODS: &[Method] = &[
-    Method { receiver: "String", name: "len", signature: "s.len()", returns: "Number", doc: "文字数" },
-    Method { receiver: "String", name: "replace", signature: "s.replace(from: String, to: String)", returns: "String", doc: "from を to に置き換えた文字列" },
-    Method { receiver: "String", name: "format", signature: "\"{name}\".format(値, ...)", returns: "String", doc: "{ } を順に引数で置き換える。名前は説明用。Dict を 1 つ渡すと、{ } の中の名前で引く。引数はどの型でもよいので、型を書けない" },
-    Method { receiver: "List", name: "len", signature: "xs.len()", returns: "Number", doc: "要素数" },
-    Method { receiver: "List", name: "push", signature: "xs.push(値: T)", returns: "Nothing", doc: "末尾に追加する。その List 自身が変わる" },
-    Method { receiver: "List", name: "enumerate", signature: "xs.enumerate()", returns: "List<(Number, T)>", doc: "番号と要素の組。for (i, x) in xs.enumerate() で使う" },
-    Method { receiver: "List", name: "reverse", signature: "xs.reverse()", returns: "List<T>", doc: "逆順にした新しい List" },
-    Method { receiver: "List", name: "contains", signature: "xs.contains(値: T)", returns: "Bool", doc: "その値を含むか" },
-    Method { receiver: "List", name: "index_of", signature: "xs.index_of(値: T)", returns: "Number", doc: "最初に現れる位置。無ければ -1" },
-    Method { receiver: "List", name: "sum", signature: "xs.sum()", returns: "Number", doc: "Number の合計" },
-    Method { receiver: "List", name: "join", signature: "xs.join(sep: String)", returns: "String", doc: "各要素を文字列にして sep でつなぐ" },
-    Method { receiver: "List", name: "map", signature: "xs.map(f: (T) -> U)", returns: "List<U>", doc: "各要素に f を通した結果の List" },
-    Method { receiver: "List", name: "filter", signature: "xs.filter(f: (T) -> Bool)", returns: "List<T>", doc: "f が true を返した要素だけの List" },
-    Method { receiver: "List", name: "reduce", signature: "xs.reduce(初期値: U, f: (U, T) -> U)", returns: "U", doc: "初期値から順に f を通して 1 つの値にする" },
-    Method { receiver: "List", name: "sort", signature: "xs.sort()", returns: "List<T>", doc: "昇順に並べた新しい List (要素は Number か Duration)" },
-    Method { receiver: "List", name: "zip", signature: "xs.zip(ys: List<U>)", returns: "List<(T, U)>", doc: "同じ位置どうしを組にする。短い方に合わせる" },
-    Method { receiver: "Range", name: "to_list", signature: "(0..n).to_list()", returns: "List<Number>", doc: "範囲の整数を並べた List" },
-    Method { receiver: "Range", name: "steps", signature: "(0..=1).steps(n: Number)", returns: "List<Number>", doc: "両端を含めて n 等分した値の List (要素は n + 1 個)" },
-    Method { receiver: "Dict", name: "keys", signature: "d.keys()", returns: "List<String>", doc: "キーの List" },
-    Method { receiver: "Dict", name: "values", signature: "d.values()", returns: "List<T>", doc: "値の List" },
-    Method { receiver: "Dict", name: "has", signature: "d.has(key: String)", returns: "Bool", doc: "そのキーがあるか" },
-    Method { receiver: "Dict", name: "len", signature: "d.len()", returns: "Number", doc: "要素数" },
-    Method { receiver: "View", name: "place", signature: "v.place(o: Placeable, at: Pos, w: Number, h: Number)", returns: "Nothing", doc: "箱の中に置く。View を置くときは at と大きさを渡す (w か h の片方だけなら比率を保つ)" },
-    Method { receiver: "View", name: "addTrack", signature: "v.addTrack(x: Timeline | View | Audio | Subtitle, at: Duration, fadeIn: Duration, fadeOut: Duration, duration: Duration, volume: Number, loop: Bool)", returns: "Nothing", doc: "この View の動きとして付ける。output する View に付けたものが動画になる。引数は Timeline.place と同じ" },
-    Method { receiver: "Timeline", name: "place", signature: "tl.place(x: Timeline | View | Audio | Subtitle, at: Duration, fadeIn: Duration, fadeOut: Duration, duration: Duration, volume: Number, loop: Bool)", returns: "Nothing", doc: "at の時刻に中へ置く。fadeIn と fadeOut は Timeline と Audio だけ。duration volume loop は Audio だけ" },
-    Method { receiver: "Timeline", name: "reverse", signature: "tl.reverse()", returns: "Timeline", doc: "時間を逆にした Timeline" },
-    Method { receiver: "Timeline", name: "duration", signature: "tl.duration", returns: "Duration", doc: "全体の長さ。読み書きできる。書き込むと、0..1 で書いた表がそれに合わせて伸縮する" },
-    Method { receiver: "Motion", name: "apply", signature: "m.apply(target: Placeable, f: (Placeable, Duration, List<Number>) -> Nothing)", returns: "Timeline", doc: "表の行ごとに f を呼び、そこで target の属性に代入された値を、その時刻の値とする Timeline を返す" },
-    Method { receiver: "Motion", name: "reverse", signature: "m.reverse()", returns: "Motion", doc: "時間を逆にした Motion" },
-    Method { receiver: "Motion", name: "duration", signature: "m.duration", returns: "Duration", doc: "全体の長さ。読み書きできる。書き込むと、0..1 で書いた表がそれに合わせて伸縮する" },
-    Method { receiver: "Vector", name: "x", signature: "v.x", returns: "Number", doc: "x 成分" },
-    Method { receiver: "Vector", name: "y", signature: "v.y", returns: "Number", doc: "y 成分" },
-    Method { receiver: "Pos", name: "anchor", signature: "p.anchor", returns: "Anchor", doc: "基準点 (:center など)" },
-    Method { receiver: "Pos", name: "vector", signature: "p.vector", returns: "Vector", doc: "座標" },
-    Method { receiver: "Pos", name: "x", signature: "p.x", returns: "Number", doc: "x 成分。代入もできる" },
-    Method { receiver: "Pos", name: "y", signature: "p.y", returns: "Number", doc: "y 成分。代入もできる" },
-    Method { receiver: "Audio", name: "duration", signature: "bgm.duration", returns: "Duration", doc: "ファイルの長さ" },
-    Method { receiver: "Audio", name: "file", signature: "bgm.file", returns: "String", doc: "import に書いたパス" },
-    Method { receiver: "Color", name: "r", signature: "c.r / c.g / c.b", returns: "Number", doc: "成分 0..255" },
-    Method { receiver: "Color", name: "a", signature: "c.a", returns: "Number", doc: "不透明度 0..1" },
-    Method { receiver: "Module", name: "output", signature: "mod.output", returns: "View", doc: "そのファイルが output した View" },
-    Method { receiver: "Module", name: "export", signature: "mod.<export した名前>", returns: "その値の型", doc: "そのモジュールが export した値。名前の数だけ読める" },
-];
 
 /// 組み込みの型。
 /// - category はドキュメントの分類。CATEGORIES の順に並べる
@@ -548,8 +495,19 @@ pub fn json() -> Json {
     let types: Vec<Json> = TYPES
         .iter()
         .map(|t| {
-            let attrs: Vec<Json> = schema(t.name).unwrap_or(&[]).iter().map(|(a, ty)| json!({ "name": a, "type": ty, "doc": attr_doc(t.name, a) })).collect();
-            let methods: Vec<Json> = METHODS.iter().filter(|m| m.receiver == t.name).map(|m| json!({ "name": m.name, "signature": m.signature, "returns": m.returns, "doc": m.doc })).collect();
+            // 属性は 2 か所から来る: Object の型は schema、値の型は attr の表
+            let mut attrs: Vec<Json> = schema(t.name).unwrap_or(&[]).iter().map(|(a, ty)| json!({ "name": a, "type": ty, "doc": attr_doc(t.name, a) })).collect();
+            attrs.extend(
+                crate::lang::attr::ATTRS
+                    .iter()
+                    .filter(|a| a.receivers.contains(&t.name))
+                    .map(|a| json!({ "name": a.name, "type": a.ty, "doc": a.doc })),
+            );
+            let methods: Vec<Json> = crate::lang::method::METHODS
+                .iter()
+                .filter(|m| m.receivers.contains(&t.name))
+                .map(|m| json!({ "name": m.name, "signature": m.signature, "returns": m.returns, "doc": m.doc }))
+                .collect();
             let values: Vec<Json> = t.values.iter().map(|(v, d)| json!({ "value": v, "doc": d })).collect();
             json!({ "name": t.name, "category": t.category, "union": t.union, "make": t.make, "values": values, "members": t.members, "doc": t.doc, "attrs": attrs, "methods": methods })
         })

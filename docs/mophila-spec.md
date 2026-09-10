@@ -247,7 +247,7 @@ type Mode = :fast | :slow
 
 `Path` の `segments` は `(:move | :line | :quad | :curve, 点...)` の並び。`:quad` は制御点 1 つ、`:curve` は 2 つを、終点より前に書く。`closed = true` なら始点に戻って閉じる。
 
-どの図形も持つ属性:
+どの図形も持つ属性。効きようがないものは、その図形が持たない (書くと `NameError.UndefinedAttribute`):
 
 | 属性 | 型 | 意味 |
 |---|---|---|
@@ -262,6 +262,12 @@ type Mode = :fast | :slow
 | `rotation` | Number | 時計回りの回転 (度) |
 | `pivot` | Vector | 回転の中心。書かなければ、その図形を囲む四角形の中心 |
 | `blend` | Blend | 下の絵との重ね方 |
+
+| 持たない図形 | 属性 | 理由 |
+|---|---|---|
+| Line | `fill` | 面が無い |
+| Circle / Ellipse / Line | `strokeJoin` | 角が無い |
+| TextArea | `strokeCap` `dash` `dashOffset` | 字の輪郭を破線にできない |
 
 ### 3.12 箱
 

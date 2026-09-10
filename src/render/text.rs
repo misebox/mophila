@@ -7,8 +7,9 @@ use parley::layout::{Alignment, AlignmentOptions, Layout, PositionedLayoutItem};
 use parley::style::{FontFamily, FontFamilyName, GenericFamily, StyleProperty};
 use parley::{FontContext, LayoutContext};
 use vello::Scene;
-use vello::kurbo::Affine;
+use vello::kurbo::{Affine, Stroke};
 use vello::peniko::{Color, Fill};
+use vello::peniko::StyleRef;
 
 /// フレームをまたいで持ち回るもの。テキストのレイアウトと、図形ごとの描画命令
 pub struct RenderCache {
@@ -72,25 +73,35 @@ impl RenderCache {
 }
 
 /// レイアウト済みのテキストを描く。transform はレイアウト座標 (px) から出力座標への変換
-pub fn draw(scene: &mut Scene, layout: &Layout<[u8; 4]>, transform: Affine, color: Color) {
+/// 文字を描く。stroke があれば、塗りの上から縁取りを重ねる
+pub fn draw(scene: &mut Scene, layout: &Layout<[u8; 4]>, transform: Affine, color: Color, stroke: Option<(&Stroke, Color)>) {
     for line in layout.lines() {
         for item in line.items() {
             let PositionedLayoutItem::GlyphRun(glyph_run) = item else { continue };
             let run = glyph_run.run();
             let mut x = glyph_run.offset();
             let y = glyph_run.baseline();
-            let glyphs = glyph_run.glyphs().map(|g| {
-                let gx = x + g.x;
-                x += g.advance;
-                vello::Glyph { id: g.id, x: gx, y: y - g.y }
-            });
-            scene
-                .draw_glyphs(run.font())
-                .font_size(run.font_size())
-                .transform(transform)
-                .normalized_coords(run.normalized_coords())
-                .brush(color)
-                .draw(Fill::NonZero, glyphs);
+            let placed: Vec<vello::Glyph> = glyph_run
+                .glyphs()
+                .map(|g| {
+                    let gx = x + g.x;
+                    x += g.advance;
+                    vello::Glyph { id: g.id, x: gx, y: y - g.y }
+                })
+                .collect();
+            let mut run_scene = |style: StyleRef, brush: Color| {
+                scene
+                    .draw_glyphs(run.font())
+                    .font_size(run.font_size())
+                    .transform(transform)
+                    .normalized_coords(run.normalized_coords())
+                    .brush(brush)
+                    .draw(style, placed.iter().copied());
+            };
+            run_scene(StyleRef::Fill(Fill::NonZero), color);
+            if let Some((width, ink)) = stroke {
+                run_scene(StyleRef::Stroke(width), ink);
+            }
         }
     }
 }

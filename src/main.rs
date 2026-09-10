@@ -382,7 +382,7 @@ fn sheet(src: &str, base_dir: std::path::PathBuf, output: &str, every: f64, time
         let layout = interp.cache_mut().layout(&label, None, (f64::from(ch) * 0.09) as f32, None, render::text::alignment(None));
         let (lw, lh) = (f64::from(layout.width()) + 8.0, f64::from(layout.height()) + 4.0);
         scene.fill(vello::peniko::Fill::NonZero, vello::kurbo::Affine::IDENTITY, vello::peniko::Color::from_rgba8(0, 0, 0, 160), None, &vello::kurbo::Rect::new(0.0, 0.0, lw, lh));
-        render::text::draw(&mut scene, layout, vello::kurbo::Affine::translate((4.0, 2.0)), vello::peniko::Color::WHITE);
+        render::text::draw(&mut scene, layout, vello::kurbo::Affine::translate((4.0, 2.0)), vello::peniko::Color::WHITE, None);
         let slot = renderer.render(&scene, interp.cache_mut().shaders.as_mut())?;
         renderer.read_pixels(slot, &mut pixels)?;
         let (col, row) = (i as u32 % cols, i as u32 / cols);

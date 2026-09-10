@@ -278,7 +278,19 @@ fn draw_text(scene: &mut Scene, attrs: &Attrs, transform: Affine, spin: &dyn Fn(
     let top_left = transform * Point::new(cx - w / 2.0, cy - h / 2.0);
     let placed = spin(Point::new(cx, cy))? * Affine::translate(top_left.to_vec2());
     let fill = color(attrs, "fill", kind)?.unwrap_or(Color::BLACK);
-    text::draw(scene, layout, placed, fill.multiply_alpha(opacity));
+    let outline = color(attrs, "stroke", kind)?;
+    let style = stroke_style(attrs)?;
+    let stroke = outline.map(|ink| (&style, ink.multiply_alpha(opacity)));
+    // blend が付いていたら、文字の箱の中だけ重ね方を変える
+    let blend = blend_mode(attrs)?;
+    let box_path = Rect::from_origin_size(Point::ZERO, (w * scale, h * scale)).to_path(0.01);
+    if let Some(mode) = blend {
+        scene.push_layer(Fill::NonZero, mode, 1.0, placed, &box_path);
+    }
+    text::draw(scene, layout, placed, fill.multiply_alpha(opacity), stroke);
+    if blend.is_some() {
+        scene.pop_layer();
+    }
     Ok(())
 }
 
@@ -457,7 +469,7 @@ pub fn overlay_subtitles(scene: &mut Scene, cache: &mut RenderCache, cues: &[cra
         let top = bottom - h - pad * 2.0;
         let x0 = (width - w) / 2.0 - pad;
         scene.fill(Fill::NonZero, Affine::IDENTITY, Color::from_rgba8(0, 0, 0, 150), None, &RoundedRect::new(x0, top, x0 + w + pad * 2.0, bottom, pad));
-        text::draw(scene, layout, Affine::translate(((width - f64::from(box_w)) / 2.0, top + pad)), Color::WHITE);
+        text::draw(scene, layout, Affine::translate(((width - f64::from(box_w)) / 2.0, top + pad)), Color::WHITE, None);
         bottom = top - pad;
     }
 }

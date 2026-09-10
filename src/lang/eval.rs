@@ -1937,33 +1937,61 @@ fn check_free_name(name: &str) -> Result<()> {
 }
 
 pub fn schema(kind: &str) -> Option<&'static [(&'static str, &'static str)]> {
-    const SHAPE: [(&str, &str); 11] = [
-        ("fill", "Paint"),
-        ("stroke", "Color"),
-        ("strokeWidth", "Number"),
-        ("strokeCap", "StrokeCap"),
-        ("strokeJoin", "StrokeJoin"),
-        ("dash", "List"),
-        ("dashOffset", "Number"),
-        ("opacity", "Number"),
-        ("rotation", "Number"),
-        ("pivot", "Vector"),
-        ("blend", "Blend"),
-    ];
-    macro_rules! with_shape {
-        ($($extra:expr),*) => {{
-            const ATTRS: &[(&str, &str)] = &[$($extra,)* SHAPE[0], SHAPE[1], SHAPE[2], SHAPE[3], SHAPE[4], SHAPE[5], SHAPE[6], SHAPE[7], SHAPE[8], SHAPE[9], SHAPE[10]];
-            ATTRS
+    // 図形が共通で持つ属性。ただし、その図形で効きようがないものは持たせない
+    //   strokeJoin — 角のある図形だけ (Circle / Ellipse / Line には角が無い)
+    //   fill        — 面のある図形だけ (Line には面が無い)
+    //   strokeCap / dash / dashOffset — 字の輪郭は破線にできないので TextArea は持たない
+    const PAINT: (&str, &str) = ("fill", "Paint");
+    const LINE: [(&str, &str); 5] = [("stroke", "Color"), ("strokeWidth", "Number"), ("strokeCap", "StrokeCap"), ("dash", "List"), ("dashOffset", "Number")];
+    const JOIN: (&str, &str) = ("strokeJoin", "StrokeJoin");
+    const COMMON: [(&str, &str); 4] = [("opacity", "Number"), ("rotation", "Number"), ("pivot", "Vector"), ("blend", "Blend")];
+    macro_rules! shape {
+        (fill: $fill:literal, join: $join:literal, $($extra:expr),*) => {{
+            const ATTRS: &[(&str, &str)] = &[
+                $($extra,)*
+                PAINT, LINE[0], LINE[1], LINE[2], LINE[3], LINE[4], JOIN,
+                COMMON[0], COMMON[1], COMMON[2], COMMON[3],
+            ];
+            const NO_FILL: &[(&str, &str)] = &[
+                $($extra,)*
+                LINE[0], LINE[1], LINE[2], LINE[3], LINE[4],
+                COMMON[0], COMMON[1], COMMON[2], COMMON[3],
+            ];
+            const NO_JOIN: &[(&str, &str)] = &[
+                $($extra,)*
+                PAINT, LINE[0], LINE[1], LINE[2], LINE[3], LINE[4],
+                COMMON[0], COMMON[1], COMMON[2], COMMON[3],
+            ];
+            match ($fill, $join) {
+                (true, true) => ATTRS,
+                (true, false) => NO_JOIN,
+                _ => NO_FILL,
+            }
         }};
     }
     Some(match kind {
-        "Circle" => with_shape!(("position", "Pos"), ("radius", "Number")),
-        "Ellipse" => with_shape!(("position", "Pos"), ("rx", "Number"), ("ry", "Number")),
-        "Rect" => with_shape!(("position", "Pos"), ("w", "Number"), ("h", "Number"), ("radius", "Number")),
-        "Line" => with_shape!(("from", "Vector"), ("to", "Vector")),
-        "Polygon" => with_shape!(("points", "List")),
-        "Path" => with_shape!(("from", "Vector"), ("segments", "List"), ("closed", "Bool")),
-        "TextArea" => with_shape!(("position", "Pos"), ("text", "String"), ("w", "Number"), ("font", "String"), ("fontSize", "Number"), ("align", "Align")),
+        "Circle" => shape!(fill: true, join: false, ("position", "Pos"), ("radius", "Number")),
+        "Ellipse" => shape!(fill: true, join: false, ("position", "Pos"), ("rx", "Number"), ("ry", "Number")),
+        "Rect" => shape!(fill: true, join: true, ("position", "Pos"), ("w", "Number"), ("h", "Number"), ("radius", "Number")),
+        "Line" => shape!(fill: false, join: false, ("from", "Vector"), ("to", "Vector")),
+        "Polygon" => shape!(fill: true, join: true, ("points", "List")),
+        "Path" => shape!(fill: true, join: true, ("from", "Vector"), ("segments", "List"), ("closed", "Bool")),
+        "TextArea" => &[
+            ("position", "Pos"),
+            ("text", "String"),
+            ("w", "Number"),
+            ("font", "String"),
+            ("fontSize", "Number"),
+            ("align", "Align"),
+            PAINT,
+            LINE[0],
+            LINE[1],
+            JOIN,
+            COMMON[0],
+            COMMON[1],
+            COMMON[2],
+            COMMON[3],
+        ],
         "View" => &[("box", "Vector"), ("position", "Pos"), ("w", "Number"), ("h", "Number"), ("opacity", "Number"), ("blend", "Blend")],
         "Subtitle" => &[("text", "String"), ("duration", "Duration")],
         "Shader" => &[("color", "Func"), ("args", "List"), ("samples", "Number")],

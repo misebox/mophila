@@ -77,7 +77,8 @@ VS Code 拡張と Neovim の設定は `editors/vscode/README.md`。構文ハイ�
 
 ```
 cargo test
-python3 scripts/check_examples.py
+python3 scripts/check_examples.py   # examples が動き、error.moph が書いてある種別で止まる
+python3 scripts/check_attrs.py      # 宣言した図形の属性が、本当に絵に効く
 ```
 
 ## ライセンス

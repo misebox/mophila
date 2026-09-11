@@ -13,12 +13,55 @@ pub struct Settings<'a> {
     pub pix_fmt: &'a str,
     /// 音声と字幕と、動画の長さ (秒)。画像出力では None
     pub media: Option<(&'a Media, f64)>,
+    /// 拡張子ごとの追加の指定 (GIF のパレットなど)
+    pub filter: Option<&'a str>,
+}
+
+/// 出力の形式。拡張子から決まる
+pub struct Format {
+    /// 1 枚の画像。--at が要る
+    pub image: bool,
+    pub codec: &'static str,
+    pub pix_fmt: &'static str,
+    /// 映像に掛けるフィルタ。音声と混ぜないものだけ
+    pub filter: Option<&'static str>,
+    /// 音声と字幕を入れられるか
+    pub media: bool,
+}
+
+/// 出力ファイルの拡張子から形式を決める。知らない拡張子は None
+pub fn format_of(path: &str) -> Option<Format> {
+    let ext = std::path::Path::new(path).extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    let image = |codec, pix_fmt| Format { image: true, codec, pix_fmt, filter: None, media: false };
+    let video = |codec, pix_fmt| Format { image: false, codec, pix_fmt, filter: None, media: true };
+    Some(match ext.as_str() {
+        "png" => image("png", "rgba"),
+        "jpg" | "jpeg" => image("mjpeg", "yuvj420p"),
+        "webp" => image("webp", "yuv420p"),
+        "tif" | "tiff" => image("tiff", "rgba"),
+        "mp4" | "m4v" => video("libx264", "yuv420p"),
+        "mov" => video("libx264", "yuv420p"),
+        "mkv" => video("libx264", "yuv420p"),
+        "webm" => video("libvpx-vp9", "yuv420p"),
+        // GIF は 256 色。先に使う色を決めてから割り当てないと汚くなる
+        "gif" => Format {
+            image: false,
+            codec: "gif",
+            pix_fmt: "rgb8",
+            filter: Some("split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3"),
+            media: false,
+        },
+        "apng" => Format { image: false, codec: "apng", pix_fmt: "rgba", filter: None, media: false },
+        _ => return None,
+    })
 }
 
 /// ffmpeg を子プロセスとして起動し、stdin に RGBA フレームを流し込む
 pub struct Ffmpeg {
     child: Child,
     stdin: Option<ChildStdin>,
+    /// エラーに出す。使えないコーデックを指した場合に分かるように
+    codec: String,
     /// 終わったら消す一時ファイル (字幕)
     temp_files: Vec<PathBuf>,
 }
@@ -44,6 +87,9 @@ impl Ffmpeg {
                 cmd.args(["-map", "0:v"]);
             }
         }
+        if let Some(filter) = s.filter {
+            cmd.args(["-vf", filter]);
+        }
         let mut child = cmd
             .args(["-c:v", s.codec, "-pix_fmt", s.pix_fmt, output])
             .stdin(Stdio::piped())
@@ -51,7 +97,7 @@ impl Ffmpeg {
             .spawn()
             .map_err(|e| format!("ffmpeg を起動できない: {e}"))?;
         let stdin = child.stdin.take().ok_or("ffmpeg の stdin を取得できない")?;
-        Ok(Self { child, stdin: Some(stdin), temp_files })
+        Ok(Self { child, stdin: Some(stdin), codec: s.codec.to_string(), temp_files })
     }
 
     pub fn write_frame(&mut self, rgba: &[u8]) -> Result<(), Box<dyn Error>> {
@@ -60,7 +106,7 @@ impl Ffmpeg {
             // ffmpeg が先に落ちた。理由は ffmpeg が stderr に出している
             self.stdin = None;
             let _ = self.child.wait();
-            return Err("ffmpeg が異常終了".into());
+            return Err(self.failed());
         }
         Ok(())
     }
@@ -68,9 +114,14 @@ impl Ffmpeg {
     pub fn finish(mut self) -> Result<(), Box<dyn Error>> {
         self.stdin = None;
         if !self.child.wait()?.success() {
-            return Err("ffmpeg が異常終了".into());
+            return Err(self.failed());
         }
         Ok(())
+    }
+
+    /// ffmpeg が理由を stderr に出しているので、こちらは何を頼んだかだけ言う
+    fn failed(&self) -> Box<dyn Error> {
+        format!("ffmpeg が異常終了 (-c:v {}). 上の ffmpeg の出力を見る", self.codec).into()
     }
 }
 

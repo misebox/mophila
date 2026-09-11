@@ -94,7 +94,9 @@ enum Command {
 /// 描画と出力のオプション。埋め込み済みバイナリではこれだけを受け取り、-o が無ければウィンドウで再生する
 #[derive(Parser)]
 struct OutputArgs {
-    /// 出力する動画 (.mp4 など) または画像 (.png)。render では省略時 output.mp4 (--at 付きなら output.png)
+    /// 出力ファイル。拡張子で形式が決まる。
+    /// 動画 mp4 mov mkv webm gif apng / 画像 png jpg webp tiff (--at が要る)。
+    /// render では省略時 output.mp4 (--at 付きなら output.png)
     #[arg(short, long)]
     output: Option<String>,
     /// フレームレート
@@ -103,12 +105,12 @@ struct OutputArgs {
     /// 画面サイズ。幅x高さ、または名前: 360p 480p 720p|hd 1080p|fhd 1440p|wqhd 2160p|4k|uhd (16:9), vga svga xga (4:3)
     #[arg(long, default_value = "800x600", value_parser = parse_size)]
     size: (u32, u32),
-    /// ffmpeg の映像コーデック (-c:v)
-    #[arg(long, default_value = "libx264")]
-    codec: String,
-    /// ffmpeg のピクセルフォーマット (-pix_fmt)
-    #[arg(long, default_value = "yuv420p")]
-    pix_fmt: String,
+    /// ffmpeg の映像コーデック (-c:v)。省略時は拡張子から決める
+    #[arg(long)]
+    codec: Option<String>,
+    /// ffmpeg のピクセルフォーマット (-pix_fmt)。省略時は拡張子から決める
+    #[arg(long)]
+    pix_fmt: Option<String>,
     /// 画像出力ならその時刻のフレーム、ウィンドウ再生ならその時刻で一時停止して開く (例: 1.5s, 500ms, 01:23)
     #[arg(long, value_parser = parse_duration)]
     at: Option<f64>,
@@ -289,7 +291,11 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
     let mut timing = timing::Timing::from_env();
     let mut renderer = timing.measure("startup", || render::gpu::HeadlessRenderer::new(width, height))?;
     interp.cache_mut().shaders = Some(renderer.shader_runner());
-    let is_image = std::path::Path::new(&output).extension().is_some_and(|e| e == "png");
+    // 拡張子で出力の形式を決める。--codec / --pix-fmt を書けばそれが勝つ
+    let Some(format) = render::encode::format_of(&output) else {
+        return Err(format!("cannot write \"{output}\": use .mp4 .mov .mkv .webm .gif .apng, or .png .jpg .webp .tiff with --at").into());
+    };
+    let is_image = format.image;
     // --trim の区間。映像はこの時刻から描き、音声と字幕もこの区間に合わせてずらして切る
     let trim = args.trim.unwrap_or(Trim { from: None, to: None });
     let from = trim.from.unwrap_or(0.0).min(duration);
@@ -304,9 +310,10 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
             width,
             height,
             fps: args.fps,
-            codec: if is_image { "png" } else { &args.codec },
-            pix_fmt: if is_image { "rgba" } else { &args.pix_fmt },
-            media: if is_image { None } else { Some((&media, to - from)) },
+            codec: args.codec.as_deref().unwrap_or(format.codec),
+            pix_fmt: args.pix_fmt.as_deref().unwrap_or(format.pix_fmt),
+            media: if format.media { Some((&media, to - from)) } else { None },
+            filter: format.filter,
         },
     )?;
 
@@ -394,7 +401,7 @@ fn sheet(src: &str, base_dir: std::path::PathBuf, output: &str, every: f64, time
         progress.step(i + 1);
     }
     progress.finish();
-    let mut ffmpeg = render::encode::Ffmpeg::spawn(output, render::encode::Settings { width, height, fps: 1, codec: "png", pix_fmt: "rgba", media: None })?;
+    let mut ffmpeg = render::encode::Ffmpeg::spawn(output, render::encode::Settings { width, height, fps: 1, codec: "png", pix_fmt: "rgba", media: None, filter: None })?;
     ffmpeg.write_frame(&canvas)?;
     ffmpeg.finish()?;
     Ok(())

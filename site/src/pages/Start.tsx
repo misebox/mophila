@@ -12,6 +12,7 @@ const COMMANDS = [
   ["mophila preview first.moph", "ウィンドウを開いて実時間で再生する。Space で一時停止、← → で移動"],
   ["mophila render first.moph -o first.mp4 --size fhd --fps 30", "動画にする。--size は 幅x高さ か 720p / fhd / 4k など"],
   ["mophila render first.moph -o first.png --at 2s", "その時刻の 1 フレームを画像にする"],
+  ["mophila render first.moph -o first.gif --fps 12", "形式は拡張子で決まる。mp4 mov mkv webm gif apng / png jpg webp tiff"],
   ["mophila timeline first.moph", "何がいつどう変わるかを、時刻順の一覧で表示する"],
 ];
 

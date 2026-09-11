@@ -361,11 +361,12 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
     // フレーム N を GPU に投入したら、その完了を待つ前にフレーム N+1 の eval と scene を進める。
     // N の読み戻しは N+1 を投入した後に行う (GPU が N を描いている間に CPU が N+1 を組み立てる)
     let mut pending: Option<usize> = None;
+    // 置いたものは描いている間に増えないので、1 度集めて使い回す
+    let tracks = lang::eval::all_tracks(&view);
     let mut progress = render::progress::Progress::new(&name, times.len());
     for (i, t) in times.into_iter().enumerate() {
         timing.measure("eval", || -> Result<(), Box<dyn Error>> {
             interp.begin_frame(t);
-            let tracks = lang::eval::all_tracks(&view);
             for placed in &tracks {
                 interp.apply_track(placed, t)?;
             }

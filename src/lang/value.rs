@@ -1,6 +1,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fmt;
+use std::fmt::Write as _;
 use std::rc::Rc;
 
 use crate::lang::ast::{Expr, FuncDef};
@@ -49,9 +50,38 @@ fn gcd(a: u64, b: u64) -> u64 {
     }
 }
 
+/// 数を 10 進で書き出す入れ物。f64 は "{}" で 24 桁を超えないので、これで足りる
+struct Digits {
+    data: [u8; 32],
+    len: usize,
+}
+
+impl Digits {
+    fn new() -> Self {
+        Digits { data: [0; 32], len: 0 }
+    }
+
+    fn as_str(&self) -> &str {
+        std::str::from_utf8(&self.data[..self.len]).unwrap_or("")
+    }
+}
+
+impl fmt::Write for Digits {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        let end = self.len + s.len();
+        if end > self.data.len() {
+            return Err(fmt::Error);
+        }
+        self.data[self.len..end].copy_from_slice(s.as_bytes());
+        self.len = end;
+        Ok(())
+    }
+}
+
+
 #[derive(Clone)]
 pub enum Value {
-    /// 実際の値と、分数のままの姿。分数で表せる間だけ後ろを持つ
+/// 実際の値と、分数のままの姿。分数で表せる間だけ後ろを持つ
     Number(f64, Option<Ratio>),
     Bool(bool),
     Str(String),
@@ -465,6 +495,31 @@ impl std::fmt::Debug for Value {
 }
 
 impl Value {
+    /// 型の名前。Object と Record 以外は借りられるので、確保しないで比べられる
+    pub fn type_name_ref(&self) -> Option<&'static str> {
+        Some(match self {
+            Value::Number(..) => "Number",
+            Value::Bool(_) => "Bool",
+            Value::Str(_) => "String",
+            Value::Symbol(_) => "Symbol",
+            Value::Duration(_) => "Duration",
+            Value::Color(_) => "Color",
+            Value::Vector(..) => "Vector",
+            Value::Apos(..) => "Pos",
+            Value::Tuple(_) => "Tuple",
+            Value::List(_) => "List",
+            Value::Range(..) => "Range",
+            Value::Dict(_) => "Dict",
+            Value::Timeline(_) => "Timeline",
+            Value::Motion(_) => "Motion",
+            Value::Func(_) | Value::Builtin(_) => "Func",
+            Value::Audio(_) => "Audio",
+            Value::Nothing => "Nothing",
+            // 名前が実体に入っているもの
+            Value::Object(_) | Value::Record(_) | Value::Type(_) | Value::BuiltinType(_) | Value::Module(_) => return None,
+        })
+    }
+
     pub fn type_name(&self) -> String {
         match self {
             Value::Number(..) => "Number".into(),
@@ -515,14 +570,23 @@ impl Ratio {
         if v.fract() == 0.0 {
             return Some(Ratio { num: v as i64, den: 1 });
         }
-        let text = format!("{v}");
+        // 数を 1 つ作るたびに通るので、桁はスタックに書いて読む (ヒープを使わない)
+        let mut buf = Digits::new();
+        write!(buf, "{v}").ok()?;
+        let text = buf.as_str();
         let (int, frac) = text.split_once('.')?;
         // 指数表記や、長すぎる小数は分数にしない
         if frac.len() > 9 || !frac.bytes().all(|b| b.is_ascii_digit()) {
             return None;
         }
         let den = 10_i64.checked_pow(frac.len() as u32)?;
-        let digits: i64 = format!("{}{}", int.trim_start_matches('-'), frac).parse().ok()?;
+        let mut digits: i64 = 0;
+        for b in int.bytes().chain(frac.bytes()) {
+            if b == b'-' {
+                continue;
+            }
+            digits = digits.checked_mul(10)?.checked_add(i64::from(b.wrapping_sub(b'0')))?;
+        }
         let num = if text.starts_with('-') { -digits } else { digits };
         Ratio::new(num, den)
     }
@@ -620,3 +684,4 @@ impl fmt::Display for Value {
         }
     }
 }
+

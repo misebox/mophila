@@ -254,12 +254,12 @@ impl Interp {
         }
     }
 
-    /// 別名なら、指している型の名前に直す
-    fn real_type_name(&self, name: &str) -> String {
+    /// 別名なら、指している型の名前に直す。別名でなければ借りたまま返す (毎フレーム通るので確保しない)
+    fn real_type_name<'a>(&self, name: &'a str) -> std::borrow::Cow<'a, str> {
         match self.scopes.iter().rev().find_map(|s| s.borrow().get(name).cloned()) {
-            Some(Value::Type(t)) => t.decl.name.clone(),
-            Some(Value::BuiltinType(n)) => n,
-            _ => name.to_string(),
+            Some(Value::Type(t)) => std::borrow::Cow::Owned(t.decl.name.clone()),
+            Some(Value::BuiltinType(n)) => std::borrow::Cow::Owned(n),
+            _ => std::borrow::Cow::Borrowed(name),
         }
     }
 
@@ -284,8 +284,9 @@ impl Interp {
 
     /// フィールドに入れる値。エラーには型名とフィールド名を出す
     fn check_field(&self, owner: &str, field: &str, v: &Value, ann: &str) -> Result<()> {
-        let name = &self.real_type_name(ann);
-        let head = name.split_once('<').map_or(name.as_str(), |(h, _)| h);
+        let full = self.real_type_name(ann);
+        let name: &str = &full;
+        let head = name.split_once('<').map_or(name, |(h, _)| h);
         if !self.known_type(head) {
             return err(Kind::UndefinedVariable, format!("{owner}.{field}: \"{head}\" is not a type"));
         }
@@ -297,9 +298,10 @@ impl Interp {
 
     /// 値が型名に合うか。Union は定義をたどる
     fn check_type(&self, v: &Value, name: &str) -> Result<()> {
-        let name = &self.real_type_name(name);
+        let full = self.real_type_name(name);
+        let name: &str = &full;
         // List<Number> のような書き方は、外側の名前だけ見る
-        let head = name.split_once('<').map_or(name.as_str(), |(h, _)| h);
+        let head = name.split_once('<').map_or(name, |(h, _)| h);
         if !self.known_type(head) {
             return err(Kind::UndefinedVariable, format!("\"{head}\" is not a type"));
         }
@@ -326,31 +328,50 @@ impl Interp {
     /// 属性に値を書く。型は宣言 (struct / record) か schema から引く
     pub(crate) fn set_attr(&self, obj: &ObjRef, attr: &str, value: Value) -> Result<()> {
         let mut o = obj.borrow_mut();
-        let expected = match &o.decl {
-            Some(ty) => ty.decl.fields.iter().find(|f| f.name == attr).map(|f| f.ann.name.clone()),
-            None => schema(&o.kind).and_then(|s| s.iter().find(|(n, _)| *n == attr)).map(|(_, t)| (*t).to_string()),
+        // 期待する型の名前。schema は 'static、宣言は借りたまま使う
+        let expected: &str = match &o.decl {
+            Some(ty) => match ty.decl.fields.iter().find(|f| f.name == attr) {
+                Some(f) => &f.ann.name,
+                None => return err(Kind::UndefinedAttribute, format!("{} has no attribute \"{attr}\"", o.kind)),
+            },
+            None => match schema(&o.kind).and_then(|s| s.iter().find(|(n, _)| *n == attr)) {
+                Some((_, t)) => t,
+                None => return err(Kind::UndefinedAttribute, format!("{} has no attribute \"{attr}\"", o.kind)),
+            },
         };
-        let Some(expected) = expected else {
-            return err(Kind::UndefinedAttribute, format!("{} has no attribute \"{attr}\"", o.kind));
-        };
-        if !self.matches_type(&value, &self.real_type_name(&expected)) {
-            return Err(self.wrong_type(Kind::AttributeType, &format!("{}.{attr}", o.kind), &expected, &value));
+        if !self.matches_type(&value, &self.real_type_name(expected)) {
+            let (expected, kind) = (expected.to_string(), o.kind.clone());
+            drop(o);
+            return Err(self.wrong_type(Kind::AttributeType, &format!("{kind}.{attr}"), &expected, &value));
         }
-        o.attrs.insert(attr.to_string(), value);
+        // 既にある属性は入れ替えるだけ。名前を作り直さない
+        match o.attrs.get_mut(attr) {
+            Some(slot) => *slot = value,
+            None => {
+                o.attrs.insert(attr.to_string(), value);
+            }
+        }
         drop(o);
         // Motion.apply は「代入が書かれたか」で拾うので、値が変わらない代入も記録する
-        if let Some(log) = self.assigned.borrow_mut().as_mut() {
-            log.push((obj.clone(), attr.to_string()));
+        if self.assigned.borrow().is_some() {
+            if let Some(log) = self.assigned.borrow_mut().as_mut() {
+                log.push((obj.clone(), attr.to_string()));
+            }
         }
         Ok(())
     }
 
     /// 属性パスに値を書く。[position, x] なら position (Pos) の x だけを変える
     fn set_path(&self, obj: &ObjRef, path: &[String], value: Value) -> Result<()> {
-        if path.is_empty() {
-            return err(Kind::UndefinedAttribute, "empty attribute path");
+        match path {
+            [] => err(Kind::UndefinedAttribute, "empty attribute path"),
+            // 属性 1 つはいちばん多い形。表を引かずに直接書く (毎フレーム何千回も通る)
+            [attr] => {
+                self.field_ok(&obj.borrow().decl, attr)?;
+                self.set_attr(obj, attr, value)
+            }
+            path => self.write_path(Value::Object(obj.clone()), path, value).map(|_| ()),
         }
-        self.write_path(Value::Object(obj.clone()), path, value).map(|_| ())
     }
 
     fn matches_type(&self, v: &Value, name: &str) -> bool {
@@ -362,9 +383,10 @@ impl Interp {
         if name.contains("->") {
             return matches!(v, Value::Func(_) | Value::Builtin(_));
         }
-        let actual = match v {
-            Value::Func(_) | Value::Builtin(_) => "Func".to_string(),
-            v => v.type_name(),
+        // 型の名前を作らずに比べる。Object と Record だけは実体に名前が入っている
+        let actual: std::borrow::Cow<str> = match v.type_name_ref() {
+            Some(n) => std::borrow::Cow::Borrowed(n),
+            None => std::borrow::Cow::Owned(v.type_name()),
         };
         if actual == name {
             // 名前が同じでも、別の宣言なら別の型。import した先の同名の型と混ざらない
@@ -1508,8 +1530,9 @@ impl Interp {
                 // 終わった Timeline。最後の値を 1 度だけ評価し、以後は書き込みだけにする (書き込み順は保つ)
                 let key = (Rc::as_ptr(tl) as usize, origin.to_bits());
                 if let Some(values) = self.finished.get(&key) {
-                    for (target, path, value) in values.clone() {
-                        self.set_path(&target, &path, value)?;
+                    // 借りたまま回す。毎フレーム通るので (対象, パス, 値) を作り直さない
+                    for (target, path, value) in values {
+                        self.set_path(target, path, value.clone())?;
                     }
                     return Ok(());
                 }
@@ -2068,9 +2091,12 @@ pub fn schema(kind: &str) -> Option<&'static [(&'static str, &'static str)]> {
     })
 }
 
+/// 2 つの値の間。k は 0..1
+/// 途中の数は分数で持たない。書いた値の間を取ったものなので分数で表せることはまずなく、
+/// 毎フレーム何千回も作るところなので、分数を求める手間を掛けない
 fn interpolate(a: &Value, b: &Value, k: f64) -> Value {
     match (a, b) {
-        (Value::Number(x, _), Value::Number(y, _)) => Value::num(x + (y - x) * k),
+        (Value::Number(x, _), Value::Number(y, _)) => Value::Number(x + (y - x) * k, None),
         (Value::Duration(x), Value::Duration(y)) => Value::Duration(x + (y - x) * k),
         (Value::Vector(x0, y0), Value::Vector(x1, y1)) => Value::Vector(x0 + (x1 - x0) * k, y0 + (y1 - y0) * k),
         (Value::Apos(an, x0, y0), Value::Apos(_, x1, y1)) => Value::Apos(an.clone(), x0 + (x1 - x0) * k, y0 + (y1 - y0) * k),

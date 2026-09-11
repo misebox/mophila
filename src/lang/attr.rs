@@ -41,11 +41,11 @@ impl<'a> Attr<'a> {
         (self.get)()
     }
 
-    /// `what` は "Audio.file" のような、エラーに出す名前
-    pub fn set(self, what: &str, v: Value) -> Result<Written> {
+    /// `what` は "Audio.file" のような、エラーに出す名前。失敗したときだけ作る
+    pub fn set(self, what: &dyn Fn() -> String, v: Value) -> Result<Written> {
         match self.set {
             Some(set) => set(v),
-            None => err(Kind::UndefinedAttribute, format!("{what} cannot be assigned")),
+            None => err(Kind::UndefinedAttribute, format!("{} cannot be assigned", what())),
         }
     }
 }
@@ -274,12 +274,12 @@ impl Interp {
     /// 値型は作り直しになるので、書き換えた受け手を返す
     pub fn write_path(&self, target: Value, path: &[String], value: Value) -> Result<Value> {
         let [name, rest @ ..] = path else { return Ok(value) };
-        let what = format!("{}.{name}", target.type_name());
         let Some(attr) = self.attr(&target, name) else {
             return err(Kind::UndefinedAttribute, format!("{} has no attribute \"{name}\"", target.type_name()));
         };
         let value = if rest.is_empty() { value } else { self.write_path(attr.get()?, rest, value)? };
-        match attr.set(&what, value)? {
+        // エラーに出す名前は、失敗したときだけ作る (毎フレーム通る道)
+        match attr.set(&|| format!("{}.{name}", target.type_name()), value)? {
             Written::Replace(v) => Ok(v),
             Written::Done => Ok(target),
         }

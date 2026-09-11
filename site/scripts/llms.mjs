@@ -62,7 +62,10 @@ ${name} を書くときは llms-full.txt を読む。文法は GBNF にしてあ
 ## 読むもの
 
 - [llms-full.txt](${pages}/llms-full.txt): 下に挙げたものを 1 ファイルにまとめたもの。まずこれを読む
-- [書き方の要点](${raw}/docs/skills/mophila/SKILL.md): 見やすい動画にするための書き方と、つまずきやすい点
+- [書き方の要点](${raw}/docs/skills/mophila/SKILL.md): 入口。最小の形とコマンド
+- [言語の使い方](${raw}/docs/skills/mophila/language.md): 他の言語と違うところ、型、時間、図形
+- [解説する動画の作り方](${raw}/docs/skills/mophila/presentation.md): 場面の組み立て、読める時間、確認の手順
+- [見た目を作る](${raw}/docs/skills/mophila/design.md): 色、構図、文字、動きの質
 - [文法 (GBNF)](${raw}/docs/mophila.gbnf): 構文の全部。文法で生成を制約するときに渡す
 - [言語仕様](${raw}/docs/mophila-spec.md): 意味と規則
 
@@ -118,6 +121,9 @@ function moduleText() {
 
 let full = `# ${name}\n\n${summary}\n\nこの 1 ファイルに、書き方・文法・仕様・builtin と module の一覧・構文の例が入っている。`;
 full += section("書き方の要点", read("docs/skills/mophila/SKILL.md"));
+full += section("言語の使い方", read("docs/skills/mophila/language.md"));
+full += section("解説する動画の作り方", read("docs/skills/mophila/presentation.md"));
+full += section("見た目を作る", read("docs/skills/mophila/design.md"));
 full += section("文法 (GBNF)", "```\n" + read("docs/mophila.gbnf").trim() + "\n```");
 full += section("言語仕様", read("docs/mophila-spec.md"));
 full += section("builtin の型", builtinText());

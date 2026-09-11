@@ -10,7 +10,10 @@ mophila を書くときは llms-full.txt を読む。文法は GBNF にしてあ
 ## 読むもの
 
 - [llms-full.txt](https://misebox.github.io/mophila/llms-full.txt): 下に挙げたものを 1 ファイルにまとめたもの。まずこれを読む
-- [書き方の要点](https://raw.githubusercontent.com/misebox/mophila/main/docs/skills/mophila/SKILL.md): 見やすい動画にするための書き方と、つまずきやすい点
+- [書き方の要点](https://raw.githubusercontent.com/misebox/mophila/main/docs/skills/mophila/SKILL.md): 入口。最小の形とコマンド
+- [言語の使い方](https://raw.githubusercontent.com/misebox/mophila/main/docs/skills/mophila/language.md): 他の言語と違うところ、型、時間、図形
+- [解説する動画の作り方](https://raw.githubusercontent.com/misebox/mophila/main/docs/skills/mophila/presentation.md): 場面の組み立て、読める時間、確認の手順
+- [見た目を作る](https://raw.githubusercontent.com/misebox/mophila/main/docs/skills/mophila/design.md): 色、構図、文字、動きの質
 - [文法 (GBNF)](https://raw.githubusercontent.com/misebox/mophila/main/docs/mophila.gbnf): 構文の全部。文法で生成を制約するときに渡す
 - [言語仕様](https://raw.githubusercontent.com/misebox/mophila/main/docs/mophila-spec.md): 意味と規則
 

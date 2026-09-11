@@ -1,8 +1,6 @@
 # mophila 言語仕様
 
-言語の意味と規則。構文の見本は examples/syntax/ を正とする。言語はできるだけ少ない部品の組み合わせで構成する。
-
-実装はインタプリタ。ソースを字句解析 → 構文解析し、構文木を評価して View と Timeline を作り、毎フレーム、キーフレームの式を構文木のまま評価して描く。コード生成は行わない。`bundle` はソースと import 先のファイルを実行ファイルに埋め込むもので、コンパイルではない。
+言語の意味と規則。できるだけ少ない部品の組み合わせで構成する。
 
 ## 1. 字句
 
@@ -15,7 +13,7 @@ name_1             # 識別子は英字・数字・_。先頭は英字か _
 
 文の区切りは改行で、`{ }` の中も同じ。リテラルは 3 を参照。
 
-`##` で始まる行もコメント。`export` の直前に置くとその項目の説明になり、ドキュメントサイトの「ライブラリ」がこれを読む。1 行目が要約で、`@param 名前 説明` `@returns 説明` `@example` が続く。
+`##` で始まる行もコメント。`export` の直前に置くとその項目の説明になる。1 行目が要約で、`@param 名前 説明` `@returns 説明` `@example` が続く。
 
 ## 2. 演算子と優先順位
 
@@ -207,16 +205,15 @@ record Vec2 {
 
 属性がこの型なら、その型に載っている名前しか書けない。値はすべて Symbol で、型を呼んでは作れない。違う名前を書くと `ValueError.OutOfRange` が、取れる値を並べて出る。
 
-| 型 | 何を決めるか |
-|---|---|
-| Anchor | Pos の座標が、置くもののどこを指すか |
-| Align | TextArea の行の寄せ方 |
-| StrokeCap | 線の両端の形 |
-| StrokeJoin | 折れ曲がった線の、角の形 |
-| Blend | 下にある絵との混ぜ方 |
-| GradientKind | Gradient の stops を並べる向き |
-
-値と、それぞれが何をするかは「builtin」のページにある。言語が検査に使っている表から作っているので、ここには写しを置かない。
+| 型 | 何を決めるか | 取れる値 (先頭が既定) |
+|---|---|---|
+| Anchor | Pos の座標が、置くもののどこを指すか | `:center` `:topLeft` `:top` `:topRight` `:left` `:right` `:bottomLeft` `:bottom` `:bottomRight` |
+| Align | TextArea の行の寄せ方 | `:left` `:center` `:right` |
+| StrokeCap | 線の両端の形 | `:butt` `:round` `:square` |
+| StrokeJoin | 折れ曲がった線の、角の形 | `:miter` `:round` `:bevel` |
+| Blend | 下にある絵との混ぜ方 | `:normal` `:multiply` `:screen` `:overlay` `:darken` `:lighten` `:difference` `:add` |
+| GradientKind | Gradient の stops を並べる向き | `:linear` `:radial` `:sweep` |
+| Easing | 区間の値の変わり方 (motion の行末にだけ書ける) | `:linear` `:ease_in` `:ease_out` `:ease` |
 
 同じものを自分でも書ける。
 
@@ -368,7 +365,7 @@ motion (t) {
 }
 ```
 
-`:linear` `:ease_in` `:ease_out` `:ease` の 4 つで、書かなければ `:linear`。Easing は属性の型ではなく、この行末にだけ書ける。値の意味は「builtin」のページにある。
+`:linear` `:ease_in` `:ease_out` `:ease` の 4 つで、書かなければ `:linear`。`:ease_in` は加速、`:ease_out` は減速、`:ease` は両方。Easing は属性の型ではなく、この行末にだけ書ける。
 
 置く。`Timeline.place` は Timeline の中へ、`View.addTrack` はその View の動きとして付ける。引数は同じで、`output` した View に付いたものが動画になる。
 
@@ -538,9 +535,9 @@ output v      # この View が動画になる。1 つのファイルに 1 つ
 | `log(値, ...)` | 引数を空白区切りで stderr へ出す。どの型でも受け取る。動画には出ない |
 | `type_of(値)` | その値の型の名前を String で返す |
 
-String / List / Dict / Range のメソッドは builtin で、`import` は要らない。一覧は「builtin」のページと examples/syntax/collection.moph。
+String / List / Dict / Range のメソッドは builtin で、`import` は要らない。
 
-`import` で使う標準ライブラリ。関数の一覧と説明は「module」のページを正とする (ドキュメントコメントから作っている)。
+`import` で使う標準ライブラリ。
 
 | モジュール | 内容 |
 |---|---|
@@ -551,11 +548,9 @@ String / List / Dict / Range のメソッドは builtin で、`import` は要ら
 | animation | 図形や View を動かす Timeline を返す。現れる、消える、滑る、回る |
 | fractal | エスケープタイム系フラクタルの Shader。反復式、精度、色付けを組み合わせる |
 
-math だけ Rust で書かれていて、ほかは本体に埋め込んだ `.moph` (`src/stdlib/`)。
-
 ## 7. エラー
 
-`種別.細目: line N: message` の形で、message は英語。行ごとの例は examples/syntax/error.moph。
+`種別.細目: line N: message` の形で、message は英語。
 
 | 種別 | 細目 |
 |---|---|

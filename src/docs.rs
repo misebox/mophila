@@ -515,3 +515,17 @@ pub fn json() -> Json {
     let errors: Vec<Json> = crate::lang::error::KINDS.iter().map(|k| json!({ "name": k.name(), "doc": k.doc() })).collect();
     json!({ "builtins": entries(BUILTINS), "math": entries(crate::stdlib::math::DOCS), "types": types, "categories": CATEGORIES, "errors": errors })
 }
+
+#[cfg(test)]
+mod tests {
+    /// 決まった値しか取らない型は、仕様書にも値を並べてある。実装と食い違わせない
+    #[test]
+    fn every_enum_value_is_in_the_spec() {
+        let spec = include_str!("../docs/mophila-spec.md");
+        for t in super::TYPES.iter().filter(|t| t.category == "Enum") {
+            for (value, _) in t.values {
+                assert!(spec.contains(&format!("`{value}`")), "{}.{value} が docs/mophila-spec.md に書かれていない", t.name);
+            }
+        }
+    }
+}

@@ -1,0 +1,6 @@
+# 色を受け取って四角を作る部品。@parts.box として import される
+
+## 指定した色の四角。左上を (x, y) に置く
+export func make(x: Number, y: Number, w: Number, h: Number, fill: Color) -> Rect {
+  Rect(position = Pos(x, y, anchor = :topLeft), w = w, h = h, fill = fill, radius = 0.2)
+}

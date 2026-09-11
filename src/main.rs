@@ -2,17 +2,25 @@ mod bundle;
 mod docs;
 mod lang;
 mod lsp;
+mod project;
 mod render;
 mod report;
 mod stdlib;
 mod timing;
 
 use std::error::Error;
+use std::rc::Rc;
 
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 struct Cli {
+    /// 設定ファイル (既定: いま居るディレクトリの mophila.yaml)
+    #[arg(short = 'f', long, global = true)]
+    config: Option<String>,
+    /// config の値を上書きする。名前=値 (複数可)。環境変数 MOPHILA_<名前> でも上書きできる
+    #[arg(long = "set", global = true, value_name = "名前=値")]
+    set: Vec<String>,
     #[command(subcommand)]
     command: Command,
 }
@@ -21,20 +29,20 @@ struct Cli {
 enum Command {
     /// スクリプトを描画して、動画または画像のファイルを書く
     Render {
-        /// スクリプト (.moph)
-        script: String,
+        /// スクリプト (.moph)。省略すると mophila.yaml の entry
+        script: Option<String>,
         #[command(flatten)]
         out: OutputArgs,
     },
     /// 描画せずにスクリプトを実行する (log の確認用)
     Run {
-        /// スクリプト (.moph)
-        script: String,
+        /// スクリプト (.moph)。省略すると mophila.yaml の entry
+        script: Option<String>,
     },
     /// ウィンドウを開いて実時間で再生する
     Preview {
-        /// スクリプト (.moph)
-        script: String,
+        /// スクリプト (.moph)。省略すると mophila.yaml の entry
+        script: Option<String>,
         /// ウィンドウサイズ
         #[arg(long, default_value = "800x600", value_parser = parse_size)]
         size: (u32, u32),
@@ -47,16 +55,16 @@ enum Command {
     },
     /// 何がいつどう変わるかを、時刻順の一覧で表示する。--filter kind=TextArea attr=opacity text=... from=10s to=20s
     Timeline {
-        /// スクリプト (.moph)
-        script: String,
+        /// スクリプト (.moph)。省略すると mophila.yaml の entry
+        script: Option<String>,
         /// 絞り込み (key=value を複数可)
         #[arg(long)]
         filter: Vec<String>,
     },
     /// 場面ごとのフレームを 1 枚の格子画像にする
     Sheet {
-        /// スクリプト (.moph)
-        script: String,
+        /// スクリプト (.moph)。省略すると mophila.yaml の entry
+        script: Option<String>,
         /// 出力する画像 (.png)
         #[arg(short, long, default_value = "sheet.png")]
         output: String,
@@ -83,8 +91,8 @@ enum Command {
     Doc,
     /// スクリプトを埋め込んだ実行ファイルを作る
     Bundle {
-        /// スクリプト (.moph)
-        script: String,
+        /// スクリプト (.moph)。省略すると mophila.yaml の entry
+        script: Option<String>,
         /// 出力する実行ファイル
         #[arg(short, long)]
         output: String,
@@ -207,32 +215,52 @@ fn run() -> Result<(), Box<dyn Error>> {
             .ok()
             .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
             .unwrap_or_else(|| sources.main.clone());
-        let result = render(&src, bundle::root_of(&sources.main), Some(&sources), name, OutputArgs::parse());
+        let result = render(&src, bundle::root_of(&sources.main), Some(&sources), &None, name, OutputArgs::parse());
         sources.cleanup();
         return result;
     }
-    match Cli::parse().command {
+    let cli = Cli::parse();
+    let project = project::Project::load(cli.config.as_deref(), &cli.set)?.map(Rc::new);
+    if let Some(p) = &project {
+        p.announce();
+    }
+    // スクリプトを書かなければ mophila.yaml の entry。どちらも無ければエラー
+    let entry = |script: Option<String>| -> Result<String, Box<dyn Error>> {
+        match (script, project.as_ref().and_then(|p| p.entry.clone())) {
+            (Some(s), _) => Ok(s),
+            (None, Some(e)) => Ok(e.to_string_lossy().into_owned()),
+            (None, None) => Err(format!("スクリプトを指定する (または {} に entry を書く)", project::FILE_NAME).into()),
+        }
+    };
+    match cli.command {
         Command::Render { script, mut out } => {
+            let script = entry(script)?;
             // -o が無ければ output.mp4 に、--at 付きなら output.png に書く。ウィンドウは preview で
             if out.output.is_none() {
                 out.output = Some(if out.at.is_some() { "output.png" } else { "output.mp4" }.to_string());
             }
-            render(&std::fs::read_to_string(&script)?, base_dir(&script), None, file_name(&script), out)
+            render(&std::fs::read_to_string(&script)?, base_dir(&script), None, &project, file_name(&script), out)
         }
         Command::Run { script } => {
+            let script = entry(script)?;
             let stmts = lang::parser::parse(&std::fs::read_to_string(&script)?)?;
             let mut interp = lang::eval::Interp::new();
             interp.base_dir = base_dir(&script);
+            if let Some(p) = &project {
+                interp.set_project(p.clone());
+            }
             interp.run(&stmts)?;
             Ok(())
         }
         Command::Preview { script, size, r#loop, at } => {
-            let (interp, view, duration) = load(&std::fs::read_to_string(&script)?, base_dir(&script), None)?;
+            let script = entry(script)?;
+            let (interp, view, duration) = load(&std::fs::read_to_string(&script)?, base_dir(&script), None, &project)?;
             let media = render::media::collect(&view, duration);
             render::preview::run(file_name(&script), interp, view, duration, size, r#loop, at, &media)
         }
         Command::Timeline { script, filter } => {
-            let (mut interp, view, duration) = load(&std::fs::read_to_string(&script)?, base_dir(&script), None)?;
+            let script = entry(script)?;
+            let (mut interp, view, duration) = load(&std::fs::read_to_string(&script)?, base_dir(&script), None, &project)?;
             let filter = report::Filter::parse(&filter)?;
             let events = report::collect(&mut interp, &view);
             println!("duration: {duration:.2}s\n");
@@ -244,13 +272,16 @@ fn run() -> Result<(), Box<dyn Error>> {
             }
             Ok(())
         }
-        Command::Sheet { script, output, every, times, cell, cols } => sheet(&std::fs::read_to_string(&script)?, base_dir(&script), &output, every, times, cell, cols),
+        Command::Sheet { script, output, every, times, cell, cols } => {
+            let script = entry(script)?;
+            sheet(&std::fs::read_to_string(&script)?, base_dir(&script), &project, &output, every, times, cell, cols)
+        }
         Command::Lsp { .. } => lsp::run(),
         Command::Doc => {
             println!("{}", serde_json::to_string_pretty(&docs::json())?);
             Ok(())
         }
-        Command::Bundle { script, output } => bundle::write(std::path::Path::new(&script), &output),
+        Command::Bundle { script, output } => bundle::write(std::path::Path::new(&entry(script)?), &output),
     }
 }
 
@@ -265,10 +296,13 @@ fn base_dir(script: &str) -> std::path::PathBuf {
 }
 
 /// スクリプトを実行し、出力する View と動画の長さを返す
-fn load(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sources>) -> Result<(lang::eval::Interp, lang::value::ObjRef, f64), Box<dyn Error>> {
+fn load(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sources>, project: &Option<Rc<project::Project>>) -> Result<(lang::eval::Interp, lang::value::ObjRef, f64), Box<dyn Error>> {
     let stmts = lang::parser::parse(src)?;
     let mut interp = lang::eval::Interp::new();
     interp.base_dir = base_dir;
+    if let Some(p) = project {
+        interp.set_project(p.clone());
+    }
     if let Some(s) = sources {
         interp.sources = s.files.clone();
         interp.assets = s.assets.clone();
@@ -280,9 +314,9 @@ fn load(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Source
     Ok((interp, view, duration))
 }
 
-fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sources>, name: String, args: OutputArgs) -> Result<(), Box<dyn Error>> {
+fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sources>, project: &Option<Rc<project::Project>>, name: String, args: OutputArgs) -> Result<(), Box<dyn Error>> {
     let (width, height) = args.size;
-    let (mut interp, view, duration) = load(src, base_dir, sources)?;
+    let (mut interp, view, duration) = load(src, base_dir, sources, project)?;
     let media = render::media::collect(&view, duration);
     let Some(output) = args.output else {
         return render::preview::run(name, interp, view, duration, args.size, args.r#loop, args.at, &media);
@@ -357,8 +391,8 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
 }
 
 /// 指定の時刻でフレームを描き、格子に並べて PNG に書く。各コマの左上に時刻を入れる
-fn sheet(src: &str, base_dir: std::path::PathBuf, output: &str, every: f64, times: Vec<f64>, cell: (u32, u32), cols: u32) -> Result<(), Box<dyn Error>> {
-    let (mut interp, view, duration) = load(src, base_dir, None)?;
+fn sheet(src: &str, base_dir: std::path::PathBuf, project: &Option<Rc<project::Project>>, output: &str, every: f64, times: Vec<f64>, cell: (u32, u32), cols: u32) -> Result<(), Box<dyn Error>> {
+    let (mut interp, view, duration) = load(src, base_dir, None, project)?;
     let media = render::media::collect(&view, duration);
     let times: Vec<f64> = if times.is_empty() {
         let n = (duration / every).floor() as u32 + 1;

@@ -15,6 +15,7 @@ parley = { version = "0.11.1", features = ["complex-scripts"] }
 pollster = "1.0.1"
 serde = "1.0.229"
 serde_json = "1.0.151"
+serde_yml = "0.0.13"
 vello = "0.10.0"
 wgpu = "29"
 winit = "0.30"

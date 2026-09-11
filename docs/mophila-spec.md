@@ -501,6 +501,17 @@ import "bgm.m4a" as bgm            # .moph 以外は音声。Audio を束縛す�
 
 `import ..parent` で 1 つ上のディレクトリも書けるが、ディレクトリをまたぐ設計は避ける。標準ライブラリを import せずに使うと、`NameError.UndefinedVariable` に `add "import math"` のヒントが付く。
 
+`@` で始まる形は、プロジェクト設定 (7 章) の別名を指す。`@.` は root、`@名前.` はそこで決めた場所。
+
+```
+import @.slides                    # <root>/slides.moph
+import @parts.box                  # <parts>/box.moph
+import { card } from @.theme
+import "@/media/bgm.m4a" as bgm    # 文字列の中では "/" 区切り
+```
+
+`import` はトップレベルにしか書けない。
+
 ### 4.7 export
 
 ```
@@ -548,7 +559,38 @@ String / List / Dict / Range のメソッドは builtin で、`import` は要ら
 | animation | 図形や View を動かす Timeline を返す。現れる、消える、滑る、回る |
 | fractal | エスケープタイム系フラクタルの Shader。反復式、精度、色付けを組み合わせる |
 
-## 7. エラー
+## 7. プロジェクト設定
+
+`mophila.yaml` を、コマンドを実行したディレクトリに置くと自動で読まれる。`-f` で別の場所を指せる。
+
+```yaml
+entry: scenes/main.moph      # スクリプトを省略したときに使う
+root: .                      # @/ と @. が指す場所
+aliases:
+  parts: src/parts           # @parts. が指す場所
+config:
+  width: 16                  # import config で読める値
+  title: "mophila"
+  debug: false
+```
+
+**設定の中に書いたパスは、設定ファイルのある場所からの相対**。コマンドラインに書いたパスは、いま居るディレクトリからの相対。設定はプロジェクトの形を書いたものなので、どこで実行しても同じ場所を指す。
+
+`config` の値は数・文字列・真偽の 3 つ。`import config` で読む。
+
+```
+import config
+let v = View(box = Vector(config.width, 9))
+```
+
+値は 2 通りで上書きできる。どちらも設定に書いた型に合わせて読み、合わなければエラー。設定に無い名前を指定してもエラーになる。
+
+| 書き方 | 例 |
+|---|---|
+| 環境変数 | `MOPHILA_WIDTH=32 mophila render` |
+| コマンド | `mophila render --set width=32 --set title=abc` |
+
+## 8. エラー
 
 `種別.細目: line N: message` の形で、message は英語。
 

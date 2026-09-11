@@ -1,0 +1,23 @@
+# mophila.yaml — プロジェクト設定。コマンドを実行したディレクトリにあれば自動で読まれる。
+# ここに書いたパスは、このファイルのある場所からの相対。
+
+# スクリプトを書かずに mophila run / render したときに使う
+entry: scenes/main.moph
+
+# @/ と @. が指す場所
+root: .
+
+# @名前. が指す場所
+aliases:
+  parts: parts
+  scenes: scenes
+
+# import config で読める値。数・文字列・真偽の 3 つ。
+# MOPHILA_<大文字の名前> か --set 名前=値 で上書きできる
+config:
+  width: 16
+  height: 9
+  title: "mophila"
+  hue: 8                     # 色そのものは書けないので、色相を数で持つ
+  seconds: 3
+  debug: false

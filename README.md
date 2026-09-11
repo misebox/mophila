@@ -73,6 +73,23 @@ cargo install --path .
 
 `.webp` は ffmpeg が libwebp 付きで作られている必要がある。
 
+## プロジェクト設定
+
+`mophila.yaml` を置くと、実行したディレクトリから自動で読む。`-f` で別の場所も指せる。
+
+```yaml
+entry: scenes/main.moph      # スクリプトを省略したときに使う
+root: .                      # @/ と @. が指す場所
+aliases:
+  parts: src/parts           # @parts. が指す場所
+config:
+  width: 16                  # import config で読める値
+  title: "mophila"
+  debug: false
+```
+
+設定の中に書いたパスは設定ファイルからの相対。コマンドラインのパスは、いま居るディレクトリから。`config` の値は `MOPHILA_WIDTH=32` か `--set width=32` で上書きできる。動く例は `examples/project/`。
+
 ## エディタ
 
 VS Code 拡張と Neovim の設定は `editors/vscode/README.md`。構文ハイライト、診断、補完、定義へ移動など。

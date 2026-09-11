@@ -1,0 +1,27 @@
+# mophila.yaml の entry。いる場所が examples/project なら、
+#   mophila run          (スクリプトを書かずに実行できる)
+#   mophila render --set seconds=6
+import config
+import { hsl } from color
+import { make } from @parts.box   # aliases の parts から。名前を直接持ち込む
+import @.scenes.title             # root からの相対。Module として読む
+
+let v = View(box = Vector(config.width, config.height))
+v.place(make(0, 0, config.width, config.height, #f4f1ea))   # 背景
+v.place(title.make(config.title))
+
+let bar = make(1, 4, 2, 1, hsl(config.hue, 0.7, 0.55))
+v.place(bar)
+
+# キーフレームの時刻には式を書けないので、0..1 で書いて duration を後から決める
+let grow = motion (t) {
+  0: bar.w = 2
+  1: bar.w = config.width - 2 :ease
+}
+grow.duration = config.seconds * 1s        # config.seconds は Number。1s を掛けて Duration に
+v.addTrack(grow)
+
+if config.debug {
+  log("title", config.title, "size", config.width, config.height)
+}
+output v

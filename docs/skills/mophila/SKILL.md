@@ -41,6 +41,7 @@ output v
 
 ```
 mophila run a.moph                             # 描画せず実行。log と型エラーの確認
+mophila run                                    # mophila.yaml の entry を実行
 mophila render a.moph -o out.png --at 2.5s     # 1 フレーム。形式は拡張子で決まる
 mophila render a.moph -o out.mp4 --size 360p   # 動画 (fps 既定 10)
 mophila render a.moph -o out.mp4 --trim 00:15..00:30   # 区間だけ

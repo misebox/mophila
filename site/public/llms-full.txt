@@ -49,6 +49,7 @@ output v
 
 ```
 mophila run a.moph                             # 描画せず実行。log と型エラーの確認
+mophila run                                    # mophila.yaml の entry を実行
 mophila render a.moph -o out.png --at 2.5s     # 1 フレーム。形式は拡張子で決まる
 mophila render a.moph -o out.mp4 --size 360p   # 動画 (fps 既定 10)
 mophila render a.moph -o out.mp4 --trim 00:15..00:30   # 区間だけ
@@ -92,9 +93,44 @@ import .other                      # 同じ場所の other.moph を other に束
 import .other as m                 # 別名
 import { a, b } from .other        # 名前を直接持ち込む
 import "bgm.m4a" as bgm            # 音声ファイル
+import @.slides                    # mophila.yaml の root から
+import @parts.box                  # mophila.yaml の aliases から
+import "@/media/bgm.m4a" as bgm    # 文字列の中では "/" 区切り
+import config                      # mophila.yaml の config: を読む
 ```
 
 見えるのは `export` した名前と、`other.output` (その中で `output` した View) だけ。同じファイルは 1 度しか実行されず、実体を共有する。`import` はトップレベルにしか書けない。
+
+### プロジェクト設定
+
+`mophila.yaml` をコマンドを実行するディレクトリに置くと自動で読まれ、読んだことが 1 行表示される。
+
+```yaml
+entry: scenes/main.moph      # スクリプトを省略したときに使う
+root: .                      # @/ と @. が指す場所
+aliases:
+  parts: src/parts           # @parts. が指す場所
+config:
+  width: 16
+  title: "mophila"
+  debug: false
+```
+
+```
+import config
+let v = View(box = Vector(config.width, 9))
+```
+
+- 設定に書いたパスは**設定ファイルからの相対**。コマンドラインのパスは、いま居るディレクトリから
+- `config` に書けるのは数・文字列・真偽の 3 つ
+- `MOPHILA_WIDTH=32` か `--set width=32` で上書きできる。型が合わなければエラー
+- `-f other/mophila.yaml` で別の設定を使える
+
+設定値を使うときに引っかかる所:
+
+- キーフレームの時刻に式は書けない。`config.seconds * 1s: ...` は構文エラー。0..1 で書いて `duration` を後から決めるか、`fit()` を使う
+- 色は設定に書けない (数・文字列・真偽だけ)。色相を数で持って `color` の `hsl` で作る
+- `import { a as b }` は書けない。名前がぶつかるなら片方を Module として読む
 
 ### 自分の型を作る
 
@@ -491,7 +527,9 @@ method-decl ::= "method" sp ident ws "(" params ")" (ws "->" ws type-ann)? ws bl
 alias-stmt  ::= "alias" sp ident ws "=" ws expr
 import-stmt ::= "import" sp import-src (sp "as" sp ident)?
               | "import" ws "{" ws ident (ws "," ws ident)* ws "}" sp "from" sp import-src
+# @ で始まるものは mophila.yaml の root / aliases を指す
 import-src  ::= ident | ("." | "..")+ ident ("." ident)* | string
+              | "@" ident? ("." ident)+
 export-stmt ::= "export" sp (let-stmt | func-decl | type-decl)
 output-stmt ::= "output" sp expr
 return-stmt ::= "return" sp expr
@@ -1096,6 +1134,17 @@ import "bgm.m4a" as bgm            # .moph 以外は音声。Audio を束縛す�
 
 `import ..parent` で 1 つ上のディレクトリも書けるが、ディレクトリをまたぐ設計は避ける。標準ライブラリを import せずに使うと、`NameError.UndefinedVariable` に `add "import math"` のヒントが付く。
 
+`@` で始まる形は、プロジェクト設定 (7 章) の別名を指す。`@.` は root、`@名前.` はそこで決めた場所。
+
+```
+import @.slides                    # <root>/slides.moph
+import @parts.box                  # <parts>/box.moph
+import { card } from @.theme
+import "@/media/bgm.m4a" as bgm    # 文字列の中では "/" 区切り
+```
+
+`import` はトップレベルにしか書けない。
+
 #### 4.7 export
 
 ```
@@ -1143,7 +1192,38 @@ String / List / Dict / Range のメソッドは builtin で、`import` は要ら
 | animation | 図形や View を動かす Timeline を返す。現れる、消える、滑る、回る |
 | fractal | エスケープタイム系フラクタルの Shader。反復式、精度、色付けを組み合わせる |
 
-### 7. エラー
+### 7. プロジェクト設定
+
+`mophila.yaml` を、コマンドを実行したディレクトリに置くと自動で読まれる。`-f` で別の場所を指せる。
+
+```yaml
+entry: scenes/main.moph      # スクリプトを省略したときに使う
+root: .                      # @/ と @. が指す場所
+aliases:
+  parts: src/parts           # @parts. が指す場所
+config:
+  width: 16                  # import config で読める値
+  title: "mophila"
+  debug: false
+```
+
+**設定の中に書いたパスは、設定ファイルのある場所からの相対**。コマンドラインに書いたパスは、いま居るディレクトリからの相対。設定はプロジェクトの形を書いたものなので、どこで実行しても同じ場所を指す。
+
+`config` の値は数・文字列・真偽の 3 つ。`import config` で読む。
+
+```
+import config
+let v = View(box = Vector(config.width, 9))
+```
+
+値は 2 通りで上書きできる。どちらも設定に書いた型に合わせて読み、合わなければエラー。設定に無い名前を指定してもエラーになる。
+
+| 書き方 | 例 |
+|---|---|
+| 環境変数 | `MOPHILA_WIDTH=32 mophila render` |
+| コマンド | `mophila render --set width=32 --set title=abc` |
+
+### 8. エラー
 
 `種別.細目: line N: message` の形で、message は英語。
 

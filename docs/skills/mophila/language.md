@@ -26,9 +26,44 @@ import .other                      # 同じ場所の other.moph を other に束
 import .other as m                 # 別名
 import { a, b } from .other        # 名前を直接持ち込む
 import "bgm.m4a" as bgm            # 音声ファイル
+import @.slides                    # mophila.yaml の root から
+import @parts.box                  # mophila.yaml の aliases から
+import "@/media/bgm.m4a" as bgm    # 文字列の中では "/" 区切り
+import config                      # mophila.yaml の config: を読む
 ```
 
 見えるのは `export` した名前と、`other.output` (その中で `output` した View) だけ。同じファイルは 1 度しか実行されず、実体を共有する。`import` はトップレベルにしか書けない。
+
+## プロジェクト設定
+
+`mophila.yaml` をコマンドを実行するディレクトリに置くと自動で読まれ、読んだことが 1 行表示される。
+
+```yaml
+entry: scenes/main.moph      # スクリプトを省略したときに使う
+root: .                      # @/ と @. が指す場所
+aliases:
+  parts: src/parts           # @parts. が指す場所
+config:
+  width: 16
+  title: "mophila"
+  debug: false
+```
+
+```
+import config
+let v = View(box = Vector(config.width, 9))
+```
+
+- 設定に書いたパスは**設定ファイルからの相対**。コマンドラインのパスは、いま居るディレクトリから
+- `config` に書けるのは数・文字列・真偽の 3 つ
+- `MOPHILA_WIDTH=32` か `--set width=32` で上書きできる。型が合わなければエラー
+- `-f other/mophila.yaml` で別の設定を使える
+
+設定値を使うときに引っかかる所:
+
+- キーフレームの時刻に式は書けない。`config.seconds * 1s: ...` は構文エラー。0..1 で書いて `duration` を後から決めるか、`fit()` を使う
+- 色は設定に書けない (数・文字列・真偽だけ)。色相を数で持って `color` の `hsl` で作る
+- `import { a as b }` は書けない。名前がぶつかるなら片方を Module として読む
 
 ## 自分の型を作る
 

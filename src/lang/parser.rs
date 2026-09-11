@@ -528,9 +528,26 @@ impl Parser {
                 let stem = std::path::Path::new(&path).file_stem().and_then(|s| s.to_str()).unwrap_or("module").to_string();
                 Ok((ImportSource::File(path), stem))
             }
+            // @.slides は root の slides.moph、@utils.format は alias utils の format.moph
+            Tok::At => {
+                let alias = match self.peek() {
+                    Tok::Ident(_) => self.ident()?,
+                    _ => String::new(),
+                };
+                let mut parts = Vec::new();
+                while *self.peek() == Tok::Dot {
+                    self.next();
+                    parts.push(self.ident()?);
+                }
+                if parts.is_empty() {
+                    return self.unexpected("\".\" and a module name after the alias (@.slides, @utils.format)");
+                }
+                let name = parts.last().expect("at least one").clone();
+                Ok((ImportSource::File(format!("@{alias}/{}.moph", parts.join("/"))), name))
+            }
             _ => {
                 self.pos -= 1;
-                self.unexpected("module name, .file, or \"file.moph\"")
+                self.unexpected("module name, .file, \"file.moph\", or @alias.file")
             }
         }
     }

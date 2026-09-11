@@ -61,6 +61,8 @@ pub struct Interp {
     calling: Option<String>,
     /// Motion.apply の実行中だけ Some。属性への代入を書かれた順に記録する
     assigned: RefCell<Option<Vec<(ObjRef, String)>>>,
+    /// mophila.yaml。@ で始まる import と `import config` に使う
+    project: Option<Rc<crate::project::Project>>,
 }
 
 impl Interp {
@@ -74,7 +76,12 @@ impl Interp {
                 types.insert(t.name.to_string(), t.values.iter().map(|(v, _)| v.to_string()).collect());
             }
         }
-        Self { scopes: vec![root_scope()], output: None, types, cache: None, finished: HashMap::new(), last_t: f64::NEG_INFINITY, base_dir: PathBuf::from("."), exports: Vec::new(), sources: HashMap::new(), assets: HashMap::new(), initial: Vec::new(), modules: HashMap::new(), loading: Vec::new(), returning: None, constructing: Vec::new(), warned: std::collections::HashSet::new(), inside: Vec::new(), calling: None, assigned: RefCell::new(None) }
+        Self { scopes: vec![root_scope()], output: None, types, cache: None, finished: HashMap::new(), last_t: f64::NEG_INFINITY, base_dir: PathBuf::from("."), exports: Vec::new(), sources: HashMap::new(), assets: HashMap::new(), initial: Vec::new(), modules: HashMap::new(), loading: Vec::new(), returning: None, constructing: Vec::new(), warned: std::collections::HashSet::new(), inside: Vec::new(), calling: None, assigned: RefCell::new(None), project: None }
+    }
+
+    /// mophila.yaml を渡す。@ の解決と `import config` がこれを見る
+    pub fn set_project(&mut self, project: Rc<crate::project::Project>) {
+        self.project = Some(project);
     }
 
     /// トップレベルの束縛 (LSP のホバー用)
@@ -382,6 +389,14 @@ impl Interp {
     /// 名前だけの import は標準ライブラリ (本体に入っているもの)、. や "" で始まるものはファイル
     fn load_module(&mut self, source: &ImportSource) -> Result<Value> {
         match source {
+            // import config — mophila.yaml の config: をモジュールとして読む
+            ImportSource::Std(name) if name == "config" => {
+                let Some(p) = &self.project else {
+                    return err(Kind::UndefinedVariable, "import config には mophila.yaml が要る");
+                };
+                let items = p.config.iter().map(|(k, v)| (k.clone(), v.to_value())).collect();
+                Ok(Value::Module(Rc::new(Module { name: "config".into(), items })))
+            }
             ImportSource::Std(name) => match stdlib::find(name) {
                 Some(stdlib::Lib::Native(module)) => Ok(Value::Module(Rc::new(module))),
                 Some(stdlib::Lib::Script(src)) => self.run_module(format!("std:{name}"), name, src, self.base_dir.clone()),
@@ -394,7 +409,16 @@ impl Interp {
     /// .moph ならファイルを別のスコープで実行し、export した束縛と output した View をモジュールにする。
     /// それ以外は音声ファイルとして読む
     fn import_file(&mut self, path: &str) -> Result<Value> {
-        let full = self.base_dir.join(path);
+        // @ で始まるものは mophila.yaml の root / aliases から引く。設定の中のパスは設定ファイルからの相対
+        let full = match path.starts_with('@') {
+            false => self.base_dir.join(path),
+            true => match &self.project {
+                Some(p) => p.resolve(path).map_err(|e| MophError::new(Kind::UndefinedVariable, e.to_string()))?,
+                None => {
+                    return err(Kind::UndefinedVariable, format!("\"{path}\" を読むには mophila.yaml が要る (aliases を書く)"));
+                }
+            },
+        };
         let key = crate::bundle::normalize(&full);
         if let Some(m) = self.modules.get(&key) {
             return Ok(m.clone());

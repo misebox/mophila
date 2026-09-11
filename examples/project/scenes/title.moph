@@ -1,0 +1,7 @@
+# 見出しの部品。@.scenes.title として import される
+import config
+
+## 画面の上に置く見出し
+export func make(s: String) -> TextArea {
+  TextArea(position = Pos(config.width / 2, 1.2), text = s, fontSize = 0.9, fill = #1a1d23, align = :center)
+}

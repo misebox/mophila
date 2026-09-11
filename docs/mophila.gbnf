@@ -33,7 +33,9 @@ method-decl ::= "method" sp ident ws "(" params ")" (ws "->" ws type-ann)? ws bl
 alias-stmt  ::= "alias" sp ident ws "=" ws expr
 import-stmt ::= "import" sp import-src (sp "as" sp ident)?
               | "import" ws "{" ws ident (ws "," ws ident)* ws "}" sp "from" sp import-src
+# @ で始まるものは mophila.yaml の root / aliases を指す
 import-src  ::= ident | ("." | "..")+ ident ("." ident)* | string
+              | "@" ident? ("." ident)+
 export-stmt ::= "export" sp (let-stmt | func-decl | type-decl)
 output-stmt ::= "output" sp expr
 return-stmt ::= "return" sp expr

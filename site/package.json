@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "node scripts/llms.mjs && vite",
     "build": "node scripts/llms.mjs && vite build",
-    "llms": "node scripts/llms.mjs",
+    "docs": "node scripts/llms.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

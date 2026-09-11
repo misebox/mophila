@@ -65,7 +65,7 @@ VS Code 拡張と Neovim の設定は `editors/vscode/README.md`。構文ハイ�
 
 ## 文書
 
-- ドキュメントページ (`site/`、bun + SolidJS + soluid)。サンプルの動画、builtin とライブラリの説明、仕様の写し。`bun run docs` でその場で見る (要 bun)。元データ `site/src/data.json` と動画は `bun run docs:gen` (= `scripts/docgen.py --media`) で作り直す。ライブラリの説明はソースの `##` コメントから
+- ドキュメントページ (`site/`、bun + SolidJS + soluid)。サンプルの動画、builtin と module の説明、仕様の写し。module の説明はソースの `##` コメントから
 - `docs/mophila-spec.md` — 言語仕様
 - `docs/mophila.gbnf` — 文法 (GBNF)
 - `docs/skills/mophila/SKILL.md` — 見やすい動画にするための書き方 (LLM に渡す)
@@ -74,10 +74,18 @@ VS Code 拡張と Neovim の設定は `editors/vscode/README.md`。構文ハイ�
 - `examples/gallery/` — 動画の例。`examples/gallery/mophila_intro/main.moph` がこの言語の紹介動画
 - `src/stdlib/` — 標準ライブラリ。`import math` (Rust) と、本体に埋め込んだ .moph の `color` `shape` `layout` `animation` `fractal`
 
-## 確認
+## 作る・確認する
+
+リポジトリの一番上で `make`。個別に回すなら次のとおり。
+
+| コマンド | すること |
+|---|---|
+| `make docs` | ドキュメント一式。`site/src/data.json`、`llms.txt`、`llms-full.txt`、`site/dist` がこれだけで揃う |
+| `make dev` | ドキュメントページをその場で見る |
+| `make media` | サンプルの動画も作り直す (GPU が要る。時間がかかる) |
+| `make check` | `cargo test` と、下の 2 つ |
 
 ```
-cargo test
 python3 scripts/check_examples.py   # examples が動き、error.moph が書いてある種別で止まる
 python3 scripts/check_attrs.py      # 宣言した図形の属性が、本当に絵に効く
 ```

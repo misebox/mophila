@@ -1,8 +1,13 @@
-// llms.txt と llms-full.txt を作る (llmstxt.org の形式)。
-// 元は src/data.json (scripts/docgen.py が作る) と、リポジトリの md / gbnf。
-// build の前に走るので、手で回す必要はない。ここには本文を書かない (すべて読み込んだもの)。
-import { execSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+// ドキュメントの元データを作り直してから、llms.txt と llms-full.txt を書く。
+// build の前に走るので、手で回す順番を覚える必要はない。
+//
+//   1. cargo build + scripts/docgen.py  → src/data.json (Rust があるときだけ)
+//   2. data.json とリポジトリの md / gbnf → public/llms.txt, public/llms-full.txt
+//
+// CI には Rust が無いので 1 は飛ばし、コミット済みの data.json を使う。
+// ここには本文を書かない (すべて読み込んだもの)。
+import { execSync, spawnSync } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -10,6 +15,19 @@ const here = dirname(fileURLToPath(import.meta.url));
 const site = join(here, "..");
 const root = join(site, "..");
 const read = (p) => readFileSync(join(root, p), "utf8");
+
+// 元データを作り直す。動画 (--media) は GPU が要るので、ここでは作らない
+function refresh() {
+  const has = (cmd) => spawnSync(cmd, ["--version"], { stdio: "ignore" }).status === 0;
+  if (!has("cargo") || !has("python3")) {
+    console.log("cargo か python3 が無いので data.json はコミット済みのものを使う");
+    return;
+  }
+  execSync("cargo build --quiet", { cwd: root, stdio: "inherit" });
+  execSync("python3 scripts/docgen.py", { cwd: root, stdio: "inherit" });
+}
+
+refresh();
 
 // owner/name。Actions では GITHUB_REPOSITORY、手元では git の origin から
 function repoPath() {

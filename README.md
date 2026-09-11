@@ -69,6 +69,7 @@ VS Code 拡張と Neovim の設定は `editors/vscode/README.md`。構文ハイ�
 - `docs/mophila-spec.md` — 言語仕様
 - `docs/mophila.gbnf` — 文法 (GBNF)
 - `docs/skills/mophila/SKILL.md` — 見やすい動画にするための書き方 (LLM に渡す)
+- `site/public/llms.txt` / `llms-full.txt` — LLM 向けの案内と、書くのに要るものを 1 つにまとめたファイル (site の build が作る。直接編集しない)
 - `examples/syntax/` — 構文ごとの短い例
 - `examples/gallery/` — 動画の例。`examples/gallery/mophila_intro/main.moph` がこの言語の紹介動画
 - `src/stdlib/` — 標準ライブラリ。`import math` (Rust) と、本体に埋め込んだ .moph の `color` `shape` `layout` `animation` `fractal`

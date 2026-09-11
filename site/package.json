@@ -3,8 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "node scripts/llms.mjs && vite",
+    "build": "node scripts/llms.mjs && vite build",
+    "llms": "node scripts/llms.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -8,6 +8,8 @@
 - examples/gallery/*.moph (先頭のコメントが説明。--media を付けると site/public/media/<name>.mp4 を render する)
 - 言語仕様と editors/ の README (本文をそのまま入れる)
 
+llms.txt と llms-full.txt は data.json から site/scripts/llms.mjs が作る (site の build で走る)。
+
 使い方: scripts/docgen.py [--media]   (先に cargo build)
 """
 import json, re, subprocess, sys

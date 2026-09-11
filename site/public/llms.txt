@@ -1,0 +1,21 @@
+# mophila
+
+> 動画をコードで書く言語。`.moph` のスクリプトを解釈し、GPU (Vello) で描いて、ffmpeg で動画か画像にする。
+
+mophila を書くときは llms-full.txt を読む。文法は GBNF にしてあるので、生成を制約できるなら使う。
+
+- 図形: Circle, Ellipse, Rect, Line, Polygon, Path, TextArea
+- module: math, color, shape, layout, animation, fractal
+
+## 読むもの
+
+- [llms-full.txt](https://misebox.github.io/mophila/llms-full.txt): 下に挙げたものを 1 ファイルにまとめたもの。まずこれを読む
+- [書き方の要点](https://raw.githubusercontent.com/misebox/mophila/main/docs/skills/mophila/SKILL.md): 見やすい動画にするための書き方と、つまずきやすい点
+- [文法 (GBNF)](https://raw.githubusercontent.com/misebox/mophila/main/docs/mophila.gbnf): 構文の全部。文法で生成を制約するときに渡す
+- [言語仕様](https://raw.githubusercontent.com/misebox/mophila/main/docs/mophila-spec.md): 意味と規則
+
+## 参照
+
+- [builtin と module](https://misebox.github.io/mophila/#/builtins): 型・属性・メソッド・エラーの一覧
+- [サンプル](https://misebox.github.io/mophila/#/samples): 動く .moph と、その動画
+- [リポジトリ](https://github.com/misebox/mophila): ソースと examples/

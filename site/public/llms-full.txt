@@ -1,0 +1,2451 @@
+# mophila
+
+動画をコードで書く言語。`.moph` のスクリプトを解釈し、GPU (Vello) で描いて、ffmpeg で動画か画像にする。
+
+この 1 ファイルに、書き方・文法・仕様・builtin と module の一覧・構文の例が入っている。
+
+# 書き方の要点
+
+---
+name: mophila
+description: Write or debug mophila (.moph) motion graphics scripts in this repo. Syntax summary, semantics that differ from other languages, patterns for slides/arrows/groups, and how to check a script.
+---
+
+## mophila を書く
+
+実装はインタプリタ。`mophila render` はソースを毎回解釈する。
+
+正は `docs/mophila-spec.md` (意味) と `examples/syntax/*.moph` (構文の見本)。形式文法は `docs/mophila.gbnf`。迷ったらそれらを読む。
+
+### 確認コマンド
+
+```
+cargo run -- run a.moph                              # 描画せず実行。log と型エラーの確認
+cargo run -- render a.moph -o out.png --at 2.5s --size 480x270   # 1 フレーム
+cargo run -- render a.moph -o out.mp4 --size 360p    # 動画 (fps 既定 10)。-o 省略時は output.mp4 (--at 付きなら output.png)
+cargo run -- render a.moph -o part.mp4 --trim 00:15..00:30   # 区間だけ (00:15 は 15 秒以降、..01:30 は最初から)
+cargo run -- preview a.moph [--loop] [--at 1s]       # ウィンドウで再生 (--at はその時刻で一時停止して開く)。
+cargo run -- timeline a.moph [--filter k=v]           # 変化の一覧をテキストで
+cargo run -- lsp                                      # Language Server (VS Code 拡張は editors/vscode/)
+cargo run -- sheet a.moph -o sheet.png --times 3s,12s # 場面の格子画像
+終わると最後の場面で止まる。Space で一時停止、← → / h l で 10 秒 (停止中 1 秒)、Shift で 10%
+```
+
+release ビルドは作らない。計測は小さいサイズと短い尺で。
+
+### 最小の形
+
+```
+import math
+let v = View(box = Vector(16, 9))          # 座標系。ピクセルは持たない
+let c = Circle(position = Pos(8, 4.5), radius = 1, fill = #e04040)
+v.place(c)
+v.addTrack(context c as o {
+  motion (t) {
+    0s: o.radius = 1
+    2s: o.radius = 2 :ease
+  }
+})
+output v
+```
+
+### 他の言語と違うところ
+
+- `(1, 2)` は Tuple。座標の型は Vector (`Vector(1, 2)`)、位置は Pos (`Pos(1, 2)`)。Vector や Pos が要る場所に素の Tuple は書けない。図形の位置は `position` 属性
+- 列挙値は `:center` `:topLeft` `:left` のように `:name`
+- `1/3` は演算。`10s` `500ms` `1m23s` `01:23` は Duration。`25%` は Number (0.25) であって Duration ではない
+- 文字列に埋め込みは無い。`"x = {x}".format(x)` (位置で置き換え)
+- コメントは `# ` (空白必須)。`#e04040` は色
+- `context obj as o { ... }` は長い名前を短く参照するための式。最後の式が値になる。無くても motion の行に元の名前を書けばよい。`if` も式
+- `T(a = 1)` は属性を型で検査する。無い属性は `NameError.UndefinedAttribute`
+- 図形: Circle(position, radius) / Rect(position, w, h, radius) / Line(from, to) / Polygon(points) / TextArea(text, position, w, fontSize, font, align)。共通: fill, stroke, strokeWidth, opacity
+- `math.sin` などは `import math` が要る。builtin の関数は `log` と `type_of` だけ。値は型名を呼んで作る (`Vector(8, 4.5)` `Pos(8, 4.5)` `Color(224, 96, 74)`)
+- リテラルは型名を呼ぶのと同じ。`[1, 2, 3]` = `List(1, 2, 3)`、`{ "k": v }` = `Dict(k = v)`、`(1, 2)` = `Tuple(1, 2)`、`0..5` = `Range(0, 5)`、`0..=5` = `Range(0, 6)`。`Number` `Duration` `Bool` `String` `Symbol` `Func` はリテラルだけ
+- builtin の型の名前は予約されている。`struct List { ... }` は `NameError.Reserved`
+- `import .other` で同じ場所の `other.moph` を読み、`other` に束縛する (`as m` で別名)。`import { a, b } from .other` で名前を直接持ち込む。見えるのは `export let` / `export func` した名前と `other.output` (output した View) だけ。同じファイルは 1 度しか実行されない (実体は共有)。`import ..parent` は文法上通るが、ディレクトリをまたぐ設計は避ける
+- 文字列は `+` で連結。`\"` `\n` のエスケープあり
+
+### 自分の型を作る
+
+トップレベルに `record` か `struct` を書く。違いはイミュータブルかどうかだけ。`record` は作った後に書き換えられず、型名とフィールドがすべて同じなら `==` で等しい。`struct` は属性を書き換えられ、`==` は同じ実体かどうかを見る。
+
+```
+record Size {
+  w: Number
+  h: Number
+  method area(self) -> Number { self.w * self.h }
+}
+
+struct Counter {
+  n: Number = 0
+  private step: Number = 1
+  func new(start: Number) -> Counter { Counter(n = start) }
+  method next(self) -> Number {
+    self.n = self.n + self.step
+    self.n
+  }
+}
+```
+
+- `func` は受け手なしで型名から呼ぶ (`Counter.new(10)`)。`method` は第 1 引数が受け手 (使わないなら `_`)
+- `func new` が無ければ、`private` でないフィールドを宣言順に受け取る。位置で渡せるのは既定値の無いフィールドまでで、それ以外は `名前 = 値`
+- 複製は record が `copy(field = 値)`、struct が `shallowCopy()` / `deepCopy()`
+- 宣言の前の行に `@immutable` `@nocopy` `@nodeepcopy` `@deprecated("説明")` を空白区切りで並べられる
+- `alias P = Pos` はそのファイルの中だけの短い名前。`export` できない
+- `export struct` / `export record` で公開する
+
+### 時間
+
+- `motion (t) { 時刻: o.attr = 式 }` が Timeline。時刻は Duration か 0..1 の実数 (`50%` 可)。1 つの motion で混ぜない
+- 実数時刻の Timeline は `tl.duration = 8s` が必須。`duration` を変えると全体が比例して伸縮する
+- `0..1: o.position = Pos(math.cos(math.TAU * t), ...)` のように範囲を書くと、その区間は補間せず毎フレーム式を評価する。円運動・振動はこれで書く。行を刻んで近似しない
+- 行末の修飾子はその行に入る区間に効く: `:ease` (加減速) `:ease_in` `:ease_out` `:linear`。出し入れは `o.opacity` の値で書くか、`animation` の `fade_in` / `fade_out` を使う
+- `tl.reverse()` で逆再生
+- 入れ物: `let track = Timeline()` に `track.place(tl, at = 3s, fadeIn = 1s)`。`v.addTrack(track)`。Timeline は終わった後も最後の状態を保つ。始まる前は何もしない
+- 後から place した Timeline が同じ属性を書けば勝つ
+- 動画の長さは View に置いた Timeline の終わり
+
+### よく使う型
+
+スライドの出し入れ:
+
+```
+func show(objs, at, dur) {
+  for o in objs {
+    let tl = context o as x { motion (t) { 0s: x.opacity = 0 \  0.4s: x.opacity = 1 } }
+    track.place(tl, at = at)
+    let out = context o as x { motion (t) { 0s: x.opacity = 1 \  0.4s: x.opacity = 0 } }
+    track.place(out, at = at + dur)
+  }
+}
+```
+(上の `\` は改行の意味。実際は行を分ける)
+
+矢印: `Line` と 3 点の `Polygon`。角度は `math.atan2` が無いので、向きを `(dx, dy)` から計算する。
+
+View の入れ子: `v.place(sub, at = Pos(x, y, anchor = :topLeft), w = 7)` で別の View を比率を保って置く。`track.place(sub, at = 0s)` でその View の Timeline を動かす。`sub.opacity` で全体をフェードできる。examples/gallery/grid.moph が例。
+
+部品が互いに依存して動くもの (多関節、木): 範囲行 `0..1: child.from = parent.to` は毎フレーム評価されるので、親の属性を読む行を書けば子が追従する。Timeline を置いた順に当たるので、親の行を先に置く。examples/gallery/fractal.moph が例 (枝が親の先端を読み、再帰で 2^n 本作る。Vector は `+` `-` `* Number` が使える)。多関節の人物は examples/gallery/walker.moph (腰 → 腿 → 脛 → 足を親の先端で順につなぎ、角度は歩行周期の sin。奥 → 胴 → 手前の順に Timeline を置く)。`import { make, speed, floor } from .walker` の `make(near, far, long)` で「その場で long の間歩く人」の View (箱 6 x 6) を作れる。置く側が position.x を動かし、幅 w のとき 1 秒に `speed * w / 6` 進めると足が滑らない。examples/gallery/crowd.moph が奥行きを付けて並べた例。
+
+ピクセル単位の絵 (グラデーション、模様、フラクタル): 図形の `fill` に `Shader(color = func (x, y, t) { ... Color) }` を入れる。x, y は箱の座標、t は秒。関数は GPU で全ピクセル分走るので数値の計算だけ (文字列・図形・Dict は不可、再帰不可)。外側の List (Number か Color だけ) と関数は使える。時間で変える値は t から計算するか、`args: [..]` を motion の行で変える。`samples: 4` で 2x2 のアンチエイリアス (計算は 4 倍)。複素数は Vector で書ける (`.x` `.y`、`+`、Number との `*`)。
+
+曲線は `Path(from =, segments = [(:curve, 制御点, 制御点, 終点), (:line, 点)], closed = true)`、楕円は `Ellipse(position =, rx =, ry =)`。塗りは Color のほかに `Gradient(from =, to =, stops = [...])` (`kind = :radial` なら from を中心に radius まで) が使える。線は `strokeCap` `strokeJoin` `dash` で形を変えられ、`dashOffset` を motion で動かすと破線が流れる。重ね方は `blend` (`:multiply` `:screen` `:add` など)。図形を回すときは `rotation` (度、時計回り。中心は position、Line は from、Polygon は重心) を使う。頂点を計算し直す必要はない。標準ライブラリは名前で import する。`animation` (`fade_in(o, duration)` / `fade_out` / `fade_to` / `slide_in(o, dx, dy)` / `slide_out` / `move_by` / `show(track, objs, at, end)` が Timeline を返すので `track.place(tl, at =)` に置く)、`color` (`mix` `lighten` `darken` `alpha` `hsl` `gray`)、`shape` (Polygon の points = `regular_polygon` `star` `arrow`)、`layout` (`grid` `cell` `along` `fit`)。自分で opacity の motion を書く前にこれらを使う。エスケープタイム系フラクタル (Mandelbrot、Julia、Burning Ship、Multibrot) は標準ライブラリ fractal を使う: `import { escape_time, mandelbrot, julia, perturbation, plain, smooth } from fractal` して `escape_time(formula =, precision =, coloring =, center =, span =, zoom =, max_iter =, samples =)` が Shader を返す。反復式は Dict (seed / step / start / delta / degree)、色付けは `func (mu, z) -> Color` で、どちらも自作できる。深く寄るなら `perturbation` (基準軌道をスクリプト側の 64 bit で計算し GPU は差分だけ。10 兆倍あたりまで)。examples/gallery/mandelbrot.moph、julia.moph、burning_ship.moph が例。
+
+音声: `import "bgm.m4a" as bgm` して `track.place(bgm, at = 0s, loop = true, volume = 0.6, fadeOut = 3s)` (examples/gallery/mophila_intro/main.moph)。`loop = true` は動画の終わりまで繰り返す。`duration:` で切る。preview でも鳴る。
+
+字幕: `Subtitle(text = s, duration =)` を `track.place(sub, at =)`。画面には描かれず、動画の字幕トラックになる (プレイヤーで表示)。preview と sheet では下に重ねて見える。字幕を TextArea で描かない。examples/media.moph が例。
+
+
+### 見やすい動画にする (説明的な動画の tips)
+
+情報を出す動画は「読める時間」を確保する。目安:
+
+- 日本語の字幕は 4 文字/秒。30 文字なら 7〜8 秒。英語は 15 文字/秒
+- コードや式は 2.5 文字/秒 (読むより「照合する」ので遅い)。`10s + 500ms → 10.5s` なら 6〜8 秒
+- 4 文字程度のラベル (箱の名前など) は 1〜2 秒
+- 文字数に空白は数えない。同時に出すもの (式とその説明など) は時間を足さず、長い方に合わせる
+- どんなに短くても 1.5 秒より短くしない。フェードの 0.4 秒は読める時間に含めない
+- 複数の項目は 1 つずつ出し、前の項目は消さない。最後の項目が出てから全体を見返す 3 秒を置く
+- 1 画面に同時に出すのは 1 つの新情報だけ。図形が動く場面と、文章を読ませる場面を重ねない
+- 場面の切り替えの前に 1 秒の間を置く
+
+時間の決まり (フェード、ずらし、章の見出し、見返し、間、読む速さ) はファイルの先頭に変数でまとめ、部品はそれを参照する。テンポを変えるときはそこだけ触る:
+
+```
+let fade_time = 0.4s
+let stagger = 0.08s
+let chapter_time = 4s
+let review = 3s
+let pause = 1s
+let read_rate = 0.25
+let code_rate = 0.3
+let min_dwell = 1.5
+```
+
+文字数から時間を計算する関数を作り、`at` を積み上げる:
+
+```
+func dwell(s) { math.max(1.5, s.replace(" ", "").len() * 0.25) * 1s }   # 字幕。空白は数えない
+func dwell_code(s) { math.max(1.5, s.replace(" ", "").len() * 0.3) * 1s }  # コード
+let clock = S_start
+for line in lines {
+  show([...], clock, ...)
+  clock = clock + dwell_code(line)
+}
+```
+
+### 説明する動画の作り方 (プレゼンのノウハウ)
+
+コードを書く前に、場面ごとの表を書く。動画は「読ませる」より「見せる」もの。
+
+| 場面 | 伝えたいこと (1 つ) | 見せるもの (1 つ) | 字幕 (1 文) | 長さ |
+|---|---|---|---|---|
+
+- **1 場面 1 メッセージ**。伝えたいことが 2 つあれば場面を分ける
+- **見せてから言う**。図形の動きで因果を見せ、字幕はその補足。字幕だけの場面を作らない
+- **位置を固定する**。見出しは上、本文は中央の決まった枠、字幕は下。場面が変わっても同じ種類の情報は同じ場所に出す
+- **同じものは同じ場所に残す**。構文解析で作った木を評価の場面でもそのまま使う、のように。消して出し直すと別物に見える
+- **順に出す**。一度に出すのは 1 つ。前のものは消さず、最後に全体を見返す時間を置く
+- **切り替えの意味を揃える**。話題が変わるときはフェード、同じものが変化するときは移動。章の見出しは「話題が変わる」の印
+- **強調は 1 色**。アクセント色は「今見るべきもの」にだけ使う
+- **画面に同時に出す項目は 3 つまで**。表なら行を順に出す
+- **文字は 1 行**。ナレーションが無いので字幕が全情報になる。長くなるなら場面を分ける
+- **矩形の中に文字を置くなら余白**。文字幅は `fontSize × 文字数 × 0.6` (英数) / `× 1.0` (日本語) が目安。箱の幅を超えるなら fontSize を下げる
+- **時間は文字量から決める** (上の「見やすい動画にする」)。切り替えの前に 1 秒、章の見出しは 4 秒
+
+### 場面を組む部品 (examples/gallery/mophila_intro/ の型)
+
+intro は `main.moph` (章の順番と output) / `theme.moph` (画面、色、時間の決まり) / `slides.moph` (部品) / 場面ごとのファイル (`export func run(now)` が場面を組んで次の開始時刻を返す) に分かれている。新しく書くときは theme と slides を写す。場面の基本形は「左にコード、右にそのコードが実際に動く箱、下にナレーションの字幕」:
+
+- `place(o)` — View に置いて返す。図形は `opacity = 0` で作る
+- `fade(o, at, from, to)` / `show(objs, at, end)` — 出し入れ。`show` は順に 0.08 秒ずらす
+- `text(s, x, y, size, color, anchor)` / `heading(s)` / `chapter(title, at)` — 文字、上の見出し、章の見出し
+- `card(lines, x, y, w, size)` — コードのカード。行数から高さが決まる。1 行は幅に収まる長さに折り返す (幅 7.6、文字 0.28 なら 40 字程度)
+- `outline(x, y, w, h)` — 線だけの枠。先に置いた View を隠さない
+- `scene()` / `add(sc, objs, at)` / `say(sc, s, at)` / `close(sc, end)` — 場面に出すものと字幕を溜め、終わりが決まったら一斉に置く。`close` は次の場面の開始時刻 (`end + pause`) を返す
+- `say(sc, "……です。", at)` — ナレーション 1 行 (ですます体)。字幕トラックに置き、読む時間 + 0.6 秒後の「次の行を出せる時刻」を返す。`t = say(sc, "...", t)` で台本を書き、図形は `add(sc, objs, t)` でその行に合わせて出す。画面で見せてから言う。見せるものが動き終わる時刻と行の終わりは `longer(t, t1 + 4.5s)` で合わせる
+- `demo(sub, x, y, w, at, end)` — 別の View を箱として置き、at からその Timeline を動かす。`loop_demo(sub, x, y, w, at, every, end)` は every ごとに置き直して繰り返す。`repeat(tl, at, every, end)` は Timeline を繰り返し置く
+- `demo_cut(sub, x, y, w, at, len)` — 同じ View (import した output など) を 2 か所の場面で使うなら、先の場面はこれにする。duration 付きの Timeline に入れて置くので、中の Timeline が最後まで進まない。切らないと終わった値 (フェードアウト後の opacity 0 など) を書き続けて、あとの場面で真っ黒になる。位置と大きさは場面ごとに motion で置き直す
+- 字幕は同時に 1 つ。次の行が始まるまで、または場面の終わりまで出す。字幕の帯は画面下 (y > 7.0 相当) を覆うので、そこに図形や文字を置かない。字幕は 1 行 36 文字まで (2 行になると帯が y 6.6 まで広がる)。長い文は `say` を 2 回に分ける
+- 右の箱の動きは `loop_demo` / `repeat` で場面の最初から最後まで繰り返す。ナレーションの間に止まった画を見せない
+- 時刻は `now` を積み上げる。`clock` は import したモジュール名と衝突するので使わない
+
+### 書いた後の確認
+
+0. 言語や部品を変えたら `scripts/check_examples.py` (examples / samples が全部 `run` でき、error.moph の各行が期待の種別で止まる)。`cargo test` は本体用
+1. `mophila timeline a.moph` — 何が、いつ、どう変わるかのテキスト。`--filter kind=TextArea` `--filter text=字幕` `--filter from=30s --filter to=60s` で絞る。末尾の「text visibility」に、テキストごとの表示区間と、文字数から見て短すぎるもの (`SHORT`) が出る。「subtitles and audio」に字幕と音声の区間 (字幕にも `SHORT`)
+2. `mophila sheet a.moph -o sheet.png --times 3s,12s,45s` — 指定した時刻 (または `--every 10s`) のフレームを格子にした画像。構成とテンポを一目で見直す
+3. 1 と 2 を、書いていない側 (別の agent か人) に渡して「伝わるか / テンポは合っているか / 被りは無いか」を指摘させ、直す
+4. 最後に `preview` で通して見て、切り替えの間と動きの速さを確かめる
+
+### エラー
+
+`種別.細目: line N: message`。種別のツリーは `examples/syntax/error.moph`。よくあるもの:
+- `TypeError.ArgumentType: Circle.position expects Pos, found Tuple` → 要素の数が Pos に合っていない
+- `ValueError.DurationRequired` → 実数時刻の Timeline に duration が無い、または時刻の単位が混在
+- `NameError.UndefinedVariable: "math" is not defined; add "import math"`
+
+
+# 文法 (GBNF)
+
+```
+# mophila の構文 (GBNF)。src/parser.rs と対応させる。空白と改行の扱いは注記のとおり
+#
+# - 文は改行で区切る。{ } の中も同じ
+# - ( ) [ ] { } の中では、"," の後と "{" "[" "(" の直後、"}" "]" ")" の直前に改行を置ける
+# - コメントは "# " (# の後に空白) から行末
+
+root        ::= (ws stmt)* ws
+
+# ---------- 文 ----------
+stmt        ::= let-stmt
+              | func-decl
+              | type-def
+              | type-decl
+              | alias-stmt
+              | import-stmt
+              | export-stmt
+              | output-stmt
+              | return-stmt
+              | for-stmt
+              | assign-stmt
+              | expr
+
+let-stmt    ::= "let" sp pattern (ws ":" ws type-ann)? ws "=" ws expr
+func-decl   ::= "func" sp ident ws "(" params ")" (ws "->" ws type-ann)? ws block
+type-def    ::= "type" sp ident ws "=" ws ident (ws "|" ws ident)*
+# struct / record の宣言。直前の行に @注釈 を並べられる
+type-decl   ::= (annotation (sp annotation)* ws)? ("struct" | "record") sp ident ws type-body
+annotation  ::= "@" ident (ws "(" ws (expr (ws "," ws expr)*)? ws ")")?
+type-body   ::= "{" (ws member)* ws "}"
+member      ::= ("private" sp)? (field-decl | method-decl | func-decl)
+field-decl  ::= ident ws ":" ws type-ann (ws "=" ws expr)?
+method-decl ::= "method" sp ident ws "(" params ")" (ws "->" ws type-ann)? ws block
+alias-stmt  ::= "alias" sp ident ws "=" ws expr
+import-stmt ::= "import" sp import-src (sp "as" sp ident)?
+              | "import" ws "{" ws ident (ws "," ws ident)* ws "}" sp "from" sp import-src
+import-src  ::= ident | ("." | "..")+ ident ("." ident)* | string
+export-stmt ::= "export" sp (let-stmt | func-decl | type-decl)
+output-stmt ::= "output" sp expr
+return-stmt ::= "return" sp expr
+for-stmt    ::= "for" sp pattern sp "in" sp expr ws block
+assign-stmt ::= target ws "=" ws expr
+              | target (ws "," ws target)+ ws "=" ws expr (ws "," ws expr)+
+target      ::= ident | expr "." ident | expr "[" ws expr ws "]"
+
+block       ::= "{" (ws stmt)* ws "}"
+
+pattern     ::= ident
+              | "(" ws pattern (ws "," ws pattern)* ws ")"
+              | "[" ws pattern (ws "," ws pattern)* ws "]"
+
+params      ::= (ws param (ws "," ws param)* (ws ",")?)? ws
+param       ::= pattern (ws ":" ws type-ann)? (ws "=" ws expr)?
+
+# 型注釈。関数は宣言と同じ形 ((Number, Number) -> Number)。< > の中はトークン列として読む
+type-ann    ::= func-type | ident ("<" type-tokens ">")?
+func-type   ::= "(" (ws type-ann "..."? (ws "," ws type-ann "..."?)*)? ws ")" ws "->" ws type-ann
+type-tokens ::= (ident | "," | "->" | "..." | "." | "(" | ")" | "<" type-tokens ">" | sp)*
+
+# ---------- 式 (優先順位の低い順) ----------
+expr        ::= or-expr
+or-expr     ::= and-expr (ws "or" ws and-expr)*
+and-expr    ::= cmp-expr (ws "and" ws cmp-expr)*
+# 比較は 6 つとも同じ強さで、続けて書ける。a < b <= c は (a < b) and (b <= c)
+cmp-expr    ::= range-expr (ws cmp-op ws range-expr)*
+cmp-op      ::= "==" | "!=" | "<=" | ">=" | "<" | ">"
+range-expr  ::= add-expr (ws ("..=" | "..") ws add-expr)?
+add-expr    ::= mul-expr (ws ("+" | "-") ws mul-expr)*
+mul-expr    ::= pow-expr (ws ("*" | "/" | "%") ws pow-expr)*
+pow-expr    ::= unary-expr (ws "^" ws pow-expr)?
+unary-expr  ::= ("-" | "not" sp) unary-expr | postfix-expr
+postfix-expr ::= primary (postfix)*
+postfix     ::= "." ident
+              | "." integer
+              | "(" args ")"
+              | "[" ws expr ws "]"
+
+primary     ::= number | duration | color | string | symbol | bool
+              | ident
+              | "(" ws expr ws ")"
+              | tuple
+              | "[" (ws expr (ws "," ws expr)* (ws ",")?)? ws "]"
+              | dict
+              | if-expr
+              | func-expr
+              | context-expr
+              | motion-expr
+
+# 組。() は空、(1,) は 1 要素。末尾の "," は書いてもよい
+tuple       ::= "(" ws ")"
+              | "(" ws expr ws "," ws ")"
+              | "(" ws expr (ws "," ws expr)+ (ws ",")? ws ")"
+
+args        ::= (ws arg (ws "," ws arg)* (ws ",")?)? ws
+# ... は Tuple / List / Range / Dict を引数に広げる。名前は付けられない
+arg         ::= (ident ws "=" ws)? expr | "..." ws expr
+
+
+dict        ::= "{" (ws dict-entry (ws "," ws dict-entry)* (ws ",")?)? ws "}"
+dict-entry  ::= string ws ":" ws expr | ident
+
+if-expr     ::= "if" sp expr ws block (ws "else" ws (if-expr | block))?
+func-expr   ::= "func" ws "(" params ")" (ws "->" ws type-ann)? ws block
+context-expr ::= "context" sp expr sp "as" sp ident (ws "," ws expr sp "as" sp ident)* ws block
+
+# motion (t, a, b) { 行 }  /  motion target [:attr.path, ...] { 行 }  /  motion { 行 }
+motion-expr ::= "motion" ws motion-head? ws "{" (ws motion-row)* ws "}"
+motion-head ::= "(" ws ident (ws "," ws ident)* ws ")"
+              | motion-target ws "[" ws attr-path (ws "," ws attr-path)* ws "]"
+# 対象は名前・属性・添字で書ける (c、g.ball、balls[0])
+motion-target ::= ident ("." ident | "[" ws expr ws "]")*
+attr-path   ::= symbol ("." ident)*
+
+# 時刻は Duration か 0..1 の実数。範囲 (0..1:) は補間せず毎フレーム式を評価する
+motion-row  ::= key-time (".." key-time)? ":" ws row-items? (sp modifier)*
+key-time    ::= duration | number
+row-items   ::= row-item (ws "," ws row-item)*
+row-item    ::= expr ws "=" ws expr | expr
+modifier    ::= ":linear" | ":ease" | ":ease_in" | ":ease_out"
+
+# ---------- 字句 ----------
+ident       ::= [A-Za-z_] [A-Za-z0-9_]*
+integer     ::= [0-9]+
+number      ::= [0-9]+ ("." [0-9]+)? "%"?
+duration    ::= ([0-9]+ ("." [0-9]+)? ("ms" | "s" | "m" | "h"))+
+              | [0-9]+ ":" [0-9]+ (":" [0-9]+)? ("." [0-9]+)?
+color       ::= "#" ([0-9a-fA-F]{8} | [0-9a-fA-F]{6} | [0-9a-fA-F]{4} | [0-9a-fA-F]{3})
+string      ::= "\"" ([^"\\\n] | "\\" ["\\nt])* "\""
+symbol      ::= ":" ident
+bool        ::= "true" | "false"
+
+sp          ::= [ \t]+
+ws          ::= [ \t\n]*
+```
+
+
+# 言語仕様
+
+## mophila 言語仕様
+
+言語の意味と規則。構文の見本は examples/syntax/ を正とする。言語はできるだけ少ない部品の組み合わせで構成する。
+
+実装はインタプリタ。ソースを字句解析 → 構文解析し、構文木を評価して View と Timeline を作り、毎フレーム、キーフレームの式を構文木のまま評価して描く。コード生成は行わない。`bundle` はソースと import 先のファイルを実行ファイルに埋め込むもので、コンパイルではない。
+
+### 1. 字句
+
+```
+# これはコメント     # "# " から行末まで
+#4080e0            # # の直後に文字が続けば Color リテラル
+name_1             # 識別子は英字・数字・_。先頭は英字か _
+:center            # Symbol
+```
+
+文の区切りは改行で、`{ }` の中も同じ。リテラルは 3 を参照。
+
+`##` で始まる行もコメント。`export` の直前に置くとその項目の説明になり、ドキュメントサイトの「ライブラリ」がこれを読む。1 行目が要約で、`@param 名前 説明` `@returns 説明` `@example` が続く。
+
+### 2. 演算子と優先順位
+
+高い順。同じ行は同じ優先順位。
+
+| 優先 | 形 | 結合 | 意味 |
+|---|---|---|---|
+| 1 | `expr.name` | 左 | 属性参照 |
+| 1 | `expr[expr]` | 左 | 添字 |
+| 1 | `expr(args)` | 左 | 呼び出し。`Name(args)` なら型の生成 |
+| 2 | `-expr` | 右 | 符号反転 |
+| 2 | `not expr` | 右 | 否定 |
+| 3 | `expr ^ expr` | 右 | べき |
+| 4 | `expr * expr` `expr / expr` `expr % expr` | 左 | 乗除、剰余 |
+| 5 | `expr + expr` `expr - expr` | 左 | 加減 |
+| 6 | `expr .. expr` `expr ..= expr` | 左 | 範囲 |
+| 7 | `expr < expr` `expr <= expr` `expr > expr` `expr >= expr` `expr == expr` `expr != expr` | 連鎖 | 比較 |
+| 8 | `expr and expr` | 左 | 論理積 |
+| 9 | `expr or expr` | 左 | 論理和 |
+
+`args` は `expr, ...`。名前を付けるときは `name = expr`。
+
+添字と `Range` の両端は整数でなければならない。`xs[1.5]` や `0.5..2.5` は `ValueError.OutOfRange` で、黙って切り捨てることはしない。
+
+比較は続けて書ける。`1 < 2 <= 2` は `(1 < 2) and (2 <= 2)` で、真ん中は 1 度しか評価しない。偽が出たらそこで止まる。`2 == 2 == 2` も `true`。
+
+括弧 `( expr )` は優先順位を変える。リテラル (`( )` `[ ]` `{ }`) と `func` `if` `context` `motion` は優先順位を持たない。3 と 4 を参照。
+
+`-expr` は優先 2、`expr - expr` は優先 5。だから `-2 ^ 2` は `(-2) ^ 2` で 4 になる。改行は文の区切りなので、行頭の `- x` は引き算ではなく新しい文。
+
+### 3. 型
+
+#### 3.1 基本型
+
+| 型 | リテラル | 備考 |
+|---|---|---|
+| Number | `1` `1.5` `1/3` `25%` | 整数と実数を区別しない。`100%` = 1.0。3.2 を参照 |
+| Duration | `83s` `1m23s` `500ms` `01:23` `01:23:45.678` | 単位は ms / s / m / h。コロン形式は mm:ss と hh:mm:ss、小数秒可 |
+| Color | `#rgb` `#rgba` `#rrggbb` `#rrggbbaa` `Color(r, g, b)` `Color(r, g, b, a)` | r/g/b は 0..255、a は 0..1。3/4 桁は各桁を重ねて 6/8 桁に広げる |
+| String | `"hello"` `"say \"hi\""` | エスケープは `\"` `\\` `\n` `\t`。`+` で連結。埋め込みはしない。`"n = {n}".format(n)` が `{...}` を順に置き換える (中の名前は説明用)。Dict を渡すと `"{x} {y}".format({x, y})` のように名前で置き換える |
+| Bool | `true` `false` | |
+| Symbol | `:center` `:linear` | 名前そのものが値。同じ名前どうしだけが等しい |
+| Tuple | `(1, 1.5)` | 要素ごとに型が違ってよい。長さは書いたときに決まる。要素 1 つは `(1,)`、空は `()` |
+| List | `[1, 2, 3]` | 値を順に並べたもの。要素の型は検査しない。メソッドの署名の `T` は要素の型、`U` は変換後の型 |
+| Dict | `{ "k": v }` `{ x, y }` | キーは String。挿入順を保つ。`{ x, y }` は `{ "x": x, "y": y }` の省略形 |
+| Range | `0..5` `0..=5` | 整数の範囲。`..` は末尾を含まない。両端が整数でなければ `ValueError.OutOfRange` |
+| Func | `func (x) { x }` | 型表記は `(引数) -> 戻り値` |
+| Type | `Circle` | 型そのもの。呼ぶとその型の値を作る |
+| Nothing | | 値を返さなかった関数の戻り値。書き方は無い |
+
+#### 3.2 分数
+
+Number は、分数で表せるあいだ分数のまま持つ。実数に落ちるのは、分数で表せない計算をしたときだけ。
+
+```
+1/3                    # 1/3
+1/3 + 1/3 + 1/3        # 1
+1/3 * 3                # 1
+2/6                    # 1/3。約分される
+0.1 + 0.2 == 0.3       # true。小数も分数として持つ
+25%                    # 0.25
+```
+
+`+ - * /` と、指数が整数の `^` は分数のまま計算する。`math.sqrt` のように分数で表せない計算が来ると、そこで実数になる。桁が溢れたときも実数になる。
+
+表示は 10 進で書けるならその形。`1/2` は `0.5`、`1/3` は `1/3`。
+
+#### 3.3 Func の型表記
+
+型は宣言と同じ形で書く。`func (a: Number, b: Number) -> Number` の型は `(Number, Number) -> Number`。
+
+```
+let double: (Number) -> Number = func (x) { x * 2 }
+let now:    () -> Duration     = func () { 3s }
+let apply:  ((Number) -> Number, Number) -> Number = func (f, x) { f(x) }
+```
+
+引数を書かずに `Func` とだけ書いてもよい。可変長は型の後ろに `...` (`(Number...) -> Number`)。builtin の `log` と `type_of` はどの型でも受け取るので、型を書けない。
+
+#### 3.4 リテラルと型名
+
+型は大文字で始まる。型名を呼ぶとその型の値ができる (`Vector(8, 4.5)`)。よく使う型にはリテラルがあり、同じ型名の呼び出しと同じ値になる。
+
+| リテラル | 同じもの |
+|---|---|
+| `()` | `Tuple()` |
+| `(1,)` | `Tuple(1)` |
+| `(1, 2)` | `Tuple(1, 2)` |
+| `[1, 2, 3]` | `List(1, 2, 3)` |
+| `{ "k": v }` | `Dict(k = v)` (名前にできないキーは `{ }` だけ) |
+| `0..5` | `Range(0, 5)` |
+| `0..=5` | `Range(0, 6)` |
+| `#4080e0` | `Color(64, 128, 224)` |
+
+同じキーを 2 回書いたら、どちらの書き方でも後が勝つ。
+
+`Number` `Duration` `Bool` `String` `Symbol` `Func` はリテラルだけで、呼んでは作れない。呼ぶと `TypeError.ArgumentType` で書き方を返す。
+
+builtin の型の名前は予約されていて、`struct` / `record` / `type` で宣言し直すと `NameError.Reserved`。
+
+#### 3.5 Union 型
+
+既存の型を `|` で結んだ名前。`type Fill = Color | Gradient`。値は作れず、引数や属性の型として書く。
+
+言語が持つ union: `Shape` (図形すべて)、`Placeable` (`Shape | View`)、`Paint` (`Color | Gradient | Shader`)。
+
+#### 3.6 record と struct
+
+違いはイミュータブルかどうか。`record` はイミュータブル、`struct` はミュータブル。それ以外 (フィールド、`func`、`method`、`private`、注釈) は同じ。どちらもトップレベルで宣言する。
+
+```
+record Size {
+  w: Number                      # フィールドは 名前: 型
+  h: Number
+  method area(self) -> Number {  # method は第 1 引数が受け手。使わないなら _
+    self.w * self.h
+  }
+}
+
+let a = Size(3, 4)               # 既定値の無いフィールドは、宣言順に位置で渡せる
+let b = Size(w = 3, h = 4)       # 名前で渡すときは 名前 = 値
+a.area()                         # 12
+```
+
+```
+struct Counter {
+  n: Number = 0                  # = 式 で既定値
+  private step: Number = 1       # private なフィールドは外から読み書きできない
+  func new(start: Number) -> Counter {   # 型名を呼んだときの作り方。受け手を取らない
+    Counter(n = start)           # func new の中で型名を呼ぶと、フィールドから作る
+  }
+  private func twice(x: Number) -> Number { x * 2 }   # private は func と method にも付く
+  method next(self) -> Number {
+    self.n = self.n + self.step
+    self.n
+  }
+}
+
+let c = Counter(10)              # func new が呼ばれる
+Counter.new(10)                  # 型名から直接呼んでも同じ
+c.next()                         # method は受け手を書かずに呼ぶ
+```
+
+`func new` を書かなければ、`private` でないフィールドを宣言順に受け取る作り方になる (上の `Size`)。`private` で既定値の無いフィールドがあるとそれでは作れないので、`func new` が要る。
+
+書き換えと複製:
+
+```
+let a = Size(3, 4)
+let b = a
+a.w = 9        # a に新しい Size を入れ直す。b は Size(3, 4) のまま
+b.copy(w = 9)  # 入れ直さずに、w だけ違う Size を作る (func new を書いた型では、フィールドを変える copy はできない)
+
+let c = Counter(0)
+let d = c
+c.next()          # 実体そのものが変わるので、d から見ても n は 1
+c.shallowCopy()   # 属性を写した別の実体。中の struct は元と同じものを指す
+c.deepCopy()      # 中の record と struct もたどって写した別の実体
+```
+
+record のフィールドへの代入は、その値を変えるのではなく、変数や属性に新しい record を入れ直す。だから同じ record を持っている他の変数は変わらない。関数の引数に代入しても、呼んだ側には伝わらない。
+
+同じ名前の `func` / `method` を宣言すれば、`copy` などより先にそちらが使われる。
+
+#### 3.7 注釈
+
+宣言の前の行に `@名前` を書く。複数は空白で並べる。
+
+| 注釈 | 意味 |
+|---|---|
+| `@immutable` | `struct` をイミュータブルにする (record と同じ扱いになる) |
+| `@nocopy` | `copy` `shallowCopy` `deepCopy` をすべて禁止する |
+| `@nodeepcopy` | `deepCopy` だけ禁止する |
+| `@deprecated("説明")` | その型を最初に作ったときに stderr へ警告を出す |
+
+```
+@deprecated("Vector を使う") @nocopy
+record Vec2 {
+  x: Number
+  y: Number
+}
+```
+
+#### 3.8 別名
+
+`alias P = Pos` で、長い型名に短い名前を付ける。そのファイルの、その行より後ろで使える。`export` はできない。
+
+#### 3.9 決まった値しか取らない型
+
+属性がこの型なら、その型に載っている名前しか書けない。値はすべて Symbol で、型を呼んでは作れない。違う名前を書くと `ValueError.OutOfRange` が、取れる値を並べて出る。
+
+| 型 | 何を決めるか |
+|---|---|
+| Anchor | Pos の座標が、置くもののどこを指すか |
+| Align | TextArea の行の寄せ方 |
+| StrokeCap | 線の両端の形 |
+| StrokeJoin | 折れ曲がった線の、角の形 |
+| Blend | 下にある絵との混ぜ方 |
+| GradientKind | Gradient の stops を並べる向き |
+
+値と、それぞれが何をするかは「builtin」のページにある。言語が検査に使っている表から作っているので、ここには写しを置かない。
+
+同じものを自分でも書ける。
+
+```
+type Mode = :fast | :slow
+```
+
+#### 3.10 位置
+
+- Vector: 実数 2 つ。`.x` `.y`。`Vector ± Vector`、`Vector × Number`、`Vector ÷ Number`、`-Vector`
+- Pos: `x`、`y`、`anchor` (既定 `:center`)。`.anchor` `.vector` `.x` `.y` (`.x` `.y` は読み書きできる)。`Pos(Vector(1, 1.5))` でも作れる
+- `(8, 4.5)` は Tuple であって Vector でも Pos でもない。`Vector` や `Pos` が要る場所には型名を書く
+- anchor の解決 (`:topLeft` が図形のどこかを出すこと) は描画のときに行われ、スクリプトからは触れない
+
+#### 3.11 図形
+
+`Circle` `Ellipse` `Rect` `TextArea` は `position` (Pos) で置く。`Line` は `from` と `to`、`Polygon` は `points`、`Path` は `from` と `segments` が位置を決めるので `position` を持たない。
+
+| 型 | その型だけの属性 |
+|---|---|
+| Circle | `radius: Number` |
+| Ellipse | `rx: Number` (横の半径) `ry: Number` (縦の半径) |
+| Rect | `w: Number` `h: Number` `radius: Number` (角の丸み。省略は 0) |
+| Line | `from: Vector` `to: Vector` |
+| Polygon | `points: List<Vector>` |
+| Path | `from: Vector` `segments: List<Tuple>` `closed: Bool` |
+| TextArea | `text: String` `w: Number` (折り返す幅) `font: String` `fontSize: Number` `align: Align` |
+
+`Path` の `segments` は `(:move | :line | :quad | :curve, 点...)` の並び。`:quad` は制御点 1 つ、`:curve` は 2 つを、終点より前に書く。`closed = true` なら始点に戻って閉じる。
+
+どの図形も持つ属性。効きようがないものは、その図形が持たない (書くと `NameError.UndefinedAttribute`)。既定のあるものは、書かなくてもその値で読める:
+
+| 属性 | 型 | 意味 |
+|---|---|---|
+| `fill` | Paint | 塗り |
+| `stroke` | Color | 線の色 |
+| `strokeWidth` | Number | 線の太さ (箱の座標の単位) |
+| `strokeCap` | StrokeCap | 線の端の形 |
+| `strokeJoin` | StrokeJoin | 線の角の形 |
+| `dash` | List | 破線。線と間の長さを順に並べた Number |
+| `dashOffset` | Number | 破線の始まりをずらす長さ |
+| `opacity` | Number | 不透明度 0..1 |
+| `rotation` | Number | 時計回りの回転 (度) |
+| `pivot` | Vector | 回転の中心。書かなければ、その図形を囲む四角形の中心 |
+| `blend` | Blend | 下の絵との重ね方 |
+
+| 持たない図形 | 属性 | 理由 |
+|---|---|---|
+| Line | `fill` | 面が無い |
+| Circle / Ellipse / Line | `strokeJoin` | 角が無い |
+| TextArea | `strokeCap` `dash` `dashOffset` | 字の輪郭を破線にできない |
+
+#### 3.12 箱
+
+```
+View(box = Vector(16, 9))
+```
+
+| 属性 | 型 | 意味 |
+|---|---|---|
+| `box` | Vector | 座標系の幅と高さ。`Vector(16, 9)` なら 0..16 × 0..9。ピクセルは持たない |
+| `opacity` | Number | 中身をまとめて 1 枚として掛ける。中の図形が重なっても二重に薄くならない |
+| `blend` | Blend | 中身を 1 枚にしてから、下の絵と重ねる |
+| `position` `w` `h` | Pos / Number | 別の View に置かれたときの位置と大きさ |
+
+#### 3.13 塗り
+
+`fill` に入れられるのは `Color` `Gradient` `Shader` (`Paint`)。
+
+```
+Gradient(from = Vector(0, 0), to = Vector(16, 9), stops = [#4080e0, #e0604a])
+```
+
+| 属性 | 型 | 意味 |
+|---|---|---|
+| `kind` | GradientKind | 広がり方。省略は `:linear` |
+| `from` | Vector | `:linear` の始点、`:radial` と `:sweep` の中心 |
+| `to` | Vector | `:linear` の終点 |
+| `radius` | Number | `:radial` の半径 |
+| `stops` | List | Color を 2 つ以上。等間隔に並ぶ |
+
+```
+Shader(color = func (x, y, t) { Color(x * 16, 0, 128) })
+```
+
+| 属性 | 型 | 意味 |
+|---|---|---|
+| `color` | (Number, Number, Number) -> Color | 箱の座標 x, y と動画の時刻 t 秒から、そのピクセルの色を返す |
+| `args` | List | Number の並び。`color` の 4 つ目の引数として渡る |
+| `samples` | Number | 1 ピクセルあたりの評価点の数。平方数に切り上げ、4 なら 2x2 の平均。省略は 1 |
+
+`color` は描画のたびに GPU で全ピクセル分走るので、書けるものが限られる。
+
+書けるもの:
+
+- `Number` `Bool` `Color` `Vector`。Vector は `Vector(x, y)` と `.x` `.y`、`+ -`、Number との `* /`
+- 四則、`%`、`^`、比較、論理、`if`、範囲の `for`、`return`
+- `math.*` と `Color(...)`
+- 外側で定義した `Number` `Color` `Bool` `Vector` と、そのどれか 1 種類だけの `List`
+- 外側で定義した関数 (再帰は不可)
+
+書けないもの: 文字列、Duration、図形、Dict、素の Tuple。
+
+`args` は毎フレーム読むので、motion の行で変えれば動く。`run` では走らず、`render` `preview` `sheet` で走る。GPU の実数は 32 bit。
+
+#### 3.14 時間
+
+時間を持つ型は 3 つ。`Motion` は値の並びだけを持ち、対象を持たない。`Timeline` は対象と属性まで決まったもので、同時に入れ物でもある。`Audio` は読み込んだ音声。
+
+`motion` が返す `Timeline` も `Timeline()` で作った `Timeline` も同じ型で、どちらも `place` で中にものを置ける。
+
+```
+let m = motion (t, a, b) {      # Motion。値の表
+  0s: 1, 2, 3
+  2s: 3, 6, 9
+}
+let tl = motion (t) {           # 行が属性への代入なら Timeline
+  0s: c.radius = 1
+  2s: c.radius = 3
+}
+m.apply(c, func (o, t, [r]) { o.radius = r })   # Motion に対象を与えても Timeline
+let track = Timeline(duration = 8s)             # 入れ物だけの Timeline
+import "bgm.m4a" as bgm                         # Audio
+```
+
+行の時刻は Duration (`2s`) か 0..1 の実数 (`0.5` `50%`)。1 つの motion で混ぜられない。実数で書いたら `duration` の設定が要る。
+
+`duration` は長さ。既定は最後の時刻で、代入すると長さだけが変わる (行の時刻は動かない。短くすれば、そこから先の行は使われない)。0..1 で書いた表は時刻が割合なので、`duration` が実時間を決める。Audio の `duration` はファイルの長さ。
+
+時刻そのものを動かすのはメソッド。
+
+| 書き方 | すること |
+|---|---|
+| `tl.scale(2)` | 時間の軸を 2 倍にする。時刻も長さも 2 倍 |
+| `tl.fit(3s)` | 長さが 3s になるように時間の軸を伸縮する |
+| `tl.trim(from = 1s, to = 4s)` | 1s から 4s までを取り出し、0 から始まるものにする |
+| `tl.reverse()` | 時間の向きを逆にする |
+
+どれも新しい Timeline (Motion なら Motion) を返し、元は変わらない。`scale` と `fit` は中に置いた Timeline も同じ倍率で伸縮する。音声と字幕は開始時刻だけ動き、長さは変わらない。
+
+Motion の行では、`t` はその行に書いた時刻、2 つ目以降の名前は同じ行の左の列の値。
+
+行末に Easing を 1 つ書ける。効くのは、前の行からその行までの区間。
+
+```
+motion (t) {
+  0s: c.radius = 1
+  1s: c.radius = 3 :ease
+}
+```
+
+`:linear` `:ease_in` `:ease_out` `:ease` の 4 つで、書かなければ `:linear`。Easing は属性の型ではなく、この行末にだけ書ける。値の意味は「builtin」のページにある。
+
+置く。`Timeline.place` は Timeline の中へ、`View.addTrack` はその View の動きとして付ける。引数は同じで、`output` した View に付いたものが動画になる。
+
+```
+v.addTrack(track)
+track.place(tl, at = 2s, fadeIn = 0.3s, fadeOut = 0.3s)
+track.place(bgm, at = 0s, duration = 30s, volume = 0.6, loop = true)
+track.place(Subtitle(text = "ここに字幕", duration = 2s), at = 5s)
+```
+
+`fadeIn` は置いた時刻から、`fadeOut` は終わりに向かって、置いたものの不透明度を動かす。View に付けると中身をまとめて 1 枚として掛かる。Subtitle には効かない (`duration` で長さを決める)。
+
+`duration` を指定した Timeline は、その長さより後を使わない。音声は `duration` で切り (繰り返さなければファイルより長くならない)、`volume` は 1 がそのまま、`loop = true` は `duration` か動画の終わりまで繰り返す (動画は延びない)。同じ音声を何度でも置けて、重なれば混ざる。
+
+`render` は音声を ffmpeg で動画の音声トラックにし、字幕を SRT にして字幕トラックに入れる (mp4 と mov は mov_text、webm は webvtt、mkv は srt)。`preview` は音声を PCM にして鳴らし、字幕を画面の下に重ねる。`sheet` も重ねる。
+
+Motion は単独では place できない。動画の長さは、置いたものすべての終わりの最大 (音声と字幕も含む)。
+
+各フレームの状態は、スクリプトを実行した直後の状態に、その時刻までに始まった Timeline を置いた順で適用して決まる。前のフレームには依存しないので、preview で時間を戻しても同じ画になる。
+
+### 4. 文
+
+#### 4.1 束縛と代入
+
+```
+let n = 1                # 束縛
+let d: Duration = 2s     # 型を書いてもよい。実行時に確かめる
+let (a, b) = (1, 2)      # Tuple を分解して束縛
+let [p, q] = [10, 20]    # List も分解できる
+
+n = 2                    # 再代入
+a, b = b, a              # 右辺を全部評価してから代入するので、入れ替えになる
+c.radius = 3             # 属性
+xs[0] = 9                # 添字
+d["k"] = 1               # Dict のキー
+```
+
+`let` を書かずに初めて代入すると `NameError.AssignWithoutLet`。同じスコープで `let` を書き直して束縛し直すことはできる。
+
+#### 4.2 条件と繰り返し
+
+`if` は式で、ブロックの最後の式が値になる。
+
+```
+let sign = if n > 0 { "正" } else if n < 0 { "負" } else { "零" }
+
+for i in 0..3 { }                              # 0, 1, 2
+for i in 0..=3 { }                             # 0, 1, 2, 3
+for c in ["赤", "青"] { }                       # "赤", "青"
+for (i, c) in ["赤", "青"].enumerate() { }      # (0, "赤"), (1, "青")
+for (k, v) in { "赤": 1, "青": 2 } { }          # ("赤", 1), ("青", 2)
+```
+
+`for` が回せるのは Range、List、Tuple、Dict。String は回せない。`break` と `continue` は無い。
+
+#### 4.3 関数
+
+ブロックの最後の式が戻り値になる。
+
+```
+func area(w: Number, h: Number = 1) -> Number {   # = 式 で既定値
+  w * h                                           # この式が戻り値
+}
+
+area(2)               # 2。h は既定値の 1
+area(h = 3, w = 2)    # 6。名前で渡すときは 名前 = 値
+```
+
+`...` を付けると、並びをそのまま引数に広げる。Tuple / List / Range は位置の引数に、Dict は `キー = 値` の名前付き引数になる。名前は付けられない (`f(x = ...xs)` は書けない)。
+
+```
+let wh = (2, 3)
+area(...wh)                    # 6。area(2, 3) と同じ
+area(...[2], 5)                # 10。ほかの引数と混ぜてよい
+area(...{ "w": 2, "h": 4 })    # 8。名前で渡したのと同じ
+```
+
+`return` は途中で抜けるときに書く。`if` や `for` の中からでも関数を抜ける。
+
+```
+func first_even(xs: List<Number>) -> Number {
+  for x in xs {
+    if x % 2 == 0 {
+      return x
+    }
+  }
+  -1        # 見つからなければこの式が戻り値
+}
+```
+
+#### 4.4 context
+
+長い名前を短く書くための式。ブロックの最後の式が値になる。
+
+```
+let r = context board.left.card as o {   # o は board.left.card
+  o.radius
+}
+
+context a as x, b as y { }   # 複数書ける
+```
+
+#### 4.5 型の宣言
+
+```
+record Size { }        # 3.6
+struct Counter { }     # 3.6
+@nocopy                # 3.7。直後の record / struct に付く
+alias P = Pos          # 3.8。そのファイルのその行より後ろだけ
+type Fill = Color | Gradient   # 3.5
+```
+
+`record` `struct` `type` はトップレベルにだけ書ける。
+
+#### 4.6 import
+
+`import` は 3 つある。何を束縛するかが違う。
+
+```
+import math                        # 標準ライブラリ。Module を math に束縛する
+import fractal as f                # as で別名を付ける
+import .orbit                      # 同じ場所の orbit.moph。Module を orbit に束縛する
+import .lib.shapes                 # ./lib/shapes.moph
+import "path/file.moph" as slides  # パスで書く形。as が無ければファイル名
+import { a, b } from .slides       # Module を作らず、export した名前をここに持ち込む
+import { sin } from math           # 標準ライブラリからも同じ
+import "bgm.m4a" as bgm            # .moph 以外は音声。Audio を束縛する
+```
+
+`.moph` の Module から見えるのは、そのファイルが `export` した名前と、`output` した View (`orbit.output`) だけ。
+
+同じファイルは 1 度しか実行されず、2 度目以降の `import` は同じ実体を返す。循環 import はエラー。`bundle` は音声も含めて import 先を実行ファイルに埋め込む。
+
+`import ..parent` で 1 つ上のディレクトリも書けるが、ディレクトリをまたぐ設計は避ける。標準ライブラリを import せずに使うと、`NameError.UndefinedVariable` に `add "import math"` のヒントが付く。
+
+#### 4.7 export
+
+```
+export let theme = #4080e0
+export func run(now: Duration) -> Duration { now }
+export struct Card { }
+export record Size { }
+```
+
+トップレベルにだけ書ける。`alias` は export できない。
+
+#### 4.8 output
+
+```
+output v      # この View が動画になる。1 つのファイルに 1 つ
+```
+
+### 5. 空間
+
+- 箱 (View) は `box = Vector(w, h)` で座標系を宣言する。中の座標はその単位
+- `view.place(shape)`。図形の位置は図形の `position` で決まる
+- `view.place(other_view, at = Pos, w =, h =)` で View を入れ子にする。w か h の片方だけなら縦横比を保ち、両方なら比率を保ったまま収める。子の座標は子の box で解釈される
+- `view.addTrack(x)` で、その View の動きとして付ける。`output` した View に付けたものが動画になる。`x` は Timeline、View、Audio、Subtitle のどれかで、引数は `Timeline.place` と同じ
+- クロージャと Timeline はスコープを共有する (複製しない)。定義後に変数を変えれば、その値が見える
+
+### 6. builtin と標準ライブラリ
+
+`import` なしで使えるのは、builtin の型の名前と、次の 2 つだけ。どちらも呼び出しの形でしか書けず、値として取り出すことはできない。
+
+| 名前 | 内容 |
+|---|---|
+| `log(値, ...)` | 引数を空白区切りで stderr へ出す。どの型でも受け取る。動画には出ない |
+| `type_of(値)` | その値の型の名前を String で返す |
+
+String / List / Dict / Range のメソッドは builtin で、`import` は要らない。一覧は「builtin」のページと examples/syntax/collection.moph。
+
+`import` で使う標準ライブラリ。関数の一覧と説明は「module」のページを正とする (ドキュメントコメントから作っている)。
+
+| モジュール | 内容 |
+|---|---|
+| math | 数学。`PI` `TAU` `E` などの定数と、三角関数・丸め・平方根・対数・最大最小 |
+| color | 色を作る、混ぜる。明るくする、暗くする、不透明度を変える、色相から作る |
+| shape | Polygon の `points` を作る。円周上の点、正多角形、星、矢印 |
+| layout | 並べる位置を計算する。格子、直線上の等間隔、比率を保って収めた大きさ |
+| animation | 図形や View を動かす Timeline を返す。現れる、消える、滑る、回る |
+| fractal | エスケープタイム系フラクタルの Shader。反復式、精度、色付けを組み合わせる |
+
+math だけ Rust で書かれていて、ほかは本体に埋め込んだ `.moph` (`src/stdlib/`)。
+
+### 7. エラー
+
+`種別.細目: line N: message` の形で、message は英語。行ごとの例は examples/syntax/error.moph。
+
+| 種別 | 細目 |
+|---|---|
+| SyntaxError | `UnexpectedToken` 構文として読めない / `InvalidLiteral` 色の桁数、Duration の形式など |
+| NameError | `UndefinedVariable` / `UndefinedAttribute` / `AssignWithoutLet` let を書かずに初めて代入した / `Reserved` builtin の型の名前を宣言し直した |
+| TypeError | `OperandType` 演算子の左右 / `AttributeType` 属性に入れる値 / `ArgumentType` 引数 / `ArityMismatch` 引数や列の数 / `NotPlaceable` place できない型 |
+| ValueError | `DurationRequired` 時刻の単位が混在、相対時刻なのに duration が無い / `OutOfRange` 型は合うが値が範囲外 |
+| RuntimeError | `DivisionByZero` / `FontNotFound` / `AudioUnreadable` / `ShaderCompile` / `ShaderUnavailable` |
+
+`ShaderCompile` と `ShaderUnavailable` は描画のときに出る。`run` では Shader を走らせないので出ない。
+
+
+# builtin の型
+
+import なしで呼べる関数:
+
+- `log(値, ...)` -> Nothing — 引数を空白区切りで stderr に表示する。動画には入らない。引数はどの型でもよいので、型を書けない
+- `type_of(値)` -> String — その値の型の名前を返す。引数はどの型でもよいので、型を書けない
+
+### Number
+
+数。整数と実数を区別しない。分数で表せるあいだは分数のまま持つので、1/3 * 3 は 1、0.1 + 0.2 は 0.3 になる。sqrt のように分数で表せない計算が来ると実数に落ちる。25% は 0.25
+
+作り方:
+
+```
+1
+1.5
+1/3
+25%
+```
+
+### Duration
+
+時間の長さ。単位は ms / s / m / h。01:23 は mm:ss、01:23:45.678 は hh:mm:ss.mmm。motion の時刻と duration に使う
+
+作り方:
+
+```
+2s
+500ms
+1m23s
+01:23
+01:23:45.678
+```
+
+### Bool
+
+真か偽。if の条件になり、and or not と比較演算子が返す
+
+作り方:
+
+```
+true
+false
+```
+
+### String
+
+文字列。+ でつなぐ。"{n}".format(n) で { } の所へ値を入れる
+
+作り方:
+
+```
+"hello"
+```
+
+メソッド:
+
+- `s.len()` -> Number — 文字数
+- `s.replace(from: String, to: String)` -> String — from を to に置き換えた文字列
+- `"{name}".format(値, ...)` -> String — { } を順に引数で置き換える。名前は説明用。Dict を 1 つ渡すと、{ } の中の名前で引く。引数はどの型でもよいので、型を書けない
+
+### Symbol
+
+先頭に : を付けた名前。名前そのものが値で、同じ名前どうしだけが等しい。Anchor や Easing のように「決まった名前しか取らない型」の値は、すべて Symbol
+
+作り方:
+
+```
+:center
+:linear
+```
+
+### Tuple
+
+要素ごとに型が違ってよい組。長さは書いたときに決まる。要素 1 つは (1,)、空は ()。Vector や Pos が要る場所には書けない。そこには型名を書く
+
+作り方:
+
+```
+(1, 1.5)
+Tuple(1, 1.5)
+(1,)
+()
+```
+
+属性:
+
+- `x`: T — 2 要素の組の 1 つ目 (Vector と同じ書き方で読める)
+- `y`: T — 2 要素の組の 2 つ目
+
+メソッド:
+
+- `xs.len()` -> Number — 要素数
+- `xs.enumerate()` -> List<(Number, T)> — 番号と要素の組。for (i, x) in xs.enumerate() で使う
+- `xs.reverse()` -> List<T> — 逆順にした新しい List
+- `xs.contains(値: T)` -> Bool — その値を含むか
+- `xs.index_of(値: T)` -> Number — 最初に現れる位置。無ければ -1
+- `xs.sum()` -> Number — Number の合計
+- `xs.join(sep: String)` -> String — 各要素を文字列にして sep でつなぐ
+- `xs.map(f: (T) -> U)` -> List<U> — 各要素に f を通した結果の List
+- `xs.filter(f: (T) -> Bool)` -> List<T> — f が true を返した要素だけの List
+- `xs.reduce(初期値: U, f: (U, T) -> U)` -> U — 初期値から順に f を通して 1 つの値にする
+- `xs.sort()` -> List<T> — 昇順に並べた新しい List (要素は Number か Duration)
+- `xs.zip(ys: List<U>)` -> List<(T, U)> — 同じ位置どうしを組にする。短い方に合わせる
+- `(0..n).to_list()` -> List<T> — 中身を並べた List
+
+### List
+
+値を順に並べたもの。[ ] は List(...) と同じものを作る。for で回し、map や filter で作り直す。push で伸ばすと、その List 自身が変わる。要素の型は検査しないので、揃えるかどうかは書く側が決める。メソッドの署名にある T は要素の型、U は変換後の型
+
+作り方:
+
+```
+[1, 2, 3]
+List(1, 2, 3)
+List()
+```
+
+メソッド:
+
+- `xs.len()` -> Number — 要素数
+- `xs.push(値: T)` -> Nothing — 末尾に追加する。その List 自身が変わる
+- `xs.enumerate()` -> List<(Number, T)> — 番号と要素の組。for (i, x) in xs.enumerate() で使う
+- `xs.reverse()` -> List<T> — 逆順にした新しい List
+- `xs.contains(値: T)` -> Bool — その値を含むか
+- `xs.index_of(値: T)` -> Number — 最初に現れる位置。無ければ -1
+- `xs.sum()` -> Number — Number の合計
+- `xs.join(sep: String)` -> String — 各要素を文字列にして sep でつなぐ
+- `xs.map(f: (T) -> U)` -> List<U> — 各要素に f を通した結果の List
+- `xs.filter(f: (T) -> Bool)` -> List<T> — f が true を返した要素だけの List
+- `xs.reduce(初期値: U, f: (U, T) -> U)` -> U — 初期値から順に f を通して 1 つの値にする
+- `xs.sort()` -> List<T> — 昇順に並べた新しい List (要素は Number か Duration)
+- `xs.zip(ys: List<U>)` -> List<(T, U)> — 同じ位置どうしを組にする。短い方に合わせる
+
+### Dict
+
+String のキーから値を引く。挿入した順を保つ。{ x, y } は { "x": x, "y": y } の省略形。Dict(k = v) の k は名前として書けるキーだけで、空白などを含むキーは { } で書く
+
+作り方:
+
+```
+{ "k": v }
+{ x, y }
+Dict(k = v)
+Dict()
+```
+
+メソッド:
+
+- `d.keys()` -> List<String> — キーの List
+- `d.values()` -> List<T> — 値の List
+- `d.has(key: String)` -> Bool — そのキーがあるか
+- `d.len()` -> Number — 要素数
+
+### Range
+
+整数の範囲。.. は末尾を含まず、..= は含む。Range(0, 5) は 0..5 と同じで、0..=5 は Range(0, 6)。for i in 0..n のように回す。両端が整数でなければ ValueError.OutOfRange
+
+作り方:
+
+```
+0..5
+0..=5
+Range(0, 5)
+```
+
+メソッド:
+
+- `xs.len()` -> Number — 要素数
+- `xs.enumerate()` -> List<(Number, T)> — 番号と要素の組。for (i, x) in xs.enumerate() で使う
+- `xs.reverse()` -> List<T> — 逆順にした新しい List
+- `xs.contains(値: T)` -> Bool — その値を含むか
+- `xs.index_of(値: T)` -> Number — 最初に現れる位置。無ければ -1
+- `xs.sum()` -> Number — Number の合計
+- `xs.join(sep: String)` -> String — 各要素を文字列にして sep でつなぐ
+- `xs.map(f: (T) -> U)` -> List<U> — 各要素に f を通した結果の List
+- `xs.filter(f: (T) -> Bool)` -> List<T> — f が true を返した要素だけの List
+- `xs.reduce(初期値: U, f: (U, T) -> U)` -> U — 初期値から順に f を通して 1 つの値にする
+- `xs.sort()` -> List<T> — 昇順に並べた新しい List (要素は Number か Duration)
+- `xs.zip(ys: List<U>)` -> List<(T, U)> — 同じ位置どうしを組にする。短い方に合わせる
+- `(0..n).to_list()` -> List<T> — 中身を並べた List
+- `(0..=1).steps(n: Number)` -> List<Number> — 両端を含めて n 等分した値の List (要素は n + 1 個)
+
+### Func
+
+関数。変数に入れて渡せる。引数の型 (名前: 型) と戻り値の型 (-> 型) は、どちらも書かなくてよい。既定値は = で書く。型を書く場所での表記は宣言と同じ形で、(引数) -> 戻り値
+
+作り方:
+
+```
+func (x: Number) -> Number { x * 2 }
+func (x) { x * 2 }
+func (a: Number, b: Number = 1) -> Number { a + b }
+func () -> Duration { 3s }
+func (o) { o.opacity = 0 }
+```
+
+### Vector
+
+実数 2 つの組。座標、大きさ、複素数に使う。Vector どうしを + -、Number と * / できる
+
+作り方:
+
+```
+Vector(8, 4.5)
+```
+
+属性:
+
+- `x`: Number — 横の座標
+- `y`: Number — 縦の座標
+
+### Pos
+
+位置と、その位置がものの どこ を指すか。フィールドは x、y、anchor で、anchor の既定は :center。図形や View の position に入れる
+
+作り方:
+
+```
+Pos(8, 4.5)
+Pos(0, 0, anchor = :topLeft)
+Pos(Vector(8, 4.5))
+```
+
+属性:
+
+- `x`: Number — 横の座標
+- `y`: Number — 縦の座標
+- `anchor`: Anchor — その座標が図形のどこを指すか
+- `vector`: Vector — 基準点を外した座標
+
+### Circle
+
+position を中心に、radius の半径で描く円
+
+作り方:
+
+```
+Circle(position = Pos(8, 4.5), radius = 1, fill = #4080e0)
+```
+
+属性:
+
+- `position`: Pos — 位置と基準点 (Pos)
+- `radius`: Number — 半径
+- `fill`: Paint — 塗り。Color か Shader
+- `stroke`: Color — 線の色
+- `strokeWidth`: Number — 線の太さ (箱の座標の単位)
+- `strokeCap`: StrokeCap — 線の端の形。:butt (既定) :round :square
+- `dash`: List — 破線。線と間の長さを順に並べた Number の List (例 [0.6, 0.4])
+- `dashOffset`: Number — 破線の始まりをずらす長さ。motion で動かすと破線が流れる
+- `opacity`: Number — 不透明度 0..1
+- `rotation`: Number — 時計回りの回転 (度)
+- `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
+- `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
+
+### Ellipse
+
+楕円。rx が横の半径、ry が縦の半径
+
+作り方:
+
+```
+Ellipse(position = Pos(8, 4.5), rx = 3, ry = 1.4, fill = #4080e0)
+```
+
+属性:
+
+- `position`: Pos — 位置と基準点 (Pos)
+- `rx`: Number — 横の半径
+- `ry`: Number — 縦の半径
+- `fill`: Paint — 塗り。Color か Shader
+- `stroke`: Color — 線の色
+- `strokeWidth`: Number — 線の太さ (箱の座標の単位)
+- `strokeCap`: StrokeCap — 線の端の形。:butt (既定) :round :square
+- `dash`: List — 破線。線と間の長さを順に並べた Number の List (例 [0.6, 0.4])
+- `dashOffset`: Number — 破線の始まりをずらす長さ。motion で動かすと破線が流れる
+- `opacity`: Number — 不透明度 0..1
+- `rotation`: Number — 時計回りの回転 (度)
+- `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
+- `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
+
+### Rect
+
+幅 w、高さ h の四角形。radius を付けると角が丸くなる
+
+作り方:
+
+```
+Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #f5f4f0)
+```
+
+属性:
+
+- `position`: Pos — 位置と基準点 (Pos)
+- `w`: Number — 幅
+- `h`: Number — 高さ
+- `radius`: Number — 角の丸み (省略は 0)
+- `fill`: Paint — 塗り。Color か Shader
+- `stroke`: Color — 線の色
+- `strokeWidth`: Number — 線の太さ (箱の座標の単位)
+- `strokeCap`: StrokeCap — 線の端の形。:butt (既定) :round :square
+- `dash`: List — 破線。線と間の長さを順に並べた Number の List (例 [0.6, 0.4])
+- `dashOffset`: Number — 破線の始まりをずらす長さ。motion で動かすと破線が流れる
+- `strokeJoin`: StrokeJoin — 線の角の形。:miter (既定) :round :bevel
+- `opacity`: Number — 不透明度 0..1
+- `rotation`: Number — 時計回りの回転 (度)
+- `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
+- `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
+
+### Line
+
+from から to へ引く 1 本の線。太さは strokeWidth、色は stroke
+
+作り方:
+
+```
+Line(from = Vector(0, 0), to = Vector(4, 3), stroke = #303030, strokeWidth = 0.1)
+```
+
+属性:
+
+- `from`: Vector — 始点
+- `to`: Vector — 終点
+- `stroke`: Color — 線の色
+- `strokeWidth`: Number — 線の太さ (箱の座標の単位)
+- `strokeCap`: StrokeCap — 線の端の形。:butt (既定) :round :square
+- `dash`: List — 破線。線と間の長さを順に並べた Number の List (例 [0.6, 0.4])
+- `dashOffset`: Number — 破線の始まりをずらす長さ。motion で動かすと破線が流れる
+- `opacity`: Number — 不透明度 0..1
+- `rotation`: Number — 時計回りの回転 (度)
+- `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
+- `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
+
+### Polygon
+
+points の頂点を順に結んで閉じた図形。points は Vector の List
+
+作り方:
+
+```
+Polygon(points = [Vector(0, 0), Vector(2, 0), Vector(1, 2)], fill = #3f9b6d)
+```
+
+属性:
+
+- `points`: List — 頂点。Vector の List
+- `fill`: Paint — 塗り。Color か Shader
+- `stroke`: Color — 線の色
+- `strokeWidth`: Number — 線の太さ (箱の座標の単位)
+- `strokeCap`: StrokeCap — 線の端の形。:butt (既定) :round :square
+- `dash`: List — 破線。線と間の長さを順に並べた Number の List (例 [0.6, 0.4])
+- `dashOffset`: Number — 破線の始まりをずらす長さ。motion で動かすと破線が流れる
+- `strokeJoin`: StrokeJoin — 線の角の形。:miter (既定) :round :bevel
+- `opacity`: Number — 不透明度 0..1
+- `rotation`: Number — 時計回りの回転 (度)
+- `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
+- `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
+
+### Path
+
+曲線も引ける形。from から始まり、segments の (:move | :line | :quad | :curve, 点...) を順にたどる。closed = true で始点に戻って閉じる
+
+作り方:
+
+```
+Path(from = Vector(0, 0), segments = [(:line, Vector(2, 0)), (:curve, Vector(3, 1), Vector(3, 2), Vector(2, 3))], closed = true)
+```
+
+属性:
+
+- `from`: Vector — 始点
+- `segments`: List — (:move | :line | :quad | :curve, 点...) の List。:quad は制御点 1 つ、:curve は 2 つを先に書く
+- `closed`: Bool — true なら始点に戻って閉じる (既定は false)
+- `fill`: Paint — 塗り。Color か Shader
+- `stroke`: Color — 線の色
+- `strokeWidth`: Number — 線の太さ (箱の座標の単位)
+- `strokeCap`: StrokeCap — 線の端の形。:butt (既定) :round :square
+- `dash`: List — 破線。線と間の長さを順に並べた Number の List (例 [0.6, 0.4])
+- `dashOffset`: Number — 破線の始まりをずらす長さ。motion で動かすと破線が流れる
+- `strokeJoin`: StrokeJoin — 線の角の形。:miter (既定) :round :bevel
+- `opacity`: Number — 不透明度 0..1
+- `rotation`: Number — 時計回りの回転 (度)
+- `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
+- `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
+
+### TextArea
+
+text を描く。w を付けるとその幅で折り返し、align で行の寄せ方を決める
+
+作り方:
+
+```
+TextArea(text = "hello", position = Pos(8, 4.5), fontSize = 1, fill = #303030)
+```
+
+属性:
+
+- `position`: Pos — 位置と基準点 (Pos)
+- `text`: String — 文字列
+- `w`: Number — 折り返す幅 (省略なら折り返さない)
+- `font`: String — フォント名
+- `fontSize`: Number — 文字の大きさ (箱の座標の単位)
+- `align`: Align — :left :center :right
+- `fill`: Paint — 塗り。Color か Shader
+- `stroke`: Color — 線の色
+- `strokeWidth`: Number — 線の太さ (箱の座標の単位)
+- `strokeJoin`: StrokeJoin — 線の角の形。:miter (既定) :round :bevel
+- `opacity`: Number — 不透明度 0..1
+- `rotation`: Number — 時計回りの回転 (度)
+- `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
+- `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
+
+### Color
+
+1 つの色。# は 16 進で、3 桁と 4 桁は各桁を 2 回書いたものと同じ (#48e は #4488ee)。4 桁と 8 桁の最後は不透明度。Color の r g b は 0..255、a は 0..1
+
+作り方:
+
+```
+#4080e0
+#48e
+#4080e080
+#48e8
+Color(64, 128, 224)
+Color(64, 128, 224, 0.5)
+```
+
+属性:
+
+- `r`: Number — 赤 0..255
+- `g`: Number — 緑 0..255
+- `b`: Number — 青 0..255
+- `a`: Number — 不透明度 0..1
+
+### Gradient
+
+色が連続して変わる塗り。stops は等間隔に並ぶ。広がり方は kind (GradientKind) で決める
+
+作り方:
+
+```
+Gradient(from = Vector(0, 0), to = Vector(16, 9), stops = [#4080e0, #e0604a])
+```
+
+属性:
+
+- `kind`: GradientKind — :linear (既定) :radial :sweep
+- `from`: Vector — :linear の始点、:radial と :sweep の中心 (箱の座標)
+- `to`: Vector — :linear の終点
+- `radius`: Number — :radial の半径
+- `stops`: List — Color の List。等間隔に並ぶ。2 つ以上
+
+### Shader
+
+位置 (x, y) と時刻 t から、そのピクセルの色を返す関数。図形の fill に入れると GPU で走る
+
+作り方:
+
+```
+Shader(color = func (x, y, t) { Color(x * 16, 0, 128) })
+```
+
+属性:
+
+- `color`: Func — func (x, y, t [, args]) -> Color。x y は箱の座標、t は秒
+- `args`: List — Number の List。color の 4 つ目の引数。毎フレーム読む
+- `samples`: Number — 1 ピクセルあたりの評価点の数 (4 なら 2x2 の平均。省略は 1)
+
+### View
+
+座標系を持つ入れ物。中に図形や View を place し、addTrack で Timeline を付ける。output した View が動画になる
+
+作り方:
+
+```
+View(box = Vector(16, 9))
+```
+
+属性:
+
+- `box`: Vector — 座標系の幅と高さ。ピクセルは持たない
+- `position`: Pos — 別の View に置かれたときの位置
+- `w`: Number — 別の View に置かれたときの幅
+- `h`: Number — 別の View に置かれたときの高さ
+- `opacity`: Number — 中身をまとめて 1 枚として掛ける不透明度
+- `blend`: Blend — 中身をまとめて 1 枚にしてから、下の絵と重ねるときの重ね方
+
+### Timeline
+
+どの対象のどの属性が、いつ、どの値になるかの並び。行に属性への代入を書いた motion がこれになる。別の Timeline、Audio、Subtitle も place で時刻に置ける
+
+作り方:
+
+```
+Timeline()
+Timeline(duration = 8s)
+motion (t) {
+  0s: c.radius = 1
+  2s: c.radius = 3
+}
+```
+
+属性:
+
+- `duration`: Duration — 長さ。代入すると長さだけが変わる (行の時刻は動かない)。0..1 で書いた表では、これが実時間を決める。時刻ごと動かすなら scale / fit / trim
+
+メソッド:
+
+- `tl.place(x: Timeline | View | Audio | Subtitle, at: Duration, fadeIn: Duration, fadeOut: Duration, duration: Duration, volume: Number, loop: Bool)` -> Nothing — 中に 1 本置く。at はこの Timeline の中での開始時刻
+- `tl.reverse()` -> Timeline — 時間の向きを逆にしたもの。ease の in と out も入れ替わる
+- `tl.scale(k: Number)` -> Timeline — 時間の軸を k 倍したもの。時刻も長さも k 倍になる
+- `tl.fit(d: Duration)` -> Timeline — 長さが d になるように時間の軸を伸縮したもの
+- `tl.trim(from: Duration, to: Duration)` -> Timeline — from から to までを取り出し、0 から始まるものにする。その区間の外にあるキーフレームと、置いたものは入らない
+
+### Motion
+
+時刻と値の表。どの対象のどの属性に入れるかは持たない。apply がそれを決めて Timeline にする
+
+作り方:
+
+```
+motion (t) {
+  0s: 1
+  2s: 3
+}
+```
+
+属性:
+
+- `duration`: Duration — 長さ。代入すると長さだけが変わる (行の時刻は動かない)。0..1 で書いた表では、これが実時間を決める。時刻ごと動かすなら scale / fit / trim
+
+メソッド:
+
+- `tl.reverse()` -> Timeline — 時間の向きを逆にしたもの。ease の in と out も入れ替わる
+- `tl.scale(k: Number)` -> Timeline — 時間の軸を k 倍したもの。時刻も長さも k 倍になる
+- `tl.fit(d: Duration)` -> Timeline — 長さが d になるように時間の軸を伸縮したもの
+- `tl.trim(from: Duration, to: Duration)` -> Timeline — from から to までを取り出し、0 から始まるものにする。その区間の外にあるキーフレームと、置いたものは入らない
+- `m.apply(target: Placeable, f: (Placeable, Duration, List<Number>) -> Nothing)` -> Timeline — 各行で f(対象, 時刻, [列...]) を呼び、その中で対象の属性に代入された値をキーフレームにする
+
+### Audio
+
+読み込んだ音声ファイル。Timeline に置くと動画の音になる
+
+作り方:
+
+```
+import "bgm.m4a" as bgm
+```
+
+属性:
+
+- `duration`: Duration — 音声ファイルの長さ
+- `file`: String — import に書いたパス
+
+### Subtitle
+
+字幕。画面には描かず、Timeline に置くと動画の字幕トラックになる
+
+作り方:
+
+```
+Subtitle(text = "ここに字幕", duration = 2s)
+```
+
+属性:
+
+- `text`: String — 字幕の文字列
+- `duration`: Duration — 表示する長さ
+
+### Anchor
+
+Pos の anchor。その位置が、置くものの どこ にあたるかを決める
+
+値:
+
+- `:center` — 中央。書かなければこれ
+- `:topLeft` — 左上の角
+- `:top` — 上辺の中央
+- `:topRight` — 右上の角
+- `:left` — 左辺の中央
+- `:right` — 右辺の中央
+- `:bottomLeft` — 左下の角
+- `:bottom` — 下辺の中央
+- `:bottomRight` — 右下の角
+
+### Align
+
+TextArea の align。w で折り返した各行を、幅の中でどちらに寄せるか
+
+値:
+
+- `:left` — 左に寄せる。書かなければこれ
+- `:center` — 中央に寄せる
+- `:right` — 右に寄せる
+
+### Easing
+
+motion の行末に書く修飾子。前の行からこの行までの区間で、値がどう変わるかを決める。時刻と値は変えず、その間の通り方だけを変える。属性の型ではなく、行末にだけ書ける。名前は CSS の easing キーワードと同じ
+
+値:
+
+- `:linear` — ずっと同じ速さで変わる。書かなければこれ
+- `:ease_in` — 止まった状態から始まり、だんだん速くなる
+- `:ease_out` — 速く始まり、だんだん遅くなって止まる
+- `:ease` — 両端が遅く、真ん中が速い
+
+### StrokeCap
+
+線の両端の形。strokeCap に渡す
+
+値:
+
+- `:butt` — 端でそのまま切る。書かなければこれ
+- `:round` — 端から半円ぶんはみ出す
+- `:square` — 端から線の太さの半分だけ四角くはみ出す
+
+### StrokeJoin
+
+折れ曲がった線の、角の形。strokeJoin に渡す
+
+値:
+
+- `:miter` — 外側をとがらせる。書かなければこれ
+- `:round` — 外側を丸める
+- `:bevel` — 外側の角を落として平らにする
+
+### Blend
+
+図形や View を、下にある絵とどう混ぜるか。blend に渡す
+
+値:
+
+- `:normal` — そのまま上に重ねる。書かなければこれ
+- `:multiply` — 成分どうしを掛ける。全体が暗くなる
+- `:screen` — 反転して掛け、戻す。全体が明るくなる
+- `:overlay` — 下が暗い所は :multiply、明るい所は :screen。明暗の差が強くなる
+- `:darken` — 成分ごとに暗い方を採る
+- `:lighten` — 成分ごとに明るい方を採る
+- `:difference` — 成分ごとの差の絶対値。同じ色どうしは黒になる
+- `:add` — 成分どうしを足す。光を重ねたように明るくなる
+
+### GradientKind
+
+Gradient の kind。stops の色をどの向きに並べるか
+
+値:
+
+- `:linear` — from から to へまっすぐ変わる。書かなければこれ
+- `:radial` — from を中心に、radius の距離まで外へ広がる
+- `:sweep` — from を中心に、角度に沿って 1 周する
+
+### Shape
+
+描ける図形をまとめた名前。View に place できて、fill や opacity など図形に共通の属性を持つ
+
+まとめている型: Circle | Ellipse | Rect | Line | Polygon | Path | TextArea
+
+### Placeable
+
+View の中に place できるものをまとめた名前。図形と View
+
+まとめている型: Shape | View
+
+### Paint
+
+図形の fill に入れられるものをまとめた名前
+
+まとめている型: Color | Gradient | Shader
+
+### Module
+
+import が束縛するもの。そのファイルが export した名前と、output した View を持つ。import { name } from math と書くと、Module を作らずに名前だけを持ち込む
+
+作り方:
+
+```
+import math
+import .file as m
+import "path/file.moph" as m
+```
+
+### Type
+
+型そのものを指す値。型名を書くとこの値になり、呼ぶとその型の値を作る。alias で別の名前を付けられる。struct と record が作る型もこれ
+
+作り方:
+
+```
+Circle
+alias P = Pos
+```
+
+### Nothing
+
+値を返さなかった関数の戻り値。書き方は無く、log や place のように結果を持たない呼び出しがこれを返す
+
+### エラー
+
+- `SyntaxError.UnexpectedToken` — 構文として読めない
+- `SyntaxError.InvalidLiteral` — 色の桁数、Duration の形式など、書き方が決まっている値が合わない
+- `NameError.UndefinedVariable` — その名前が見つからない
+- `NameError.UndefinedAttribute` — その型にその属性やメソッドが無い
+- `NameError.AssignWithoutLet` — let を書かずに初めて代入した
+- `NameError.Reserved` — builtin の型や関数の名前を宣言し直した
+- `TypeError.OperandType` — 演算子の左右の型が合わない
+- `TypeError.AttributeType` — 属性に入れる値の型が合わない
+- `TypeError.ArgumentType` — 引数の型が合わない
+- `TypeError.ArityMismatch` — 引数や列の数が合わない
+- `TypeError.NotPlaceable` — place できない型を置いた
+- `ValueError.DurationRequired` — 時刻の単位が混ざっている、または 0..1 で書いたのに duration が無い
+- `ValueError.OutOfRange` — 型は合うが値が範囲外
+- `RuntimeError.DivisionByZero` — 0 で割った
+- `RuntimeError.FontNotFound` — その名前のフォントが見つからない
+- `RuntimeError.AudioUnreadable` — 音声ファイルを読めない
+- `RuntimeError.ShaderCompile` — Shader を WGSL に変換できない
+- `RuntimeError.ShaderUnavailable` — GPU が使えないので Shader を走らせられない
+
+
+# module
+
+### math
+
+- `math.PI` -> Number — 円周率
+- `math.TAU` -> Number — 2π
+- `math.E` -> Number — 自然対数の底
+- `math.sin(x: Number)` -> Number — 正弦 (ラジアン)
+- `math.cos(x: Number)` -> Number — 余弦 (ラジアン)
+- `math.floor(x: Number)` -> Number — 切り捨て
+- `math.ceil(x: Number)` -> Number — 切り上げ
+- `math.abs(x: Number)` -> Number — 絶対値
+- `math.sqrt(x: Number)` -> Number — 平方根
+- `math.ln(x: Number)` -> Number — 自然対数
+- `math.exp(x: Number)` -> Number — e の x 乗
+- `math.atan2(y: Number, x: Number)` -> Number — (x, y) の角度 (ラジアン)
+- `math.max(a: Number, b: Number, ...)` -> Number — 最大
+- `math.min(a: Number, b: Number, ...)` -> Number — 最小
+
+### color
+
+- `mix(a: Color, b: Color, k: Number)` -> Color — 2 色を混ぜる。k が 0 なら a、1 なら b
+- `lighten(c: Color, k: Number)` -> Color — 白に近づける。k が 1 なら白
+- `darken(c: Color, k: Number)` -> Color — 黒に近づける。k が 1 なら黒
+- `alpha(c: Color, a: Number)` -> Color — 不透明度だけ変えた色
+- `hsl(h: Number, s: Number, l: Number)` -> Color — 色相・彩度・明度から作る
+- `gray(v: Number)` -> Color — 灰色。0 が黒、255 が白
+
+### shape
+
+- `polar(cx: Number, cy: Number, r: Number, degrees: Number)` -> Vector — 中心から距離 r、角度 degrees の点。0 が真上で、時計回り
+- `regular_polygon(
+  cx: Number,
+  cy: Number,
+  r: Number,
+  n: Number,
+  rotation: Number = 0,
+)` -> List<Vector> — 正多角形の頂点
+- `star(
+  cx: Number,
+  cy: Number,
+  outer: Number,
+  inner: Number,
+  n: Number = 5,
+  rotation: Number = 0,
+)` -> List<Vector> — 星の頂点。外側と内側の半径を交互に
+- `arrow(
+  from: Vector,
+  to: Vector,
+  width: Number,
+  head: Number,
+  head_width: Number = 0,
+)` -> List<Vector> — 矢印の輪郭 (7 点)。from から to へ向く
+
+### layout
+
+- `grid(
+  x: Number,
+  y: Number,
+  w: Number,
+  h: Number,
+  cols: Number,
+  rows: Number,
+)` -> List<Vector> — 格子の各マスの中心。左上 (x, y) から幅 w、高さ h を cols 列 rows 行に分け、左上から行ごとに
+- `cell(w: Number, h: Number, cols: Number, rows: Number)` -> Vector — 格子の 1 マスの大きさ
+- `along(from: Vector, to: Vector, n: Number)` -> List<Vector> — from から to まで、両端を含めて n 個の点
+- `fit(w: Number, h: Number, box_w: Number, box_h: Number)` -> Vector — 幅 w、高さ h のものを、比率を保って box_w x box_h に収めたときの大きさ
+
+### animation
+
+- `fade_to(
+  target: Placeable,
+  from: Number,
+  to: Number,
+  duration: Duration = 0.5s,
+)` -> Timeline — target の不透明度を from から to へ変える Timeline を返す。 0 → 1 と 1 → 0 は fade_in / fade_out があるので、途中の値を使うときに呼ぶ
+- `fade_in(target: Placeable, duration: Duration = 0.5s)` -> Timeline — target が透明な状態から現れる Timeline を返す (不透明度 0 → 1)。 置いた時刻に現れてほしいものに使う
+- `fade_out(target: Placeable, duration: Duration = 0.5s)` -> Timeline — target が消える Timeline を返す (不透明度 1 → 0)。 消え終わってほしい時刻から duration だけ手前に置く
+- `slide_in(
+  target: Placeable,
+  dx: Number,
+  dy: Number,
+  duration: Duration = 0.5s,
+)` -> Timeline — target が (dx, dy) だけずれた所に現れ、今いる場所へ滑り込む Timeline を返す。 終わりに向かって減速する
+- `slide_out(
+  target: Placeable,
+  dx: Number,
+  dy: Number,
+  duration: Duration = 0.5s,
+)` -> Timeline — target が今いる場所から (dx, dy) の方へ、消えながら去る Timeline を返す。 進むほど加速する
+- `move_by(
+  target: Placeable,
+  dx: Number,
+  dy: Number,
+  duration: Duration = 0.5s,
+)` -> Timeline — target が今いる場所から (dx, dy) だけ動く Timeline を返す。 動き出しと止まり際がなめらかになる
+- `spin(
+  target: Placeable,
+  turns: Number,
+  duration: Duration = 1s,
+)` -> Timeline — target が時計回りに turns 周まわる Timeline を返す。速さは一定
+- `show(
+  track: Timeline,
+  targets: List<Placeable>,
+  at: Duration,
+  end: Duration,
+  duration: Duration = 0.5s,
+  stagger: Duration = 0s,
+)` -> Nothing — at に現れて end に消え終わるまでを、track に直接置く。 場面の出し入れをまとめて書くためのもので、戻り値は無い
+
+### fractal
+
+- `escape_time(
+  formula: Dict,
+  coloring: (Number, Vector) -> Color,
+  center: Vector,
+  span: Number,
+  precision: Symbol = :perturbation,
+  zoom: (Number) -> Number = func (t) { 1 },
+  max_iter: (Number) -> Number = func (zoom) { 200 },
+  samples: Number = 1,
+  at: Vector = Vector(0, 0),
+  box: Vector = Vector(16, 9),
+  flip: Bool = false,
+  bailout: Number = 256,
+  ref_iter: Number = 8000,
+)` -> Color, center: Vector, span: Number, precision: Symbol = :perturbation, zoom: (Number) -> Number = func (t) — エスケープタイム系フラクタルの Shader を作る。図形の fill に入れる
+- `mandelbrot` -> Dict — Mandelbrot 集合の反復式 z' = z² + p。z は 0 から始まり、p がピクセルの複素座標。 escape_time の formula に渡す。摂動法にも対応している
+- `julia(c: JuliaConstant)` -> Dict — Julia 集合の反復式 z' = z² + c を作る。z はピクセルの複素座標から始まり、c は全ピクセルで共通。 escape_time の formula に渡す
+- `burning_ship` -> Dict — Burning Ship の反復式 z' = (|Re z| + i|Im z|)² + p。実部と虚部の絶対値を取ってから 2 乗する。 escape_time の formula に渡す。escape_time に flip: true を付けると、慣習どおり船が上を向く
+- `multibrot(n: Number)` -> Dict — Multibrot の反復式 z' = z^n + p を作る。n が 2 なら Mandelbrot と同じで、大きいほど腕の数が増える。 escape_time の formula に渡す
+- `plain` -> Symbol — GPU の 32 bit のまま反復する。escape_time の precision に渡す。 数万倍あたりまでなら、これで足りる
+- `perturbation` -> Symbol — 中心の点の軌道をスクリプト側の 64 bit で計算し、GPU はそこからの差分だけ反復する (摂動法)。 escape_time の precision に渡す。10 兆倍あたりまで寄れる
+- `smooth(
+  stops: List<Color>,
+  period: Number,
+  inside: Color = #000000,
+)` -> (Number, Vector) -> Color — 脱出の速さから色を決める関数を作る。stops を period 回の反復ごとに 1 周する。 escape_time の coloring に渡す
+- `cmul(a: Vector, b: Vector)` -> Vector — 複素数の積。複素数は Vector (x が実部、y が虚部)
+- `cabs2(z: Vector)` -> Number — 複素数の絶対値の 2 乗
+
+
+# 構文の例
+
+### arithmetic.moph
+
+```
+# arithmetic.moph — 演算 (すべて仮)
+
+import math
+
+# 四則と剰余、べき
+let a = 1 + 2 * 3        # 7
+let b = (1 + 2) * 3      # 9
+let c = 7 % 3            # 1
+let d = 2 ^ 10           # 1024
+
+# 分数はそのまま計算される
+let e = 1/3 + 1/6        # 1/2
+
+# Duration 同士、Duration と数値
+let t1 = 1s + 500ms      # 1.5s
+let t2 = 2s * 3          # 6s
+let t3 = 10s / 4         # 2.5s
+let k  = 3s / 1s         # 3 (数値)
+
+# タプルの要素ごとの演算
+let p = (1, 2) + (0.5, 0.5)   # (1.5, 2.5)
+let q = (1, 2) * 2            # (2, 4)
+
+# Color の合成
+let mix = #ff0000 * 0.5 + #0000ff * 0.5
+
+# 比較と論理
+let ok = a > 5 and b <= 9
+let ng = not ok or c == 1
+
+# 標準ライブラリ (先頭の import math が要る)
+let pi = math.PI               # math.PI / math.TAU / math.E
+let s = math.sin(3.14)
+let m = math.max(1, 2, 3)
+let f = math.floor(2.7)
+let g = math.sin               # 関数は値として取り出せる
+
+log(a, b, c, d, e)          # 7 9 1 1024 0.5
+log(t1, t2, t3, k)          # 1.5s 6s 2.5s 3
+log(p, q, mix)              # (1.5, 2.5) (2, 4) #800080
+log(ok, ng, s, m, f)        # true true 0.00159... 3 2  (not ok が先に結合するので (not ok) or (c == 1))
+```
+
+### basic.moph
+
+```
+# basic.moph — 束縛、リテラル、型 (すべて仮)
+
+# 束縛は let。再代入は = のみ
+let n = 3
+n = n + 1
+
+# 数値。整数と実数を区別しない
+let a = 1
+let b = 1.5
+let c = 1/3          # 分数のまま持つ。c * 3 は 1
+
+# Duration
+let d1 = 83s
+let d2 = 1m23s
+let d3 = 01:23           # mm:ss
+let d4 = 01:23:45.678    # hh:mm:ss.fff
+let d5 = 500ms
+
+# Color
+let red   = #e04040
+let half  = #e04040cc            # 8 桁目までで不透明度
+let short = #e44                 # 3 桁 = #ee4444。4 桁なら不透明度付き
+let named = red
+let plain = Color(r = 224, g = 64, b = 64, a = 1)   # 名前で渡す形
+let t1 = Color(224, 64, 64)                     # record。Color を返す
+let t2 = Color(224, 64, 64, 1)
+
+# パーセント。100% は 1.0
+let full = 100%
+let q    = 25%                   # 0.25
+
+# 文字列
+let s = "hello"
+let t = "n = {n}".format(n)     # {name} を順に置き換える。名前は説明用
+
+# 真偽値
+let ok = true
+
+# タプルとリスト
+let p  = (1, 1.5)        # 座標などに使う
+let xs = [1, 2, 3]
+
+# オブジェクト生成
+let c = Circle(fill = red, radius = 0.5)
+
+# 属性の参照と更新
+let r = c.radius
+c.radius = 1
+
+# ログ出力 (stderr)。動画には出ない
+log("radius = ", r)
+log("radius = {r}".format(r))
+log(c)                           # オブジェクトはそのまま表示
+```
+
+### collection.moph
+
+```
+# collection.moph — List / Tuple / Range / Dict (すべて仮)
+
+# ---- List ----
+let xs = [1, 2, 3]
+let ys = []                      # 空
+
+xs[0]                            # 1
+xs[-1]                           # 3 (末尾)
+xs.len()                         # 3
+
+xs.push(4)                       # [1, 2, 3, 4]。破壊的
+let zs = xs + [5, 6]             # 連結。新しい List
+let sub = xs[1..3]               # [2, 3]。スライス
+
+xs.contains(2)                   # true
+xs.index_of(3)                   # 2。無ければ -1
+
+# 変換
+xs.map(func (x) { x * 2 })       # [2, 4, 6]
+xs.filter(func (x) { x > 1 })    # [2, 3]
+xs.reduce(0, func (acc, x) { acc + x })   # 6
+xs.sum()                         # 6
+xs.reverse()                     # [3, 2, 1]
+xs.sort()                        # 昇順
+xs.enumerate()                   # [(0, 1), (1, 2), (2, 3)]
+xs.zip([10, 20, 30])             # [(1, 10), (2, 20), (3, 30)]
+
+# 図形の List
+let v = View(box = Vector(4, 3))
+let circles = [1, 2, 3].map(func (i) {
+  Circle(position = Pos(i, 1.5), radius = 0.3, fill = #e04040)
+})
+for c in circles {
+  v.place(c)
+}
+
+# ---- String ----
+"hello".len()                    # 5 (文字数)
+"a b c".replace(" ", "")         # "abc"
+["a", "b"].join("-")             # "a-b"
+
+# ---- Tuple ----
+let p = (1, 1.5)
+p.0                              # 1
+p.1                              # 1.5
+let (x, y) = p                   # 分割代入
+let q = (x, y, 0)                # 要素数は自由
+
+# 座標用の別名 (Tuple の要素に名前を付ける)
+p.x                              # 1。2 要素の Tuple に限り .x .y で参照できる
+p.y                              # 1.5
+
+# ---- Range ----
+let r = 0..5                     # 0, 1, 2, 3, 4
+let ri = 0..=5                   # 0 〜 5
+r.to_list()                      # [0, 1, 2, 3, 4]
+r.len()                          # 5
+for i in 0..3 { log(i) }
+
+# 実数の範囲 (for には使えない。均等に分ける)
+let fs = (0..=1).steps(4)        # [0, 0.25, 0.5, 0.75, 1]
+
+# ---- Dict ----
+let m = { "red": #e04040, "green": #40a040 }
+m["red"]                         # #e04040
+m.keys()                         # ["red", "green"]
+m.values()
+m.has("blue")                    # false
+m["blue"] = #4040e0              # 追加
+for (k, val) in m {
+  log("{k}: {val}".format(k, val))
+}
+
+log(xs, zs, sub, fs)                 # [1, 2, 3, 4] [1, 2, 3, 4, 5, 6] [2, 3] [0, 0.25, 0.5, 0.75, 1]
+log(p.0, p.1, x, y, q, p.x, p.y)    # 1 1.5 1 1.5 (1, 1.5, 0) 1 1.5
+log(m["red"], m.keys(), m.has("blue"), m.has("cyan"))   # #e04040 ["red", "green", "blue"] true false
+```
+
+### error.moph
+
+```
+# error.moph — エラーの種類と例 (すべて仮)。各行がエラー
+
+# ---- エラー種別のツリー ----
+# Error
+# ├─ SyntaxError            構文として読めない
+# │  ├─ UnexpectedToken
+# │  └─ InvalidLiteral       色の桁数、Duration の形式など
+# ├─ NameError              名前が解決できない
+# │  ├─ UndefinedVariable
+# │  ├─ UndefinedAttribute
+# │  ├─ AssignWithoutLet
+# │  └─ Reserved            builtin の型の名前を struct / record / type で宣言し直した
+# ├─ TypeError              型が合わない
+# │  ├─ OperandType          演算子の左右
+# │  ├─ AttributeType        属性に入れる値
+# │  ├─ ArgumentType         関数・コンストラクタの引数
+# │  ├─ ArityMismatch        引数や列の数
+# │  └─ NotPlaceable         place できない型
+# ├─ ValueError             型は合うが値が不正
+# │  ├─ DurationRequired     時刻の単位が混在、相対時刻なのに duration が無い
+# │  └─ OutOfRange
+# └─ RuntimeError           実行時
+#    ├─ DivisionByZero
+#    ├─ FontNotFound
+#    ├─ AudioUnreadable      import した音声を ffprobe が読めない (音声ストリームが無い、ffprobe が無い)
+#    ├─ ShaderCompile        Shader の関数に GPU で計算できないものがある (描画時に出る)
+#    └─ ShaderUnavailable    GPU の無い場面で Shader を描こうとした
+
+# ---- SyntaxError ----
+let d = #e0404                 # SyntaxError.InvalidLiteral: color literal must have 3, 4, 6 or 8 hex digits
+let e = 1:2:3:4                # SyntaxError.InvalidLiteral: invalid duration literal "1:2:3:4"
+let f = (1, 2                  # SyntaxError.UnexpectedToken: expected ")" but found end of line
+
+let v = View(box = Vector(4, 3))
+let tr = Timeline(duration = 10s)
+let n = 1
+
+# ---- NameError ----
+let y = z + 1                  # NameError.UndefinedVariable: "z" is not defined
+let ann: Numbr = 1             # NameError.UndefinedVariable: "Numbr" is not a type
+import "nope.m4a" as bgm       # NameError.UndefinedVariable: cannot read "nope.m4a": ... is not a file
+w = 1                          # NameError.AssignWithoutLet: "w" is not defined; use "let w = ..."
+record List { a: Number }      # NameError.Reserved: "List" is a builtin type and cannot be redeclared
+let x = Circle(radius = 1)
+x.width = 2                    # NameError.UndefinedAttribute: Circle has no attribute "width"
+
+# ---- TypeError ----
+let a = 1s + 1                 # TypeError.OperandType: cannot add Duration and Number
+let c = #e04040 + 1            # TypeError.OperandType: cannot add Color and Number
+x.position = 1                 # TypeError.AttributeType: Circle.position expects Pos, found Number
+let ta = TextArea(text = 1)   # TypeError.ArgumentType: TextArea.text expects String, found Number
+let mo = motion { 0s: 0, 1s: 1 }
+mo.apply(x, func (x, t, [p, q]) { x.radius = p })   # TypeError.ArityMismatch: motion has 1 column but 2 parameters given
+tr.place(mo, at = 0s)           # TypeError.NotPlaceable: Motion cannot be placed; apply it to make a Timeline
+tr.place(1, at = 0s)            # TypeError.ArgumentType: Timeline.place expects Timeline, Audio or Subtitle, found Number
+
+# ---- ValueError ----
+let m = motion { 0s: 0, 0.5: 1 }   # ValueError.DurationRequired: keyframe times must be all Duration or all Number (0..1)
+let m2 = motion { 5: 0 }       # ValueError.OutOfRange: relative keyframe time must be within 0..1
+tr.place(Subtitle(text = "a"), at = 0s)   # ValueError.DurationRequired: a Subtitle needs duration before it is placed
+v.place(1)                     # TypeError.ArgumentType: View.place expects Placeable, found Number
+output Circle(radius = 1)      # TypeError.ArgumentType: output takes a View, found Circle
+let h = #e04040 * 2            # ValueError.OutOfRange: color channel exceeds 1.0
+
+# ---- RuntimeError ----
+let g = 1 / (n - n)            # RuntimeError.DivisionByZero: division by zero
+let t2 = TextArea(text = "a", font = "NoSuchFont")   # RuntimeError.FontNotFound: font "NoSuchFont" not found   (未実装: フォント読み込みは M2)
+```
+
+### function.moph
+
+```
+# function.moph — 関数 (すべて仮)
+
+# 定義
+func double(x) {
+  x * 2                  # 最後の式が戻り値
+}
+
+func add(a, b) {
+  return a + b           # return も使える
+}
+
+# if の中の return は関数を抜ける
+func sign(x) {
+  if x < 0 { return -1 }
+  1
+}
+
+# 無名関数
+let triple = func (x) { x * 3 }
+
+# 分割代入する引数
+let sum3 = func ([a, b, c]) { a + b + c }
+sum3([1, 2, 3])          # 6
+
+# 既定値と名前付き引数
+func circle_at(pos, r = 0.5, fill = #a0a0a0) {
+  Circle(position = pos, radius = r, fill = fill)
+}
+let c1 = circle_at(Pos(1, 1))
+let c2 = circle_at(Pos(2, 1), fill = #e04040)
+
+# 関数を返す
+func scaler(k) {
+  func (x) { x * k }
+}
+let half = scaler(1/2)
+half(4)                  # 2
+
+# context: オブジェクトに短い別名を付けて属性を扱う
+let c = Circle()
+let variableWithLongName = Rect()
+context c as o, variableWithLongName as v {
+  o.position, o.radius = Pos(1, 1.5), 0.5
+  o.fill = #4040e0
+  v.w = 1
+}
+
+# ---- ... で引数に広げる ----
+let pair = (1, 2)
+log(add(...pair))                       # 3。add(1, 2) と同じ
+log(add(...[1], 5))                     # 6。ほかの引数と混ぜてよい
+log(add(...{ "a": 1, "b": 9 }))         # 10。Dict は名前付き引数になる
+
+log(double(3), add(1, 2), triple(3), sum3([1, 2, 3]), half(4))   # 6 3 9 6 2
+log(sign(-5), sign(3))   # -1 1
+log(c1, c2)
+log(c)
+```
+
+### media.moph
+
+```
+# media.moph — 音声と字幕 (すべて仮)。どちらも Timeline に置き、render が動画のトラックにする
+
+let v = View(box = Vector(4, 3))
+let track = Timeline()
+
+# ---- 音声。.moph 以外のファイルを import すると Audio になる (長さは ffprobe で読む) ----
+import "../gallery/mophila_intro/QuietSignal.m4a" as bgm
+log(type_of(bgm), bgm.duration, bgm.file)         # Audio 152.52s ../gallery/mophila_intro/QuietSignal.m4a
+
+track.place(bgm, at = 0s, fadeIn = 1s, duration=5s, fadeOut = 2s)   # 動画の終わりまで繰り返す (動画は延びない)
+track.place(bgm, at = 0.5s, duration = 5s, volume = 0.6)                                        # 3 秒から 5 秒分だけ (重ねて鳴る)
+
+# ---- 字幕。text と duration を持つ。画面には描かず、動画の字幕トラック (mp4 は mov_text) に書く ----
+let s1 = Subtitle(text = "最初の字幕", duration = 3s)
+track.place(s1, at = 1s)
+let s2 = Subtitle(text = "2 行目は\nで分ける", duration = 2s)
+track.place(s2, at = 5s)
+
+# 動画の長さは置いたものの終わりで決まる (loop でない曲が長ければ曲の終わりまで)
+v.addTrack(track)
+output v
+
+# render は音声を混ぜて (adelay / amix / afade) 動画に付ける。preview でも鳴り、字幕は画面の下に重ねて出る
+# bundle は import した音声も埋め込む
+```
+
+### minimal.moph
+
+```
+# minimal.moph — 最初に動かす対象
+
+let view = View(box = Vector(200, 200))
+let redCircle = Circle(position = Pos(100, 100), radius = 10, fill = #e04040)
+
+# context は式。最後の式 (motion) が値になる
+let grow = context redCircle as c {
+  motion (t) {
+    0s: c.radius = 10
+    3s: c.radius = 100
+  }
+}
+
+let x = (1 + 2) * 3 ^ 2 / 4 % 5
+log("x = ", x)
+log("x = {x}, doubled = {d}".format(x, x * 2))
+
+view.place(redCircle)
+view.addTrack(grow)
+output view
+```
+
+### motion.moph
+
+```
+# motion.moph — motion と Timeline。View に置いて、時間で動かして、output するまで
+
+let v = View(box = Vector(4, 3))
+
+# ---- View に置く。位置は図形の position で決まる ----
+let red   = Circle(position = Pos(1, 1.5), radius = 0.5, fill = #e04040)
+let green = Rect(position = Pos(2, 0.5, anchor = :topLeft), w = 1, h = 1, fill = #40a040, stroke = #000000, strokeWidth = 0.05)
+let line  = Line(from = Vector(0, 3), to = Vector(4, 0), stroke = #4040e0, strokeWidth = 0.03)
+let tri   = Polygon(points = [Vector(3, 2), Vector(4, 3), Vector(2, 3)], fill = #e0a020)
+v.place(red)
+v.place(green)
+v.place(line)
+v.place(tri)
+
+# ---- Motion: 値の時間変化。対象なし ----
+# t = その行の時刻 (秒)、a = 1 列目、b = 2 列目 (同じ行の左の列を参照)
+let m1 = motion (t, a, b) {
+  1s: t*3, a*1, b*3      # 3, 3, 9
+  2s: t*4, a*2, b*4      # 8, 16, 64
+  5s: t*3, a*3, b*5      # 15, 45, 225
+}
+# m1.duration は 5s。延ばすには
+m1.duration = 10s
+
+# 定数だけの Motion。行末に Easing を書ける
+let m2 = motion {
+  0s: 0
+  2s: 3
+  5s: 0 :ease_out
+}
+
+# ---- Timeline: Motion を対象に当てる ----
+let c1 = Circle(position = Pos(0.5, 1.5), radius = 0.3, fill = #a0a0a0)
+v.place(c1)
+
+# apply は builtin メソッド。列を受け取る関数を渡す
+let calc = func (c1, t, [x, r, _]) {
+  context c1 as o {
+    o.position, o.radius = Pos(x / 5, 1.5), r / 100
+  }
+}
+let tl1 = m1.apply(c1, calc)
+
+# context で囲んで属性に代入する形。戻り値は Timeline
+let tl2 = context c1 as o {
+  motion (t) {
+    1s: o.radius = t / 10
+    2s: o.radius = t / 5
+    5s: o.radius = t / 10
+  }
+}
+
+# 属性名を先に列挙する形
+let tl3 = motion c1 [:position, :radius] {
+  0s: Pos(0.5, 0.5), 0.5
+  2s: Pos(3.5, 2.5), 1
+  5s: Pos(0.5, 0.5) :ease_out
+}
+
+# 参照を辿った先だけ
+let tl4 = motion c1 [:position.x] {
+  0s: 0.5
+  2s: 3.5
+}
+
+# 対象は名前だけでなく、属性や添字でも書ける
+let balls = [c1]
+let tl5 = motion balls[0] [:opacity] {
+  0s: 1
+  1s: 0.2
+}
+
+log(m1, m2, tl1, tl2, tl3, tl4, tl5)
+
+# ---- Timeline を Timeline に置く ----
+let track = Timeline(duration = 10s)
+track.place(tl1, at = 0s)
+track.place(tl3, at = 3s, fadeIn = 1s)
+
+let sub = Timeline()
+sub.place(tl2, at = 0s)
+track.place(sub, at = 5s)         # 5s 時点に sub。sub の長さは中身で決まる
+
+# ---- View に Timeline を付けて出力 ----
+v.addTrack(track)
+output v
+```
+
+### statement.moph
+
+```
+# statement.moph — 制御構文 (すべて仮)
+
+let n = 5
+
+# if / else
+if n > 3 {
+  log("big")
+} else if n > 1 {
+  log("mid")
+} else {
+  log("small")
+}
+
+# for: 範囲
+for i in 0..5 {          # 0, 1, 2, 3, 4
+  log(i)
+}
+for i in 0..=5 {         # 0 〜 5
+  log(i)
+}
+
+# for: リスト
+let colors = [#e04040, #40a040, #4040e0]
+for col in colors {
+  let c = Circle(fill = col)
+}
+
+# for: インデックス付き
+for (i, col) in colors.enumerate() {
+  log("{i}: {col}".format(i, col))
+}
+
+# ブロックは値を返す (最後の式)
+let size = if n > 3 { 1/2 } else { 1/4 }
+```
+
+### type.moph
+
+```
+# type.moph — 型の一覧 (すべて仮)。examples/ に登場する型をすべて載せる
+
+# ---- 基本型 ----
+# 型名を呼ぶ形が実体で、リテラルはその短い書き方。両方書ける型は == で等しい
+# Number    1  1.5  1/3  25% (= 0.25)。整数と実数を区別しない
+# Duration  83s  1m23s  500ms  01:23  01:23:45.678
+# Bool      true  false
+# String    "hello"
+# Symbol    :center  :linear    名前そのものが値
+# Color     #e04040  #e04040cc  #e44 (= #ee4444)  #e448  Color(224, 64, 64)  Color(224, 64, 64, 1)
+#           r/g/b 0..255, a 0..1
+# Tuple     (1, 1.5)            = Tuple(1, 1.5)      要素ごとに型が違ってよい
+# List      [1, 2, 3]           = List(1, 2, 3)      要素は同じ型
+# Dict      { "red": #e04040 }  = Dict(red = #e04040)  キーは String
+# Range     0..5                = Range(0, 5)        0..=5 は Range(0, 6)
+# Func      func (x) { x }      下記
+log([1, 2, 3] == List(1, 2, 3), { "a": 1 } == Dict(a = 1), (0..5) == Range(0, 5))
+
+# ---- Func ----
+# 型の表記は宣言と同じ形: (引数の型, ...) -> 戻り値の型
+let double: (Number) -> Number = func (x) { x * 2 }
+let add:    (Number, Number) -> Number = func (a, b) { a + b }
+let mk:     (Pos) -> Circle = func (p) { Circle(position = p) }
+let noret:  (String) -> Nothing = func (s) { log(s) }
+# builtin の log と type_of は、どの型でも受け取るので型を書けない
+
+# ---- Module ----
+# import で束縛される。標準ライブラリは math のみ
+import math
+# math:       Module
+# math.PI / math.TAU / math.E:  Number
+# math.sin:   (Number) -> Number     (cos, floor, ceil, abs, sqrt も同じ)
+# math.max:   (Number...) -> Number  (min も)
+
+# ---- record と struct (ユーザー定義) ----
+# record はイミュータブル。作った後は書き換えられず、中身が同じなら == で等しい
+record Size {
+  w: Number
+  h: Number
+  method area(self) -> Number { self.w * self.h }
+}
+let s1 = Size(1, 2)           # 位置で渡す
+let s2 = Size(w = 3, h = 4)   # 名前で渡す
+log(s1, s1.w, s1.area(), s1 == Size(1, 2))   # Size(1, 2) 1 2 true
+log(s1.copy(h = 9))                          # Size(1, 9)
+
+# struct はミュータブル。属性を書き換えられ、== は同じ実体かどうかを見る
+struct Counter {
+  n: Number = 0
+  private step: Number = 1
+  func new(start: Number) -> Counter { Counter(n = start) }
+  method next(self) -> Number {
+    self.n = self.n + self.step
+    self.n
+  }
+}
+let c = Counter(10)
+log(c.next(), c.next(), type_of(c))          # 11 12 Counter
+
+# ---- Union 型 ----
+# Shape (図形すべて)、Placeable (Shape | View)、Paint (Color | Shader | Gradient) は言語が持っている。
+# 自分で作るときは type 名 = A | B。builtin の型名では宣言できない
+type Fill = Color | Gradient
+
+# ---- 決まった値しか取らない型 ----
+# 値はすべて Symbol。呼んでは作れない
+# Easing       :linear :ease_in :ease_out :ease      motion の行末。値の変わり方
+# Align        :left :center :right                  TextArea.align
+# Anchor       :center :topLeft :topRight :bottomLeft :bottomRight :top :bottom :left :right
+# StrokeCap    :butt :round :square                  線の端の形
+# StrokeJoin   :miter :round :bevel                  線の角の形
+# Blend        :normal :multiply :screen :overlay :darken :lighten :difference :add
+# GradientKind :linear :radial :sweep
+
+# ---- 位置 ----
+# Vector  Vector(1, 1.5)   .x .y で参照できる
+# Pos     Pos(1, 1.5)      x, y, anchor (既定 :center)。Pos(Vector(1, 1.5)) も同じ
+#
+# (1, 1.5) は Tuple であって Vector でも Pos でもない。
+# Vector や Pos が要る場所には、型名を書く
+let pos = Pos(1, 1.5)
+pos.anchor                                 # :center
+pos.vector                                 # Vector(1, 1.5)
+# 基準点の違う Pos 同士の変換には図形のサイズが要るので、place された後にしかできない
+
+# ---- 図形 (Shape) ----
+# 共通属性: fill: Color, stroke = Color, strokeWidth = Number, opacity = Number
+let c = Circle(position = Pos(1, 1.5),   # Pos
+  radius = 0.5,          # Number
+  fill =   #e04040)
+
+let r = Rect(position = Pos(0, 0, anchor = :topLeft),
+  w = 1,                 # Number
+  h = 1/2,               # Number
+  radius = 0.1,          # Number。角の丸み。省略なら 0
+  fill = #40a040,
+  stroke = #000000,
+  strokeWidth = 0.02)
+
+let l = Line(from = Vector(0, 0),     # Vector
+  to =   Vector(4, 3),     # Vector
+  stroke = #000000,
+  strokeWidth = 0.05)
+
+let p = Polygon(points = [Vector(0, 0), Vector(1, 0), Vector(0.5, 1)],   # List<Vector>
+  fill = #4040e0)
+
+let t = TextArea(text = "hello",        # String
+  position = Pos(0, 0, anchor = :topLeft),
+  w = 2,                 # Number。幅に合わせて折り返す
+  font = "Noto Sans JP", # String。フォントの指定方法は未決
+  fontSize = 0.3,        # Number。箱の座標単位
+  fill = #000000,
+  align = :left,         # Align
+)
+
+# ---- 箱 ----
+let v = View(box = Vector(4, 3))  # box: Vector。座標系 0..4 × 0..3。ピクセルは持たない
+# v.place(target = Placeable) -> Nothing   (位置は target の position。w / h の扱いは未決)
+# v.addTrack(t = Timeline) -> Nothing
+
+# ---- 時間 ----
+let m  = motion { 0s: 0, 1s: 1 }             # Motion。値の時間変化。対象なし
+#   m.duration: Duration
+#   m.apply(target = Shape, f = Func<Shape, Duration, List -> Nothing>) -> Timeline
+let tl = m.apply(c, func (c, t, [x]) { c.radius = x })   # Timeline。対象 + 割り当て
+let tr = Timeline(duration = 10s)      # Timeline。入れ物にもなる
+#   tr.duration: Duration
+#   tr.place(t = Timeline, at = Duration, fadeIn = Duration, fadeOut = Duration) -> Nothing
+
+# ---- その他 ----
+# Nothing   値を返さなかった関数の戻り値。書き方は無い
+# Type      型そのもの。型名を書くとこの値になり、呼ぶとその型の値を作る
+# Module    import が束縛するもの
+log(type_of(log(1)), type_of(Circle), type_of(math))
+
+# ---- 型の確認 ----
+type_of(c)        # "Circle"
+type_of(1s)       # "Duration"
+type_of(1/3)      # "Number"
+type_of(double)   # "(Number) -> Number"
+
+log(type_of(add), type_of(m), type_of(tl), type_of(tr), type_of(v), type_of(t))
+```

@@ -61,6 +61,7 @@ impl Setting {
     }
 }
 
+#[derive(Clone)]
 pub struct Project {
     /// 設定ファイルそのもの。ログに出す
     pub path: PathBuf,

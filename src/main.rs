@@ -128,6 +128,10 @@ struct OutputArgs {
     /// 動画のこの区間だけを書き出す。00:15..00:30 (15 秒から 30 秒)、00:15 (15 秒以降)、..01:30 (最初から 1 分 30 秒)
     #[arg(long, value_parser = parse_trim)]
     trim: Option<Trim>,
+    /// フレームを組むスレッドの数 (既定 1)。0 なら CPU の数から決める。
+    /// 組み立てが GPU より重い絵でだけ速くなる。Shader を使う絵は常に 1 本
+    #[arg(long, default_value_t = 1)]
+    jobs: usize,
 }
 
 /// --trim の区間。None は端まで
@@ -358,29 +362,65 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
         let frames = ((to - from) * f64::from(args.fps)).round() as u32;
         (0..frames).map(|f| from + f64::from(f) / f64::from(args.fps)).collect()
     };
-    // フレーム N を GPU に投入したら、その完了を待つ前にフレーム N+1 の eval と scene を進める。
-    // N の読み戻しは N+1 を投入した後に行う (GPU が N を描いている間に CPU が N+1 を組み立てる)
-    let mut pending: Option<usize> = None;
+    // GPU には 2 フレームまで投入しておき、3 本目を投入する前に古い方を読み戻す。
+    // 待ちの間に次のフレームが GPU に入っているので、読み戻しで止まらない
+    let mut pending: std::collections::VecDeque<usize> = std::collections::VecDeque::new();
     // 置いたものは描いている間に増えないので、1 度集めて使い回す
     let tracks = lang::eval::all_tracks(&view);
     let mut progress = render::progress::Progress::new(&name, times.len());
-    for (i, t) in times.into_iter().enumerate() {
-        timing.measure("eval", || -> Result<(), Box<dyn Error>> {
-            interp.begin_frame(t);
-            for placed in &tracks {
-                interp.apply_track(placed, t)?;
+    // Shader の塗りは描画命令を組む時点で GPU を使うので、別スレッドでは組めない
+    let workers = match render::scene::uses_shader(&view) {
+        true => 1,
+        false => match args.jobs {
+            0 => std::thread::available_parallelism().map_or(1, |n| n.get().min(4)).max(1),
+            n => n.max(1),
+        },
+    };
+    let mut frames = (workers > 1 && times.len() > 1).then(|| {
+        render::frames::Frames::start(
+            &render::frames::Job {
+                src: src.to_string(),
+                base_dir: interp.base_dir.clone(),
+                sources: sources.cloned(),
+                project: project.as_ref().map(|p| (**p).clone()),
+                width: f64::from(width),
+                height: f64::from(height),
+            },
+            &times,
+            workers,
+        )
+    });
+    for (i, t) in times.iter().copied().enumerate() {
+        let scene = match &mut frames {
+            // 別スレッドが組んだもの。配った順に届く
+            Some(frames) => timing.measure("frame", || -> Result<vello::Scene, Box<dyn Error>> {
+                match frames.recv() {
+                    Some(Ok((n, scene))) if n == i => Ok(scene),
+                    Some(Ok((n, _))) => Err(format!("フレームの並びが崩れた ({n} が {i} の位置に来た)").into()),
+                    Some(Err(e)) => Err(e.into()),
+                    None => Err("フレームを組むスレッドが落ちた".into()),
+                }
+            })?,
+            None => {
+                timing.measure("eval", || -> Result<(), Box<dyn Error>> {
+                    interp.begin_frame(t);
+                    for placed in &tracks {
+                        interp.apply_track(placed, t)?;
+                    }
+                    Ok(())
+                })?;
+                timing.measure("scene", || render::scene::build(&view, f64::from(width), f64::from(height), t, interp.cache_mut()))?
             }
-            Ok(())
-        })?;
-        let scene = timing.measure("scene", || render::scene::build(&view, f64::from(width), f64::from(height), t, interp.cache_mut()))?;
-        if let Some(prev) = pending.take() {
+        };
+        pending.push_back(timing.measure("render", || renderer.render(&scene, interp.cache_mut().shaders.as_mut()))?);
+        if pending.len() == 2 {
+            let prev = pending.pop_front().expect("2 本ある");
             timing.measure("readback", || renderer.read_pixels(prev, &mut pixels))?;
             timing.measure("encode", || ffmpeg.write_frame(&pixels))?;
         }
-        pending = Some(timing.measure("render", || renderer.render(&scene, interp.cache_mut().shaders.as_mut()))?);
         progress.step(i + 1);
     }
-    if let Some(prev) = pending {
+    while let Some(prev) = pending.pop_front() {
         timing.measure("readback", || renderer.read_pixels(prev, &mut pixels))?;
         timing.measure("encode", || ffmpeg.write_frame(&pixels))?;
     }

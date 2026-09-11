@@ -527,3 +527,9 @@ fn draw_shader_fill(scene: &mut Scene, path: &BezPath, transform: Affine, opacit
     scene.fill(Fill::NonZero, transform, &Brush::Image(brush), Some(transform.inverse() * Affine::translate((x0, y0))), path);
     Ok(())
 }
+
+/// View の中に Shader の塗りがあるか。あると描画命令を組むのに GPU が要る
+pub fn uses_shader(view: &ObjRef) -> bool {
+    let v = view.borrow();
+    shader_fill(&v).is_some() || v.children.iter().any(uses_shader)
+}

@@ -14,6 +14,7 @@ const MAGIC: &[u8] = b"MOPHILA-BUNDLE-2";
 
 /// 埋め込まれたファイル。パスはメインのスクリプトのディレクトリからの相対 (正規化済み)。
 /// スクリプトは本文で持ち、音声などは一時ディレクトリに取り出して実際のパスで持つ
+#[derive(Clone)]
 pub struct Sources {
     pub main: String,
     pub files: HashMap<String, String>,

@@ -44,6 +44,7 @@ mophila run a.moph                             # 描画せず実行。log と型
 mophila run                                    # mophila.yaml の entry を実行
 mophila render a.moph -o out.png --at 2.5s     # 1 フレーム。形式は拡張子で決まる
 mophila render a.moph -o out.mp4 --size 360p   # 動画 (fps 既定 10)
+mophila render a.moph -o out.mp4 --jobs 4      # 組み立てを 4 スレッドに分ける (重い絵だけ速くなる)
 mophila render a.moph -o out.mp4 --trim 00:15..00:30   # 区間だけ
 mophila preview a.moph [--loop] [--at 1s]      # ウィンドウで再生
 mophila timeline a.moph [--filter k=v]         # 何がいつどう変わるかの一覧

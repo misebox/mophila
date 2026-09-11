@@ -318,12 +318,17 @@ pub struct Timeline {
     pub duration: Cell<Option<f64>>,
     /// place で中に置いたもの。入れ物として使うときはこちらだけを持つ
     pub tracks: RefCell<Vec<Placed>>,
+    /// (対象, 属性パス) ごとの (キーフレーム番号, 割り当て番号)。keyframes から決まるので 1 度だけ作る
+    pub groups: RefCell<Option<Rc<Groups>>>,
 }
+
+/// (対象, 属性パス, その属性を書くキーフレームの並び)
+pub type Groups = Vec<(ObjRef, Vec<String>, Vec<(usize, usize)>)>;
 
 impl Timeline {
     /// 中身のない入れ物
     pub fn empty(duration: Option<f64>) -> Timeline {
-        Timeline { param: "t".into(), keyframes: Vec::new(), relative: false, duration: Cell::new(duration), tracks: RefCell::new(Vec::new()) }
+        Timeline { param: "t".into(), keyframes: Vec::new(), relative: false, duration: Cell::new(duration), tracks: RefCell::new(Vec::new()), groups: RefCell::new(None) }
     }
 }
 
@@ -365,6 +370,25 @@ impl Timeline {
             // 入れ物として使っているときは、中に置いたものの終わりまで
             None => keyframes.max(self.tracks.borrow().iter().map(Placed::end).fold(0.0, f64::max)),
         }
+    }
+
+    /// (対象, 属性パス) ごとのキーフレームの並び。毎フレーム引くので 1 度だけ作って持つ
+    pub fn groups(&self) -> Rc<Groups> {
+        if let Some(g) = self.groups.borrow().as_ref() {
+            return g.clone();
+        }
+        let mut out: Groups = Vec::new();
+        for (ki, kf) in self.keyframes.iter().enumerate() {
+            for (ai, a) in kf.assigns.iter().enumerate() {
+                match out.iter_mut().find(|(o, path, _)| Rc::ptr_eq(o, &a.target) && *path == a.path) {
+                    Some((_, _, list)) => list.push((ki, ai)),
+                    None => out.push((a.target.clone(), a.path.clone(), vec![(ki, ai)])),
+                }
+            }
+        }
+        let out = Rc::new(out);
+        *self.groups.borrow_mut() = Some(out.clone());
+        out
     }
 
     /// 書かれた時刻 → 実際の時刻 の倍率。0..1 で書いた表だけ、duration が実時間を決める。
@@ -418,6 +442,7 @@ impl Timeline {
             relative: self.relative,
             duration: Cell::new(self.duration.get().map(|d| d * k)),
             tracks: RefCell::new(tracks),
+            groups: RefCell::new(None),
         }
     }
 
@@ -446,6 +471,7 @@ impl Timeline {
             relative: self.relative,
             duration: Cell::new(Some(to - from)),
             tracks: RefCell::new(tracks),
+            groups: RefCell::new(None),
         }
     }
 
@@ -483,7 +509,7 @@ impl Timeline {
                 TlKeyframe { time, end, assigns, ease }
             })
             .collect();
-        Timeline { param: self.param.clone(), keyframes, relative: self.relative, duration: Cell::new(self.duration.get()), tracks: RefCell::new(self.tracks.borrow().clone()) }
+        Timeline { param: self.param.clone(), keyframes, relative: self.relative, duration: Cell::new(self.duration.get()), tracks: RefCell::new(self.tracks.borrow().clone()), groups: RefCell::new(None) }
     }
 }
 

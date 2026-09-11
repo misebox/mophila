@@ -1267,7 +1267,7 @@ impl Interp {
                     .collect();
                 keyframes.push(TlKeyframe { time: row.time, end: row.end, assigns, ease: row.ease.clone() });
             }
-            return Ok(Value::Timeline(Rc::new(Timeline { param: "t".into(), keyframes, relative, duration: Cell::new(None), tracks: RefCell::new(Vec::new()) }.normalize())));
+            return Ok(Value::Timeline(Rc::new(Timeline { param: "t".into(), keyframes, relative, duration: Cell::new(None), tracks: RefCell::new(Vec::new()), groups: RefCell::new(None) }.normalize())));
         }
         // 属性への割り当て → Timeline
         if is_assign {
@@ -1285,7 +1285,7 @@ impl Interp {
                 }
                 keyframes.push(TlKeyframe { time: row.time, end: row.end, assigns, ease: row.ease.clone() });
             }
-            return Ok(Value::Timeline(Rc::new(Timeline { param, keyframes, relative, duration: Cell::new(None), tracks: RefCell::new(Vec::new()) }.normalize())));
+            return Ok(Value::Timeline(Rc::new(Timeline { param, keyframes, relative, duration: Cell::new(None), tracks: RefCell::new(Vec::new()), groups: RefCell::new(None) }.normalize())));
         }
         // 値の表 → Motion。params[0] は行の時刻、以降は左の列
         if def.rows.iter().any(|r| r.end.is_some()) {
@@ -1343,7 +1343,7 @@ impl Interp {
             target.borrow_mut().attrs = before;
             keyframes.push(TlKeyframe { time: row.time, end: None, assigns, ease: row.ease.clone() });
         }
-        Ok(Value::Timeline(Rc::new(Timeline { param: "t".into(), keyframes, relative: motion.relative, duration: Cell::new(motion.duration.get()), tracks: RefCell::new(Vec::new()) }.normalize())))
+        Ok(Value::Timeline(Rc::new(Timeline { param: "t".into(), keyframes, relative: motion.relative, duration: Cell::new(motion.duration.get()), tracks: RefCell::new(Vec::new()), groups: RefCell::new(None) }.normalize())))
     }
 
     fn method(&mut self, obj: &ObjRef, method: &str, args: Vec<(Option<String>, Value)>) -> Result<Value> {
@@ -1565,36 +1565,24 @@ impl Interp {
 
     /// 時刻 t における Timeline の値を対象に書き込む
     pub fn apply_timeline(&mut self, tl: &Timeline, t: f64) -> Result<()> {
-        // (対象, 属性パス) ごとにキーフレームを集める
-        let mut by_attr: Vec<(ObjRef, &[String], Vec<(&TlKeyframe, &TlAssign)>)> = vec![];
-        for kf in &tl.keyframes {
-            for a in &kf.assigns {
-                match by_attr.iter_mut().find(|(o, path, _)| Rc::ptr_eq(o, &a.target) && *path == a.path.as_slice()) {
-                    Some((_, _, list)) => list.push((kf, a)),
-                    None => by_attr.push((a.target.clone(), &a.path, vec![(kf, a)])),
-                }
-            }
-        }
+        // (対象, 属性パス) ごとのキーフレームの並び。キーフレームから決まるので 1 度だけ作る
+        let groups = tl.groups();
         // 書かれた時刻 × scale が実際の時刻。t は実際の時刻なので、書かれた時刻の軸に戻して比べる
         let t = t / tl.time_scale();
-        for (target, path, list) in by_attr {
+        for (target, path, indices) in groups.iter() {
+            let at = |&(k, a): &(usize, usize)| (&tl.keyframes[k], &tl.keyframes[k].assigns[a]);
+            let path = path.as_slice();
             // 範囲の行の中なら、その時刻で式を評価するだけ
-            if let Some((_, a)) = list.iter().find(|(kf, _)| kf.end.is_some_and(|e| kf.time <= t && t <= e)) {
+            if let Some((_, a)) = indices.iter().map(at).find(|(kf, _)| kf.end.is_some_and(|e| kf.time <= t && t <= e)) {
                 let value = self.eval_assign(tl, a, t)?;
-                let value = match (path.first(), schema(&target.borrow().kind)) {
-                    (Some(attr), Some(sch)) if path.len() == 1 => match sch.iter().find(|(n, _)| n == attr) {
-                        Some(_) => value,
-                        None => value,
-                    },
-                    _ => value,
-                };
-                self.set_path(&target, path, value)?;
+                self.set_path(target, path, value)?;
                 continue;
             }
             // 点の列。範囲の行は始点と終点の 2 点になる
-            let points: Vec<(f64, &TlKeyframe, &TlAssign)> = list
+            let points: Vec<(f64, &TlKeyframe, &TlAssign)> = indices
                 .iter()
-                .flat_map(|&(kf, a)| match kf.end {
+                .map(at)
+                .flat_map(|(kf, a)| match kf.end {
                     Some(e) => vec![(kf.time, kf, a), (e, kf, a)],
                     None => vec![(kf.time, kf, a)],
                 })
@@ -1611,14 +1599,7 @@ impl Interp {
                 }
                 _ => v0,
             };
-            let value = match (path.first(), schema(&target.borrow().kind)) {
-                (Some(attr), Some(sch)) if path.len() == 1 => match sch.iter().find(|(n, _)| n == attr) {
-                    Some(_) => value,
-                    None => value,
-                },
-                _ => value,
-            };
-            self.set_path(&target, path, value)?;
+            self.set_path(target, path, value)?;
         }
         Ok(())
     }

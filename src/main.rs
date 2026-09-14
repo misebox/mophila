@@ -362,8 +362,10 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
         let frames = ((to - from) * f64::from(args.fps)).round() as u32;
         (0..frames).map(|f| from + f64::from(f) / f64::from(args.fps)).collect()
     };
-    // GPU には 2 フレームまで投入しておき、3 本目を投入する前に古い方を読み戻す。
-    // 待ちの間に次のフレームが GPU に入っているので、読み戻しで止まらない
+    // GPU には 2 フレームまで投入しておき、次を投入する前に古い方を読み戻す。
+    // 待ちの間に次のフレームが GPU に入っているので、読み戻しで止まらない。
+    // ただし Shader を使う絵では、compute と描画が GPU を取り合って遅くなるので 1 枚ずつにする
+    let depth = if render::scene::uses_shader(&view) { 1 } else { 2 };
     let mut pending: std::collections::VecDeque<usize> = std::collections::VecDeque::new();
     // 置いたものは描いている間に増えないので、1 度集めて使い回す
     let tracks = lang::eval::all_tracks(&view);
@@ -412,12 +414,13 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
                 timing.measure("scene", || render::scene::build(&view, f64::from(width), f64::from(height), t, interp.cache_mut()))?
             }
         };
-        pending.push_back(timing.measure("render", || renderer.render(&scene, interp.cache_mut().shaders.as_mut()))?);
-        if pending.len() == 2 {
-            let prev = pending.pop_front().expect("2 本ある");
+        // 読み戻しは、次のフレームを組んだ後に行う (GPU が描いている間に CPU が組み立てる)
+        if pending.len() >= depth {
+            let prev = pending.pop_front().expect("溜まっている");
             timing.measure("readback", || renderer.read_pixels(prev, &mut pixels))?;
             timing.measure("encode", || ffmpeg.write_frame(&pixels))?;
         }
+        pending.push_back(timing.measure("render", || renderer.render(&scene, interp.cache_mut().shaders.as_mut()))?);
         progress.step(i + 1);
     }
     while let Some(prev) = pending.pop_front() {

@@ -2096,6 +2096,7 @@ pub fn defaults(kind: &str) -> Vec<(&'static str, Value)> {
         out.push(("dashOffset", num(0.0)));
     }
     match kind {
+        "View" => out.push(("clip", Value::Bool(false))),
         "Rect" => out.push(("radius", num(0.0))),
         "Path" => out.push(("closed", Value::Bool(false))),
         "TextArea" => out.push(("align", sym("left"))),
@@ -2161,7 +2162,7 @@ pub fn schema(kind: &str) -> Option<&'static [(&'static str, &'static str)]> {
             COMMON[2],
             COMMON[3],
         ],
-        "View" => &[("box", "Vector"), ("position", "Pos"), ("w", "Number"), ("h", "Number"), ("opacity", "Number"), ("blend", "Blend")],
+        "View" => &[("box", "Vector"), ("position", "Pos"), ("w", "Number"), ("h", "Number"), ("opacity", "Number"), ("blend", "Blend"), ("clip", "Bool")],
         "Subtitle" => &[("text", "String"), ("duration", "Duration")],
         "Shader" => &[("color", "Func"), ("args", "List"), ("samples", "Number")],
         "Gradient" => &[("kind", "GradientKind"), ("from", "Vector"), ("to", "Vector"), ("radius", "Number"), ("stops", "List")],

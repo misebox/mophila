@@ -59,6 +59,41 @@ TRY = {
 }
 
 
+# View は図形と置き方が違うので別に書く。中身が枠からはみ出す形にして、clip が効くのを見る
+VIEW_BASE = {"box": "Vector(3, 3)"}
+VIEW_PLACE = {"at": "Pos(1, 0.5, anchor = :topLeft)", "w": "3"}
+# place が書く属性は、その引数を動かして見る (position は at が書く)
+BY_PLACE = {"position": "at", "w": "w", "h": "h"}
+VIEW_CASES = [
+    ("box", "Vector(3, 3)", "Vector(6, 3)"),
+    ("clip", "false", "true"),
+    ("opacity", "1", "0.2"),
+    ("blend", ":normal", ":multiply"),
+    ("position", "Pos(0.2, 0.5, anchor = :topLeft)", "Pos(1, 0.5, anchor = :topLeft)"),
+    ("w", "2", "3"),
+    ("h", "2", "3"),
+]
+
+
+def draw_view(attrs: dict, place: dict, work: Path) -> str:
+    """内側の View を外側に置いて描く。中の円は枠からはみ出す位置にある"""
+    body = ", ".join(f"{k} = {v}" for k, v in attrs.items())
+    placed = ", ".join(f"{k} = {v}" for k, v in place.items())
+    src, out = work / "case.moph", work / "case.png"
+    src.write_text(
+        "let outer = View(box = Vector(4, 4))\n"
+        "outer.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 4, h = 4, fill = #303030))\n"
+        f"let inner = View({body})\n"
+        "inner.place(Circle(position = Pos(3, 1.5), radius = 1, fill = #e04040))\n"
+        f"outer.place(inner, {placed})\n"
+        "output outer\n"
+    )
+    r = subprocess.run([BIN, "render", str(src), "-o", str(out), "--at", "0s"], capture_output=True, text=True)
+    if r.returncode != 0:
+        return "ERR: " + (r.stderr.strip().splitlines() or ["?"])[-1]
+    return hashlib.sha1(out.read_bytes()).hexdigest()
+
+
 def draw(kind: str, attrs: dict, work: Path) -> str:
     body = ", ".join(f"{k} = {v}" for k, v in attrs.items())
     src, out = work / "case.moph", work / "case.png"
@@ -94,6 +129,23 @@ def main() -> int:
                     failed.append(f"{kind}.{attr}: {ha if ha.startswith('ERR') else hb}")
                 elif ha == hb:
                     failed.append(f"{kind}.{attr}: 値を変えても絵が変わらない")
+        # View は別の置き方で見る
+        for attr, a, b in VIEW_CASES:
+            checked += 1
+            if attr in BY_PLACE:
+                arg = BY_PLACE[attr]
+                ha = draw_view(VIEW_BASE, {**VIEW_PLACE, arg: a}, work)
+                hb = draw_view(VIEW_BASE, {**VIEW_PLACE, arg: b}, work)
+            else:
+                ha = draw_view({**VIEW_BASE, attr: a}, VIEW_PLACE, work)
+                hb = draw_view({**VIEW_BASE, attr: b}, VIEW_PLACE, work)
+            if ha.startswith("ERR") or hb.startswith("ERR"):
+                failed.append(f"View.{attr}: {ha if ha.startswith('ERR') else hb}")
+            elif ha == hb:
+                failed.append(f"View.{attr}: 値を変えても絵が変わらない")
+        missing = [a for a in types.get("View", []) if a not in {n for n, _, _ in VIEW_CASES}]
+        if missing:
+            failed.append(f"View: 試す値が scripts/check_attrs.py に無い: {' '.join(missing)}")
     print(f"attrs: {checked - len(failed)}/{checked} ok")
     for line in failed:
         print("  " + line)

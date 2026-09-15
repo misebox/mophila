@@ -172,6 +172,16 @@ track.place(Subtitle(text = "……です。", duration = 4s), at = 2s)
 
 `v.place(sub, at = Pos(x, y, anchor = :topLeft), w = 7)` で別の View を比率を保って置く。中の Timeline は親と同じ時間軸で動く。`track.place(sub, at = 3s)` で置けば、その時刻から動き出す。`sub.opacity` で全体をまとめてフェードできる。
 
+`clip = true` を付けると、箱からはみ出した中身を描かない。中身を動かして窓から覗かせる形が作れる。
+
+```
+let win = View(box = Vector(6, 2), clip = true)
+let strip = View(box = Vector(18, 2))       # 長い帯
+win.place(strip, at = Pos(0, 0, anchor = :topLeft), w = 18)
+win.addTrack(motion (t) { 0s: strip.position = Pos(0, 0, anchor = :topLeft)
+                          3s: strip.position = Pos(-12, 0, anchor = :topLeft) })
+```
+
 ## 組み合わせて再利用する
 
 書いたものはそのまま部品になる。同じものを 2 度書かない。

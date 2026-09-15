@@ -241,6 +241,16 @@ track.place(Subtitle(text = "……です。", duration = 4s), at = 2s)
 
 `v.place(sub, at = Pos(x, y, anchor = :topLeft), w = 7)` で別の View を比率を保って置く。中の Timeline は親と同じ時間軸で動く。`track.place(sub, at = 3s)` で置けば、その時刻から動き出す。`sub.opacity` で全体をまとめてフェードできる。
 
+`clip = true` を付けると、箱からはみ出した中身を描かない。中身を動かして窓から覗かせる形が作れる。
+
+```
+let win = View(box = Vector(6, 2), clip = true)
+let strip = View(box = Vector(18, 2))       # 長い帯
+win.place(strip, at = Pos(0, 0, anchor = :topLeft), w = 18)
+win.addTrack(motion (t) { 0s: strip.position = Pos(0, 0, anchor = :topLeft)
+                          3s: strip.position = Pos(-12, 0, anchor = :topLeft) })
+```
+
 ### 組み合わせて再利用する
 
 書いたものはそのまま部品になる。同じものを 2 度書かない。
@@ -935,6 +945,7 @@ View(box = Vector(16, 9))
 |---|---|---|
 | `box` | Vector | 座標系の幅と高さ。`Vector(16, 9)` なら 0..16 × 0..9。ピクセルは持たない |
 | `opacity` | Number | 中身をまとめて 1 枚として掛ける。中の図形が重なっても二重に薄くならない |
+| `clip` | Bool | `true` なら箱からはみ出した中身を描かない。既定は `false` |
 | `blend` | Blend | 中身を 1 枚にしてから、下の絵と重ねる |
 | `position` `w` `h` | Pos / Number | 別の View に置かれたときの位置と大きさ |
 
@@ -1795,6 +1806,7 @@ View(box = Vector(16, 9))
 - `h`: Number — 別の View に置かれたときの高さ
 - `opacity`: Number — 中身をまとめて 1 枚として掛ける不透明度
 - `blend`: Blend — 中身をまとめて 1 枚にしてから、下の絵と重ねるときの重ね方
+- `clip`: Bool — 
 
 メソッド:
 
@@ -2852,8 +2864,12 @@ log(t.size())            # 置いたときの幅と高さ (Vector)。w があれ
 
 # ---- 箱 ----
 let v = View(box = Vector(4, 3))  # box: Vector。座標系 0..4 × 0..3。ピクセルは持たない
-# v.place(target = Placeable) -> Nothing   (位置は target の position。w / h の扱いは未決)
-# v.addTrack(t = Timeline) -> Nothing
+# v.place(o: Placeable, at: Pos, w: Number, h: Number) -> Nothing
+# v.addTrack(x: Timeline | View | Audio | Subtitle, at: Duration, ...) -> Nothing
+
+let win = View(box = Vector(2, 2), clip = true)   # clip: Bool。箱からはみ出した中身を描かない
+win.place(Circle(position = Pos(2, 1), radius = 0.8, fill = #e04040))   # 右にはみ出す
+v.place(win, at = Pos(0, 0, anchor = :topLeft), w = 2)
 
 # ---- 時間 ----
 let m  = motion { 0s: 0, 1s: 1 }             # Motion。値の時間変化。対象なし

@@ -49,11 +49,18 @@ fn draw_view(scene: &mut Scene, view: &ObjRef, transform: Affine, frame: &Frame,
     if opacity <= 0.0 {
         return Ok(());
     }
-    // opacity か blend が付いていたら、中身をまとめて 1 枚のレイヤーにする
+    // opacity か blend か clip が付いていたら、中身をまとめて 1 枚のレイヤーにする
     let blend = blend_mode(&v.attrs)?.unwrap_or(BlendMode::new(Mix::Normal, Compose::SrcOver));
-    let grouped = opacity < 1.0 || blend.mix != Mix::Normal || blend.compose != Compose::SrcOver;
+    let clip = matches!(v.attrs.get("clip"), Some(Value::Bool(true)));
+    let grouped = clip || opacity < 1.0 || blend.mix != Mix::Normal || blend.compose != Compose::SrcOver;
     if grouped {
-        scene.push_layer(Fill::NonZero, blend, opacity as f32, Affine::IDENTITY, &frame.viewport);
+        // clip なら箱の四角でレイヤーを切る。外へはみ出した中身は描かれない
+        let (bw, bh) = view_box(view)?;
+        let area: BezPath = match clip {
+            true => (transform * Rect::new(0.0, 0.0, bw, bh).to_path(0.01)).into_iter().collect(),
+            false => frame.viewport.to_path(0.01),
+        };
+        scene.push_layer(Fill::NonZero, blend, opacity as f32, Affine::IDENTITY, &area);
     }
     for child in &v.children {
         if child.borrow().kind == "View" {

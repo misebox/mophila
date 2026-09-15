@@ -278,6 +278,7 @@ View(box = Vector(16, 9))
 |---|---|---|
 | `box` | Vector | 座標系の幅と高さ。`Vector(16, 9)` なら 0..16 × 0..9。ピクセルは持たない |
 | `opacity` | Number | 中身をまとめて 1 枚として掛ける。中の図形が重なっても二重に薄くならない |
+| `clip` | Bool | `true` なら箱からはみ出した中身を描かない。既定は `false` |
 | `blend` | Blend | 中身を 1 枚にしてから、下の絵と重ねる |
 | `position` `w` `h` | Pos / Number | 別の View に置かれたときの位置と大きさ |
 

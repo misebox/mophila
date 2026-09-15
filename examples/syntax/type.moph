@@ -108,11 +108,12 @@ let p = Polygon(points = [Vector(0, 0), Vector(1, 0), Vector(0.5, 1)],   # List<
 let t = TextArea(text = "hello",        # String
   position = Pos(0, 0, anchor = :topLeft),
   w = 2,                 # Number。幅に合わせて折り返す
-  font = "Noto Sans JP", # String。フォントの指定方法は未決
+  font = "Noto Sans JP", # String。mophila fonts で使える名前が出る
   fontSize = 0.3,        # Number。箱の座標単位
   fill = #000000,
   align = :left,         # Align
 )
+log(t.size())            # 置いたときの幅と高さ (Vector)。w があれば幅はその値
 
 # ---- 箱 ----
 let v = View(box = Vector(4, 3))  # box: Vector。座標系 0..4 × 0..3。ピクセルは持たない

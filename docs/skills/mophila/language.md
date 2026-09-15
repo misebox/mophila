@@ -123,7 +123,7 @@ motion c [:position, :radius] { ... }      # 対象と属性を先に並べる�
 | Line | `from` `to` |
 | Polygon | `points` |
 | Path | `from` `segments` `closed` |
-| TextArea | `position` `text` `w` (折り返す幅) `fontSize` `font` `align` |
+| TextArea | `position` `text` `w` (折り返す幅) `fontSize` `font` `align`。`t.size()` で置いたときの幅と高さを測れる |
 
 共通: `fill` `stroke` `strokeWidth` `strokeCap` `strokeJoin` `dash` `dashOffset` `opacity` `rotation` `pivot` `blend`。効きようがないものは持たない (Line に `fill` は無い)。
 

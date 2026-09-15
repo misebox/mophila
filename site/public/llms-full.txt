@@ -192,7 +192,7 @@ motion c [:position, :radius] { ... }      # 対象と属性を先に並べる�
 | Line | `from` `to` |
 | Polygon | `points` |
 | Path | `from` `segments` `closed` |
-| TextArea | `position` `text` `w` (折り返す幅) `fontSize` `font` `align` |
+| TextArea | `position` `text` `w` (折り返す幅) `fontSize` `font` `align`。`t.size()` で置いたときの幅と高さを測れる |
 
 共通: `fill` `stroke` `strokeWidth` `strokeCap` `strokeJoin` `dash` `dashOffset` `opacity` `rotation` `pivot` `blend`。効きようがないものは持たない (Line に `fill` は無い)。
 
@@ -207,7 +207,7 @@ motion c [:position, :radius] { ... }      # 対象と属性を先に並べる�
 
 | module | 中身 |
 |---|---|
-| math | `PI` `TAU` `E`、三角関数、丸め、平方根、対数、最大最小 |
+| math | `PI` `TAU` `E`、三角関数、`round(x, 桁)` `clamp` `lerp` `map_range` `nice_step`、`pow` `log10` `log2` `hypot` `sign` |
 | color | `mix` `lighten` `darken` `alpha` `hsl` `gray` |
 | shape | Polygon の points = `regular_polygon` `star` `arrow` |
 | layout | `grid` `cell` `along` `fit` |
@@ -461,7 +461,14 @@ View の `box` が座標系。ピクセルではないので、余白も図形�
 
 - **大きさは 3 段**。見出し・本文・補足。中間の大きさを足さない
 - **1 行の長さ**。日本語なら 1 行 30 文字前後、英数なら 60 字前後で `w` を決めて折り返す
-- **箱の中に置くなら余白**。文字幅の目安は `fontSize × 文字数 × 0.6` (英数) / `× 1.0` (日本語)。箱の幅を超えるなら `fontSize` を下げる
+- **箱の中に置くなら余白**。幅は目分量で決めず `t.size()` で測る。`fontSize × 文字数 × 0.6` (英数) / `× 1.0` (日本語) は当てにならないときの目安
+
+```
+let t = TextArea(position = Pos(1, 1, anchor = :topLeft), text = s, fontSize = 0.6)
+let size = t.size()                       # 置いたときの幅と高さ (箱の座標)
+if size.x > box_width { ... }             # はみ出すなら fontSize を下げる
+next_y = next_y + size.y + gap            # 重ならないように次を置く
+```
 - **太さで強調しない**。色か大きさで差をつける
 - コードを見せるなら等幅を指定する (`font = "Menlo"` など)。指定が無いと環境で幅が変わって、折り返しがずれる
 - 和文の等幅は入っていないことが多い。`Menlo` を指定すると和文だけ別のフォントで補われ、桁が揃わない。`mophila fonts` で入っている名前を確かめる
@@ -619,7 +626,7 @@ modifier    ::= ":linear" | ":ease" | ":ease_in" | ":ease_out"
 # ---------- 字句 ----------
 ident       ::= [A-Za-z_] [A-Za-z0-9_]*
 integer     ::= [0-9]+
-number      ::= [0-9]+ ("." [0-9]+)? "%"?
+number      ::= [0-9]+ ("." [0-9]+)? ([eE] [+-]? [0-9]+)? "%"?
 duration    ::= ([0-9]+ ("." [0-9]+)? ("ms" | "s" | "m" | "h"))+
               | [0-9]+ ":" [0-9]+ (":" [0-9]+)? ("." [0-9]+)?
 color       ::= "#" ([0-9a-fA-F]{8} | [0-9a-fA-F]{6} | [0-9a-fA-F]{4} | [0-9a-fA-F]{3})
@@ -686,7 +693,7 @@ name_1             # 識別子は英字・数字・_。先頭は英字か _
 
 | 型 | リテラル | 備考 |
 |---|---|---|
-| Number | `1` `1.5` `1/3` `25%` | 整数と実数を区別しない。`100%` = 1.0。3.2 を参照 |
+| Number | `1` `1.5` `1/3` `25%` `1e-9` | 整数と実数を区別しない。`100%` = 1.0。`1e-9` は指数表記。3.2 を参照 |
 | Duration | `83s` `1m23s` `500ms` `01:23` `01:23:45.678` | 単位は ms / s / m / h。コロン形式は mm:ss と hh:mm:ss、小数秒可 |
 | Color | `#rgb` `#rgba` `#rrggbb` `#rrggbbaa` `Color(r, g, b)` `Color(r, g, b, a)` | r/g/b は 0..255、a は 0..1。3/4 桁は各桁を重ねて 6/8 桁に広げる |
 | String | `"hello"` `"say \"hi\""` | エスケープは `\"` `\\` `\n` `\t`。`+` で連結。埋め込みはしない。`"n = {n}".format(n)` が `{...}` を順に置き換える (中の名前は説明用)。Dict を渡すと `"{x} {y}".format({x, y})` のように名前で置き換える |
@@ -876,7 +883,7 @@ type Mode = :fast | :slow
 | Line | `from: Vector` `to: Vector` |
 | Polygon | `points: List<Vector>` |
 | Path | `from: Vector` `segments: List<Tuple>` `closed: Bool` |
-| TextArea | `text: String` `w: Number` (折り返す幅) `font: String` `fontSize: Number` `align: Align` |
+| TextArea | `text: String` `w: Number` (折り返す幅) `font: String` `fontSize: Number` `align: Align`。`size()` で置いたときの幅と高さ (Vector) を返す |
 
 `Path` の `segments` は `(:move | :line | :quad | :curve, 点...)` の並び。`:quad` は制御点 1 つ、`:curve` は 2 つを、終点より前に書く。`closed = true` なら始点に戻って閉じる。
 
@@ -1188,7 +1195,7 @@ String / List / Dict / Range のメソッドは builtin で、`import` は要ら
 
 | モジュール | 内容 |
 |---|---|
-| math | 数学。`PI` `TAU` `E` などの定数と、三角関数・丸め・平方根・対数・最大最小 |
+| math | 数学。`PI` `TAU` `E` などの定数と、三角関数・丸め・平方根・対数・最大最小・範囲の変換 |
 | color | 色を作る、混ぜる。明るくする、暗くする、不透明度を変える、色相から作る |
 | shape | Polygon の `points` を作る。円周上の点、正多角形、星、矢印 |
 | layout | 並べる位置を計算する。格子、直線上の等間隔、比率を保って収めた大きさ |
@@ -1259,6 +1266,7 @@ import なしで呼べる関数:
 1.5
 1/3
 25%
+1e-9
 ```
 
 ### Duration
@@ -1654,6 +1662,10 @@ TextArea(text = "hello", position = Pos(8, 4.5), fontSize = 1, fill = #303030)
 - `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
 - `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
 
+メソッド:
+
+- `t.size()` -> Vector — 置いたときに占める幅と高さ (箱の座標)。w を書いていれば幅はその値。重なりを避けて並べたり、はみ出すなら fontSize を下げたりするのに使う
+
 ### Color
 
 1 つの色。# は 16 進で、3 桁と 4 桁は各桁を 2 回書いたものと同じ (#48e は #4488ee)。4 桁と 8 桁の最後は不透明度。Color の r g b は 0..255、a は 0..1
@@ -1728,6 +1740,11 @@ View(box = Vector(16, 9))
 - `h`: Number — 別の View に置かれたときの高さ
 - `opacity`: Number — 中身をまとめて 1 枚として掛ける不透明度
 - `blend`: Blend — 中身をまとめて 1 枚にしてから、下の絵と重ねるときの重ね方
+
+メソッド:
+
+- `v.place(o: Placeable, at: Pos, w: Number, h: Number)` -> Nothing — View に置く。別の View を置くときは at と、w か h が要る (比率を保って収める)
+- `v.addTrack(x: Timeline | View | Audio | Subtitle, at: Duration, fadeIn: Duration, fadeOut: Duration, duration: Duration, volume: Number, loop: Bool)` -> Nothing — その View の動きとして付ける。output した View に付いたものが動画になる
 
 ### Timeline
 
@@ -1978,6 +1995,21 @@ alias P = Pos
 - `math.atan2(y: Number, x: Number)` -> Number — (x, y) の角度 (ラジアン)
 - `math.max(a: Number, b: Number, ...)` -> Number — 最大
 - `math.min(a: Number, b: Number, ...)` -> Number — 最小
+- `math.tan(x: Number)` -> Number — 正接 (ラジアン)
+- `math.asin(x: Number)` -> Number — 逆正弦。戻りはラジアン
+- `math.acos(x: Number)` -> Number — 逆余弦。戻りはラジアン
+- `math.atan(x: Number)` -> Number — 逆正接。戻りはラジアン
+- `math.round(x: Number, digits: Number = 0)` -> Number — 四捨五入。digits で小数の桁を決める
+- `math.sign(x: Number)` -> Number — 符号。-1 / 0 / 1
+- `math.pow(a: Number, b: Number)` -> Number — a の b 乗。a ^ b と同じ
+- `math.log10(x: Number)` -> Number — 常用対数。組み込みの log (表示) と紛れるので、この名前にしてある
+- `math.log2(x: Number)` -> Number — 2 を底とする対数
+- `math.hypot(x: Number, y: Number)` -> Number — 原点からの距離
+- `math.clamp(x: Number, lo: Number, hi: Number)` -> Number — lo と hi の間に収める
+- `math.lerp(a: Number, b: Number, k: Number)` -> Number — a と b の間。k は 0..1
+- `math.unlerp(a: Number, b: Number, x: Number)` -> Number — x が a..b のどこか。lerp の逆
+- `math.map_range(x: Number, a0: Number, a1: Number, b0: Number, b1: Number)` -> Number — a0..a1 の x を b0..b1 に写す。グラフの軸に使う
+- `math.nice_step(span: Number, count: Number)` -> Number — span を count 個に分けるときの、切りの良い目盛りの間隔 (1, 2, 5 の倍数)
 
 ### color
 
@@ -2120,6 +2152,10 @@ let d = 2 ^ 10           # 1024
 # 分数はそのまま計算される
 let e = 1/3 + 1/6        # 1/2
 
+# 指数表記
+let tiny = 1e-9          # 0.000000001
+let big = 2.5e3          # 2500
+
 # Duration 同士、Duration と数値
 let t1 = 1s + 500ms      # 1.5s
 let t2 = 2s * 3          # 6s
@@ -2143,11 +2179,18 @@ let s = math.sin(3.14)
 let m = math.max(1, 2, 3)
 let f = math.floor(2.7)
 let g = math.sin               # 関数は値として取り出せる
+let r = math.round(1.23456, 2) # 1.23 (小数の桁を決めて四捨五入)
+let cl = math.clamp(5, 0, 1)   # 1   (範囲に収める)
+let lp = math.lerp(0, 10, 0.25)   # 2.5 (a と b の間)
+let mr = math.map_range(5, 0, 10, 0, 100)   # 50 (範囲から範囲へ)
+let ns = math.nice_step(8, 5)  # 2   (目盛りの切りの良い間隔)
 
 log(a, b, c, d, e)          # 7 9 1 1024 0.5
 log(t1, t2, t3, k)          # 1.5s 6s 2.5s 3
 log(p, q, mix)              # (1.5, 2.5) (2, 4) #800080
 log(ok, ng, s, m, f)        # true true 0.00159... 3 2  (not ok が先に結合するので (not ok) or (c == 1))
+log(tiny, big)              # 1/1000000000 2500
+log(r, cl, lp, mr, ns)      # 1.23 1 2.5 50 2
 ```
 
 ### basic.moph
@@ -2720,11 +2763,12 @@ let p = Polygon(points = [Vector(0, 0), Vector(1, 0), Vector(0.5, 1)],   # List<
 let t = TextArea(text = "hello",        # String
   position = Pos(0, 0, anchor = :topLeft),
   w = 2,                 # Number。幅に合わせて折り返す
-  font = "Noto Sans JP", # String。フォントの指定方法は未決
+  font = "Noto Sans JP", # String。mophila fonts で使える名前が出る
   fontSize = 0.3,        # Number。箱の座標単位
   fill = #000000,
   align = :left,         # Align
 )
+log(t.size())            # 置いたときの幅と高さ (Vector)。w があれば幅はその値
 
 # ---- 箱 ----
 let v = View(box = Vector(4, 3))  # box: Vector。座標系 0..4 × 0..3。ピクセルは持たない

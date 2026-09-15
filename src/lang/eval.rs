@@ -1352,9 +1352,43 @@ impl Interp {
         Ok(Value::Timeline(Rc::new(Timeline { param: "t".into(), keyframes, relative: motion.relative, duration: Cell::new(motion.duration.get()), tracks: RefCell::new(Vec::new()), groups: RefCell::new(None) }.normalize())))
     }
 
-    fn method(&mut self, obj: &ObjRef, method: &str, args: Vec<(Option<String>, Value)>) -> Result<Value> {
+    pub(crate) fn method(&mut self, obj: &ObjRef, method: &str, args: Vec<(Option<String>, Value)>) -> Result<Value> {
         let kind = obj.borrow().kind.clone();
         match (kind.as_str(), method) {
+            // 置く前に「この文字が何ユニットになるか」を知るためのもの。
+            // 重なりを避けて並べたり、はみ出すなら fontSize を下げたりできる
+            ("TextArea", "size") => {
+                if !args.is_empty() {
+                    return err(Kind::ArityMismatch, "TextArea.size takes no arguments");
+                }
+                let (text, size, font, wrap, align) = {
+                    let o = obj.borrow();
+                    let Some(Value::Str(text)) = o.attrs.get("text") else {
+                        return err(Kind::UndefinedAttribute, "TextArea.text is not set");
+                    };
+                    let Some(Value::Number(size, _)) = o.attrs.get("fontSize") else {
+                        return err(Kind::UndefinedAttribute, "TextArea.fontSize is not set");
+                    };
+                    let font = match o.attrs.get("font") {
+                        Some(Value::Str(f)) => Some(f.clone()),
+                        _ => None,
+                    };
+                    let wrap = match o.attrs.get("w") {
+                        Some(Value::Number(w, _)) => Some(*w as f32),
+                        _ => None,
+                    };
+                    let align = match o.attrs.get("align") {
+                        Some(Value::Symbol(a)) => Some(a.clone()),
+                        _ => None,
+                    };
+                    (text.clone(), *size, font, wrap, align)
+                };
+                // 箱の単位のまま組む (1 ユニット = 1 ピクセルとして測り、そのまま返す)
+                let align = crate::render::text::alignment(align.as_deref());
+                let layout = self.cache_mut().layout(&text, font.as_deref(), size as f32, wrap, align);
+                let (w, h) = (f64::from(layout.width()), f64::from(layout.height()));
+                Ok(Value::Vector(wrap.map_or(w, f64::from), h))
+            }
             ("View", "place") => match args.first() {
                 Some((None, Value::Object(child))) if child.borrow().kind == "View" => {
                     if Rc::ptr_eq(child, obj) {

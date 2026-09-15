@@ -91,6 +91,30 @@ pub const METHODS: &[Method] = &[
         call: trim,
     },
     Method {
+        receivers: &["View"],
+        name: "place",
+        signature: "v.place(o: Placeable, at: Pos, w: Number, h: Number)",
+        returns: "Nothing",
+        doc: "View に置く。別の View を置くときは at と、w か h が要る (比率を保って収める)",
+        call: view_place,
+    },
+    Method {
+        receivers: &["View"],
+        name: "addTrack",
+        signature: "v.addTrack(x: Timeline | View | Audio | Subtitle, at: Duration, fadeIn: Duration, fadeOut: Duration, duration: Duration, volume: Number, loop: Bool)",
+        returns: "Nothing",
+        doc: "その View の動きとして付ける。output した View に付いたものが動画になる",
+        call: view_add_track,
+    },
+    Method {
+        receivers: &["TextArea"],
+        name: "size",
+        signature: "t.size()",
+        returns: "Vector",
+        doc: "置いたときに占める幅と高さ (箱の座標)。w を書いていれば幅はその値。重なりを避けて並べたり、はみ出すなら fontSize を下げたりするのに使う",
+        call: text_size,
+    },
+    Method {
         receivers: &["Motion"],
         name: "apply",
         signature: "m.apply(target: Placeable, f: (Placeable, Duration, List<Number>) -> Nothing)",
@@ -406,6 +430,27 @@ fn trim(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
         return err(Kind::OutOfRange, format!("trim: from is {from}s but to is {to}s"));
     }
     convert(&r, |t| t.trim(from, to), |m| m.trim(from, to), "trim")
+}
+
+/// Object の kind ごとのメソッドは Interp::method が持っている。表からはそこへ渡す
+fn on_object(it: &mut Interp, r: Value, name: &str, args: Args) -> Result<Value> {
+    let Value::Object(obj) = &r else {
+        return err(Kind::ArgumentType, format!("{name} is a method of an object, found {}", r.type_name()));
+    };
+    let obj = obj.clone();
+    it.method(&obj, name, args)
+}
+
+fn view_place(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    on_object(it, r, "place", args)
+}
+
+fn view_add_track(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    on_object(it, r, "addTrack", args)
+}
+
+fn text_size(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    on_object(it, r, "size", args)
 }
 
 fn motion_apply(it: &mut Interp, r: Value, args: Args) -> Result<Value> {

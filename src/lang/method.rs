@@ -38,6 +38,10 @@ pub const METHODS: &[Method] = &[
         doc: "{ } を順に引数で置き換える。名前は説明用。Dict を 1 つ渡すと、{ } の中の名前で引く。引数はどの型でもよいので、型を書けない",
         call: str_format,
     },
+    Method { receivers: &["String"], name: "chars", signature: "s.chars()", returns: "List<String>", doc: "1 文字ずつの List", call: str_chars },
+    Method { receivers: &["String"], name: "split", signature: "s.split(sep: String)", returns: "List<String>", doc: "sep で区切る。sep が空なら 1 文字ずつ", call: str_split },
+    Method { receivers: &["String"], name: "contains", signature: "s.contains(part: String)", returns: "Bool", doc: "その文字列を含むか", call: str_contains },
+    Method { receivers: &["String"], name: "repeat", signature: "s.repeat(n: Number)", returns: "String", doc: "n 回つなげる。桁を揃えるのに使う", call: str_repeat },
     Method { receivers: SEQ, name: "len", signature: "xs.len()", returns: "Number", doc: "要素数", call: seq_len },
     Method { receivers: &["List"], name: "push", signature: "xs.push(値: T)", returns: "Nothing", doc: "末尾に追加する。その List 自身が変わる", call: list_push },
     Method { receivers: SEQ, name: "enumerate", signature: "xs.enumerate()", returns: "List<(Number, T)>", doc: "番号と要素の組。for (i, x) in xs.enumerate() で使う", call: seq_enumerate },
@@ -105,6 +109,14 @@ pub const METHODS: &[Method] = &[
         returns: "Nothing",
         doc: "その View の動きとして付ける。output した View に付いたものが動画になる",
         call: view_add_track,
+    },
+    Method {
+        receivers: &["Path", "Polygon", "Line", "Circle", "Ellipse", "Rect"],
+        name: "length",
+        signature: "p.length()",
+        returns: "Number",
+        doc: "輪郭の長さ (箱の座標)。dash と dashOffset で線を少しずつ描き出すときに使う",
+        call: shape_length,
     },
     Method {
         receivers: &["TextArea"],
@@ -178,6 +190,43 @@ fn str_replace(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
 
 fn str_format(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
     format(&text_of(&r), &args.into_iter().map(|(_, v)| v).collect::<Vec<_>>())
+}
+
+fn str_chars(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    if !args.is_empty() {
+        return arity("String.chars", "no arguments", args.len());
+    }
+    Ok(list(text_of(&r).chars().map(|c| Value::Str(c.to_string())).collect()))
+}
+
+fn str_split(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    let [(None, Value::Str(sep))] = args.as_slice() else {
+        return err(Kind::ArgumentType, "String.split takes one String");
+    };
+    let text = text_of(&r);
+    let parts: Vec<Value> = match sep.is_empty() {
+        true => text.chars().map(|c| Value::Str(c.to_string())).collect(),
+        false => text.split(sep.as_str()).map(|p| Value::Str(p.to_string())).collect(),
+    };
+    Ok(list(parts))
+}
+
+fn str_contains(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    let [(None, Value::Str(part))] = args.as_slice() else {
+        return err(Kind::ArgumentType, "String.contains takes one String");
+    };
+    Ok(Value::Bool(text_of(&r).contains(part.as_str())))
+}
+
+fn str_repeat(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    let [(None, Value::Number(n, _))] = args.as_slice() else {
+        return err(Kind::ArgumentType, "String.repeat takes one Number");
+    };
+    let times = whole(*n, "repeat")?;
+    if times < 0 {
+        return err(Kind::OutOfRange, format!("repeat expects 0 or more, found {n}"));
+    }
+    Ok(Value::Str(text_of(&r).repeat(times as usize)))
 }
 
 fn seq_len(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
@@ -447,6 +496,10 @@ fn view_place(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
 
 fn view_add_track(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
     on_object(it, r, "addTrack", args)
+}
+
+fn shape_length(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    on_object(it, r, "length", args)
 }
 
 fn text_size(it: &mut Interp, r: Value, args: Args) -> Result<Value> {

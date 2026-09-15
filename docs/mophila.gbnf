@@ -74,7 +74,7 @@ postfix-expr ::= primary (postfix)*
 postfix     ::= "." ident
               | "." integer
               | "(" args ")"
-              | "[" ws expr ws "]"
+              | "[" ws expr ws "]"          # 添字と切り出し。String は文字単位
 
 primary     ::= number | duration | color | string | symbol | bool
               | ident

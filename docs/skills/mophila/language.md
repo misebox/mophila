@@ -123,9 +123,21 @@ motion c [:position, :radius] { ... }      # 対象と属性を先に並べる�
 | Line | `from` `to` |
 | Polygon | `points` |
 | Path | `from` `segments` `closed` |
-| TextArea | `position` `text` `w` (折り返す幅) `fontSize` `font` `align`。`t.size()` で置いたときの幅と高さを測れる |
+| TextArea | `position` `text` `w` (折り返す幅) `fontSize` `font` `align`。`\n` で改行できる |
 
 共通: `fill` `stroke` `strokeWidth` `strokeCap` `strokeJoin` `dash` `dashOffset` `opacity` `rotation` `pivot` `blend`。効きようがないものは持たない (Line に `fill` は無い)。
+
+測るメソッド:
+
+- `t.size()` — TextArea が置いたときに占める幅と高さ (Vector)。`w` を書いていれば幅はその値
+- `p.length()` — 図形の輪郭の長さ。線を少しずつ描き出すときに使う
+
+```
+let total = p.length()
+p.dash = [total, total]                    # 線と間を全長にして、全部「間」にする
+motion (t) { 0s: p.dashOffset = total      # ずらしを戻していくと、線が伸びて見える
+             2s: p.dashOffset = 0 }
+```
 
 - 回すのは `rotation` (度、時計回り)。中心は外接矩形の中心で、`pivot` で変えられる。頂点を計算し直さない
 - `dashOffset` を motion で動かすと破線が流れる

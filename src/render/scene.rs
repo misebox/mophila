@@ -113,30 +113,10 @@ fn shader_fill(c: &crate::lang::value::Object) -> Option<ObjRef> {
     }
 }
 
-/// 図形 1 つを描く。transform は箱の座標から出力座標への変換。shader は fill が Shader のときその実体
-fn draw_object(scene: &mut Scene, c: &crate::lang::value::Object, transform: Affine, frame: &Frame, key: usize, shader: Option<&ObjRef>, cache: &mut RenderCache) -> Result<()> {
+/// 図形の輪郭と、回転の中心 (囲む四角形の中心)。描くときと、長さを測るときに使う
+pub fn outline(c: &crate::lang::value::Object) -> Result<(BezPath, Point)> {
     let kind = c.kind.as_str();
-    let scale = transform.as_coeffs()[0].hypot(transform.as_coeffs()[1]);
-    let opacity = match c.attrs.get("opacity") {
-        Some(Value::Number(o, _)) => o.clamp(0.0, 1.0) as f32,
-        _ => 1.0,
-    };
-    // 回転の中心は pivot、書いていなければ囲む四角形の中心。描く座標で回すので、後から掛ける
-    let spin = |bbox: Point| -> Result<Affine> {
-        let Some(Value::Number(deg, _)) = c.attrs.get("rotation") else { return Ok(Affine::IDENTITY) };
-        if *deg == 0.0 {
-            return Ok(Affine::IDENTITY);
-        }
-        let origin = match c.attrs.get("pivot") {
-            Some(v) => point_of(v, &format!("{kind}.pivot"))?,
-            None => bbox,
-        };
-        Ok(Affine::rotate_about(deg.to_radians(), transform * origin))
-    };
-    if kind == "TextArea" {
-        return draw_text(scene, &c.attrs, transform, &spin, scale, opacity, cache);
-    }
-    let (path, origin) = match kind {
+    Ok(match kind {
         "Circle" => {
             let r = number(&c.attrs, "radius", kind)?;
             let (x, y) = anchored_center(&c.attrs, 2.0 * r, 2.0 * r, kind)?;
@@ -203,7 +183,34 @@ fn draw_object(scene: &mut Scene, c: &crate::lang::value::Object, transform: Aff
             (path, center)
         }
         kind => return err(Kind::NotPlaceable, format!("cannot draw {kind}")),
+
+    })
+}
+
+/// 図形 1 つを描く。transform は箱の座標から出力座標への変換。shader は fill が Shader のときその実体
+fn draw_object(scene: &mut Scene, c: &crate::lang::value::Object, transform: Affine, frame: &Frame, key: usize, shader: Option<&ObjRef>, cache: &mut RenderCache) -> Result<()> {
+    let kind = c.kind.as_str();
+    let scale = transform.as_coeffs()[0].hypot(transform.as_coeffs()[1]);
+    let opacity = match c.attrs.get("opacity") {
+        Some(Value::Number(o, _)) => o.clamp(0.0, 1.0) as f32,
+        _ => 1.0,
     };
+    // 回転の中心は pivot、書いていなければ囲む四角形の中心。描く座標で回すので、後から掛ける
+    let spin = |bbox: Point| -> Result<Affine> {
+        let Some(Value::Number(deg, _)) = c.attrs.get("rotation") else { return Ok(Affine::IDENTITY) };
+        if *deg == 0.0 {
+            return Ok(Affine::IDENTITY);
+        }
+        let origin = match c.attrs.get("pivot") {
+            Some(v) => point_of(v, &format!("{kind}.pivot"))?,
+            None => bbox,
+        };
+        Ok(Affine::rotate_about(deg.to_radians(), transform * origin))
+    };
+    if kind == "TextArea" {
+        return draw_text(scene, &c.attrs, transform, &spin, scale, opacity, cache);
+    }
+    let (path, origin) = outline(c)?;
     let placed = spin(origin)? * transform;
     // blend が付いていたら、その図形の描画だけを 1 枚のレイヤーにして重ね方を変える
     let blend = blend_mode(&c.attrs)?;

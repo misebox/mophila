@@ -1357,6 +1357,14 @@ impl Interp {
         match (kind.as_str(), method) {
             // 置く前に「この文字が何ユニットになるか」を知るためのもの。
             // 重なりを避けて並べたり、はみ出すなら fontSize を下げたりできる
+            // 線の長さ。dash で少しずつ描き出すときに、全長を自分で足さずに済む
+            ("Path" | "Polygon" | "Line" | "Circle" | "Ellipse" | "Rect", "length") => {
+                if !args.is_empty() {
+                    return err(Kind::ArityMismatch, format!("{kind}.length takes no arguments"));
+                }
+                let (path, _) = crate::render::scene::outline(&obj.borrow())?;
+                Ok(Value::num(vello::kurbo::Shape::perimeter(&path, 1e-4)))
+            }
             ("TextArea", "size") => {
                 if !args.is_empty() {
                     return err(Kind::ArityMismatch, "TextArea.size takes no arguments");
@@ -1740,6 +1748,24 @@ fn index_value(target: &Value, index: &Value) -> Result<Value> {
             .find(|(k, _)| k == key)
             .map(|(_, v)| v.clone())
             .ok_or_else(|| MophError::new(Kind::OutOfRange, format!("key {key:?} not found")));
+    }
+    // 文字列は文字の並びとして扱う (バイトではない)。s[0] は 1 文字の String
+    if let Value::Str(text) = target {
+        let chars: Vec<char> = text.chars().collect();
+        let n = chars.len() as i64;
+        if let Value::Range(a, b) = index {
+            let (a, b) = ((*a).clamp(0, n) as usize, (*b).clamp(0, n) as usize);
+            return Ok(Value::Str(chars[a.min(b)..b].iter().collect()));
+        }
+        let Value::Number(i, _) = index else {
+            return err(Kind::OperandType, format!("index must be Number, found {}", index.type_name()));
+        };
+        let i = whole(*i, "an index")?;
+        let at = if i < 0 { i + n } else { i };
+        if at < 0 || at >= n {
+            return err(Kind::OutOfRange, format!("index {i} out of range for length {n}"));
+        }
+        return Ok(Value::Str(chars[at as usize].to_string()));
     }
     let items: Vec<Value> = match target {
         Value::List(items) => items.borrow().clone(),
@@ -2272,9 +2298,39 @@ fn check_color(v: Option<Value>) -> Result<Option<Value>> {
     Ok(v)
 }
 
+/// 大小を比べる。比べようがない組み合わせは None (`<` はエラー、sort もエラー)
 pub(crate) fn cmp(l: &Value, r: &Value) -> Option<std::cmp::Ordering> {
+    use std::cmp::Ordering;
     match (l, r) {
         (Value::Number(a, _), Value::Number(b, _)) | (Value::Duration(a), Value::Duration(b)) => a.partial_cmp(b),
+        // 文字は Unicode の順。日本語の五十音順にはならない
+        (Value::Str(a), Value::Str(b)) | (Value::Symbol(a), Value::Symbol(b)) => Some(a.cmp(b)),
+        (Value::Bool(a), Value::Bool(b)) => Some(a.cmp(b)),
+        // 組は前から順に。先に差が付いた所で決まる (長さが違えば短い方が先)
+        (Value::Tuple(a), Value::Tuple(b)) => seq_cmp(a, b),
+        (Value::List(a), Value::List(b)) => seq_cmp(&a.borrow(), &b.borrow()),
+        // record はフィールドを宣言順に。型が違えば比べない
+        (Value::Record(a), Value::Record(b)) if a.name == b.name => {
+            for ((_, x), (_, y)) in a.fields.iter().zip(&b.fields) {
+                match cmp(x, y)? {
+                    Ordering::Equal => {}
+                    other => return Some(other),
+                }
+            }
+            Some(Ordering::Equal)
+        }
         _ => None,
     }
+}
+
+/// 並びを前から比べる
+fn seq_cmp(a: &[Value], b: &[Value]) -> Option<std::cmp::Ordering> {
+    use std::cmp::Ordering;
+    for (x, y) in a.iter().zip(b) {
+        match cmp(x, y)? {
+            Ordering::Equal => {}
+            other => return Some(other),
+        }
+    }
+    Some(a.len().cmp(&b.len()))
 }

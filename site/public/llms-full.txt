@@ -192,9 +192,21 @@ motion c [:position, :radius] { ... }      # 対象と属性を先に並べる�
 | Line | `from` `to` |
 | Polygon | `points` |
 | Path | `from` `segments` `closed` |
-| TextArea | `position` `text` `w` (折り返す幅) `fontSize` `font` `align`。`t.size()` で置いたときの幅と高さを測れる |
+| TextArea | `position` `text` `w` (折り返す幅) `fontSize` `font` `align`。`\n` で改行できる |
 
 共通: `fill` `stroke` `strokeWidth` `strokeCap` `strokeJoin` `dash` `dashOffset` `opacity` `rotation` `pivot` `blend`。効きようがないものは持たない (Line に `fill` は無い)。
+
+測るメソッド:
+
+- `t.size()` — TextArea が置いたときに占める幅と高さ (Vector)。`w` を書いていれば幅はその値
+- `p.length()` — 図形の輪郭の長さ。線を少しずつ描き出すときに使う
+
+```
+let total = p.length()
+p.dash = [total, total]                    # 線と間を全長にして、全部「間」にする
+motion (t) { 0s: p.dashOffset = total      # ずらしを戻していくと、線が伸びて見える
+             2s: p.dashOffset = 0 }
+```
 
 - 回すのは `rotation` (度、時計回り)。中心は外接矩形の中心で、`pivot` で変えられる。頂点を計算し直さない
 - `dashOffset` を motion で動かすと破線が流れる
@@ -578,7 +590,7 @@ postfix-expr ::= primary (postfix)*
 postfix     ::= "." ident
               | "." integer
               | "(" args ")"
-              | "[" ws expr ws "]"
+              | "[" ws expr ws "]"          # 添字と切り出し。String は文字単位
 
 primary     ::= number | duration | color | string | symbol | bool
               | ident
@@ -883,7 +895,9 @@ type Mode = :fast | :slow
 | Line | `from: Vector` `to: Vector` |
 | Polygon | `points: List<Vector>` |
 | Path | `from: Vector` `segments: List<Tuple>` `closed: Bool` |
-| TextArea | `text: String` `w: Number` (折り返す幅) `font: String` `fontSize: Number` `align: Align`。`size()` で置いたときの幅と高さ (Vector) を返す |
+| TextArea | `text: String` (`\n` で改行) `w: Number` (折り返す幅) `font: String` `fontSize: Number` `align: Align`。`size()` で置いたときの幅と高さ (Vector) を返す |
+
+図形は `length()` で輪郭の長さを返す。`dash` と `dashOffset` で線を少しずつ描き出すときに使う。
 
 `Path` の `segments` は `(:move | :line | :quad | :curve, 点...)` の並び。`:quad` は制御点 1 つ、`:curve` は 2 つを、終点より前に書く。`closed = true` なら始点に戻って閉じる。
 
@@ -1309,6 +1323,10 @@ false
 - `s.len()` -> Number — 文字数
 - `s.replace(from: String, to: String)` -> String — from を to に置き換えた文字列
 - `"{name}".format(値, ...)` -> String — { } を順に引数で置き換える。名前は説明用。Dict を 1 つ渡すと、{ } の中の名前で引く。引数はどの型でもよいので、型を書けない
+- `s.chars()` -> List<String> — 1 文字ずつの List
+- `s.split(sep: String)` -> List<String> — sep で区切る。sep が空なら 1 文字ずつ
+- `s.contains(part: String)` -> Bool — その文字列を含むか
+- `s.repeat(n: Number)` -> String — n 回つなげる。桁を揃えるのに使う
 
 ### Symbol
 
@@ -1505,6 +1523,10 @@ Circle(position = Pos(8, 4.5), radius = 1, fill = #4080e0)
 - `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
 - `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
 
+メソッド:
+
+- `p.length()` -> Number — 輪郭の長さ (箱の座標)。dash と dashOffset で線を少しずつ描き出すときに使う
+
 ### Ellipse
 
 楕円。rx が横の半径、ry が縦の半径
@@ -1530,6 +1552,10 @@ Ellipse(position = Pos(8, 4.5), rx = 3, ry = 1.4, fill = #4080e0)
 - `rotation`: Number — 時計回りの回転 (度)
 - `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
 - `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
+
+メソッド:
+
+- `p.length()` -> Number — 輪郭の長さ (箱の座標)。dash と dashOffset で線を少しずつ描き出すときに使う
 
 ### Rect
 
@@ -1559,6 +1585,10 @@ Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #f5f4f0)
 - `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
 - `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
 
+メソッド:
+
+- `p.length()` -> Number — 輪郭の長さ (箱の座標)。dash と dashOffset で線を少しずつ描き出すときに使う
+
 ### Line
 
 from から to へ引く 1 本の線。太さは strokeWidth、色は stroke
@@ -1582,6 +1612,10 @@ Line(from = Vector(0, 0), to = Vector(4, 3), stroke = #303030, strokeWidth = 0.1
 - `rotation`: Number — 時計回りの回転 (度)
 - `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
 - `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
+
+メソッド:
+
+- `p.length()` -> Number — 輪郭の長さ (箱の座標)。dash と dashOffset で線を少しずつ描き出すときに使う
 
 ### Polygon
 
@@ -1607,6 +1641,10 @@ Polygon(points = [Vector(0, 0), Vector(2, 0), Vector(1, 2)], fill = #3f9b6d)
 - `rotation`: Number — 時計回りの回転 (度)
 - `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
 - `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
+
+メソッド:
+
+- `p.length()` -> Number — 輪郭の長さ (箱の座標)。dash と dashOffset で線を少しずつ描き出すときに使う
 
 ### Path
 
@@ -1634,6 +1672,10 @@ Path(from = Vector(0, 0), segments = [(:line, Vector(2, 0)), (:curve, Vector(3, 
 - `rotation`: Number — 時計回りの回転 (度)
 - `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
 - `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
+
+メソッド:
+
+- `p.length()` -> Number — 輪郭の長さ (箱の座標)。dash と dashOffset で線を少しずつ描き出すときに使う
 
 ### TextArea
 
@@ -2316,6 +2358,21 @@ for i in 0..3 { log(i) }
 # 実数の範囲 (for には使えない。均等に分ける)
 let fs = (0..=1).steps(4)        # [0, 0.25, 0.5, 0.75, 1]
 
+# ---- String ----
+let s = "こんにちは world"
+s.len()                          # 11 (文字数。バイト数ではない)
+s[0]                             # "こ"
+s[0..5]                          # "こんにちは"
+s[-1]                            # "d"
+s.chars()                        # 1 文字ずつの List
+s.split(" ")                     # ["こんにちは", "world"]
+s.contains("world")              # true
+"-".repeat(5)                    # "-----"
+
+# 並べ替えは文字列・組・record もできる (前から順に比べる)
+["banana", "apple"].sort()       # ["apple", "banana"]
+[(2, "b"), (1, "a")].sort()      # [(1, "a"), (2, "b")]
+
 # ---- Dict ----
 let m = { "red": #e04040, "green": #40a040 }
 m["red"]                         # #e04040
@@ -2330,6 +2387,8 @@ for (k, val) in m {
 log(xs, zs, sub, fs)                 # [1, 2, 3, 4] [1, 2, 3, 4, 5, 6] [2, 3] [0, 0.25, 0.5, 0.75, 1]
 log(p.0, p.1, x, y, q, p.x, p.y)    # 1 1.5 1 1.5 (1, 1.5, 0) 1 1.5
 log(m["red"], m.keys(), m.has("blue"), m.has("cyan"))   # #e04040 ["red", "green", "blue"] true false
+log(s[0..5], s.split(" "), "-".repeat(5))              # こんにちは [こんにちは, world] -----
+log(["banana", "apple"].sort(), [(2, "b"), (1, "a")].sort())   # [apple, banana] [(1, a), (2, b)]
 ```
 
 ### error.moph

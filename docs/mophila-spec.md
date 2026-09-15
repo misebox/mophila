@@ -240,7 +240,9 @@ type Mode = :fast | :slow
 | Line | `from: Vector` `to: Vector` |
 | Polygon | `points: List<Vector>` |
 | Path | `from: Vector` `segments: List<Tuple>` `closed: Bool` |
-| TextArea | `text: String` `w: Number` (折り返す幅) `font: String` `fontSize: Number` `align: Align`。`size()` で置いたときの幅と高さ (Vector) を返す |
+| TextArea | `text: String` (`\n` で改行) `w: Number` (折り返す幅) `font: String` `fontSize: Number` `align: Align`。`size()` で置いたときの幅と高さ (Vector) を返す |
+
+図形は `length()` で輪郭の長さを返す。`dash` と `dashOffset` で線を少しずつ描き出すときに使う。
 
 `Path` の `segments` は `(:move | :line | :quad | :curve, 点...)` の並び。`:quad` は制御点 1 つ、`:curve` は 2 つを、終点より前に書く。`closed = true` なら始点に戻って閉じる。
 

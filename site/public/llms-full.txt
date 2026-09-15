@@ -52,10 +52,12 @@ mophila run a.moph                             # 描画せず実行。log と型
 mophila run                                    # mophila.yaml の entry を実行
 mophila render a.moph -o out.png --at 2.5s     # 1 フレーム。形式は拡張子で決まる
 mophila render a.moph -o out.mp4 --size 360p   # 動画 (fps 既定 10)
+mophila render a.moph -o out.mp4 --jobs 4      # 組み立てを 4 スレッドに分ける (重い絵だけ速くなる)
 mophila render a.moph -o out.mp4 --trim 00:15..00:30   # 区間だけ
 mophila preview a.moph [--loop] [--at 1s]      # ウィンドウで再生
 mophila timeline a.moph [--filter k=v]         # 何がいつどう変わるかの一覧
 mophila sheet a.moph -o sheet.png --times 3s,12s   # 場面の格子画像
+mophila fonts                                  # 使えるフォント名 (font に書ける名前)
 ```
 
 preview は Space で一時停止、← → / h l で 10 秒 (停止中は 1 秒)、Shift で 10% 移動。最後まで行くと最後の場面で止まる。
@@ -462,6 +464,7 @@ View の `box` が座標系。ピクセルではないので、余白も図形�
 - **箱の中に置くなら余白**。文字幅の目安は `fontSize × 文字数 × 0.6` (英数) / `× 1.0` (日本語)。箱の幅を超えるなら `fontSize` を下げる
 - **太さで強調しない**。色か大きさで差をつける
 - コードを見せるなら等幅を指定する (`font = "Menlo"` など)。指定が無いと環境で幅が変わって、折り返しがずれる
+- 和文の等幅は入っていないことが多い。`Menlo` を指定すると和文だけ別のフォントで補われ、桁が揃わない。`mophila fonts` で入っている名前を確かめる
 
 ### 動き
 

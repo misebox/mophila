@@ -87,6 +87,8 @@ enum Command {
         #[arg(long)]
         stdio: bool,
     },
+    /// この機械で使えるフォント名を並べる (TextArea の font に書ける名前)
+    Fonts,
     /// builtin の型・関数・メソッドの説明を JSON で表示する (scripts/docgen.py が読む)
     Doc,
     /// スクリプトを埋め込んだ実行ファイルを作る
@@ -281,6 +283,13 @@ fn run() -> Result<(), Box<dyn Error>> {
             sheet(&std::fs::read_to_string(&script)?, base_dir(&script), &project, &output, every, times, cell, cols)
         }
         Command::Lsp { .. } => lsp::run(),
+        Command::Fonts => {
+            let mut cache = render::text::RenderCache::new();
+            for name in cache.families() {
+                println!("{name}");
+            }
+            Ok(())
+        }
         Command::Doc => {
             println!("{}", serde_json::to_string_pretty(&docs::json())?);
             Ok(())

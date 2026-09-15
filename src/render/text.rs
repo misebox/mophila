@@ -43,6 +43,34 @@ impl RenderCache {
         collection.family_id(family).is_some()
     }
 
+    /// この機械で使えるフォント名。並べ替えて重複を除く
+    pub fn families(&mut self) -> Vec<String> {
+        let collection: &mut Collection = &mut self.fonts.collection;
+        let mut names: Vec<String> = collection.family_names().map(str::to_string).collect();
+        names.sort_unstable();
+        names.dedup();
+        names
+    }
+
+    /// 名前が見つからないときに出す、近いもの。
+    /// 共有する語の数を第一に、頭からどれだけ一致するかを第二に見る
+    pub fn nearest(&mut self, wanted: &str) -> Vec<String> {
+        let wanted_lower = wanted.to_lowercase();
+        let words: Vec<&str> = wanted_lower.split_whitespace().collect();
+        let prefix = |name: &str| name.chars().zip(wanted_lower.chars()).take_while(|(a, b)| a == b).count();
+        let mut scored: Vec<(usize, usize, String)> = self
+            .families()
+            .into_iter()
+            .filter_map(|name| {
+                let lower = name.to_lowercase();
+                let hits = words.iter().filter(|w| lower.split_whitespace().any(|part| part == **w)).count();
+                (hits > 0).then(|| (hits, prefix(&lower), name))
+            })
+            .collect();
+        scored.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| b.1.cmp(&a.1)).then_with(|| a.2.len().cmp(&b.2.len())));
+        scored.into_iter().take(3).map(|(_, _, n)| n).collect()
+    }
+
     /// ピクセル単位でレイアウトする。max_width が None なら折り返さない。同じ入力なら前回の結果を返す
     pub fn layout(&mut self, text: &str, family: Option<&str>, size_px: f32, max_width: Option<f32>, align: Alignment) -> &Layout<[u8; 4]> {
         let key = LayoutKey {

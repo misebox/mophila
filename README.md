@@ -56,6 +56,7 @@ cargo install --path .
 | `mophila run a.moph` | 描画せずに実行する (`log` の確認) |
 | `mophila timeline a.moph` | 何が、いつ、どう変わるかをテキストで出す |
 | `mophila sheet a.moph -o sheet.png --times 1s,5s,10s` | 指定した時刻のコマを 1 枚に並べる |
+| `mophila fonts` | この機械で使えるフォント名を並べる (`TextArea` の `font` に書ける名前) |
 | `mophila bundle a.moph -o a` | スクリプトを埋め込んだ実行ファイルを作る |
 | `mophila lsp` | Language Server (エディタから起動する) |
 

@@ -950,7 +950,13 @@ impl Interp {
                         if kind == "TextArea" && name == "font" {
                             if let Value::Str(family) = &v {
                                 if !self.cache_mut().family_exists(family) {
-                                    return err(Kind::FontNotFound, format!("font \"{family}\" not found"));
+                                    // 何が使えるか分からないと直せないので、近い名前を並べる
+                                    let near = self.cache_mut().nearest(&family);
+                                    let hint = match near.is_empty() {
+                                        true => "; \"mophila fonts\" lists the ones this machine has".to_string(),
+                                        false => format!("; did you mean {}? (\"mophila fonts\" lists them all)", near.iter().map(|n| format!("\"{n}\"")).collect::<Vec<_>>().join(", ")),
+                                    };
+                                    return err(Kind::FontNotFound, format!("font \"{family}\" not found{hint}"));
                                 }
                             }
                         }

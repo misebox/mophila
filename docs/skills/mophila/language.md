@@ -138,7 +138,7 @@ motion c [:position, :radius] { ... }      # 対象と属性を先に並べる�
 
 | module | 中身 |
 |---|---|
-| math | `PI` `TAU` `E`、三角関数、丸め、平方根、対数、最大最小 |
+| math | `PI` `TAU` `E`、三角関数、`round(x, 桁)` `clamp` `lerp` `map_range` `nice_step`、`pow` `log10` `log2` `hypot` `sign` |
 | color | `mix` `lighten` `darken` `alpha` `hsl` `gray` |
 | shape | Polygon の points = `regular_polygon` `star` `arrow` |
 | layout | `grid` `cell` `along` `fit` |

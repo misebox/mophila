@@ -302,7 +302,7 @@ fn lex_number(chars: &[char], start: usize, line: usize, col: usize) -> Result<(
     Ok((Tok::Number(value), i - start))
 }
 
-/// 位置 start から数値 (小数可) を読む。読めなければ None
+/// 位置 start から数値 (小数・指数可) を読む。読めなければ None
 fn read_number(chars: &[char], start: usize) -> Option<(f64, usize)> {
     let mut i = start;
     while i < chars.len() && (chars[i].is_ascii_digit() || (chars[i] == '.' && chars.get(i + 1).is_some_and(|c| c.is_ascii_digit()))) {
@@ -310,6 +310,20 @@ fn read_number(chars: &[char], start: usize) -> Option<(f64, usize)> {
     }
     if i == start {
         return None;
+    }
+    // 1e-9 や 2.5e3。e の後は符号ひとつと数字 1 つ以上。そうでなければ単位の始まり (1e は読まない)
+    if matches!(chars.get(i), Some('e' | 'E')) {
+        let mut j = i + 1;
+        if matches!(chars.get(j), Some('+' | '-')) {
+            j += 1;
+        }
+        let digits = j;
+        while chars.get(j).is_some_and(char::is_ascii_digit) {
+            j += 1;
+        }
+        if j > digits {
+            i = j;
+        }
     }
     let text: String = chars[start..i].iter().collect();
     text.parse().ok().map(|v| (v, i))

@@ -45,7 +45,7 @@ pub const TYPES: &[Type] = &[
         name: "Number",
         category: "Primitive",
         union: "",
-        make: "1\n1.5\n1/3\n25%",
+        make: "1\n1.5\n1/3\n25%\n1e-9",
         values: &[],
         members: &[],
         doc: "数。整数と実数を区別しない。分数で表せるあいだは分数のまま持つので、1/3 * 3 は 1、0.1 + 0.2 は 0.3 になる。sqrt のように分数で表せない計算が来ると実数に落ちる。25% は 0.25",

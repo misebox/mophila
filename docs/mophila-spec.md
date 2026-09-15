@@ -355,6 +355,8 @@ motion (t) { start: c.opacity = 0
 ```
 
 
+間を補間できるのは Number、Duration、Vector、Pos、Color と、それらを同じ長さで並べた Tuple / List。長さの違う並びや、補間できない値は、次の行の時刻で切り替わる。`Path` の `segments` や `Polygon` の `points` を動かすと形が変わる。
+
 `duration` は長さ。既定は最後の時刻で、代入すると長さだけが変わる (行の時刻は動かない。短くすれば、そこから先の行は使われない)。0..1 で書いた表は時刻が割合なので、`duration` が実時間を決める。Audio の `duration` はファイルの長さ。
 
 時刻そのものを動かすのはメソッド。

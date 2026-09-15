@@ -2183,6 +2183,13 @@ fn interpolate(a: &Value, b: &Value, k: f64) -> Value {
             let k = k as f32;
             Value::Color(std::array::from_fn(|i| c0[i] + (c1[i] - c0[i]) * k))
         }
+        // 並びは要素ごとに。Path の segments や Polygon の points の形が変わる。
+        // 長さが違えば形が対応しないので、補間せず元のままにする
+        (Value::Tuple(x), Value::Tuple(y)) if x.len() == y.len() => Value::Tuple(x.iter().zip(y).map(|(a, b)| interpolate(a, b, k)).collect()),
+        (Value::List(x), Value::List(y)) if x.borrow().len() == y.borrow().len() => {
+            let out = x.borrow().iter().zip(y.borrow().iter()).map(|(a, b)| interpolate(a, b, k)).collect();
+            Value::List(Rc::new(RefCell::new(out)))
+        }
         _ => a.clone(),
     }
 }

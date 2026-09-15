@@ -108,6 +108,14 @@ motion c [:position, :radius] { ... }      # 対象と属性を先に並べる�
 - `duration` は長さ。代入しても行の時刻は動かない (短くすればその先は使われない)。時刻ごと動かすのは `scale(k)` `fit(3s)` `trim(from =, to =)`。どれも新しい Timeline を返す
 - `0..1: o.position = Pos(math.cos(math.TAU * t), ...)` のように範囲を書くと、その区間は補間せず毎フレーム式を評価する。円運動・振動はこれで書く。行を刻んで近似しない
 - 行末の修飾子はその行に入る区間に効く。`:ease` (加減速) `:ease_in` (加速) `:ease_out` (減速) `:linear` (既定)
+- 間を補間できるのは Number / Duration / Vector / Pos / Color と、それらを**同じ長さで**並べた Tuple / List。`Path.segments` や `Polygon.points` を動かすと形が変わる。長さが違うと補間せず、次の行の時刻で切り替わる
+
+```
+motion (t) {
+  0s: p.segments = [(:line, Vector(3, 3)), (:line, Vector(5, 3))]
+  2s: p.segments = [(:line, Vector(3, 1)), (:line, Vector(5, 3.5))]   # 形が変わる
+}
+```
 - 出し入れは `o.opacity` を書くか、`animation` の `fade_in` / `fade_out`
 - `tl.reverse()` で逆再生
 - 入れ物: `let track = Timeline()` に `track.place(tl, at = 3s, fadeIn = 1s)`。`v.addTrack(track)`。Timeline は終わった後も最後の状態を保ち、始まる前は何もしない

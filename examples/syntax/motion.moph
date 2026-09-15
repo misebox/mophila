@@ -71,6 +71,14 @@ let tl6 = motion c1 [:opacity] {
   dur + 1s: 1
 }
 
+# 並びも補間される (同じ長さなら)。Path の形が変わる
+let p1 = Path(from = Vector(0, 2), segments = [(:line, Vector(2, 2)), (:line, Vector(4, 2))],
+              stroke = #e04040, strokeWidth = 0.05)
+let tl7 = motion p1 [:segments] {
+  0s: [(:line, Vector(2, 2)), (:line, Vector(4, 2))]
+  1s: [(:line, Vector(2, 0.5)), (:line, Vector(4, 2.5))]
+}
+
 # 対象は名前だけでなく、属性や添字でも書ける
 let balls = [c1]
 let tl5 = motion balls[0] [:opacity] {
@@ -78,7 +86,7 @@ let tl5 = motion balls[0] [:opacity] {
   1s: 0.2
 }
 
-log(m1, m2, tl1, tl2, tl3, tl4, tl5, tl6)
+log(m1, m2, tl1, tl2, tl3, tl4, tl5, tl6, tl7)
 
 # ---- Timeline を Timeline に置く ----
 let track = Timeline(duration = 10s)

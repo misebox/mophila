@@ -177,6 +177,14 @@ motion c [:position, :radius] { ... }      # 対象と属性を先に並べる�
 - `duration` は長さ。代入しても行の時刻は動かない (短くすればその先は使われない)。時刻ごと動かすのは `scale(k)` `fit(3s)` `trim(from =, to =)`。どれも新しい Timeline を返す
 - `0..1: o.position = Pos(math.cos(math.TAU * t), ...)` のように範囲を書くと、その区間は補間せず毎フレーム式を評価する。円運動・振動はこれで書く。行を刻んで近似しない
 - 行末の修飾子はその行に入る区間に効く。`:ease` (加減速) `:ease_in` (加速) `:ease_out` (減速) `:linear` (既定)
+- 間を補間できるのは Number / Duration / Vector / Pos / Color と、それらを**同じ長さで**並べた Tuple / List。`Path.segments` や `Polygon.points` を動かすと形が変わる。長さが違うと補間せず、次の行の時刻で切り替わる
+
+```
+motion (t) {
+  0s: p.segments = [(:line, Vector(3, 3)), (:line, Vector(5, 3))]
+  2s: p.segments = [(:line, Vector(3, 1)), (:line, Vector(5, 3.5))]   # 形が変わる
+}
+```
 - 出し入れは `o.opacity` を書くか、`animation` の `fade_in` / `fade_out`
 - `tl.reverse()` で逆再生
 - 入れ物: `let track = Timeline()` に `track.place(tl, at = 3s, fadeIn = 1s)`。`v.addTrack(track)`。Timeline は終わった後も最後の状態を保ち、始まる前は何もしない
@@ -1021,6 +1029,8 @@ motion (t) { start: c.opacity = 0
              start + 0.4s: c.opacity = 1 }   # 足し算
 ```
 
+
+間を補間できるのは Number、Duration、Vector、Pos、Color と、それらを同じ長さで並べた Tuple / List。長さの違う並びや、補間できない値は、次の行の時刻で切り替わる。`Path` の `segments` や `Polygon` の `points` を動かすと形が変わる。
 
 `duration` は長さ。既定は最後の時刻で、代入すると長さだけが変わる (行の時刻は動かない。短くすれば、そこから先の行は使われない)。0..1 で書いた表は時刻が割合なので、`duration` が実時間を決める。Audio の `duration` はファイルの長さ。
 
@@ -2680,6 +2690,14 @@ let tl6 = motion c1 [:opacity] {
   dur + 1s: 1
 }
 
+# 並びも補間される (同じ長さなら)。Path の形が変わる
+let p1 = Path(from = Vector(0, 2), segments = [(:line, Vector(2, 2)), (:line, Vector(4, 2))],
+              stroke = #e04040, strokeWidth = 0.05)
+let tl7 = motion p1 [:segments] {
+  0s: [(:line, Vector(2, 2)), (:line, Vector(4, 2))]
+  1s: [(:line, Vector(2, 0.5)), (:line, Vector(4, 2.5))]
+}
+
 # 対象は名前だけでなく、属性や添字でも書ける
 let balls = [c1]
 let tl5 = motion balls[0] [:opacity] {
@@ -2687,7 +2705,7 @@ let tl5 = motion balls[0] [:opacity] {
   1s: 0.2
 }
 
-log(m1, m2, tl1, tl2, tl3, tl4, tl5, tl6)
+log(m1, m2, tl1, tl2, tl3, tl4, tl5, tl6, tl7)
 
 # ---- Timeline を Timeline に置く ----
 let track = Timeline(duration = 10s)

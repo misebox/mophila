@@ -87,11 +87,10 @@ pub struct MotionDef {
 
 #[derive(Debug, Clone)]
 pub struct MotionRow {
-    /// 時刻。relative なら 0..1 の割合、そうでなければ秒
-    pub time: f64,
+    /// 時刻の式。Duration なら秒、Number なら 0..1 の割合。どちらかは評価してから決まる
+    pub time: Expr,
     /// `0..1:` のように範囲で書いた行の終わり。この区間は補間せず、式を毎フレーム評価する
-    pub end: Option<f64>,
-    pub relative: bool,
+    pub end: Option<Expr>,
     pub items: Vec<RowItem>,
     pub ease: Option<String>,
 }

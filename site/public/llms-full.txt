@@ -173,6 +173,7 @@ motion c [:position, :radius] { ... }      # 対象と属性を先に並べる�
 ```
 
 - 時刻は Duration か 0..1 の実数 (`50%` も可)。1 つの motion で混ぜない。0..1 で書いたら `duration` が要る
+- 時刻には式を書ける (`dur:` `start + 0.4s:`)。長さを引数で受け取る部品が素直に書ける
 - `duration` は長さ。代入しても行の時刻は動かない (短くすればその先は使われない)。時刻ごと動かすのは `scale(k)` `fit(3s)` `trim(from =, to =)`。どれも新しい Timeline を返す
 - `0..1: o.position = Pos(math.cos(math.TAU * t), ...)` のように範囲を書くと、その区間は補間せず毎フレーム式を評価する。円運動・振動はこれで書く。行を刻んで近似しない
 - 行末の修飾子はその行に入る区間に効く。`:ease` (加減速) `:ease_in` (加速) `:ease_out` (減速) `:linear` (既定)
@@ -628,9 +629,10 @@ motion-head ::= "(" ws ident (ws "," ws ident)* ws ")"
 motion-target ::= ident ("." ident | "[" ws expr ws "]")*
 attr-path   ::= symbol ("." ident)*
 
-# 時刻は Duration か 0..1 の実数。範囲 (0..1:) は補間せず毎フレーム式を評価する
+# 時刻は Duration か 0..1 の実数。式も書ける (dur、start + 1s)。".." は範囲の区切りなので、そこで止まる
+# 範囲 (0..1:) は補間せず毎フレーム式を評価する
 motion-row  ::= key-time (".." key-time)? ":" ws row-items? (sp modifier)*
-key-time    ::= duration | number
+key-time    ::= expr
 row-items   ::= row-item (ws "," ws row-item)*
 row-item    ::= expr ws "=" ws expr | expr
 modifier    ::= ":linear" | ":ease" | ":ease_in" | ":ease_out"
@@ -997,6 +999,17 @@ import "bgm.m4a" as bgm                         # Audio
 ```
 
 行の時刻は Duration (`2s`) か 0..1 の実数 (`0.5` `50%`)。1 つの motion で混ぜられない。実数で書いたら `duration` の設定が要る。
+
+時刻には式も書ける。`..` は範囲の区切りなので、そこで読むのを止める。
+
+```
+let dur = 3s
+motion (t) { 0s: c.radius = 1
+             dur: c.radius = 3 }          # 変数
+motion (t) { start: c.opacity = 0
+             start + 0.4s: c.opacity = 1 }   # 足し算
+```
+
 
 `duration` は長さ。既定は最後の時刻で、代入すると長さだけが変わる (行の時刻は動かない。短くすれば、そこから先の行は使われない)。0..1 で書いた表は時刻が割合なので、`duration` が実時間を決める。Audio の `duration` はファイルの長さ。
 
@@ -2647,6 +2660,14 @@ let tl4 = motion c1 [:position.x] {
   2s: 3.5
 }
 
+# 時刻には式を書ける
+let dur = 2s
+let tl6 = motion c1 [:opacity] {
+  0s: 1
+  dur: 0.2
+  dur + 1s: 1
+}
+
 # 対象は名前だけでなく、属性や添字でも書ける
 let balls = [c1]
 let tl5 = motion balls[0] [:opacity] {
@@ -2654,7 +2675,7 @@ let tl5 = motion balls[0] [:opacity] {
   1s: 0.2
 }
 
-log(m1, m2, tl1, tl2, tl3, tl4, tl5)
+log(m1, m2, tl1, tl2, tl3, tl4, tl5, tl6)
 
 # ---- Timeline を Timeline に置く ----
 let track = Timeline(duration = 10s)

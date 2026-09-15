@@ -1247,20 +1247,42 @@ impl Interp {
         if is_assign && is_value {
             return err(Kind::UnexpectedToken, "a motion cannot mix assignments and values");
         }
-        let relative = def.rows.first().is_some_and(|r| r.relative);
-        if def.rows.iter().any(|r| r.relative != relative) {
-            return err(Kind::DurationRequired, "keyframe times must be all Duration or all Number (0..1)");
+        // 時刻は式なので、ここで評価して秒か割合かを決める
+        let mut times: Vec<(f64, Option<f64>)> = Vec::new();
+        let mut relative = None;
+        for row in &def.rows {
+            let (time, rel) = self.keyframe_time(&row.time)?;
+            let end = match &row.end {
+                Some(e) => {
+                    let (end, end_rel) = self.keyframe_time(e)?;
+                    if end_rel != rel {
+                        return err(Kind::DurationRequired, "both ends of a keyframe range must be the same kind");
+                    }
+                    if end <= time {
+                        return err(Kind::OutOfRange, format!("keyframe range must go forward, found {time} to {end}"));
+                    }
+                    Some(end)
+                }
+                None => None,
+            };
+            match relative {
+                None => relative = Some(rel),
+                Some(first) if first != rel => return err(Kind::DurationRequired, "keyframe times must be all Duration or all Number (0..1)"),
+                Some(_) => {}
+            }
+            if rel && !(0.0..=1.0).contains(&time) {
+                return err(Kind::OutOfRange, format!("relative keyframe time must be within 0..1, found {time}"));
+            }
+            times.push((time, end));
         }
-        if relative && def.rows.iter().any(|r| !(0.0..=1.0).contains(&r.time)) {
-            return err(Kind::OutOfRange, "relative keyframe time must be within 0..1");
-        }
+        let relative = relative.unwrap_or(false);
         // 対象と属性パスを列挙した形 → Timeline
         if let Some((target_expr, paths)) = &def.target {
             let target = self.eval_object(target_expr)?;
             let mut keyframes = Vec::new();
-            for row in &def.rows {
+            for (row, &(time, end)) in def.rows.iter().zip(&times) {
                 if row.items.len() > paths.len() {
-                    return err(Kind::ArityMismatch, format!("keyframe at {}s has {} values but {} attributes are listed", row.time, row.items.len(), paths.len()));
+                    return err(Kind::ArityMismatch, format!("keyframe at {time}s has {} values but {} attributes are listed", row.items.len(), paths.len()));
                 }
                 let assigns = row
                     .items
@@ -1271,7 +1293,7 @@ impl Interp {
                         TlAssign { target: target.clone(), path: path.clone(), expr: e.clone(), scopes: self.scopes.clone() }
                     })
                     .collect();
-                keyframes.push(TlKeyframe { time: row.time, end: row.end, assigns, ease: row.ease.clone() });
+                keyframes.push(TlKeyframe { time, end, assigns, ease: row.ease.clone() });
             }
             return Ok(Value::Timeline(Rc::new(Timeline { param: "t".into(), keyframes, relative, duration: Cell::new(None), tracks: RefCell::new(Vec::new()), groups: RefCell::new(None) }.normalize())));
         }
@@ -1279,7 +1301,7 @@ impl Interp {
         if is_assign {
             let param = def.params.first().cloned().unwrap_or_else(|| "t".into());
             let mut keyframes = Vec::new();
-            for row in &def.rows {
+            for (row, &(time, end)) in def.rows.iter().zip(&times) {
                 let mut assigns = Vec::new();
                 for item in &row.items {
                     let RowItem::Assign(obj, path, e) = item else { unreachable!() };
@@ -1289,20 +1311,20 @@ impl Interp {
                     let target = self.eval_object(obj)?;
                     assigns.push(TlAssign { target, path: path.clone(), expr: e.clone(), scopes: self.scopes.clone() });
                 }
-                keyframes.push(TlKeyframe { time: row.time, end: row.end, assigns, ease: row.ease.clone() });
+                keyframes.push(TlKeyframe { time, end, assigns, ease: row.ease.clone() });
             }
             return Ok(Value::Timeline(Rc::new(Timeline { param, keyframes, relative, duration: Cell::new(None), tracks: RefCell::new(Vec::new()), groups: RefCell::new(None) }.normalize())));
         }
         // 値の表 → Motion。params[0] は行の時刻、以降は左の列
-        if def.rows.iter().any(|r| r.end.is_some()) {
+        if times.iter().any(|(_, end)| end.is_some()) {
             return err(Kind::UnexpectedToken, "a keyframe range (0..1:) needs a target; use it with assignments or motion target [...]");
         }
         let mut rows = Vec::new();
-        for row in &def.rows {
+        for (row, &(time, _)) in def.rows.iter().zip(&times) {
             self.scopes.push(new_scope());
             let result = (|| {
                 if let Some(t) = def.params.first() {
-                    self.scopes.last().expect("scope").borrow_mut().insert(t.clone(), Value::num(row.time));
+                    self.scopes.last().expect("scope").borrow_mut().insert(t.clone(), Value::num(time));
                 }
                 let mut values = Vec::new();
                 for (i, item) in row.items.iter().enumerate() {
@@ -1316,9 +1338,18 @@ impl Interp {
                 Ok(values)
             })();
             self.scopes.pop();
-            rows.push(MotionRowVal { time: row.time, values: result?, ease: row.ease.clone() });
+            rows.push(MotionRowVal { time, values: result?, ease: row.ease.clone() });
         }
         Ok(Value::Motion(Rc::new(Motion { rows, relative, duration: Cell::new(None) }.normalize())))
+    }
+
+    /// キーフレームの時刻の式。Duration なら秒、Number なら 0..1 の割合
+    fn keyframe_time(&mut self, e: &Expr) -> Result<(f64, bool)> {
+        match self.eval(e)? {
+            Value::Duration(d) => Ok((d, false)),
+            Value::Number(n, _) => Ok((n, true)),
+            v => err(Kind::DurationRequired, format!("a keyframe time is a Duration (2s) or a Number (0..1), found {}", v.type_name())),
+        }
     }
 
     /// Motion の各行で f(target, t, [列...]) を呼び、その中で target の属性に代入された値をキーフレームとして記録する

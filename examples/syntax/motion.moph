@@ -63,6 +63,14 @@ let tl4 = motion c1 [:position.x] {
   2s: 3.5
 }
 
+# 時刻には式を書ける
+let dur = 2s
+let tl6 = motion c1 [:opacity] {
+  0s: 1
+  dur: 0.2
+  dur + 1s: 1
+}
+
 # 対象は名前だけでなく、属性や添字でも書ける
 let balls = [c1]
 let tl5 = motion balls[0] [:opacity] {
@@ -70,7 +78,7 @@ let tl5 = motion balls[0] [:opacity] {
   1s: 0.2
 }
 
-log(m1, m2, tl1, tl2, tl3, tl4, tl5)
+log(m1, m2, tl1, tl2, tl3, tl4, tl5, tl6)
 
 # ---- Timeline を Timeline に置く ----
 let track = Timeline(duration = 10s)

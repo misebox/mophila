@@ -343,6 +343,17 @@ import "bgm.m4a" as bgm                         # Audio
 
 行の時刻は Duration (`2s`) か 0..1 の実数 (`0.5` `50%`)。1 つの motion で混ぜられない。実数で書いたら `duration` の設定が要る。
 
+時刻には式も書ける。`..` は範囲の区切りなので、そこで読むのを止める。
+
+```
+let dur = 3s
+motion (t) { 0s: c.radius = 1
+             dur: c.radius = 3 }          # 変数
+motion (t) { start: c.opacity = 0
+             start + 0.4s: c.opacity = 1 }   # 足し算
+```
+
+
 `duration` は長さ。既定は最後の時刻で、代入すると長さだけが変わる (行の時刻は動かない。短くすれば、そこから先の行は使われない)。0..1 で書いた表は時刻が割合なので、`duration` が実時間を決める。Audio の `duration` はファイルの長さ。
 
 時刻そのものを動かすのはメソッド。

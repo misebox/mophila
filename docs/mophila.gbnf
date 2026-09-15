@@ -112,9 +112,10 @@ motion-head ::= "(" ws ident (ws "," ws ident)* ws ")"
 motion-target ::= ident ("." ident | "[" ws expr ws "]")*
 attr-path   ::= symbol ("." ident)*
 
-# 時刻は Duration か 0..1 の実数。範囲 (0..1:) は補間せず毎フレーム式を評価する
+# 時刻は Duration か 0..1 の実数。式も書ける (dur、start + 1s)。".." は範囲の区切りなので、そこで止まる
+# 範囲 (0..1:) は補間せず毎フレーム式を評価する
 motion-row  ::= key-time (".." key-time)? ":" ws row-items? (sp modifier)*
-key-time    ::= duration | number
+key-time    ::= expr
 row-items   ::= row-item (ws "," ws row-item)*
 row-item    ::= expr ws "=" ws expr | expr
 modifier    ::= ":linear" | ":ease" | ":ease_in" | ":ease_out"

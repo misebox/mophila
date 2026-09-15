@@ -880,19 +880,13 @@ impl Parser {
 
     /// `時刻: 項目, 項目 :ease_out :fade_in`
     fn motion_row(&mut self) -> Result<MotionRow> {
-        let (time, relative) = self.keyframe_time()?;
-        let end = if *self.peek() == Tok::DotDot {
-            self.next();
-            let (end, rel) = self.keyframe_time()?;
-            if rel != relative {
-                return err(Kind::DurationRequired, format!("line {}:{}: both ends of a keyframe range must be the same kind", self.line(), self.col()));
+        let time = self.keyframe_time()?;
+        let end = match *self.peek() == Tok::DotDot {
+            true => {
+                self.next();
+                Some(self.keyframe_time()?)
             }
-            if end <= time {
-                return err(Kind::OutOfRange, format!("line {}:{}: keyframe range must go forward", self.line(), self.col()));
-            }
-            Some(end)
-        } else {
-            None
+            false => None,
         };
         self.expect(Tok::Colon)?;
         let mut items = Vec::new();
@@ -916,7 +910,7 @@ impl Parser {
             }
             self.next();
             // "0s: 0, 1s: 1" のように 1 行に複数のキーフレームを書ける
-            if matches!(self.peek(), Tok::Duration(_) | Tok::Number(_)) && *self.peek_at(1) == Tok::Colon {
+            if matches!(self.peek(), Tok::Duration(_) | Tok::Number(_) | Tok::Ident(_)) && *self.peek_at(1) == Tok::Colon {
                 break;
             }
         }
@@ -933,18 +927,17 @@ impl Parser {
             }
         }
         match self.peek() {
-            Tok::Newline | Tok::RBrace | Tok::Duration(_) | Tok::Number(_) => Ok(MotionRow { time, end, relative, items, ease }),
+            Tok::Newline | Tok::RBrace | Tok::Duration(_) | Tok::Number(_) | Tok::Ident(_) | Tok::LParen => Ok(MotionRow { time, end, items, ease }),
             _ => self.unexpected("end of keyframe"),
         }
     }
 
-    /// キーフレームの時刻。(値, 相対か)
-    fn keyframe_time(&mut self) -> Result<(f64, bool)> {
-        match self.next() {
-            Tok::Duration(t) => Ok((t, false)),
-            Tok::Number(t) => Ok((t, true)),
+    /// キーフレームの時刻。`2s` のような値のほか、式も書ける (`dur` `start + 1s`)。
+    /// `..` は範囲の区切りなので、そこまでで止まる強さで読む
+    fn keyframe_time(&mut self) -> Result<Expr> {
+        match self.peek() {
+            Tok::Duration(_) | Tok::Number(_) | Tok::Ident(_) | Tok::LParen | Tok::Minus => self.expr(7),
             _ => {
-                self.pos -= 1;
                 self.unexpected("keyframe time")
             }
         }

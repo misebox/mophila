@@ -6140,6 +6140,340 @@
    ]
   },
   {
+   "name": "media",
+   "path": "src/stdlib/media.moph",
+   "entries": [],
+   "items": [
+    {
+     "name": "picture",
+     "category": "画像",
+     "isFunc": true,
+     "signature": "picture(image: Image, w: Number, h: Number, mode: Symbol = :contain)",
+     "call": "picture(\n  image: Image,\n  w: Number,\n  h: Number,\n  mode: Symbol = :contain,\n)",
+     "summary": "画像を箱に入れる。縦横比は変えない",
+     "params": [
+      {
+       "name": "image",
+       "type": "Image",
+       "doc": "import した画像",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "箱の幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "箱の高さ",
+       "default": ""
+      },
+      {
+       "name": "mode",
+       "type": "Symbol",
+       "doc": ":contain なら全体が入る、:cover なら箱を埋めてはみ出しを切る (既定 :contain)",
+       "default": ":contain"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(picture(photo, 8, 4.5, :cover), at = Pos(0, 0, anchor = :topLeft), w = 8)"
+    },
+    {
+     "name": "ken_burns",
+     "category": "画像",
+     "isFunc": true,
+     "signature": "ken_burns(image: Image, progress: Number, w: Number, h: Number, from_zoom: Number = 1, to_zoom: Number = 1.18,",
+     "call": "ken_burns(\n  image: Image,\n  progress: Number,\n  w: Number,\n  h: Number,\n  from_zoom: Number = 1,\n  to_zoom: Number = 1.18,\n)",
+     "summary": "静止画をゆっくり寄せながら流す",
+     "params": [
+      {
+       "name": "image",
+       "type": "Image",
+       "doc": "import した画像",
+       "default": ""
+      },
+      {
+       "name": "progress",
+       "type": "Number",
+       "doc": "0 で始め、1 で終わり",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "箱の幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "箱の高さ",
+       "default": ""
+      },
+      {
+       "name": "from_zoom",
+       "type": "Number",
+       "doc": "始めの拡大率 (既定 1)",
+       "default": "1"
+      },
+      {
+       "name": "to_zoom",
+       "type": "Number",
+       "doc": "終わりの拡大率 (既定 1.18)",
+       "default": "1.18"
+      },
+      {
+       "name": "from_at",
+       "type": "",
+       "doc": "始めに真ん中へ来る点 (0..1 の割合。既定 真ん中)",
+       "default": ""
+      },
+      {
+       "name": "to_at",
+       "type": "",
+       "doc": "終わりに真ん中へ来る点 (既定 真ん中)",
+       "default": ""
+      }
+     ],
+     "returns": {
+      "type": "",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(ken_burns(photo, k, 16, 9, 1, 1.2, Vector(0.4, 0.4), Vector(0.6, 0.55)), at = Pos(0, 0, anchor = :topLeft), w = 16)"
+    },
+    {
+     "name": "slideshow",
+     "category": "画像",
+     "isFunc": true,
+     "signature": "slideshow(images: List<Image>, index: Number, w: Number, h: Number, mode: Symbol = :cover)",
+     "call": "slideshow(\n  images: List<Image>,\n  index: Number,\n  w: Number,\n  h: Number,\n  mode: Symbol = :cover,\n)",
+     "summary": "画像を順に見せる。index の小数の分が次への重なりになる",
+     "params": [
+      {
+       "name": "images",
+       "type": "List<Image>",
+       "doc": "import した画像の並び",
+       "default": ""
+      },
+      {
+       "name": "index",
+       "type": "Number",
+       "doc": "今の番号。2.5 なら 2 枚目と 3 枚目が半分ずつ",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "箱の幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "箱の高さ",
+       "default": ""
+      },
+      {
+       "name": "mode",
+       "type": "Symbol",
+       "doc": "picture と同じ (既定 :cover)",
+       "default": ":cover"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(slideshow([a, b, c], 1.5, 8, 4.5), at = Pos(0, 0, anchor = :topLeft), w = 8)"
+    },
+    {
+     "name": "watermark",
+     "category": "画像",
+     "isFunc": true,
+     "signature": "watermark(image: Image, w: Number, h: Number, corner: Symbol = :bottomRight, size: Number = 0.12, opacity: Number = 0.6)",
+     "call": "watermark(\n  image: Image,\n  w: Number,\n  h: Number,\n  corner: Symbol = :bottomRight,\n  size: Number = 0.12,\n  opacity: Number = 0.6,\n)",
+     "summary": "隅に置くロゴ",
+     "params": [
+      {
+       "name": "image",
+       "type": "Image",
+       "doc": "import した画像",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "箱の幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "箱の高さ",
+       "default": ""
+      },
+      {
+       "name": "corner",
+       "type": "Symbol",
+       "doc": ":topLeft :topRight :bottomLeft :bottomRight のどれか (既定 :bottomRight)",
+       "default": ":bottomRight"
+      },
+      {
+       "name": "size",
+       "type": "Number",
+       "doc": "ロゴの幅を箱の幅に対する割合で (既定 0.12)",
+       "default": "0.12"
+      },
+      {
+       "name": "opacity",
+       "type": "Number",
+       "doc": "不透明度 (既定 0.6)",
+       "default": "0.6"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(watermark(logo, 16, 9), at = Pos(0, 0, anchor = :topLeft), w = 16)"
+    },
+    {
+     "name": "project",
+     "category": "地図",
+     "isFunc": true,
+     "signature": "project(lat: Number, lon: Number)",
+     "call": "project(lat: Number, lon: Number)",
+     "summary": "緯度経度を 0..1 の平面座標にする (Web メルカトル)",
+     "params": [
+      {
+       "name": "lat",
+       "type": "Number",
+       "doc": "緯度 (度。-85..85)",
+       "default": ""
+      },
+      {
+       "name": "lon",
+       "type": "Number",
+       "doc": "経度 (度。-180..180)",
+       "default": ""
+      }
+     ],
+     "returns": {
+      "type": "Vector",
+      "doc": "Vector(x, y)。x は西が 0、y は北が 0"
+     },
+     "example": "let p = project(35.68, 139.77)   # 東京"
+    },
+    {
+     "name": "map_route",
+     "category": "地図",
+     "isFunc": true,
+     "signature": "map_route(points: List<Vector>, progress: Number, w: Number, h: Number, color: Color = #e04040, width: Number = 0)",
+     "call": "map_route(\n  points: List<Vector>,\n  progress: Number,\n  w: Number,\n  h: Number,\n  color: Color = #e04040,\n  width: Number = 0,\n)",
+     "summary": "経路が伸びる線。点は箱の座標",
+     "params": [
+      {
+       "name": "points",
+       "type": "List<Vector>",
+       "doc": "通る点",
+       "default": ""
+      },
+      {
+       "name": "progress",
+       "type": "Number",
+       "doc": "伸びる割合 0..1",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "箱の幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "箱の高さ",
+       "default": ""
+      },
+      {
+       "name": "color",
+       "type": "Color",
+       "doc": "線の色 (既定 赤)",
+       "default": "#e04040"
+      },
+      {
+       "name": "width",
+       "type": "Number",
+       "doc": "線の太さ (既定 幅の 1/120)",
+       "default": "0"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(map_route([Vector(1, 4), Vector(4, 2), Vector(7, 3)], 0.6, 8, 4.5), at = Pos(0, 0, anchor = :topLeft), w = 8)"
+    },
+    {
+     "name": "map_pin",
+     "category": "地図",
+     "isFunc": true,
+     "signature": "map_pin(at: Vector, progress: Number, w: Number, h: Number, size: Number = 0.6, color: Color = #e04040)",
+     "call": "map_pin(\n  at: Vector,\n  progress: Number,\n  w: Number,\n  h: Number,\n  size: Number = 0.6,\n  color: Color = #e04040,\n)",
+     "summary": "ピンが落ちてくる",
+     "params": [
+      {
+       "name": "at",
+       "type": "Vector",
+       "doc": "刺さる点 (置く先の座標)",
+       "default": ""
+      },
+      {
+       "name": "progress",
+       "type": "Number",
+       "doc": "0 で上、1 で刺さり切る",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "置く先の View の幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "置く先の View の高さ",
+       "default": ""
+      },
+      {
+       "name": "size",
+       "type": "Number",
+       "doc": "ピンの高さ (既定 0.6)",
+       "default": "0.6"
+      },
+      {
+       "name": "color",
+       "type": "Color",
+       "doc": "ピンの色 (既定 赤)",
+       "default": "#e04040"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(map_pin(Vector(4, 2), 0.8, 8, 4.5), at = Pos(0, 0, anchor = :topLeft), w = 8)"
+    }
+   ]
+  },
+  {
    "name": "meter",
    "path": "src/stdlib/meter.moph",
    "entries": [],

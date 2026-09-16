@@ -1,0 +1,178 @@
+# media.moph — 画像と地図
+#
+# 画像は import で読む。縦横比は呼ぶ側の箱に合わせて、こちらで揃える。
+#
+#   import "photo.jpg" as photo
+#   v.place(picture(photo, 8, 4.5), at = Pos(0, 0, anchor = :topLeft), w = 8)
+
+import math
+import { alpha } from color
+import { fit } from layout
+
+## 画像を箱に入れる。縦横比は変えない
+## @category 画像
+## @param image import した画像
+## @param w 箱の幅
+## @param h 箱の高さ
+## @param mode :contain なら全体が入る、:cover なら箱を埋めてはみ出しを切る (既定 :contain)
+## @returns 箱が w x h の View
+## @example
+## v.place(picture(photo, 8, 4.5, :cover), at = Pos(0, 0, anchor = :topLeft), w = 8)
+export func picture(image: Image, w: Number, h: Number, mode: Symbol = :contain) -> View {
+  let v = View(box = Vector(w, h), clip = true)
+  let ratio = image.width / image.height
+  let size = if mode == :cover {
+    if w / h > ratio { Vector(w, w / ratio) } else { Vector(h * ratio, h) }
+  } else {
+    fit(image.width, image.height, w, h)
+  }
+  v.place(Rect(position = Pos(w / 2, h / 2), w = size.x, h = size.y, fill = image))
+  v
+}
+
+## 静止画をゆっくり寄せながら流す
+## @category 画像
+## @param image import した画像
+## @param progress 0 で始め、1 で終わり
+## @param w 箱の幅
+## @param h 箱の高さ
+## @param from_zoom 始めの拡大率 (既定 1)
+## @param to_zoom 終わりの拡大率 (既定 1.18)
+## @param from_at 始めに真ん中へ来る点 (0..1 の割合。既定 真ん中)
+## @param to_at 終わりに真ん中へ来る点 (既定 真ん中)
+## @returns 箱が w x h の View
+## @example
+## v.place(ken_burns(photo, k, 16, 9, 1, 1.2, Vector(0.4, 0.4), Vector(0.6, 0.55)), at = Pos(0, 0, anchor = :topLeft), w = 16)
+export func ken_burns(image: Image, progress: Number, w: Number, h: Number, from_zoom: Number = 1, to_zoom: Number = 1.18,
+                      from_at: Vector = Vector(0.5, 0.5), to_at: Vector = Vector(0.5, 0.5)) -> View {
+  let v = View(box = Vector(w, h), clip = true)
+  let k = math.clamp(progress, 0, 1)
+  let zoom = math.lerp(from_zoom, to_zoom, k)
+  let ratio = image.width / image.height
+  # まず箱を埋める大きさにして、そこから寄せる
+  let base = if w / h > ratio { Vector(w, w / ratio) } else { Vector(h * ratio, h) }
+  let size = base * zoom
+  let at = Vector(math.lerp(from_at.x, to_at.x, k), math.lerp(from_at.y, to_at.y, k))
+  # at が箱の真ん中に来るように動かし、端が内側に入らないところで止める
+  let x = math.clamp(w / 2 - size.x * at.x, w - size.x, 0)
+  let y = math.clamp(h / 2 - size.y * at.y, h - size.y, 0)
+  v.place(Rect(position = Pos(x, y, anchor = :topLeft), w = size.x, h = size.y, fill = image))
+  v
+}
+
+## 画像を順に見せる。index の小数の分が次への重なりになる
+## @category 画像
+## @param images import した画像の並び
+## @param index 今の番号。2.5 なら 2 枚目と 3 枚目が半分ずつ
+## @param w 箱の幅
+## @param h 箱の高さ
+## @param mode picture と同じ (既定 :cover)
+## @returns 箱が w x h の View
+## @example
+## v.place(slideshow([a, b, c], 1.5, 8, 4.5), at = Pos(0, 0, anchor = :topLeft), w = 8)
+export func slideshow(images: List<Image>, index: Number, w: Number, h: Number, mode: Symbol = :cover) -> View {
+  let v = View(box = Vector(w, h))
+  if images.len() == 0 { return v }
+  let last = images.len() - 1
+  let i = math.clamp(math.floor(index), 0, last)
+  let k = math.clamp(index - i, 0, 1)
+  let back = picture(images[i], w, h, mode)
+  back.opacity = 1
+  v.place(back, at = Pos(0, 0, anchor = :topLeft), w = w, h = h)
+  if k > 0 and i < last {
+    let front = picture(images[i + 1], w, h, mode)
+    front.opacity = k
+    v.place(front, at = Pos(0, 0, anchor = :topLeft), w = w, h = h)
+  }
+  v
+}
+
+## 隅に置くロゴ
+## @category 画像
+## @param image import した画像
+## @param w 箱の幅
+## @param h 箱の高さ
+## @param corner :topLeft :topRight :bottomLeft :bottomRight のどれか (既定 :bottomRight)
+## @param size ロゴの幅を箱の幅に対する割合で (既定 0.12)
+## @param opacity 不透明度 (既定 0.6)
+## @returns 箱が w x h の View
+## @example
+## v.place(watermark(logo, 16, 9), at = Pos(0, 0, anchor = :topLeft), w = 16)
+export func watermark(image: Image, w: Number, h: Number, corner: Symbol = :bottomRight, size: Number = 0.12, opacity: Number = 0.6) -> View {
+  let v = View(box = Vector(w, h))
+  let lw = w * size
+  let lh = lw * image.height / image.width
+  let pad = w * 0.02
+  let x = if corner == :topLeft or corner == :bottomLeft { pad } else { w - pad - lw }
+  let y = if corner == :topLeft or corner == :topRight { pad } else { h - pad - lh }
+  v.place(Rect(position = Pos(x, y, anchor = :topLeft), w = lw, h = lh, fill = image, opacity = opacity))
+  v
+}
+
+## 緯度経度を 0..1 の平面座標にする (Web メルカトル)
+## @category 地図
+## @param lat 緯度 (度。-85..85)
+## @param lon 経度 (度。-180..180)
+## @returns Vector(x, y)。x は西が 0、y は北が 0
+## @example
+## let p = project(35.68, 139.77)   # 東京
+export func project(lat: Number, lon: Number) -> Vector {
+  let phi = math.clamp(lat, -85.05112878, 85.05112878) * math.PI / 180
+  let x = (lon + 180) / 360
+  let y = 0.5 - math.ln(math.tan(math.PI / 4 + phi / 2)) / (2 * math.PI)
+  Vector(x, y)
+}
+
+## 経路が伸びる線。点は箱の座標
+## @category 地図
+## @param points 通る点
+## @param progress 伸びる割合 0..1
+## @param w 箱の幅
+## @param h 箱の高さ
+## @param color 線の色 (既定 赤)
+## @param width 線の太さ (既定 幅の 1/120)
+## @returns 箱が w x h の View
+## @example
+## v.place(map_route([Vector(1, 4), Vector(4, 2), Vector(7, 3)], 0.6, 8, 4.5), at = Pos(0, 0, anchor = :topLeft), w = 8)
+export func map_route(points: List<Vector>, progress: Number, w: Number, h: Number, color: Color = #e04040, width: Number = 0) -> View {
+  let v = View(box = Vector(w, h))
+  if points.len() < 2 { return v }
+  let wide = if width > 0 { width } else { w / 120 }
+  let segments = []
+  for p in points[1..points.len()] { segments.push((:line, p)) }
+  let path = Path(from = points[0], segments = segments, stroke = color, strokeWidth = wide, strokeCap = :round)
+  let k = math.clamp(progress, 0, 1)
+  if k < 1 {
+    let total = path.length()
+    path.dash = [total, total]
+    path.dashOffset = total * (1 - k)
+  }
+  v.place(path)
+  v
+}
+
+## ピンが落ちてくる
+## @category 地図
+## @param at 刺さる点 (置く先の座標)
+## @param progress 0 で上、1 で刺さり切る
+## @param w 置く先の View の幅
+## @param h 置く先の View の高さ
+## @param size ピンの高さ (既定 0.6)
+## @param color ピンの色 (既定 赤)
+## @returns 箱が w x h の View
+## @example
+## v.place(map_pin(Vector(4, 2), 0.8, 8, 4.5), at = Pos(0, 0, anchor = :topLeft), w = 8)
+export func map_pin(at: Vector, progress: Number, w: Number, h: Number, size: Number = 0.6, color: Color = #e04040) -> View {
+  let v = View(box = Vector(w, h))
+  let k = math.clamp(progress, 0, 1)
+  # 落ちるほど速く、最後は止まる
+  let drop = (1 - k) * (1 - k) * size * 3
+  let tip = Vector(at.x, at.y - drop)
+  let r = size * 0.3
+  let c = Vector(tip.x, tip.y - size * 0.72)
+  v.place(Ellipse(position = Pos(at.x, at.y), rx = r * k, ry = r * 0.35 * k, fill = alpha(#000000, 0.25 * k)))
+  v.place(Polygon(points = [tip, Vector(c.x - r * 0.72, c.y + r * 0.5), Vector(c.x + r * 0.72, c.y + r * 0.5)], fill = color))
+  v.place(Circle(position = Pos(c.x, c.y), radius = r, fill = color))
+  v.place(Circle(position = Pos(c.x, c.y), radius = r * 0.38, fill = #ffffff))
+  v
+}

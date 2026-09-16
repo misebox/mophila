@@ -2667,6 +2667,55 @@ alias P = Pos
   color: Color = #ffffff,
 )` -> View — エンドロール。offset で下から上へ流す
 
+### media
+
+- `picture(
+  image: Image,
+  w: Number,
+  h: Number,
+  mode: Symbol = :contain,
+)` -> View — 画像を箱に入れる。縦横比は変えない
+- `ken_burns(
+  image: Image,
+  progress: Number,
+  w: Number,
+  h: Number,
+  from_zoom: Number = 1,
+  to_zoom: Number = 1.18,
+)` — 静止画をゆっくり寄せながら流す
+- `slideshow(
+  images: List<Image>,
+  index: Number,
+  w: Number,
+  h: Number,
+  mode: Symbol = :cover,
+)` -> View — 画像を順に見せる。index の小数の分が次への重なりになる
+- `watermark(
+  image: Image,
+  w: Number,
+  h: Number,
+  corner: Symbol = :bottomRight,
+  size: Number = 0.12,
+  opacity: Number = 0.6,
+)` -> View — 隅に置くロゴ
+- `project(lat: Number, lon: Number)` -> Vector — 緯度経度を 0..1 の平面座標にする (Web メルカトル)
+- `map_route(
+  points: List<Vector>,
+  progress: Number,
+  w: Number,
+  h: Number,
+  color: Color = #e04040,
+  width: Number = 0,
+)` -> View — 経路が伸びる線。点は箱の座標
+- `map_pin(
+  at: Vector,
+  progress: Number,
+  w: Number,
+  h: Number,
+  size: Number = 0.6,
+  color: Color = #e04040,
+)` -> View — ピンが落ちてくる
+
 ### meter
 
 - `progress_bar(

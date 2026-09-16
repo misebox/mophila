@@ -4023,6 +4023,12 @@
        "default": ""
       },
       {
+       "name": "start",
+       "type": "",
+       "doc": "動き出す時刻 (既定 0s)",
+       "default": ""
+      },
+      {
        "name": "duration",
        "type": "",
        "doc": "0s より長ければ、その長さで 0 から値まで伸びる (既定 0s = 止まったまま)",
@@ -4104,6 +4110,12 @@
        "default": ""
       },
       {
+       "name": "start",
+       "type": "",
+       "doc": "動き出す時刻 (既定 0s)",
+       "default": ""
+      },
+      {
        "name": "duration",
        "type": "",
        "doc": "0s より長ければ、その長さで 0 から progress まで描き進む (既定 0s = 止まったまま)",
@@ -4120,8 +4132,8 @@
      "name": "pie",
      "category": "グラフ",
      "isFunc": true,
-     "signature": "pie(values: List<Number>, size: Number, colors: List<Color> = [], hole: Number = 0, duration: Duration = 0s)",
-     "call": "pie(\n  values: List<Number>,\n  size: Number,\n  colors: List<Color> = [],\n  hole: Number = 0,\n  duration: Duration = 0s,\n)",
+     "signature": "pie(values: List<Number>, size: Number, colors: List<Color> = [], hole: Number = 0, duration: Duration = 0s, start: Duration = 0s)",
+     "call": "pie(\n  values: List<Number>,\n  size: Number,\n  colors: List<Color> = [],\n  hole: Number = 0,\n  duration: Duration = 0s,\n  start: Duration = 0s,\n)",
      "summary": "円グラフ。values の割合で切り分ける",
      "params": [
       {
@@ -4147,6 +4159,12 @@
        "type": "Number",
        "doc": "中央の穴の割合 0..1 (既定 0。0.5 ならドーナツ)",
        "default": "0"
+      },
+      {
+       "name": "start",
+       "type": "Duration",
+       "doc": "動き出す時刻 (既定 0s)",
+       "default": "0s"
       },
       {
        "name": "duration",
@@ -4772,8 +4790,8 @@
      "name": "node_graph",
      "category": "関係",
      "isFunc": true,
-     "signature": "node_graph(nodes: Dict, edges: List<Tuple>, w: Number, h: Number, revealed: Number = -1, color: Color = #4080e0, duration: Duration = 0s)",
-     "call": "node_graph(\n  nodes: Dict,\n  edges: List<Tuple>,\n  w: Number,\n  h: Number,\n  revealed: Number = -1,\n  color: Color = #4080e0,\n  duration: Duration = 0s,\n)",
+     "signature": "node_graph(nodes: Dict, edges: List<Tuple>, w: Number, h: Number, revealed: Number = -1, color: Color = #4080e0, duration: Duration = 0s, start: Duration = 0s)",
+     "call": "node_graph(\n  nodes: Dict,\n  edges: List<Tuple>,\n  w: Number,\n  h: Number,\n  revealed: Number = -1,\n  color: Color = #4080e0,\n  duration: Duration = 0s,\n  start: Duration = 0s,\n)",
      "summary": "ネットワーク図。ノードは (名前, 位置) の Dict、エッジは (名前, 名前) の組",
      "params": [
       {
@@ -4813,6 +4831,12 @@
        "default": "#4080e0"
       },
       {
+       "name": "start",
+       "type": "Duration",
+       "doc": "動き出す時刻 (既定 0s)",
+       "default": "0s"
+      },
+      {
        "name": "duration",
        "type": "Duration",
        "doc": "0s より長ければ、その長さで 1 つずつ出てくる (既定 0s = revealed のまま止まる)",
@@ -4829,8 +4853,8 @@
      "name": "table",
      "category": "表",
      "isFunc": true,
-     "signature": "table(headers: List<String>, rows: List<List<String>>, w: Number, h: Number, revealed: Number = -1, accent: Color = #e6e2da, duration: Duration = 0s)",
-     "call": "table(\n  headers: List<String>,\n  rows: List<List<String>>,\n  w: Number,\n  h: Number,\n  revealed: Number = -1,\n  accent: Color = #e6e2da,\n  duration: Duration = 0s,\n)",
+     "signature": "table(headers: List<String>, rows: List<List<String>>, w: Number, h: Number, revealed: Number = -1, accent: Color = #e6e2da, duration: Duration = 0s, start: Duration = 0s)",
+     "call": "table(\n  headers: List<String>,\n  rows: List<List<String>>,\n  w: Number,\n  h: Number,\n  revealed: Number = -1,\n  accent: Color = #e6e2da,\n  duration: Duration = 0s,\n  start: Duration = 0s,\n)",
      "summary": "比較表。行を順に出せる",
      "params": [
       {
@@ -4868,6 +4892,12 @@
        "type": "Color",
        "doc": "見出しの背の色 (既定 薄い灰)",
        "default": "#e6e2da"
+      },
+      {
+       "name": "start",
+       "type": "Duration",
+       "doc": "動き出す時刻 (既定 0s)",
+       "default": "0s"
       },
       {
        "name": "duration",
@@ -5073,8 +5103,8 @@
      "name": "highlight",
      "category": "見出し",
      "isFunc": true,
-     "signature": "highlight(s: String, from: Number, to: Number, fontSize: Number, style: Symbol = :marker, color: Color = #1a1d23, accent: Color = #ffd34d, duration: Duration = 0s)",
-     "call": "highlight(\n  s: String,\n  from: Number,\n  to: Number,\n  fontSize: Number,\n  style: Symbol = :marker,\n  color: Color = #1a1d23,\n  accent: Color = #ffd34d,\n  duration: Duration = 0s,\n)",
+     "signature": "highlight(s: String, from: Number, to: Number, fontSize: Number, style: Symbol = :marker, color: Color = #1a1d23, accent: Color = #ffd34d, duration: Duration = 0s, start: Duration = 0s)",
+     "call": "highlight(\n  s: String,\n  from: Number,\n  to: Number,\n  fontSize: Number,\n  style: Symbol = :marker,\n  color: Color = #1a1d23,\n  accent: Color = #ffd34d,\n  duration: Duration = 0s,\n  start: Duration = 0s,\n)",
      "summary": "1 行の文字の一部を目立たせる。マーカーか下線",
      "params": [
       {
@@ -5118,6 +5148,12 @@
        "type": "Color",
        "doc": "目立たせる色 (既定 黄)",
        "default": "#ffd34d"
+      },
+      {
+       "name": "start",
+       "type": "Duration",
+       "doc": "動き出す時刻 (既定 0s)",
+       "default": "0s"
       },
       {
        "name": "duration",
@@ -5187,8 +5223,8 @@
      "name": "lower_third",
      "category": "見出し",
      "isFunc": true,
-     "signature": "lower_third(title: String, subtitle: String, w: Number, h: Number, progress: Number = 1, fill: Color = #1a1d23, accent: Color = #e04040, duration: Duration = 0s)",
-     "call": "lower_third(\n  title: String,\n  subtitle: String,\n  w: Number,\n  h: Number,\n  progress: Number = 1,\n  fill: Color = #1a1d23,\n  accent: Color = #e04040,\n  duration: Duration = 0s,\n)",
+     "signature": "lower_third(title: String, subtitle: String, w: Number, h: Number, progress: Number = 1, fill: Color = #1a1d23, accent: Color = #e04040, duration: Duration = 0s, start: Duration = 0s)",
+     "call": "lower_third(\n  title: String,\n  subtitle: String,\n  w: Number,\n  h: Number,\n  progress: Number = 1,\n  fill: Color = #1a1d23,\n  accent: Color = #e04040,\n  duration: Duration = 0s,\n  start: Duration = 0s,\n)",
      "summary": "画面下の帯タイトル。progress で左から出てくる",
      "params": [
       {
@@ -5232,6 +5268,12 @@
        "type": "Color",
        "doc": "先頭の縦線の色 (既定 赤)",
        "default": "#e04040"
+      },
+      {
+       "name": "start",
+       "type": "Duration",
+       "doc": "動き出す時刻 (既定 0s)",
+       "default": "0s"
       },
       {
        "name": "duration",
@@ -5449,8 +5491,8 @@
      "name": "terminal",
      "category": "枠",
      "isFunc": true,
-     "signature": "terminal(lines: List<String>, revealed: Number, w: Number, h: Number, rows: Number = 0, back: Color = #14161a, ink: Color = #9fe0a0, font: String = \"\", duration: Duration = 0s)",
-     "call": "terminal(\n  lines: List<String>,\n  revealed: Number,\n  w: Number,\n  h: Number,\n  rows: Number = 0,\n  back: Color = #14161a,\n  ink: Color = #9fe0a0,\n  font: String = \"\",\n  duration: Duration = 0s,\n)",
+     "signature": "terminal(lines: List<String>, revealed: Number, w: Number, h: Number, rows: Number = 0, back: Color = #14161a, ink: Color = #9fe0a0, font: String = \"\", duration: Duration = 0s, start: Duration = 0s)",
+     "call": "terminal(\n  lines: List<String>,\n  revealed: Number,\n  w: Number,\n  h: Number,\n  rows: Number = 0,\n  back: Color = #14161a,\n  ink: Color = #9fe0a0,\n  font: String = \"\",\n  duration: Duration = 0s,\n  start: Duration = 0s,\n)",
      "summary": "ターミナル。行を上から順に出し、最後の行は 1 文字ずつ出る",
      "params": [
       {
@@ -5500,6 +5542,12 @@
        "type": "String",
        "doc": "文字の書体 (既定 そのときの既定の書体)",
        "default": "\"\""
+      },
+      {
+       "name": "start",
+       "type": "Duration",
+       "doc": "動き出す時刻 (既定 0s)",
+       "default": "0s"
       },
       {
        "name": "duration",
@@ -5569,8 +5617,8 @@
      "name": "toast",
      "category": "部品",
      "isFunc": true,
-     "signature": "toast(message: String, w: Number, h: Number, progress: Number = 1, fill: Color = #1a1d23, accent: Color = #4aa863, duration: Duration = 0s)",
-     "call": "toast(\n  message: String,\n  w: Number,\n  h: Number,\n  progress: Number = 1,\n  fill: Color = #1a1d23,\n  accent: Color = #4aa863,\n  duration: Duration = 0s,\n)",
+     "signature": "toast(message: String, w: Number, h: Number, progress: Number = 1, fill: Color = #1a1d23, accent: Color = #4aa863, duration: Duration = 0s, start: Duration = 0s)",
+     "call": "toast(\n  message: String,\n  w: Number,\n  h: Number,\n  progress: Number = 1,\n  fill: Color = #1a1d23,\n  accent: Color = #4aa863,\n  duration: Duration = 0s,\n  start: Duration = 0s,\n)",
      "summary": "通知のバブル。progress が 0 のときは上に隠れている",
      "params": [
       {
@@ -5608,6 +5656,12 @@
        "type": "Color",
        "doc": "左の丸の色 (既定 緑)",
        "default": "#4aa863"
+      },
+      {
+       "name": "start",
+       "type": "Duration",
+       "doc": "動き出す時刻 (既定 0s)",
+       "default": "0s"
       },
       {
        "name": "duration",
@@ -5921,8 +5975,8 @@
      "name": "particles",
      "category": "動く",
      "isFunc": true,
-     "signature": "particles(w: Number, h: Number, duration: Duration, count: Number = 40, color: Color = #ffffff, size: Number = 0)",
-     "call": "particles(\n  w: Number,\n  h: Number,\n  duration: Duration,\n  count: Number = 40,\n  color: Color = #ffffff,\n  size: Number = 0,\n)",
+     "signature": "particles(w: Number, h: Number, duration: Duration, start: Duration = 0s, count: Number = 40, color: Color = #ffffff, size: Number = 0)",
+     "call": "particles(\n  w: Number,\n  h: Number,\n  duration: Duration,\n  start: Duration = 0s,\n  count: Number = 40,\n  color: Color = #ffffff,\n  size: Number = 0,\n)",
      "summary": "粒が下から上へ流れる。duration で 1 周する",
      "params": [
       {
@@ -5942,6 +5996,12 @@
        "type": "Duration",
        "doc": "流れ切るまでの長さ",
        "default": ""
+      },
+      {
+       "name": "start",
+       "type": "Duration",
+       "doc": "動き出す時刻 (既定 0s)",
+       "default": "0s"
       },
       {
        "name": "count",
@@ -5972,8 +6032,8 @@
      "name": "grid_pulse",
      "category": "動く",
      "isFunc": true,
-     "signature": "grid_pulse(w: Number, h: Number, duration: Duration, step: Number = 1, color: Color = #4080e0, back: Color = #12151a)",
-     "call": "grid_pulse(\n  w: Number,\n  h: Number,\n  duration: Duration,\n  step: Number = 1,\n  color: Color = #4080e0,\n  back: Color = #12151a,\n)",
+     "signature": "grid_pulse(w: Number, h: Number, duration: Duration, start: Duration = 0s, step: Number = 1, color: Color = #4080e0, back: Color = #12151a)",
+     "call": "grid_pulse(\n  w: Number,\n  h: Number,\n  duration: Duration,\n  start: Duration = 0s,\n  step: Number = 1,\n  color: Color = #4080e0,\n  back: Color = #12151a,\n)",
      "summary": "格子が順に明るくなる。duration で 1 周する",
      "params": [
       {
@@ -5993,6 +6053,12 @@
        "type": "Duration",
        "doc": "端から端まで明るさが渡る長さ",
        "default": ""
+      },
+      {
+       "name": "start",
+       "type": "Duration",
+       "doc": "動き出す時刻 (既定 0s)",
+       "default": "0s"
       },
       {
        "name": "step",
@@ -6023,8 +6089,8 @@
      "name": "radar_sweep",
      "category": "動く",
      "isFunc": true,
-     "signature": "radar_sweep(w: Number, h: Number, duration: Duration, rings: Number = 3, color: Color = #4aa863, back: Color = #0e1412)",
-     "call": "radar_sweep(\n  w: Number,\n  h: Number,\n  duration: Duration,\n  rings: Number = 3,\n  color: Color = #4aa863,\n  back: Color = #0e1412,\n)",
+     "signature": "radar_sweep(w: Number, h: Number, duration: Duration, start: Duration = 0s, rings: Number = 3, color: Color = #4aa863, back: Color = #0e1412)",
+     "call": "radar_sweep(\n  w: Number,\n  h: Number,\n  duration: Duration,\n  start: Duration = 0s,\n  rings: Number = 3,\n  color: Color = #4aa863,\n  back: Color = #0e1412,\n)",
      "summary": "レーダーの掃引。duration で 1 回転する",
      "params": [
       {
@@ -6044,6 +6110,12 @@
        "type": "Duration",
        "doc": "1 回転の長さ",
        "default": ""
+      },
+      {
+       "name": "start",
+       "type": "Duration",
+       "doc": "動き出す時刻 (既定 0s)",
+       "default": "0s"
       },
       {
        "name": "rings",
@@ -6228,8 +6300,8 @@
      "name": "iris",
      "category": "切り替え",
      "isFunc": true,
-     "signature": "iris(w: Number, h: Number, progress: Number, cx: Number = -1, cy: Number = -1, color: Color = #000000, duration: Duration = 0s)",
-     "call": "iris(\n  w: Number,\n  h: Number,\n  progress: Number,\n  cx: Number = -1,\n  cy: Number = -1,\n  color: Color = #000000,\n  duration: Duration = 0s,\n)",
+     "signature": "iris(w: Number, h: Number, progress: Number, cx: Number = -1, cy: Number = -1, color: Color = #000000, duration: Duration = 0s, start: Duration = 0s)",
+     "call": "iris(\n  w: Number,\n  h: Number,\n  progress: Number,\n  cx: Number = -1,\n  cy: Number = -1,\n  color: Color = #000000,\n  duration: Duration = 0s,\n  start: Duration = 0s,\n)",
      "summary": "円が開く / 閉じる切り替え",
      "params": [
       {
@@ -6269,6 +6341,12 @@
        "default": "#000000"
       },
       {
+       "name": "start",
+       "type": "Duration",
+       "doc": "動き出す時刻 (既定 0s)",
+       "default": "0s"
+      },
+      {
        "name": "duration",
        "type": "Duration",
        "doc": "0s より長ければ、その長さで 0 から progress まで開く (既定 0s = 止まったまま)",
@@ -6285,8 +6363,8 @@
      "name": "wipe",
      "category": "切り替え",
      "isFunc": true,
-     "signature": "wipe(w: Number, h: Number, progress: Number, direction: Symbol = :left, color: Color = #000000, duration: Duration = 0s)",
-     "call": "wipe(\n  w: Number,\n  h: Number,\n  progress: Number,\n  direction: Symbol = :left,\n  color: Color = #000000,\n  duration: Duration = 0s,\n)",
+     "signature": "wipe(w: Number, h: Number, progress: Number, direction: Symbol = :left, color: Color = #000000, duration: Duration = 0s, start: Duration = 0s)",
+     "call": "wipe(\n  w: Number,\n  h: Number,\n  progress: Number,\n  direction: Symbol = :left,\n  color: Color = #000000,\n  duration: Duration = 0s,\n  start: Duration = 0s,\n)",
      "summary": "端から幕が寄せる / 引く切り替え",
      "params": [
       {
@@ -6318,6 +6396,12 @@
        "type": "Color",
        "doc": "幕の色 (既定 黒)",
        "default": "#000000"
+      },
+      {
+       "name": "start",
+       "type": "Duration",
+       "doc": "動き出す時刻 (既定 0s)",
+       "default": "0s"
       },
       {
        "name": "duration",
@@ -6438,8 +6522,8 @@
      "name": "credits_roll",
      "category": "流す",
      "isFunc": true,
-     "signature": "credits_roll(lines: List<String>, offset: Number, w: Number, h: Number, fontSize: Number = 0, color: Color = #ffffff, duration: Duration = 0s)",
-     "call": "credits_roll(\n  lines: List<String>,\n  offset: Number,\n  w: Number,\n  h: Number,\n  fontSize: Number = 0,\n  color: Color = #ffffff,\n  duration: Duration = 0s,\n)",
+     "signature": "credits_roll(lines: List<String>, offset: Number, w: Number, h: Number, fontSize: Number = 0, color: Color = #ffffff, duration: Duration = 0s, start: Duration = 0s)",
+     "call": "credits_roll(\n  lines: List<String>,\n  offset: Number,\n  w: Number,\n  h: Number,\n  fontSize: Number = 0,\n  color: Color = #ffffff,\n  duration: Duration = 0s,\n  start: Duration = 0s,\n)",
      "summary": "エンドロール。offset で下から上へ流す",
      "params": [
       {
@@ -6477,6 +6561,12 @@
        "type": "Color",
        "doc": "文字の色 (既定 白)",
        "default": "#ffffff"
+      },
+      {
+       "name": "start",
+       "type": "Duration",
+       "doc": "動き出す時刻 (既定 0s)",
+       "default": "0s"
       },
       {
        "name": "duration",
@@ -6591,6 +6681,12 @@
        "name": "to_at",
        "type": "",
        "doc": "終わりに真ん中へ来る点 (既定 真ん中)",
+       "default": ""
+      },
+      {
+       "name": "start",
+       "type": "",
+       "doc": "動き出す時刻 (既定 0s)",
        "default": ""
       },
       {
@@ -6733,8 +6829,8 @@
      "name": "map_route",
      "category": "地図",
      "isFunc": true,
-     "signature": "map_route(points: List<Vector>, progress: Number, w: Number, h: Number, color: Color = #e04040, width: Number = 0, duration: Duration = 0s)",
-     "call": "map_route(\n  points: List<Vector>,\n  progress: Number,\n  w: Number,\n  h: Number,\n  color: Color = #e04040,\n  width: Number = 0,\n  duration: Duration = 0s,\n)",
+     "signature": "map_route(points: List<Vector>, progress: Number, w: Number, h: Number, color: Color = #e04040, width: Number = 0, duration: Duration = 0s, start: Duration = 0s)",
+     "call": "map_route(\n  points: List<Vector>,\n  progress: Number,\n  w: Number,\n  h: Number,\n  color: Color = #e04040,\n  width: Number = 0,\n  duration: Duration = 0s,\n  start: Duration = 0s,\n)",
      "summary": "経路が伸びる線。点は箱の座標",
      "params": [
       {
@@ -6774,6 +6870,12 @@
        "default": "0"
       },
       {
+       "name": "start",
+       "type": "Duration",
+       "doc": "動き出す時刻 (既定 0s)",
+       "default": "0s"
+      },
+      {
        "name": "duration",
        "type": "Duration",
        "doc": "0s より長ければ、その長さで 0 から progress まで伸びる (既定 0s = 止まったまま)",
@@ -6790,8 +6892,8 @@
      "name": "map_pin",
      "category": "地図",
      "isFunc": true,
-     "signature": "map_pin(at: Vector, progress: Number, w: Number, h: Number, size: Number = 0.6, color: Color = #e04040, duration: Duration = 0s)",
-     "call": "map_pin(\n  at: Vector,\n  progress: Number,\n  w: Number,\n  h: Number,\n  size: Number = 0.6,\n  color: Color = #e04040,\n  duration: Duration = 0s,\n)",
+     "signature": "map_pin(at: Vector, progress: Number, w: Number, h: Number, size: Number = 0.6, color: Color = #e04040, duration: Duration = 0s, start: Duration = 0s)",
+     "call": "map_pin(\n  at: Vector,\n  progress: Number,\n  w: Number,\n  h: Number,\n  size: Number = 0.6,\n  color: Color = #e04040,\n  duration: Duration = 0s,\n  start: Duration = 0s,\n)",
      "summary": "ピンが落ちてくる",
      "params": [
       {
@@ -6829,6 +6931,12 @@
        "type": "Color",
        "doc": "ピンの色 (既定 赤)",
        "default": "#e04040"
+      },
+      {
+       "name": "start",
+       "type": "Duration",
+       "doc": "動き出す時刻 (既定 0s)",
+       "default": "0s"
       },
       {
        "name": "duration",
@@ -7121,8 +7229,8 @@
      "name": "timeline_bar",
      "category": "帯",
      "isFunc": true,
-     "signature": "timeline_bar(markers: List<Number>, position: Number, w: Number, h: Number, color: Color = #e04040, track: Color = #e6e2da, duration: Duration = 0s)",
-     "call": "timeline_bar(\n  markers: List<Number>,\n  position: Number,\n  w: Number,\n  h: Number,\n  color: Color = #e04040,\n  track: Color = #e6e2da,\n  duration: Duration = 0s,\n)",
+     "signature": "timeline_bar(markers: List<Number>, position: Number, w: Number, h: Number, color: Color = #e04040, track: Color = #e6e2da, duration: Duration = 0s, start: Duration = 0s)",
+     "call": "timeline_bar(\n  markers: List<Number>,\n  position: Number,\n  w: Number,\n  h: Number,\n  color: Color = #e04040,\n  track: Color = #e6e2da,\n  duration: Duration = 0s,\n  start: Duration = 0s,\n)",
      "summary": "再生バー。印の付いた所が章の切れ目",
      "params": [
       {
@@ -7160,6 +7268,12 @@
        "type": "Color",
        "doc": "残りの色 (既定 薄い灰)",
        "default": "#e6e2da"
+      },
+      {
+       "name": "start",
+       "type": "Duration",
+       "doc": "動き出す時刻 (既定 0s)",
+       "default": "0s"
       },
       {
        "name": "duration",

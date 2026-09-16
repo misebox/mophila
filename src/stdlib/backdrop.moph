@@ -63,13 +63,14 @@ export func vignette(w: Number, h: Number, amount: Number = 0.5, color: Color = 
 ## @param w 幅
 ## @param h 高さ
 ## @param duration 流れ切るまでの長さ
+## @param start 動き出す時刻 (既定 0s)
 ## @param count 粒の数 (既定 40)
 ## @param color 粒の色 (既定 白)
 ## @param size 粒の半径 (既定 高さの 1/120)
 ## @returns 箱が w x h の View。Timeline を持っているので、置けば動く
 ## @example
 ## v.place(particles(16, 9, 6s), at = Pos(0, 0, anchor = :topLeft), w = 16)
-export func particles(w: Number, h: Number, duration: Duration, count: Number = 40, color: Color = #ffffff, size: Number = 0) -> View {
+export func particles(w: Number, h: Number, duration: Duration, start: Duration = 0s, count: Number = 40, color: Color = #ffffff, size: Number = 0) -> View {
   let v = View(box = Vector(w, h))
   let r = if size > 0 { size } else { h / 120 }
   for i in 0..count {
@@ -93,13 +94,14 @@ export func particles(w: Number, h: Number, duration: Duration, count: Number = 
 ## @param w 幅
 ## @param h 高さ
 ## @param duration 端から端まで明るさが渡る長さ
+## @param start 動き出す時刻 (既定 0s)
 ## @param step 格子の間隔 (既定 1)
 ## @param color 線の色 (既定 青)
 ## @param back 背の色 (既定 ほぼ黒)
 ## @returns 箱が w x h の View。Timeline を持っているので、置けば動く
 ## @example
 ## v.place(grid_pulse(16, 9, 3s), at = Pos(0, 0, anchor = :topLeft), w = 16)
-export func grid_pulse(w: Number, h: Number, duration: Duration, step: Number = 1, color: Color = #4080e0, back: Color = #12151a) -> View {
+export func grid_pulse(w: Number, h: Number, duration: Duration, start: Duration = 0s, step: Number = 1, color: Color = #4080e0, back: Color = #12151a) -> View {
   let v = View(box = Vector(w, h))
   v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h, fill = back))
   let cols = math.floor(w / step)
@@ -135,13 +137,14 @@ export func grid_pulse(w: Number, h: Number, duration: Duration, step: Number = 
 ## @param w 幅
 ## @param h 高さ
 ## @param duration 1 回転の長さ
+## @param start 動き出す時刻 (既定 0s)
 ## @param rings 円の本数 (既定 3)
 ## @param color 線と扇の色 (既定 緑)
 ## @param back 背の色 (既定 ほぼ黒)
 ## @returns 箱が w x h の View。Timeline を持っているので、置けば動く
 ## @example
 ## v.place(radar_sweep(8, 8, 4s), at = Pos(0, 0, anchor = :topLeft), w = 8)
-export func radar_sweep(w: Number, h: Number, duration: Duration, rings: Number = 3, color: Color = #4aa863, back: Color = #0e1412) -> View {
+export func radar_sweep(w: Number, h: Number, duration: Duration, start: Duration = 0s, rings: Number = 3, color: Color = #4aa863, back: Color = #0e1412) -> View {
   let v = View(box = Vector(w, h))
   let cx = w / 2
   let cy = h / 2

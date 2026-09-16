@@ -68,11 +68,12 @@ export func browser(content: View, url: String, w: Number, h: Number, chrome: Co
 ## @param back 背の色 (既定 ほぼ黒)
 ## @param ink 文字の色 (既定 薄い緑)
 ## @param font 文字の書体 (既定 そのときの既定の書体)
+## @param start 動き出す時刻 (既定 0s)
 ## @param duration 0s より長ければ、その長さで全行を順に打つ (既定 0s = revealed のまま止まる)
 ## @returns 箱が w x h の View。duration があれば Timeline を持つので、置けば動く
 ## @example
 ## v.place(terminal(["$ mophila render a.moph", "done"], 0, 8, 3, duration = 2s), at = Pos(1, 1, anchor = :topLeft), w = 8)
-export func terminal(lines: List<String>, revealed: Number, w: Number, h: Number, rows: Number = 0, back: Color = #14161a, ink: Color = #9fe0a0, font: String = "", duration: Duration = 0s) -> View {
+export func terminal(lines: List<String>, revealed: Number, w: Number, h: Number, rows: Number = 0, back: Color = #14161a, ink: Color = #9fe0a0, font: String = "", duration: Duration = 0s, start: Duration = 0s) -> View {
   let v = View(box = Vector(w, h))
   v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h, radius = h * 0.04, fill = back))
   let n = if rows > 0 { rows } else { math.max(lines.len(), 1) }
@@ -103,7 +104,7 @@ export func terminal(lines: List<String>, revealed: Number, w: Number, h: Number
       window.place(t)
       v.place(window, at = Pos(pad, pad + line_h * i, anchor = :topLeft), w = math.max(tw * k, 0.0001))
       if duration > 0s {
-        v.addTrack(reveal_x(window, 0, tw, slot), at = slot * i)
+        v.addTrack(reveal_x(window, 0, tw, slot), at = start + slot * i)
       }
     }
   }
@@ -154,11 +155,12 @@ export func chat(messages: List<Tuple>, revealed: Number, w: Number, h: Number, 
 ## @param progress 出ている割合 0..1 (既定 1)
 ## @param fill 背の色 (既定 ほぼ黒)
 ## @param accent 左の丸の色 (既定 緑)
+## @param start 動き出す時刻 (既定 0s)
 ## @param duration 0s より長ければ、その長さで上から降りてくる (既定 0s = progress のまま止まる)
 ## @returns 箱が w x h の View。duration があれば Timeline を持つので、置けば動く
 ## @example
 ## v.place(toast("保存しました", 5, 1, duration = 0.4s), at = Pos(1, 1, anchor = :topLeft), w = 5)
-export func toast(message: String, w: Number, h: Number, progress: Number = 1, fill: Color = #1a1d23, accent: Color = #4aa863, duration: Duration = 0s) -> View {
+export func toast(message: String, w: Number, h: Number, progress: Number = 1, fill: Color = #1a1d23, accent: Color = #4aa863, duration: Duration = 0s, start: Duration = 0s) -> View {
   let v = View(box = Vector(w, h))
   let k = math.clamp(progress, 0, 1)
   if k <= 0 and duration <= 0s { return v }
@@ -169,10 +171,12 @@ export func toast(message: String, w: Number, h: Number, progress: Number = 1, f
   card.place(TextArea(position = Pos(h * 0.85, h / 2, anchor = :left), text = message, fontSize = h * 0.34, fill = contrast(fill)))
   v.place(card, at = Pos(0, -h * (1 - k), anchor = :topLeft), w = w)
   if duration > 0s {
+    card.position = Pos(0, -h, anchor = :topLeft)
+    card.opacity = 0
     v.addTrack(motion {
       0s: card.position = Pos(0, -h, anchor = :topLeft), card.opacity = 0
       duration: card.position = Pos(0, 0, anchor = :topLeft), card.opacity = 1 :ease_out
-    })
+    }, at = start)
   }
   v
 }

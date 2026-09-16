@@ -128,11 +128,12 @@ export func speech_bubble(text: String, w: Number, h: Number, tail: Symbol = :bo
 ## @param h 高さ
 ## @param revealed 出すノードの数 (既定 全部)。エッジは両端が出ていれば出る
 ## @param color ノードの色 (既定 #4080e0)
+## @param start 動き出す時刻 (既定 0s)
 ## @param duration 0s より長ければ、その長さで 1 つずつ出てくる (既定 0s = revealed のまま止まる)
 ## @returns 箱が w x h の View。duration があれば Timeline を持つので、置けば動く
 ## @example
 ## v.place(node_graph({ "a": Vector(1, 1), "b": Vector(3, 2) }, [("a", "b")], 4, 3, duration = 1s), at = Pos(1, 1, anchor = :topLeft), w = 4)
-export func node_graph(nodes: Dict, edges: List<Tuple>, w: Number, h: Number, revealed: Number = -1, color: Color = #4080e0, duration: Duration = 0s) -> View {
+export func node_graph(nodes: Dict, edges: List<Tuple>, w: Number, h: Number, revealed: Number = -1, color: Color = #4080e0, duration: Duration = 0s, start: Duration = 0s) -> View {
   let v = View(box = Vector(w, h))
   let names = nodes.keys()
   let n = if duration > 0s { names.len() } else if revealed < 0 { names.len() } else { math.clamp(revealed, 0, names.len()) }
@@ -150,7 +151,7 @@ export func node_graph(nodes: Dict, edges: List<Tuple>, w: Number, h: Number, re
         v.addTrack(motion {
           at: edge.opacity = 0
           at + slot: edge.opacity = 1
-        })
+        }, at = start)
       }
     }
   }
@@ -165,7 +166,7 @@ export func node_graph(nodes: Dict, edges: List<Tuple>, w: Number, h: Number, re
       v.addTrack(motion {
         slot * i: dot.opacity = 0, dot.radius = 0, label.opacity = 0
         slot * (i + 1): dot.opacity = 1, dot.radius = r, label.opacity = 1 :ease_out
-      })
+      }, at = start)
     }
   }
   v
@@ -179,11 +180,12 @@ export func node_graph(nodes: Dict, edges: List<Tuple>, w: Number, h: Number, re
 ## @param h 高さ
 ## @param revealed 出す行の数 (既定 全部)
 ## @param accent 見出しの背の色 (既定 薄い灰)
+## @param start 動き出す時刻 (既定 0s)
 ## @param duration 0s より長ければ、その長さで 1 行ずつ出てくる (既定 0s = revealed のまま止まる)
 ## @returns 箱が w x h の View。duration があれば Timeline を持つので、置けば動く
 ## @example
 ## v.place(table(["名前", "値"], [["A", "3"], ["B", "7"]], 5, 2, duration = 1s), at = Pos(1, 1, anchor = :topLeft), w = 5)
-export func table(headers: List<String>, rows: List<List<String>>, w: Number, h: Number, revealed: Number = -1, accent: Color = #e6e2da, duration: Duration = 0s) -> View {
+export func table(headers: List<String>, rows: List<List<String>>, w: Number, h: Number, revealed: Number = -1, accent: Color = #e6e2da, duration: Duration = 0s, start: Duration = 0s) -> View {
   let v = View(box = Vector(w, h))
   let cols = headers.len()
   if cols == 0 { return v }
@@ -209,14 +211,14 @@ export func table(headers: List<String>, rows: List<List<String>>, w: Number, h:
         v.addTrack(motion {
           slot * r: text.opacity = 0
           slot * (r + 1): text.opacity = 1
-        })
+        }, at = start)
       }
     }
     if duration > 0s {
       v.addTrack(motion {
         slot * r: rule.opacity = 0
         slot * (r + 1): rule.opacity = 1
-      })
+      }, at = start)
     }
   }
   v

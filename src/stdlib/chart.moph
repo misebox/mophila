@@ -87,6 +87,7 @@ func label(x: Number) -> String {
 ## @param colors 棒の色 (足りなければ繰り返す)
 ## @param lo 縦軸の下端 (既定 0)
 ## @param hi 縦軸の上端 (既定 値の最大)
+## @param start 動き出す時刻 (既定 0s)
 ## @param duration 0s より長ければ、その長さで 0 から値まで伸びる (既定 0s = 止まったまま)
 ## @param stagger 隣の棒が伸び始めるまでの間 (既定 0s)
 ## @returns 箱が w x h の View。duration があれば Timeline を持つので、置けば動く
@@ -94,7 +95,7 @@ func label(x: Number) -> String {
 ## v.place(bar([3, 7, 5], ["A", "B", "C"], 6, 4, duration = 0.8s, stagger = 0.1s), at = Pos(1, 1, anchor = :topLeft), w = 6)
 export func bar(values: List<Number>, labels: List<String>, w: Number, h: Number,
                 colors: List<Color> = [#e04040], lo: Number = 0, hi: Number = 0,
-                duration: Duration = 0s, stagger: Duration = 0s) -> View {
+                duration: Duration = 0s, start: Duration = 0s, stagger: Duration = 0s) -> View {
   let v = View(box = Vector(w, h))
   let n = values.len()
   if n == 0 { return v }
@@ -108,11 +109,13 @@ export func bar(values: List<Number>, labels: List<String>, w: Number, h: Number
     let rect = Rect(position = Pos(x, h, anchor = :bottomLeft), w = bw, h = math.max(bh, 0), fill = colors[i % colors.len()])
     v.place(rect)
     if duration > 0s {
+      # 動き出すまでは伸びる前の姿で待つ
+      rect.h = 0
       let at = stagger * i
       v.addTrack(motion {
         at: rect.h = 0
         at + duration: rect.h = math.max(bh, 0) :ease_out
-      })
+      }, at = start)
     }
     if i < labels.len() {
       v.place(TextArea(position = Pos(x + bw / 2, h + size * 0.3, anchor = :top), text = labels[i], fontSize = size, fill = gray(110), align = :center))
@@ -132,12 +135,13 @@ export func bar(values: List<Number>, labels: List<String>, w: Number, h: Number
 ## @param y_hi 縦軸の上端
 ## @param color 線の色 (既定 #e04040)
 ## @param progress 描く割合 0..1 (既定 1)
+## @param start 動き出す時刻 (既定 0s)
 ## @param duration 0s より長ければ、その長さで 0 から progress まで描き進む (既定 0s = 止まったまま)
 ## @returns 箱が w x h の View。duration があれば Timeline を持つので、置けば動く
 ## @example
 ## v.place(line(pts, 6, 4, 0, 10, 0, 100, duration = 1s), at = Pos(1, 1, anchor = :topLeft), w = 6)
 export func line(points: List<Vector>, w: Number, h: Number, x_lo: Number, x_hi: Number, y_lo: Number, y_hi: Number,
-                 color: Color = #e04040, progress: Number = 1, duration: Duration = 0s) -> View {
+                 color: Color = #e04040, progress: Number = 1, duration: Duration = 0s, start: Duration = 0s) -> View {
   let v = View(box = Vector(w, h))
   if points.len() < 2 { return v }
   let pts = points.map(func (p) { Vector(math.map_range(p.x, x_lo, x_hi, 0, w), math.map_range(p.y, y_lo, y_hi, h, 0)) })
@@ -151,10 +155,11 @@ export func line(points: List<Vector>, w: Number, h: Number, x_lo: Number, x_hi:
   }
   v.place(path)
   if duration > 0s {
+    path.dashOffset = total
     v.addTrack(motion {
       0s: path.dashOffset = total
       duration: path.dashOffset = total * (1 - k)
-    })
+    }, at = start)
   }
   v
 }
@@ -165,11 +170,12 @@ export func line(points: List<Vector>, w: Number, h: Number, x_lo: Number, x_hi:
 ## @param size 直径
 ## @param colors 切れ端の色 (既定 categorical)
 ## @param hole 中央の穴の割合 0..1 (既定 0。0.5 ならドーナツ)
+## @param start 動き出す時刻 (既定 0s)
 ## @param duration 0s より長ければ、その長さで真上から時計回りに開いていく (既定 0s = 止まったまま)
 ## @returns 箱が size x size の View。duration があれば Timeline を持つので、置けば動く
 ## @example
 ## v.place(pie([3, 2, 1], 3, duration = 1s), at = Pos(1, 1, anchor = :topLeft), w = 3)
-export func pie(values: List<Number>, size: Number, colors: List<Color> = [], hole: Number = 0, duration: Duration = 0s) -> View {
+export func pie(values: List<Number>, size: Number, colors: List<Color> = [], hole: Number = 0, duration: Duration = 0s, start: Duration = 0s) -> View {
   let v = View(box = Vector(size, size))
   let total = values.sum()
   if total <= 0 { return v }
@@ -189,7 +195,7 @@ export func pie(values: List<Number>, size: Number, colors: List<Color> = [], ho
       v.addTrack(motion {
         from_at: wedge.points = ring_segment(r, r, r_in, r, at, at, 32)
         to_at: wedge.points = ring_segment(r, r, r_in, r, at, at + sweep, 32)
-      })
+      }, at = start)
     }
     at = at + sweep
   }

@@ -40,12 +40,13 @@ export func picture(image: Image, w: Number, h: Number, mode: Symbol = :contain)
 ## @param to_zoom 終わりの拡大率 (既定 1.18)
 ## @param from_at 始めに真ん中へ来る点 (0..1 の割合。既定 真ん中)
 ## @param to_at 終わりに真ん中へ来る点 (既定 真ん中)
+## @param start 動き出す時刻 (既定 0s)
 ## @param duration 0s より長ければ、その長さで 0 から progress まで動く (既定 0s = 止まったまま)
 ## @returns 箱が w x h の View。duration があれば Timeline を持つので、置けば動く
 ## @example
 ## v.place(ken_burns(photo, k, 16, 9, 1, 1.2, Vector(0.4, 0.4), Vector(0.6, 0.55)), at = Pos(0, 0, anchor = :topLeft), w = 16)
 export func ken_burns(image: Image, progress: Number, w: Number, h: Number, from_zoom: Number = 1, to_zoom: Number = 1.18,
-                      from_at: Vector = Vector(0.5, 0.5), to_at: Vector = Vector(0.5, 0.5), duration: Duration = 0s) -> View {
+                      from_at: Vector = Vector(0.5, 0.5), to_at: Vector = Vector(0.5, 0.5), duration: Duration = 0s, start: Duration = 0s) -> View {
   let v = View(box = Vector(w, h), clip = true)
   let k = math.clamp(progress, 0, 1)
   let zoom = math.lerp(from_zoom, to_zoom, k)
@@ -60,13 +61,17 @@ export func ken_burns(image: Image, progress: Number, w: Number, h: Number, from
   let shot = Rect(position = Pos(x, y, anchor = :topLeft), w = size.x, h = size.y, fill = image)
   v.place(shot)
   if duration > 0s {
-    let start = base * from_zoom
-    let sx = math.clamp(w / 2 - start.x * from_at.x, w - start.x, 0)
-    let sy = math.clamp(h / 2 - start.y * from_at.y, h - start.y, 0)
+    let begin = base * from_zoom
+    let sx = math.clamp(w / 2 - begin.x * from_at.x, w - begin.x, 0)
+    let sy = math.clamp(h / 2 - begin.y * from_at.y, h - begin.y, 0)
+    # 動き出すまでは寄る前の姿で待つ
+    shot.position = Pos(sx, sy, anchor = :topLeft)
+    shot.w = begin.x
+    shot.h = begin.y
     v.addTrack(motion {
-      0s: shot.position = Pos(sx, sy, anchor = :topLeft), shot.w = start.x, shot.h = start.y
+      0s: shot.position = Pos(sx, sy, anchor = :topLeft), shot.w = begin.x, shot.h = begin.y
       duration: shot.position = Pos(x, y, anchor = :topLeft), shot.w = size.x, shot.h = size.y
-    })
+    }, at = start)
   }
   v
 }
@@ -142,11 +147,12 @@ export func project(lat: Number, lon: Number) -> Vector {
 ## @param h 箱の高さ
 ## @param color 線の色 (既定 赤)
 ## @param width 線の太さ (既定 幅の 1/120)
+## @param start 動き出す時刻 (既定 0s)
 ## @param duration 0s より長ければ、その長さで 0 から progress まで伸びる (既定 0s = 止まったまま)
 ## @returns 箱が w x h の View。duration があれば Timeline を持つので、置けば動く
 ## @example
 ## v.place(map_route([Vector(1, 4), Vector(4, 2), Vector(7, 3)], 1, 8, 4.5, duration = 1.5s), at = Pos(0, 0, anchor = :topLeft), w = 8)
-export func map_route(points: List<Vector>, progress: Number, w: Number, h: Number, color: Color = #e04040, width: Number = 0, duration: Duration = 0s) -> View {
+export func map_route(points: List<Vector>, progress: Number, w: Number, h: Number, color: Color = #e04040, width: Number = 0, duration: Duration = 0s, start: Duration = 0s) -> View {
   let v = View(box = Vector(w, h))
   if points.len() < 2 { return v }
   let wide = if width > 0 { width } else { w / 120 }
@@ -161,10 +167,11 @@ export func map_route(points: List<Vector>, progress: Number, w: Number, h: Numb
   }
   v.place(path)
   if duration > 0s {
+    path.dashOffset = total
     v.addTrack(motion {
       0s: path.dashOffset = total
       duration: path.dashOffset = total * (1 - k)
-    })
+    }, at = start)
   }
   v
 }
@@ -177,11 +184,12 @@ export func map_route(points: List<Vector>, progress: Number, w: Number, h: Numb
 ## @param h 置く先の View の高さ
 ## @param size ピンの高さ (既定 0.6)
 ## @param color ピンの色 (既定 赤)
+## @param start 動き出す時刻 (既定 0s)
 ## @param duration 0s より長ければ、その長さで落ちてくる (既定 0s = progress のまま止まる)
 ## @returns 箱が w x h の View。duration があれば Timeline を持つので、置けば動く
 ## @example
 ## v.place(map_pin(Vector(4, 2), 1, 8, 4.5, duration = 0.6s), at = Pos(0, 0, anchor = :topLeft), w = 8)
-export func map_pin(at: Vector, progress: Number, w: Number, h: Number, size: Number = 0.6, color: Color = #e04040, duration: Duration = 0s) -> View {
+export func map_pin(at: Vector, progress: Number, w: Number, h: Number, size: Number = 0.6, color: Color = #e04040, duration: Duration = 0s, start: Duration = 0s) -> View {
   let v = View(box = Vector(w, h))
   let k = math.clamp(progress, 0, 1)
   # 落ちるほど速く、最後は止まる
@@ -198,13 +206,19 @@ export func map_pin(at: Vector, progress: Number, w: Number, h: Number, size: Nu
   v.place(head)
   v.place(hole)
   if duration > 0s {
+    shadow.rx = 0
+    shadow.ry = 0
+    shadow.fill = alpha(#000000, 0)
     # 落ち始めの位置
     let tip0 = Vector(at.x, at.y - size * 3)
     let c0 = Vector(tip0.x, tip0.y - size * 0.72)
+    spike.points = [tip0, Vector(c0.x - r * 0.72, c0.y + r * 0.5), Vector(c0.x + r * 0.72, c0.y + r * 0.5)]
+    head.position = Pos(c0.x, c0.y)
+    hole.position = Pos(c0.x, c0.y)
     v.addTrack(motion {
       0s: shadow.rx = 0, shadow.ry = 0, shadow.fill = alpha(#000000, 0), spike.points = [tip0, Vector(c0.x - r * 0.72, c0.y + r * 0.5), Vector(c0.x + r * 0.72, c0.y + r * 0.5)], head.position = Pos(c0.x, c0.y), hole.position = Pos(c0.x, c0.y)
       duration: shadow.rx = r * k, shadow.ry = r * 0.35 * k, shadow.fill = alpha(#000000, 0.25 * k), spike.points = [tip, Vector(c.x - r * 0.72, c.y + r * 0.5), Vector(c.x + r * 0.72, c.y + r * 0.5)], head.position = Pos(c.x, c.y), hole.position = Pos(c.x, c.y) :ease_in
-    })
+    }, at = start)
   }
   v
 }

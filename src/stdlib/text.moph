@@ -130,11 +130,12 @@ export func duration(d: Duration, format: String = "mm:ss") -> String {
 ## @param style :marker か :underline (既定 :marker)
 ## @param color 文字の色 (既定 ほぼ黒)
 ## @param accent 目立たせる色 (既定 黄)
+## @param start 動き出す時刻 (既定 0s)
 ## @param duration 0s より長ければ、その長さで左から引かれる (既定 0s = 引かれたまま)
 ## @returns 箱が文字全体の大きさの View。中は左上から始まる
 ## @example
 ## v.place(highlight("ここが大事", 2, 4, 0.6, duration = 0.4s), at = Pos(1, 1, anchor = :topLeft), w = 5)
-export func highlight(s: String, from: Number, to: Number, fontSize: Number, style: Symbol = :marker, color: Color = #1a1d23, accent: Color = #ffd34d, duration: Duration = 0s) -> View {
+export func highlight(s: String, from: Number, to: Number, fontSize: Number, style: Symbol = :marker, color: Color = #1a1d23, accent: Color = #ffd34d, duration: Duration = 0s, start: Duration = 0s) -> View {
   let whole = TextArea(position = Pos(0, 0), text = s, fontSize = fontSize)
   let size = whole.size()
   let v = View(box = size)
@@ -150,10 +151,11 @@ export func highlight(s: String, from: Number, to: Number, fontSize: Number, sty
     }
     v.place(mark)
     if duration > 0s {
+      mark.w = 0
       v.addTrack(motion {
         0s: mark.w = 0
         duration: mark.w = x1 - x0
-      })
+      }, at = start)
     }
   }
   v.place(TextArea(position = Pos(0, 0, anchor = :topLeft), text = s, fontSize = fontSize, fill = color))
@@ -195,11 +197,12 @@ export func quote_card(s: String, author: String, w: Number, h: Number, fill: Co
 ## @param progress 出ている割合 0..1 (既定 1)
 ## @param fill 帯の色 (既定 ほぼ黒)
 ## @param accent 先頭の縦線の色 (既定 赤)
+## @param start 動き出す時刻 (既定 0s)
 ## @param duration 0s より長ければ、その長さで 0 から progress まで出てくる (既定 0s = 止まったまま)
 ## @returns 箱が w x h の View。duration があれば Timeline を持つので、置けば動く
 ## @example
 ## v.place(lower_third("名前", "肩書き", 8, 1.6, duration = 0.5s), at = Pos(1, 6, anchor = :topLeft), w = 8)
-export func lower_third(title: String, subtitle: String, w: Number, h: Number, progress: Number = 1, fill: Color = #1a1d23, accent: Color = #e04040, duration: Duration = 0s) -> View {
+export func lower_third(title: String, subtitle: String, w: Number, h: Number, progress: Number = 1, fill: Color = #1a1d23, accent: Color = #e04040, duration: Duration = 0s, start: Duration = 0s) -> View {
   let v = View(box = Vector(w, h))
   let k = math.clamp(progress, 0, 1)
   if k <= 0 and duration <= 0s { return v }
@@ -218,7 +221,9 @@ export func lower_third(title: String, subtitle: String, w: Number, h: Number, p
   window.place(inner, at = Pos(0, 0, anchor = :topLeft), w = w)
   v.place(window, at = Pos(0, 0, anchor = :topLeft), w = w * k)
   if duration > 0s {
-    v.addTrack(reveal_x(window, 0, w * k, duration))
+    window.box.x = 0.0001
+    window.w = 0.0001
+    v.addTrack(reveal_x(window, 0, w * k, duration), at = start)
   }
   v
 }

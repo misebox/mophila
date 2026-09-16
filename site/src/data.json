@@ -4205,6 +4205,204 @@
       "doc": "箱が w x h の View。上から順に並ぶ"
      },
      "example": "v.place(legend([\"A\", \"B\"], categorical(2), 2, 1), at = Pos(1, 1, anchor = :topLeft), w = 2)"
+    },
+    {
+     "name": "radar",
+     "category": "グラフ",
+     "isFunc": true,
+     "signature": "radar(labels: List<String>, values: List<Number>, size: Number, max: Number = 0, color: Color = #4080e0)",
+     "call": "radar(\n  labels: List<String>,\n  values: List<Number>,\n  size: Number,\n  max: Number = 0,\n  color: Color = #4080e0,\n)",
+     "summary": "レーダーチャート。軸の数だけ角がある",
+     "params": [
+      {
+       "name": "labels",
+       "type": "List<String>",
+       "doc": "軸の名前",
+       "default": ""
+      },
+      {
+       "name": "values",
+       "type": "List<Number>",
+       "doc": "軸ごとの値 (labels と同じ数)",
+       "default": ""
+      },
+      {
+       "name": "size",
+       "type": "Number",
+       "doc": "直径",
+       "default": ""
+      },
+      {
+       "name": "max",
+       "type": "Number",
+       "doc": "外周の値 (既定 values の最大)",
+       "default": "0"
+      },
+      {
+       "name": "color",
+       "type": "Color",
+       "doc": "面の色 (既定 #4080e0)",
+       "default": "#4080e0"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が size x size の View"
+     },
+     "example": "v.place(radar([\"速さ\", \"軽さ\", \"強さ\"], [3, 4, 2], 4), at = Pos(1, 1, anchor = :topLeft), w = 4)"
+    },
+    {
+     "name": "heatmap",
+     "category": "グラフ",
+     "isFunc": true,
+     "signature": "heatmap(cells: List<List<Number>>, w: Number, h: Number, lo: Number = 0, hi: Number = 0, color: Color = #4080e0)",
+     "call": "heatmap(\n  cells: List<List<Number>>,\n  w: Number,\n  h: Number,\n  lo: Number = 0,\n  hi: Number = 0,\n  color: Color = #4080e0,\n)",
+     "summary": "格子の濃淡",
+     "params": [
+      {
+       "name": "cells",
+       "type": "List<List<Number>>",
+       "doc": "行ごとの値 (どの行も同じ数)",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "lo",
+       "type": "Number",
+       "doc": "一番薄い値 (既定 cells の最小)",
+       "default": "0"
+      },
+      {
+       "name": "hi",
+       "type": "Number",
+       "doc": "一番濃い値 (既定 cells の最大)",
+       "default": "0"
+      },
+      {
+       "name": "color",
+       "type": "Color",
+       "doc": "一番濃いところの色 (既定 #4080e0)",
+       "default": "#4080e0"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(heatmap([[1, 2], [3, 4]], 4, 4), at = Pos(1, 1, anchor = :topLeft), w = 4)"
+    },
+    {
+     "name": "histogram",
+     "category": "グラフ",
+     "isFunc": true,
+     "signature": "histogram(values: List<Number>, bins: Number, w: Number, h: Number, lo: Number = 0, hi: Number = 0, color: Color = #4080e0)",
+     "call": "histogram(\n  values: List<Number>,\n  bins: Number,\n  w: Number,\n  h: Number,\n  lo: Number = 0,\n  hi: Number = 0,\n  color: Color = #4080e0,\n)",
+     "summary": "ヒストグラム。値を bins 個の区間に分けて数える",
+     "params": [
+      {
+       "name": "values",
+       "type": "List<Number>",
+       "doc": "元の値",
+       "default": ""
+      },
+      {
+       "name": "bins",
+       "type": "Number",
+       "doc": "区間の数 (既定 10)",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "lo",
+       "type": "Number",
+       "doc": "一番左の値 (既定 values の最小)",
+       "default": "0"
+      },
+      {
+       "name": "hi",
+       "type": "Number",
+       "doc": "一番右の値 (既定 values の最大)",
+       "default": "0"
+      },
+      {
+       "name": "color",
+       "type": "Color",
+       "doc": "棒の色 (既定 #4080e0)",
+       "default": "#4080e0"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(histogram([1, 2, 2, 3, 5], 5, 6, 3), at = Pos(1, 1, anchor = :topLeft), w = 6)"
+    },
+    {
+     "name": "bar_race",
+     "category": "グラフ",
+     "isFunc": true,
+     "signature": "bar_race(values: Dict, w: Number, h: Number, top: Number = 0, colors: List<Color> = [])",
+     "call": "bar_race(\n  values: Dict,\n  w: Number,\n  h: Number,\n  top: Number = 0,\n  colors: List<Color> = [],\n)",
+     "summary": "順位の入れ替わる横棒。値の大きい順に並べ替えて上から出す",
+     "params": [
+      {
+       "name": "values",
+       "type": "Dict",
+       "doc": "名前 → 値",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "top",
+       "type": "Number",
+       "doc": "出す本数 (既定 全部)",
+       "default": "0"
+      },
+      {
+       "name": "colors",
+       "type": "List<Color>",
+       "doc": "棒の色 (既定 categorical)",
+       "default": "[]"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(bar_race({ \"A\": 30, \"B\": 12 }, 8, 4), at = Pos(1, 1, anchor = :topLeft), w = 8)"
     }
    ]
   },

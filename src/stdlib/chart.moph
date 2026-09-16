@@ -6,7 +6,7 @@
 #   v.place(bar([3, 7, 5], ["A", "B", "C"], 6, 4), at = Pos(1, 1, anchor = :topLeft), w = 6)
 
 import math
-import { to_segments, ring_segment } from shape
+import { to_segments, ring_segment, regular_polygon, polar } from shape
 import { gray, categorical, alpha } from color
 
 ## 軸と目盛り。他のグラフの下に敷く
@@ -231,6 +231,149 @@ export func legend(labels: List<String>, colors: List<Color>, w: Number, h: Numb
     let cy = row * (i + 0.5)
     v.place(Rect(position = Pos(0, cy, anchor = :left), w = size, h = size, radius = size * 0.2, fill = colors[i % colors.len()]))
     v.place(TextArea(position = Pos(size * 1.4, cy, anchor = :left), text = name, fontSize = size, fill = gray(60)))
+  }
+  v
+}
+
+## レーダーチャート。軸の数だけ角がある
+## @category グラフ
+## @param labels 軸の名前
+## @param values 軸ごとの値 (labels と同じ数)
+## @param size 直径
+## @param max 外周の値 (既定 values の最大)
+## @param color 面の色 (既定 #4080e0)
+## @returns 箱が size x size の View
+## @example
+## v.place(radar(["速さ", "軽さ", "強さ"], [3, 4, 2], 4), at = Pos(1, 1, anchor = :topLeft), w = 4)
+export func radar(labels: List<String>, values: List<Number>, size: Number, max: Number = 0, color: Color = #4080e0) -> View {
+  let v = View(box = Vector(size, size))
+  let n = values.len()
+  if n < 3 { return v }
+  let hi = if max > 0 { max } else { math.max(...values) }
+  if hi <= 0 { return v }
+  let c = size / 2
+  let r = size * 0.36
+  let line = gray(190)
+  for step in 1..=4 {
+    v.place(Polygon(points = regular_polygon(c, c, r * step / 4, n), stroke = line, strokeWidth = size * 0.004))
+  }
+  let points = []
+  for (i, value) in values.enumerate() {
+    let deg = i * 360 / n
+    v.place(Line(from = Vector(c, c), to = polar(c, c, r, deg), stroke = line, strokeWidth = size * 0.004))
+    points.push(polar(c, c, r * math.clamp(value / hi, 0, 1), deg))
+    let at = polar(c, c, r * 1.16, deg)
+    v.place(TextArea(position = Pos(at.x, at.y), text = labels[i], fontSize = size * 0.055, fill = gray(70), align = :center))
+  }
+  v.place(Polygon(points = points, fill = alpha(color, 0.35), stroke = color, strokeWidth = size * 0.008))
+  v
+}
+
+## 格子の濃淡
+## @category グラフ
+## @param cells 行ごとの値 (どの行も同じ数)
+## @param w 幅
+## @param h 高さ
+## @param lo 一番薄い値 (既定 cells の最小)
+## @param hi 一番濃い値 (既定 cells の最大)
+## @param color 一番濃いところの色 (既定 #4080e0)
+## @returns 箱が w x h の View
+## @example
+## v.place(heatmap([[1, 2], [3, 4]], 4, 4), at = Pos(1, 1, anchor = :topLeft), w = 4)
+export func heatmap(cells: List<List<Number>>, w: Number, h: Number, lo: Number = 0, hi: Number = 0, color: Color = #4080e0) -> View {
+  let v = View(box = Vector(w, h))
+  let rows = cells.len()
+  if rows == 0 or cells[0].len() == 0 { return v }
+  let cols = cells[0].len()
+  let flat = []
+  for row in cells {
+    for value in row { flat.push(value) }
+  }
+  let low = if lo == 0 and hi == 0 { math.min(...flat) } else { lo }
+  let high = if lo == 0 and hi == 0 { math.max(...flat) } else { hi }
+  let cw = w / cols
+  let ch = h / rows
+  for (r, row) in cells.enumerate() {
+    for (c, value) in row.enumerate() {
+      let k = if high == low { 1 } else { math.clamp(math.unlerp(low, high, value), 0, 1) }
+      v.place(Rect(position = Pos(c * cw, r * ch, anchor = :topLeft), w = cw, h = ch, fill = alpha(color, 0.1 + k * 0.9)))
+    }
+  }
+  v
+}
+
+## ヒストグラム。値を bins 個の区間に分けて数える
+## @category グラフ
+## @param values 元の値
+## @param bins 区間の数 (既定 10)
+## @param w 幅
+## @param h 高さ
+## @param lo 一番左の値 (既定 values の最小)
+## @param hi 一番右の値 (既定 values の最大)
+## @param color 棒の色 (既定 #4080e0)
+## @returns 箱が w x h の View
+## @example
+## v.place(histogram([1, 2, 2, 3, 5], 5, 6, 3), at = Pos(1, 1, anchor = :topLeft), w = 6)
+export func histogram(values: List<Number>, bins: Number, w: Number, h: Number, lo: Number = 0, hi: Number = 0, color: Color = #4080e0) -> View {
+  let v = View(box = Vector(w, h))
+  let n = math.max(math.floor(bins), 1)
+  if values.len() == 0 { return v }
+  let low = if lo == 0 and hi == 0 { math.min(...values) } else { lo }
+  let high = if lo == 0 and hi == 0 { math.max(...values) } else { hi }
+  let counts = []
+  for i in 0..n { counts.push(0) }
+  for value in values {
+    if value >= low and value <= high {
+      let at = if high == low { 0 } else { math.clamp(math.floor((value - low) / (high - low) * n), 0, n - 1) }
+      counts[at] = counts[at] + 1
+    }
+  }
+  let peak = math.max(...counts)
+  if peak <= 0 { return v }
+  let bw = w / n
+  for (i, count) in counts.enumerate() {
+    let bh = h * count / peak
+    v.place(Rect(position = Pos(i * bw + bw * 0.06, h - bh, anchor = :topLeft), w = bw * 0.88, h = bh, fill = color))
+  }
+  v
+}
+
+## 順位の入れ替わる横棒。値の大きい順に並べ替えて上から出す
+## @category グラフ
+## @param values 名前 → 値
+## @param w 幅
+## @param h 高さ
+## @param top 出す本数 (既定 全部)
+## @param colors 棒の色 (既定 categorical)
+## @returns 箱が w x h の View
+## @example
+## v.place(bar_race({ "A": 30, "B": 12 }, 8, 4), at = Pos(1, 1, anchor = :topLeft), w = 8)
+export func bar_race(values: Dict, w: Number, h: Number, top: Number = 0, colors: List<Color> = []) -> View {
+  let v = View(box = Vector(w, h))
+  let pairs = []
+  for (name, value) in values { pairs.push((value, name)) }
+  if pairs.len() == 0 { return v }
+  let ranked = pairs.sort().reverse()
+  let n = if top > 0 { math.min(math.floor(top), ranked.len()) } else { ranked.len() }
+  let peak = ranked[0][0]
+  if peak <= 0 { return v }
+  let palette = if colors.len() > 0 { colors } else { categorical(ranked.len()) }
+  let row = h / n
+  let size = row * 0.4
+  # 名前の幅を揃えて、棒の左端を合わせる
+  let label_w = 0
+  for i in 0..n {
+    let tw = TextArea(position = Pos(0, 0), text = ranked[i][1], fontSize = size).size().x
+    if tw > label_w { label_w = tw }
+  }
+  let left = label_w + size * 0.6
+  for i in 0..n {
+    let (value, name) = ranked[i]
+    let y = row * (i + 0.5)
+    let bw = (w - left - size * 2.4) * value / peak
+    v.place(TextArea(position = Pos(label_w, y, anchor = :right), text = name, fontSize = size, fill = gray(60)))
+    v.place(Rect(position = Pos(left, y - row * 0.3, anchor = :topLeft), w = bw, h = row * 0.6, radius = row * 0.1, fill = palette[i % palette.len()]))
+    v.place(TextArea(position = Pos(left + bw + size * 0.3, y, anchor = :left), text = "{v}".format(value), fontSize = size * 0.9, fill = gray(90)))
   }
   v
 }

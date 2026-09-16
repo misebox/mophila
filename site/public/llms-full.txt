@@ -2366,6 +2366,37 @@ alias P = Pos
   w: Number,
   h: Number,
 )` -> View — 色の凡例
+- `radar(
+  labels: List<String>,
+  values: List<Number>,
+  size: Number,
+  max: Number = 0,
+  color: Color = #4080e0,
+)` -> View — レーダーチャート。軸の数だけ角がある
+- `heatmap(
+  cells: List<List<Number>>,
+  w: Number,
+  h: Number,
+  lo: Number = 0,
+  hi: Number = 0,
+  color: Color = #4080e0,
+)` -> View — 格子の濃淡
+- `histogram(
+  values: List<Number>,
+  bins: Number,
+  w: Number,
+  h: Number,
+  lo: Number = 0,
+  hi: Number = 0,
+  color: Color = #4080e0,
+)` -> View — ヒストグラム。値を bins 個の区間に分けて数える
+- `bar_race(
+  values: Dict,
+  w: Number,
+  h: Number,
+  top: Number = 0,
+  colors: List<Color> = [],
+)` -> View — 順位の入れ替わる横棒。値の大きい順に並べ替えて上から出す
 
 ### diagram
 

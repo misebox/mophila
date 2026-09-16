@@ -6474,6 +6474,331 @@
    ]
   },
   {
+   "name": "clock",
+   "path": "src/stdlib/clock.moph",
+   "entries": [],
+   "items": [
+    {
+     "name": "analog",
+     "category": "時計",
+     "isFunc": true,
+     "signature": "analog(time: Duration, w: Number, h: Number, face: Color = #ffffff, hand: Color = #1a1d23, second: Color = #e04040)",
+     "call": "analog(\n  time: Duration,\n  w: Number,\n  h: Number,\n  face: Color = #ffffff,\n  hand: Color = #1a1d23,\n  second: Color = #e04040,\n)",
+     "summary": "針の時計",
+     "params": [
+      {
+       "name": "time",
+       "type": "Duration",
+       "doc": "0 時からの長さ",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "face",
+       "type": "Color",
+       "doc": "文字盤の色 (既定 白)",
+       "default": "#ffffff"
+      },
+      {
+       "name": "hand",
+       "type": "Color",
+       "doc": "針の色 (既定 ほぼ黒)",
+       "default": "#1a1d23"
+      },
+      {
+       "name": "second",
+       "type": "Color",
+       "doc": "秒針の色 (既定 赤)",
+       "default": "#e04040"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(analog(10h8m, 3, 3), at = Pos(1, 1, anchor = :topLeft), w = 3)"
+    },
+    {
+     "name": "digital",
+     "category": "時計",
+     "isFunc": true,
+     "signature": "digital(time: Duration, w: Number, h: Number, format: String = \"hh:mm\", back: Color = #14161a, ink: Color = #9fe0a0)",
+     "call": "digital(\n  time: Duration,\n  w: Number,\n  h: Number,\n  format: String = \"hh:mm\",\n  back: Color = #14161a,\n  ink: Color = #9fe0a0,\n)",
+     "summary": "数字の時計",
+     "params": [
+      {
+       "name": "time",
+       "type": "Duration",
+       "doc": "0 時からの長さ",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "format",
+       "type": "String",
+       "doc": "text.duration の書き方 (既定 \"hh:mm\")",
+       "default": "\"hh:mm\""
+      },
+      {
+       "name": "back",
+       "type": "Color",
+       "doc": "背の色 (既定 ほぼ黒)",
+       "default": "#14161a"
+      },
+      {
+       "name": "ink",
+       "type": "Color",
+       "doc": "数字の色 (既定 薄い緑)",
+       "default": "#9fe0a0"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(digital(10h8m, 3, 1.2), at = Pos(1, 1, anchor = :topLeft), w = 3)"
+    },
+    {
+     "name": "countdown",
+     "category": "時計",
+     "isFunc": true,
+     "signature": "countdown(remaining: Duration, total: Duration, w: Number, h: Number, format: String = \"mm:ss\", color: Color = #e04040, track: Color = #e6e2da)",
+     "call": "countdown(\n  remaining: Duration,\n  total: Duration,\n  w: Number,\n  h: Number,\n  format: String = \"mm:ss\",\n  color: Color = #e04040,\n  track: Color = #e6e2da,\n)",
+     "summary": "残り時間。輪が減っていく",
+     "params": [
+      {
+       "name": "remaining",
+       "type": "Duration",
+       "doc": "残り",
+       "default": ""
+      },
+      {
+       "name": "total",
+       "type": "Duration",
+       "doc": "全体",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "format",
+       "type": "String",
+       "doc": "text.duration の書き方 (既定 \"mm:ss\")",
+       "default": "\"mm:ss\""
+      },
+      {
+       "name": "color",
+       "type": "Color",
+       "doc": "残りの色 (既定 赤)",
+       "default": "#e04040"
+      },
+      {
+       "name": "track",
+       "type": "Color",
+       "doc": "減った分の色 (既定 薄い灰)",
+       "default": "#e6e2da"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(countdown(25s, 60s, 2, 2), at = Pos(1, 1, anchor = :topLeft), w = 2)"
+    },
+    {
+     "name": "stopwatch",
+     "category": "時計",
+     "isFunc": true,
+     "signature": "stopwatch(elapsed: Duration, w: Number, h: Number, format: String = \"mm:ss.S\", color: Color = #1a1d23, track: Color = #e6e2da)",
+     "call": "stopwatch(\n  elapsed: Duration,\n  w: Number,\n  h: Number,\n  format: String = \"mm:ss.S\",\n  color: Color = #1a1d23,\n  track: Color = #e6e2da,\n)",
+     "summary": "経過時間。秒針代わりの点が回る",
+     "params": [
+      {
+       "name": "elapsed",
+       "type": "Duration",
+       "doc": "経過",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "format",
+       "type": "String",
+       "doc": "text.duration の書き方 (既定 \"mm:ss.S\")",
+       "default": "\"mm:ss.S\""
+      },
+      {
+       "name": "color",
+       "type": "Color",
+       "doc": "点と文字の色 (既定 ほぼ黒)",
+       "default": "#1a1d23"
+      },
+      {
+       "name": "track",
+       "type": "Color",
+       "doc": "輪の色 (既定 薄い灰)",
+       "default": "#e6e2da"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(stopwatch(83.4s, 2, 2), at = Pos(1, 1, anchor = :topLeft), w = 2)"
+    },
+    {
+     "name": "calendar_page",
+     "category": "日付",
+     "isFunc": true,
+     "signature": "calendar_page(month: String, day: Number, weekday: String, w: Number, h: Number, accent: Color = #e04040, face: Color = #ffffff)",
+     "call": "calendar_page(\n  month: String,\n  day: Number,\n  weekday: String,\n  w: Number,\n  h: Number,\n  accent: Color = #e04040,\n  face: Color = #ffffff,\n)",
+     "summary": "カレンダーの 1 枚",
+     "params": [
+      {
+       "name": "month",
+       "type": "String",
+       "doc": "上に出す月の文字",
+       "default": ""
+      },
+      {
+       "name": "day",
+       "type": "Number",
+       "doc": "日",
+       "default": ""
+      },
+      {
+       "name": "weekday",
+       "type": "String",
+       "doc": "下に出す曜日の文字 (空なら出さない)",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "accent",
+       "type": "Color",
+       "doc": "上の帯の色 (既定 赤)",
+       "default": "#e04040"
+      },
+      {
+       "name": "face",
+       "type": "Color",
+       "doc": "紙の色 (既定 白)",
+       "default": "#ffffff"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(calendar_page(\"9月\", 16, \"火\", 2.4, 2.6), at = Pos(1, 1, anchor = :topLeft), w = 2.4)"
+    },
+    {
+     "name": "timeline_bar",
+     "category": "帯",
+     "isFunc": true,
+     "signature": "timeline_bar(markers: List<Number>, position: Number, w: Number, h: Number, color: Color = #e04040, track: Color = #e6e2da)",
+     "call": "timeline_bar(\n  markers: List<Number>,\n  position: Number,\n  w: Number,\n  h: Number,\n  color: Color = #e04040,\n  track: Color = #e6e2da,\n)",
+     "summary": "再生バー。印の付いた所が章の切れ目",
+     "params": [
+      {
+       "name": "markers",
+       "type": "List<Number>",
+       "doc": "印を付ける位置 (0..1)",
+       "default": ""
+      },
+      {
+       "name": "position",
+       "type": "Number",
+       "doc": "今の位置 (0..1)",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "color",
+       "type": "Color",
+       "doc": "進んだ分の色 (既定 赤)",
+       "default": "#e04040"
+      },
+      {
+       "name": "track",
+       "type": "Color",
+       "doc": "残りの色 (既定 薄い灰)",
+       "default": "#e6e2da"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(timeline_bar([0.25, 0.6], 0.4, 8, 0.4), at = Pos(1, 1, anchor = :topLeft), w = 8)"
+    }
+   ]
+  },
+  {
    "name": "meter",
    "path": "src/stdlib/meter.moph",
    "entries": [],

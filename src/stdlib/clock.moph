@@ -1,0 +1,164 @@
+# clock.moph — 時計と日付の絵
+#
+# 時刻は 0 時からの Duration で受け取る。日付を持つ型は無いので、日付は文字と数で渡す。
+#
+#   v.place(analog(10h8m, 3, 3), at = Pos(1, 1, anchor = :topLeft), w = 3)
+
+import math
+import { gray, alpha, contrast } from color
+import shape
+import text
+
+## 針の時計
+## @category 時計
+## @param time 0 時からの長さ
+## @param w 幅
+## @param h 高さ
+## @param face 文字盤の色 (既定 白)
+## @param hand 針の色 (既定 ほぼ黒)
+## @param second 秒針の色 (既定 赤)
+## @returns 箱が w x h の View
+## @example
+## v.place(analog(10h8m, 3, 3), at = Pos(1, 1, anchor = :topLeft), w = 3)
+export func analog(time: Duration, w: Number, h: Number, face: Color = #ffffff, hand: Color = #1a1d23, second: Color = #e04040) -> View {
+  let v = View(box = Vector(w, h))
+  let cx = w / 2
+  let cy = h / 2
+  let r = math.min(w, h) / 2
+  v.place(Circle(position = Pos(cx, cy), radius = r, fill = face, stroke = alpha(hand, 0.25), strokeWidth = r * 0.03))
+  for i in 0..12 {
+    let outer = shape.polar(cx, cy, r * 0.92, i * 30)
+    let inner = shape.polar(cx, cy, r * (if i % 3 == 0 { 0.78 } else { 0.85 }), i * 30)
+    v.place(Line(from = inner, to = outer, stroke = alpha(hand, 0.7), strokeWidth = r * (if i % 3 == 0 { 0.05 } else { 0.025 })))
+  }
+  let secs = time / 1s
+  let hours = (secs / 3600) % 12
+  let minutes = (secs / 60) % 60
+  v.place(Line(from = Pos(cx, cy).vector, to = shape.polar(cx, cy, r * 0.5, hours * 30), stroke = hand, strokeWidth = r * 0.07, strokeCap = :round))
+  v.place(Line(from = Pos(cx, cy).vector, to = shape.polar(cx, cy, r * 0.72, minutes * 6), stroke = hand, strokeWidth = r * 0.05, strokeCap = :round))
+  v.place(Line(from = shape.polar(cx, cy, r * 0.18, (secs % 60) * 6 + 180), to = shape.polar(cx, cy, r * 0.8, (secs % 60) * 6), stroke = second, strokeWidth = r * 0.02, strokeCap = :round))
+  v.place(Circle(position = Pos(cx, cy), radius = r * 0.05, fill = hand))
+  v
+}
+
+## 数字の時計
+## @category 時計
+## @param time 0 時からの長さ
+## @param w 幅
+## @param h 高さ
+## @param format text.duration の書き方 (既定 "hh:mm")
+## @param back 背の色 (既定 ほぼ黒)
+## @param ink 数字の色 (既定 薄い緑)
+## @returns 箱が w x h の View
+## @example
+## v.place(digital(10h8m, 3, 1.2), at = Pos(1, 1, anchor = :topLeft), w = 3)
+export func digital(time: Duration, w: Number, h: Number, format: String = "hh:mm", back: Color = #14161a, ink: Color = #9fe0a0) -> View {
+  let v = View(box = Vector(w, h))
+  v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h, radius = h * 0.12, fill = back))
+  v.place(TextArea(position = Pos(w / 2, h / 2), text = text.duration(time, format), fontSize = h * 0.5, fill = ink, align = :center))
+  v
+}
+
+## 残り時間。輪が減っていく
+## @category 時計
+## @param remaining 残り
+## @param total 全体
+## @param w 幅
+## @param h 高さ
+## @param format text.duration の書き方 (既定 "mm:ss")
+## @param color 残りの色 (既定 赤)
+## @param track 減った分の色 (既定 薄い灰)
+## @returns 箱が w x h の View
+## @example
+## v.place(countdown(25s, 60s, 2, 2), at = Pos(1, 1, anchor = :topLeft), w = 2)
+export func countdown(remaining: Duration, total: Duration, w: Number, h: Number, format: String = "mm:ss", color: Color = #e04040, track: Color = #e6e2da) -> View {
+  let v = View(box = Vector(w, h))
+  let cx = w / 2
+  let cy = h / 2
+  let r_out = math.min(w, h) / 2
+  let r_in = r_out * 0.86
+  let k = if total / 1s == 0 { 0 } else { math.clamp(remaining / total, 0, 1) }
+  v.place(Polygon(points = shape.ring_segment(cx, cy, r_in, r_out, 0, 360, 48), fill = track))
+  if k > 0 {
+    v.place(Polygon(points = shape.ring_segment(cx, cy, r_in, r_out, 0, 360 * k, 48), fill = color))
+  }
+  v.place(TextArea(position = Pos(cx, cy), text = text.duration(remaining, format), fontSize = r_out * 0.42, fill = #1a1d23, align = :center))
+  v
+}
+
+## 経過時間。秒針代わりの点が回る
+## @category 時計
+## @param elapsed 経過
+## @param w 幅
+## @param h 高さ
+## @param format text.duration の書き方 (既定 "mm:ss.S")
+## @param color 点と文字の色 (既定 ほぼ黒)
+## @param track 輪の色 (既定 薄い灰)
+## @returns 箱が w x h の View
+## @example
+## v.place(stopwatch(83.4s, 2, 2), at = Pos(1, 1, anchor = :topLeft), w = 2)
+export func stopwatch(elapsed: Duration, w: Number, h: Number, format: String = "mm:ss.S", color: Color = #1a1d23, track: Color = #e6e2da) -> View {
+  let v = View(box = Vector(w, h))
+  let cx = w / 2
+  let cy = h / 2
+  let r = math.min(w, h) / 2
+  v.place(Circle(position = Pos(cx, cy), radius = r * 0.94, stroke = track, strokeWidth = r * 0.08))
+  v.place(Circle(position = Pos(shape.polar(cx, cy, r * 0.94, (elapsed / 1s % 60) * 6)), radius = r * 0.08, fill = color))
+  v.place(TextArea(position = Pos(cx, cy), text = text.duration(elapsed, format), fontSize = r * 0.4, fill = color, align = :center))
+  v
+}
+
+## カレンダーの 1 枚
+## @category 日付
+## @param month 上に出す月の文字
+## @param day 日
+## @param weekday 下に出す曜日の文字 (空なら出さない)
+## @param w 幅
+## @param h 高さ
+## @param accent 上の帯の色 (既定 赤)
+## @param face 紙の色 (既定 白)
+## @returns 箱が w x h の View
+## @example
+## v.place(calendar_page("9月", 16, "火", 2.4, 2.6), at = Pos(1, 1, anchor = :topLeft), w = 2.4)
+export func calendar_page(month: String, day: Number, weekday: String, w: Number, h: Number, accent: Color = #e04040, face: Color = #ffffff) -> View {
+  let v = View(box = Vector(w, h))
+  let head = h * 0.26
+  v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h, radius = w * 0.06, fill = face))
+  v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = head, radius = w * 0.06, fill = accent))
+  v.place(Rect(position = Pos(0, head * 0.6, anchor = :topLeft), w = w, h = head * 0.4, fill = accent))
+  v.place(TextArea(position = Pos(w / 2, head / 2), text = month, fontSize = head * 0.55, fill = contrast(accent), align = :center))
+  let has_week = weekday != ""
+  let day_y = if has_week { h * 0.58 } else { h * 0.64 }
+  v.place(TextArea(position = Pos(w / 2, day_y), text = "{day}".format(math.floor(day)), fontSize = h * 0.42, fill = gray(35), align = :center))
+  if has_week {
+    v.place(TextArea(position = Pos(w / 2, h * 0.86, anchor = :bottom), text = weekday, fontSize = h * 0.12, fill = gray(120), align = :center))
+  }
+  v
+}
+
+## 再生バー。印の付いた所が章の切れ目
+## @category 帯
+## @param markers 印を付ける位置 (0..1)
+## @param position 今の位置 (0..1)
+## @param w 幅
+## @param h 高さ
+## @param color 進んだ分の色 (既定 赤)
+## @param track 残りの色 (既定 薄い灰)
+## @returns 箱が w x h の View
+## @example
+## v.place(timeline_bar([0.25, 0.6], 0.4, 8, 0.4), at = Pos(1, 1, anchor = :topLeft), w = 8)
+export func timeline_bar(markers: List<Number>, position: Number, w: Number, h: Number, color: Color = #e04040, track: Color = #e6e2da) -> View {
+  let v = View(box = Vector(w, h))
+  let k = math.clamp(position, 0, 1)
+  let bar = h * 0.34
+  let cy = h / 2
+  v.place(Rect(position = Pos(0, cy - bar / 2, anchor = :topLeft), w = w, h = bar, radius = bar / 2, fill = track))
+  if k > 0 {
+    v.place(Rect(position = Pos(0, cy - bar / 2, anchor = :topLeft), w = w * k, h = bar, radius = bar / 2, fill = color))
+  }
+  for m in markers {
+    v.place(Rect(position = Pos(w * math.clamp(m, 0, 1), cy, anchor = :center), w = bar * 0.28, h = bar * 1.6, fill = gray(120)))
+  }
+  v.place(Circle(position = Pos(w * k, cy), radius = h * 0.32, fill = color))
+  v
+}

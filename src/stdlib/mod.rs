@@ -26,6 +26,7 @@ pub const SCRIPTS: &[(&str, &str)] = &[
     ("backdrop", include_str!("backdrop.moph")),
     ("focus", include_str!("focus.moph")),
     ("media", include_str!("media.moph")),
+    ("clock", include_str!("clock.moph")),
     ("meter", include_str!("meter.moph")),
     ("fractal", include_str!("fractal.moph")),
 ];

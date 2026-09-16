@@ -2716,6 +2716,59 @@ alias P = Pos
   color: Color = #e04040,
 )` -> View — ピンが落ちてくる
 
+### clock
+
+- `analog(
+  time: Duration,
+  w: Number,
+  h: Number,
+  face: Color = #ffffff,
+  hand: Color = #1a1d23,
+  second: Color = #e04040,
+)` -> View — 針の時計
+- `digital(
+  time: Duration,
+  w: Number,
+  h: Number,
+  format: String = "hh:mm",
+  back: Color = #14161a,
+  ink: Color = #9fe0a0,
+)` -> View — 数字の時計
+- `countdown(
+  remaining: Duration,
+  total: Duration,
+  w: Number,
+  h: Number,
+  format: String = "mm:ss",
+  color: Color = #e04040,
+  track: Color = #e6e2da,
+)` -> View — 残り時間。輪が減っていく
+- `stopwatch(
+  elapsed: Duration,
+  w: Number,
+  h: Number,
+  format: String = "mm:ss.S",
+  color: Color = #1a1d23,
+  track: Color = #e6e2da,
+)` -> View — 経過時間。秒針代わりの点が回る
+- `calendar_page(
+  month: String,
+  day: Number,
+  weekday: String,
+  w: Number,
+  h: Number,
+  accent: Color = #e04040,
+  face: Color = #ffffff,
+)` -> View — カレンダーの 1 枚
+- `timeline_bar(
+  markers: List<Number>,
+  position: Number,
+  w: Number,
+  h: Number,
+  color: Color = #e04040,
+  track: Color = #e6e2da,
+)` -> View — 再生バー。印の付いた所が章の切れ目
+
 ### meter
 
 - `progress_bar(

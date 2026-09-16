@@ -16,15 +16,25 @@ const site = join(here, "..");
 const root = join(site, "..");
 const read = (p) => readFileSync(join(root, p), "utf8");
 
-// 元データを作り直す。動画 (--media) は GPU が要るので、ここでは作らない
+// 元データを作り直す。動画 (--media) は GPU が要るので、ここでは作らない。
+// CI では作り直さない (音声の system ライブラリが無く cargo build が通らない)。
+// 手元でも作り直せなければ、コミット済みの data.json をそのまま使う
 function refresh() {
+  if (process.env.CI) {
+    console.log("CI なので data.json はコミット済みのものを使う");
+    return;
+  }
   const has = (cmd) => spawnSync(cmd, ["--version"], { stdio: "ignore" }).status === 0;
   if (!has("cargo") || !has("python3")) {
     console.log("cargo か python3 が無いので data.json はコミット済みのものを使う");
     return;
   }
-  execSync("cargo build --quiet", { cwd: root, stdio: "inherit" });
-  execSync("python3 scripts/docgen.py", { cwd: root, stdio: "inherit" });
+  try {
+    execSync("cargo build --quiet", { cwd: root, stdio: "inherit" });
+    execSync("python3 scripts/docgen.py", { cwd: root, stdio: "inherit" });
+  } catch {
+    console.log("data.json を作り直せなかったので、コミット済みのものを使う");
+  }
 }
 
 refresh();

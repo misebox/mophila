@@ -3,8 +3,9 @@
 let v = View(box = Vector(4, 3))
 let track = Timeline()
 
-# ---- 音声。.moph 以外のファイルを import すると Audio になる (長さは ffprobe で読む) ----
+# ---- 音声。.moph 以外のファイルを import すると Audio か Image になる (拡張子で決まる) ----
 import "../gallery/mophila_intro/QuietSignal.m4a" as bgm
+import "sample.png" as pic              # 画像 (png jpg gif webp bmp tiff)
 log(type_of(bgm), bgm.duration, bgm.file)         # Audio 152.52s ../gallery/mophila_intro/QuietSignal.m4a
 
 track.place(bgm, at = 0s, fadeIn = 1s, duration=5s, fadeOut = 2s)   # 動画の終わりまで繰り返す (動画は延びない)
@@ -15,6 +16,11 @@ let s1 = Subtitle(text = "最初の字幕", duration = 3s)
 track.place(s1, at = 1s)
 let s2 = Subtitle(text = "2 行目は\nで分ける", duration = 2s)
 track.place(s2, at = 5s)
+
+# ---- 画像。図形の fill に入れると、その形に切り抜いて敷かれる ----
+log(pic.file, pic.width, pic.height)      # import に書いたパスと、元のピクセル数
+v.place(Rect(position = Pos(0.2, 0.2, anchor = :topLeft), w = 1.6, h = 1, fill = pic))
+v.place(Circle(position = Pos(3, 2), radius = 0.8, fill = pic))   # 丸く切り抜く
 
 # 動画の長さは置いたものの終わりで決まる (loop でない曲が長ければ曲の終わりまで)
 v.addTrack(track)

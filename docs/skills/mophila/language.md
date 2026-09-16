@@ -26,6 +26,7 @@ import .other                      # 同じ場所の other.moph を other に束
 import .other as m                 # 別名
 import { a, b } from .other        # 名前を直接持ち込む
 import "bgm.m4a" as bgm            # 音声ファイル
+import "logo.png" as logo          # 画像 (png jpg gif webp bmp tiff)
 import @.slides                    # mophila.yaml の root から
 import @parts.box                  # mophila.yaml の aliases から
 import "@/media/bgm.m4a" as bgm    # 文字列の中では "/" 区切り
@@ -151,6 +152,13 @@ motion (t) { 0s: p.dashOffset = total      # ずらしを戻していくと、�
 - 回すのは `rotation` (度、時計回り)。中心は外接矩形の中心で、`pivot` で変えられる。頂点を計算し直さない
 - `dashOffset` を motion で動かすと破線が流れる
 - 塗りは Color のほか `Gradient(from =, to =, stops = [...])` (`kind = :radial` なら from を中心に radius まで)
+- `fill` に読み込んだ画像を入れると、その図形の形に切り抜いて敷かれる。大きさは図形の外接矩形に合わせる (縦横比は図形に従う)
+
+```
+import "photo.jpg" as photo
+v.place(Circle(position = Pos(4, 2), radius = 1.5, fill = photo))   # 丸く切り抜く
+log(photo.width, photo.height, photo.file)                          # 元のピクセル数
+```
 - ピクセル単位の絵は `fill` に `Shader(color = func (x, y, t) { ... Color })`。x, y は箱の座標、t は秒。GPU で全ピクセル分走るので数値の計算だけ (文字列・図形・Dict は不可、再帰不可)。時間で変える値は t から計算するか、`args` を motion の行で変える。`samples: 4` で 2x2 のアンチエイリアス。複素数は Vector で書ける
 
 ## 標準ライブラリ

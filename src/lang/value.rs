@@ -113,6 +113,8 @@ pub enum Value {
     Builtin(&'static str),
     /// import "file.m4a" で読み込んだ音声ファイル
     Audio(Rc<Audio>),
+    /// import "file.png" で読み込んだ画像
+    Image(Rc<ImageFile>),
     Nothing,
 }
 
@@ -124,6 +126,16 @@ pub struct Audio {
     pub path: std::path::PathBuf,
     /// 秒
     pub length: f64,
+}
+
+/// 画像ファイル。中身は描くときに読む (スクリプトを実行するだけなら開かない)
+pub struct ImageFile {
+    /// import に書いたパス
+    pub name: String,
+    /// 実際のファイル
+    pub path: std::path::PathBuf,
+    pub width: f64,
+    pub height: f64,
 }
 
 pub struct Module {
@@ -540,6 +552,7 @@ impl Value {
             Value::Motion(_) => "Motion",
             Value::Func(_) | Value::Builtin(_) => "Func",
             Value::Audio(_) => "Audio",
+            Value::Image(_) => "Image",
             Value::Nothing => "Nothing",
             // 名前が実体に入っているもの
             Value::Object(_) | Value::Record(_) | Value::Type(_) | Value::BuiltinType(_) | Value::Module(_) => return None,
@@ -569,6 +582,7 @@ impl Value {
             Value::Module(_) => "Module".into(),
             Value::Builtin(_) => "Func".into(),
             Value::Audio(_) => "Audio".into(),
+            Value::Image(_) => "Image".into(),
             Value::Nothing => "Nothing".into(),
         }
     }
@@ -706,6 +720,7 @@ impl fmt::Display for Value {
             Value::Module(m) => write!(f, "module {}", m.name),
             Value::Builtin(name) => write!(f, "builtin {name}"),
             Value::Audio(a) => write!(f, "Audio {{ file: {:?}, duration: {}s }}", a.name, a.length),
+            Value::Image(i) => write!(f, "Image {{ file: {:?}, size: {} x {} }}", i.name, i.width, i.height),
             Value::Nothing => write!(f, "nothing"),
         }
     }

@@ -267,6 +267,15 @@ pub const TYPES: &[Type] = &[
         doc: "時刻と値の表。どの対象のどの属性に入れるかは持たない。apply がそれを決めて Timeline にする",
     },
     Type {
+        name: "Image",
+        category: "Media",
+        union: "Paint",
+        make: "import \"logo.png\" as logo",
+        values: &[],
+        members: &[],
+        doc: "読み込んだ画像。図形の fill に入れると、その形に切り抜いて敷かれる。png jpg gif webp bmp tiff",
+    },
+    Type {
         name: "Audio",
         category: "Media",
         union: "",
@@ -403,7 +412,7 @@ pub const TYPES: &[Type] = &[
         union: "",
         make: "",
         values: &[],
-        members: &["Color", "Gradient", "Shader"],
+        members: &["Color", "Gradient", "Shader", "Image"],
         doc: "図形の fill に入れられるものをまとめた名前",
     },
     Type {

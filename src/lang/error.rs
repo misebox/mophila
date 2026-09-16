@@ -31,6 +31,7 @@ pub enum Kind {
     DivisionByZero,
     FontNotFound,
     AudioUnreadable,
+    ImageUnreadable,
     ShaderCompile,
     ShaderUnavailable,
 }
@@ -52,6 +53,7 @@ pub const KINDS: &[Kind] = &[
     Kind::DivisionByZero,
     Kind::FontNotFound,
     Kind::AudioUnreadable,
+    Kind::ImageUnreadable,
     Kind::ShaderCompile,
     Kind::ShaderUnavailable,
 ];
@@ -76,6 +78,7 @@ impl Kind {
             Kind::DivisionByZero => "0 で割った",
             Kind::FontNotFound => "その名前のフォントが見つからない",
             Kind::AudioUnreadable => "音声ファイルを読めない",
+            Kind::ImageUnreadable => "画像ファイルを読めない",
             Kind::ShaderCompile => "Shader を WGSL に変換できない",
             Kind::ShaderUnavailable => "GPU が使えないので Shader を走らせられない",
         }
@@ -99,6 +102,7 @@ impl Kind {
             Kind::DivisionByZero => "RuntimeError.DivisionByZero",
             Kind::FontNotFound => "RuntimeError.FontNotFound",
             Kind::AudioUnreadable => "RuntimeError.AudioUnreadable",
+            Kind::ImageUnreadable => "RuntimeError.ImageUnreadable",
             Kind::ShaderCompile => "RuntimeError.ShaderCompile",
             Kind::ShaderUnavailable => "RuntimeError.ShaderUnavailable",
         }

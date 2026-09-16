@@ -250,7 +250,7 @@ type Mode = :fast | :slow
 
 | 属性 | 型 | 意味 |
 |---|---|---|
-| `fill` | Paint | 塗り |
+| `fill` | Paint | 塗り。Color / Gradient / Shader / Image |
 | `stroke` | Color | 線の色 |
 | `strokeWidth` | Number | 線の太さ (箱の座標の単位) |
 | `strokeCap` | StrokeCap | 線の端の形 |
@@ -508,7 +508,8 @@ import .lib.shapes                 # ./lib/shapes.moph
 import "path/file.moph" as slides  # パスで書く形。as が無ければファイル名
 import { a, b } from .slides       # Module を作らず、export した名前をここに持ち込む
 import { sin } from math           # 標準ライブラリからも同じ
-import "bgm.m4a" as bgm            # .moph 以外は音声。Audio を束縛する
+import "bgm.m4a" as bgm            # 音声。Audio を束縛する
+import "logo.png" as logo          # 画像。Image を束縛する (png jpg gif webp bmp tiff)
 ```
 
 `.moph` の Module から見えるのは、そのファイルが `export` した名前と、`output` した View (`orbit.output`) だけ。
@@ -616,6 +617,6 @@ let v = View(box = Vector(config.width, 9))
 | NameError | `UndefinedVariable` / `UndefinedAttribute` / `AssignWithoutLet` let を書かずに初めて代入した / `Reserved` builtin の型の名前を宣言し直した |
 | TypeError | `OperandType` 演算子の左右 / `AttributeType` 属性に入れる値 / `ArgumentType` 引数 / `ArityMismatch` 引数や列の数 / `NotPlaceable` place できない型 |
 | ValueError | `DurationRequired` 時刻の単位が混在、相対時刻なのに duration が無い / `OutOfRange` 型は合うが値が範囲外 |
-| RuntimeError | `DivisionByZero` / `FontNotFound` / `AudioUnreadable` / `ShaderCompile` / `ShaderUnavailable` |
+| RuntimeError | `DivisionByZero` / `FontNotFound` / `AudioUnreadable` / `ImageUnreadable` / `ShaderCompile` / `ShaderUnavailable` |
 
 `ShaderCompile` と `ShaderUnavailable` は描画のときに出る。`run` では Shader を走らせないので出ない。

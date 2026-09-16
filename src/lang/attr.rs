@@ -95,7 +95,9 @@ pub const ATTRS: &[AttrDef] = &[
         set: Some(set_duration_attr),
     },
     AttrDef { receivers: &["Audio"], name: "duration", ty: "Duration", doc: "音声ファイルの長さ", get: get_duration, set: None },
-    AttrDef { receivers: &["Audio"], name: "file", ty: "String", doc: "import に書いたパス", get: get_file, set: None },
+    AttrDef { receivers: &["Audio", "Image"], name: "file", ty: "String", doc: "import に書いたパス", get: get_file, set: None },
+    AttrDef { receivers: &["Image"], name: "width", ty: "Number", doc: "画像の幅 (ピクセル)", get: get_width, set: None },
+    AttrDef { receivers: &["Image"], name: "height", ty: "Number", doc: "画像の高さ (ピクセル)", get: get_height, set: None },
 ];
 
 fn def_of(receiver: &str, name: &str) -> Option<&'static AttrDef> {
@@ -222,7 +224,22 @@ fn set_duration_attr(v: &Value, nv: Value) -> Result<Written> {
 fn get_file(v: &Value) -> Result<Value> {
     match v {
         Value::Audio(a) => Ok(Value::Str(a.name.clone())),
+        Value::Image(i) => Ok(Value::Str(i.name.clone())),
         v => err(Kind::UndefinedAttribute, format!("{} has no file", v.type_name())),
+    }
+}
+
+fn get_width(v: &Value) -> Result<Value> {
+    match v {
+        Value::Image(i) => Ok(Value::num(i.width)),
+        v => err(Kind::UndefinedAttribute, format!("{} has no width", v.type_name())),
+    }
+}
+
+fn get_height(v: &Value) -> Result<Value> {
+    match v {
+        Value::Image(i) => Ok(Value::num(i.height)),
+        v => err(Kind::UndefinedAttribute, format!("{} has no height", v.type_name())),
     }
 }
 

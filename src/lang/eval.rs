@@ -447,9 +447,14 @@ impl Interp {
         }
         if !path.ends_with(".moph") {
             let real = self.assets.get(&key).cloned().unwrap_or(full);
-            let audio = Value::Audio(Rc::new(load_audio(path, real)?));
-            self.modules.insert(key, audio.clone());
-            return Ok(audio);
+            // 拡張子で音声か画像かを決める
+            let ext = std::path::Path::new(path).extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+            let asset = match matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "tif" | "tiff") {
+                true => Value::Image(Rc::new(load_image(path, real)?)),
+                false => Value::Audio(Rc::new(load_audio(path, real)?)),
+            };
+            self.modules.insert(key, asset.clone());
+            return Ok(asset);
         }
         let src = match self.sources.get(&key) {
             Some(src) => src.clone(),
@@ -1746,6 +1751,15 @@ fn collect_names(pat: &Pattern, out: &mut Vec<String>) {
 
 /// 標準ライブラリ。import で束縛する
 /// 音声ファイルを読む。長さは ffprobe で調べる (ffmpeg に付属)
+/// 画像の大きさだけを読む。中身 (ピクセル) は描くときに読む
+fn load_image(name: &str, path: std::path::PathBuf) -> Result<crate::lang::value::ImageFile> {
+    if !path.is_file() {
+        return err(Kind::UndefinedVariable, format!("cannot read \"{name}\": {} is not a file", path.display()));
+    }
+    let (width, height) = image::image_dimensions(&path).map_err(|e| MophError::new(Kind::ImageUnreadable, format!("cannot read \"{name}\": {e}")))?;
+    Ok(crate::lang::value::ImageFile { name: name.to_string(), path, width: f64::from(width), height: f64::from(height) })
+}
+
 fn load_audio(name: &str, path: std::path::PathBuf) -> Result<Audio> {
     if !path.is_file() {
         return err(Kind::UndefinedVariable, format!("cannot read \"{name}\": {} is not a file", path.display()));

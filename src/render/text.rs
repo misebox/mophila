@@ -21,6 +21,8 @@ pub struct RenderCache {
     pub fragments: HashMap<usize, (u64, Scene)>,
     /// Shader を GPU で走らせるもの。描画する側 (render / preview) が装置を作ってから入れる
     pub shaders: Option<crate::render::shader::ShaderRunner>,
+    /// 読み込んだ画像。ファイルごとに 1 度だけ開く
+    images: HashMap<std::path::PathBuf, vello::peniko::ImageData>,
 }
 
 #[derive(Hash, PartialEq, Eq)]
@@ -34,7 +36,7 @@ struct LayoutKey {
 
 impl RenderCache {
     pub fn new() -> Self {
-        Self { fonts: FontContext::new(), layouts: LayoutContext::new(), layout_cache: HashMap::new(), fragments: HashMap::new(), shaders: None }
+        Self { fonts: FontContext::new(), layouts: LayoutContext::new(), layout_cache: HashMap::new(), fragments: HashMap::new(), shaders: None, images: HashMap::new() }
     }
 
     /// システムにそのファミリ名のフォントがあるか
@@ -69,6 +71,24 @@ impl RenderCache {
             .collect();
         scored.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| b.1.cmp(&a.1)).then_with(|| a.2.len().cmp(&b.2.len())));
         scored.into_iter().take(3).map(|(_, _, n)| n).collect()
+    }
+
+    /// 画像を読む。同じファイルは 1 度だけ開いて使い回す
+    pub fn image(&mut self, path: &std::path::Path) -> Result<vello::peniko::ImageData, String> {
+        if let Some(found) = self.images.get(path) {
+            return Ok(found.clone());
+        }
+        let decoded = image::open(path).map_err(|e| format!("{}: {e}", path.display()))?.into_rgba8();
+        let (width, height) = decoded.dimensions();
+        let data = vello::peniko::ImageData {
+            data: vello::peniko::Blob::new(std::sync::Arc::new(decoded.into_raw())),
+            format: vello::peniko::ImageFormat::Rgba8,
+            alpha_type: vello::peniko::ImageAlphaType::Alpha,
+            width,
+            height,
+        };
+        self.images.insert(path.to_path_buf(), data.clone());
+        Ok(data)
     }
 
     /// ピクセル単位でレイアウトする。max_width が None なら折り返さない。同じ入力なら前回の結果を返す

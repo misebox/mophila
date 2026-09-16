@@ -95,6 +95,7 @@ import .other                      # 同じ場所の other.moph を other に束
 import .other as m                 # 別名
 import { a, b } from .other        # 名前を直接持ち込む
 import "bgm.m4a" as bgm            # 音声ファイル
+import "logo.png" as logo          # 画像 (png jpg gif webp bmp tiff)
 import @.slides                    # mophila.yaml の root から
 import @parts.box                  # mophila.yaml の aliases から
 import "@/media/bgm.m4a" as bgm    # 文字列の中では "/" 区切り
@@ -220,6 +221,13 @@ motion (t) { 0s: p.dashOffset = total      # ずらしを戻していくと、�
 - 回すのは `rotation` (度、時計回り)。中心は外接矩形の中心で、`pivot` で変えられる。頂点を計算し直さない
 - `dashOffset` を motion で動かすと破線が流れる
 - 塗りは Color のほか `Gradient(from =, to =, stops = [...])` (`kind = :radial` なら from を中心に radius まで)
+- `fill` に読み込んだ画像を入れると、その図形の形に切り抜いて敷かれる。大きさは図形の外接矩形に合わせる (縦横比は図形に従う)
+
+```
+import "photo.jpg" as photo
+v.place(Circle(position = Pos(4, 2), radius = 1.5, fill = photo))   # 丸く切り抜く
+log(photo.width, photo.height, photo.file)                          # 元のピクセル数
+```
 - ピクセル単位の絵は `fill` に `Shader(color = func (x, y, t) { ... Color })`。x, y は箱の座標、t は秒。GPU で全ピクセル分走るので数値の計算だけ (文字列・図形・Dict は不可、再帰不可)。時間で変える値は t から計算するか、`args` を motion の行で変える。`samples: 4` で 2x2 のアンチエイリアス。複素数は Vector で書ける
 
 ### 標準ライブラリ
@@ -925,7 +933,7 @@ type Mode = :fast | :slow
 
 | 属性 | 型 | 意味 |
 |---|---|---|
-| `fill` | Paint | 塗り |
+| `fill` | Paint | 塗り。Color / Gradient / Shader / Image |
 | `stroke` | Color | 線の色 |
 | `strokeWidth` | Number | 線の太さ (箱の座標の単位) |
 | `strokeCap` | StrokeCap | 線の端の形 |
@@ -1183,7 +1191,8 @@ import .lib.shapes                 # ./lib/shapes.moph
 import "path/file.moph" as slides  # パスで書く形。as が無ければファイル名
 import { a, b } from .slides       # Module を作らず、export した名前をここに持ち込む
 import { sin } from math           # 標準ライブラリからも同じ
-import "bgm.m4a" as bgm            # .moph 以外は音声。Audio を束縛する
+import "bgm.m4a" as bgm            # 音声。Audio を束縛する
+import "logo.png" as logo          # 画像。Image を束縛する (png jpg gif webp bmp tiff)
 ```
 
 `.moph` の Module から見えるのは、そのファイルが `export` した名前と、`output` した View (`orbit.output`) だけ。
@@ -1291,7 +1300,7 @@ let v = View(box = Vector(config.width, 9))
 | NameError | `UndefinedVariable` / `UndefinedAttribute` / `AssignWithoutLet` let を書かずに初めて代入した / `Reserved` builtin の型の名前を宣言し直した |
 | TypeError | `OperandType` 演算子の左右 / `AttributeType` 属性に入れる値 / `ArgumentType` 引数 / `ArityMismatch` 引数や列の数 / `NotPlaceable` place できない型 |
 | ValueError | `DurationRequired` 時刻の単位が混在、相対時刻なのに duration が無い / `OutOfRange` 型は合うが値が範囲外 |
-| RuntimeError | `DivisionByZero` / `FontNotFound` / `AudioUnreadable` / `ShaderCompile` / `ShaderUnavailable` |
+| RuntimeError | `DivisionByZero` / `FontNotFound` / `AudioUnreadable` / `ImageUnreadable` / `ShaderCompile` / `ShaderUnavailable` |
 
 `ShaderCompile` と `ShaderUnavailable` は描画のときに出る。`run` では Shader を走らせないので出ない。
 
@@ -1875,6 +1884,22 @@ motion (t) {
 - `tl.trim(from: Duration, to: Duration)` -> Timeline — from から to までを取り出し、0 から始まるものにする。その区間の外にあるキーフレームと、置いたものは入らない
 - `m.apply(target: Placeable, f: (Placeable, Duration, List<Number>) -> Nothing)` -> Timeline — 各行で f(対象, 時刻, [列...]) を呼び、その中で対象の属性に代入された値をキーフレームにする
 
+### Image
+
+読み込んだ画像。図形の fill に入れると、その形に切り抜いて敷かれる。png jpg gif webp bmp tiff
+
+作り方:
+
+```
+import "logo.png" as logo
+```
+
+属性:
+
+- `file`: String — import に書いたパス
+- `width`: Number — 画像の幅 (ピクセル)
+- `height`: Number — 画像の高さ (ピクセル)
+
 ### Audio
 
 読み込んだ音声ファイル。Timeline に置くと動画の音になる
@@ -2003,7 +2028,7 @@ View の中に place できるものをまとめた名前。図形と View
 
 図形の fill に入れられるものをまとめた名前
 
-まとめている型: Color | Gradient | Shader
+まとめている型: Color | Gradient | Shader | Image
 
 ### Module
 
@@ -2050,6 +2075,7 @@ alias P = Pos
 - `RuntimeError.DivisionByZero` — 0 で割った
 - `RuntimeError.FontNotFound` — その名前のフォントが見つからない
 - `RuntimeError.AudioUnreadable` — 音声ファイルを読めない
+- `RuntimeError.ImageUnreadable` — 画像ファイルを読めない
 - `RuntimeError.ShaderCompile` — Shader を WGSL に変換できない
 - `RuntimeError.ShaderUnavailable` — GPU が使えないので Shader を走らせられない
 
@@ -2568,8 +2594,9 @@ log(c)
 let v = View(box = Vector(4, 3))
 let track = Timeline()
 
-# ---- 音声。.moph 以外のファイルを import すると Audio になる (長さは ffprobe で読む) ----
+# ---- 音声。.moph 以外のファイルを import すると Audio か Image になる (拡張子で決まる) ----
 import "../gallery/mophila_intro/QuietSignal.m4a" as bgm
+import "sample.png" as pic              # 画像 (png jpg gif webp bmp tiff)
 log(type_of(bgm), bgm.duration, bgm.file)         # Audio 152.52s ../gallery/mophila_intro/QuietSignal.m4a
 
 track.place(bgm, at = 0s, fadeIn = 1s, duration=5s, fadeOut = 2s)   # 動画の終わりまで繰り返す (動画は延びない)
@@ -2580,6 +2607,11 @@ let s1 = Subtitle(text = "最初の字幕", duration = 3s)
 track.place(s1, at = 1s)
 let s2 = Subtitle(text = "2 行目は\nで分ける", duration = 2s)
 track.place(s2, at = 5s)
+
+# ---- 画像。図形の fill に入れると、その形に切り抜いて敷かれる ----
+log(pic.file, pic.width, pic.height)      # import に書いたパスと、元のピクセル数
+v.place(Rect(position = Pos(0.2, 0.2, anchor = :topLeft), w = 1.6, h = 1, fill = pic))
+v.place(Circle(position = Pos(3, 2), radius = 0.8, fill = pic))   # 丸く切り抜く
 
 # 動画の長さは置いたものの終わりで決まる (loop でない曲が長ければ曲の終わりまで)
 v.addTrack(track)

@@ -226,6 +226,7 @@ fn draw_object(scene: &mut Scene, c: &crate::lang::value::Object, transform: Aff
     }
     if let Some(shader) = shader {
         draw_shader_fill(scene, &path, placed, opacity, shader, frame, key, cache)?;
+    } else if image_fill(scene, c, &path, placed, opacity, cache)? {
     } else if let Some(fill) = brush(&c.attrs, "fill", kind)? {
         scene.fill(Fill::NonZero, placed, &fill.multiply_alpha(opacity), None, &path);
     }
@@ -341,9 +342,30 @@ fn brush(attrs: &Attrs, name: &str, kind: &str) -> Result<Option<Brush>> {
     match attrs.get(name) {
         Some(Value::Color([r, g, b, a])) => Ok(Some(Brush::Solid(Color::new([*r, *g, *b, *a])))),
         Some(Value::Object(o)) if o.borrow().kind == "Gradient" => Ok(Some(Brush::Gradient(gradient(&o.borrow().attrs)?))),
+        // 画像は呼ぶ側が形の大きさに合わせるので、ここでは扱わない
+        Some(Value::Image(_)) => Ok(None),
         Some(v) => err(Kind::AttributeType, format!("{kind}.{name} expects a Paint, found {}", v.type_name())),
         None => Ok(None),
     }
+}
+
+/// 画像の塗り。画像を形の外接矩形にちょうど収める (縦横比は形に合わせる)
+fn image_fill(scene: &mut Scene, c: &crate::lang::value::Object, path: &BezPath, placed: Affine, opacity: f32, cache: &mut RenderCache) -> Result<bool> {
+    let Some(Value::Image(file)) = c.attrs.get("fill") else { return Ok(false) };
+    let data = cache
+        .image(&file.path)
+        .map_err(|e| crate::lang::error::MophError::new(Kind::ImageUnreadable, format!("cannot read \"{}\": {e}", file.name)))?;
+    let (iw, ih) = (f64::from(data.width), f64::from(data.height));
+    let bounds = path.bounding_box();
+    if bounds.is_zero_area() || iw <= 0.0 || ih <= 0.0 {
+        return Ok(true);
+    }
+    let mut image = ImageBrush::new(data);
+    image.sampler.alpha = opacity;
+    // 画像のピクセル座標 → 図形の座標
+    let fit = Affine::translate((bounds.x0, bounds.y0)) * Affine::scale_non_uniform(bounds.width() / iw, bounds.height() / ih);
+    scene.fill(Fill::NonZero, placed, &Brush::Image(image), Some(fit), path);
+    Ok(true)
 }
 
 /// Gradient を peniko の Gradient にする。座標は箱の座標

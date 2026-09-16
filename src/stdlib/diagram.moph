@@ -5,7 +5,7 @@
 #   v.place(arrow(Vector(1, 1), Vector(5, 3)))
 
 import math
-import { to_segments } from shape
+import shape
 import { gray, contrast } from color
 
 ## 2 点を結ぶ線。progress で from から伸びる
@@ -41,14 +41,7 @@ export func arrow(from: Vector, to: Vector, progress: Number = 1, color: Color =
   let len = math.hypot(d.x, d.y)
   if len <= 0 { return Polygon(points = [], fill = color) }
   let hl = math.min(if head > 0 { head } else { width * 5 }, len)
-  let u = Vector(d.x / len, d.y / len)
-  let n = Vector(-u.y, u.x)
-  let stop = tip - u * hl
-  let hw = width / 2
-  let side = hl * 0.4
-  Polygon(points = [
-    from + n * hw, stop + n * hw, stop + n * side, tip, stop - n * side, stop - n * hw, from - n * hw,
-  ], fill = color)
+  Polygon(points = shape.arrow(from, tip, width, hl), fill = color)
 }
 
 ## 直角に曲がる線。フローチャートの枝分かれに使う

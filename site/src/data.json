@@ -3778,6 +3778,301 @@
    ]
   },
   {
+   "name": "meter",
+   "path": "src/stdlib/meter.moph",
+   "entries": [],
+   "items": [
+    {
+     "name": "progress_bar",
+     "category": "進捗",
+     "isFunc": true,
+     "signature": "progress_bar(progress: Number, w: Number, h: Number, fill: Color = #e04040, track: Color = #dedbd4)",
+     "call": "progress_bar(\n  progress: Number,\n  w: Number,\n  h: Number,\n  fill: Color = #e04040,\n  track: Color = #dedbd4,\n)",
+     "summary": "横に伸びる進捗バー",
+     "params": [
+      {
+       "name": "progress",
+       "type": "Number",
+       "doc": "進み具合 0..1",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "fill",
+       "type": "Color",
+       "doc": "進んだ部分の色 (既定 #e04040)",
+       "default": "#e04040"
+      },
+      {
+       "name": "track",
+       "type": "Color",
+       "doc": "背の色 (既定 薄い灰)",
+       "default": "#dedbd4"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(progress_bar(0.4, 6, 0.4), at = Pos(1, 1, anchor = :topLeft), w = 6)"
+    },
+    {
+     "name": "progress_ring",
+     "category": "進捗",
+     "isFunc": true,
+     "signature": "progress_ring(progress: Number, size: Number, thickness: Number, fill: Color = #e04040, track: Color = #dedbd4)",
+     "call": "progress_ring(\n  progress: Number,\n  size: Number,\n  thickness: Number,\n  fill: Color = #e04040,\n  track: Color = #dedbd4,\n)",
+     "summary": "円形の進捗リング。真上から時計回りに伸びる",
+     "params": [
+      {
+       "name": "progress",
+       "type": "Number",
+       "doc": "進み具合 0..1",
+       "default": ""
+      },
+      {
+       "name": "size",
+       "type": "Number",
+       "doc": "直径",
+       "default": ""
+      },
+      {
+       "name": "thickness",
+       "type": "Number",
+       "doc": "輪の太さ",
+       "default": ""
+      },
+      {
+       "name": "fill",
+       "type": "Color",
+       "doc": "進んだ部分の色 (既定 #e04040)",
+       "default": "#e04040"
+      },
+      {
+       "name": "track",
+       "type": "Color",
+       "doc": "背の色 (既定 薄い灰)",
+       "default": "#dedbd4"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が size x size の View"
+     },
+     "example": "v.place(progress_ring(0.7, 2, 0.3), at = Pos(1, 1, anchor = :topLeft), w = 2)"
+    },
+    {
+     "name": "gauge",
+     "category": "ゲージ",
+     "isFunc": true,
+     "signature": "gauge(value: Number, lo: Number, hi: Number, size: Number, fill: Color = #e04040, track: Color = #dedbd4)",
+     "call": "gauge(\n  value: Number,\n  lo: Number,\n  hi: Number,\n  size: Number,\n  fill: Color = #e04040,\n  track: Color = #dedbd4,\n)",
+     "summary": "半円のメーター。左が range の下端、右が上端",
+     "params": [
+      {
+       "name": "value",
+       "type": "Number",
+       "doc": "今の値",
+       "default": ""
+      },
+      {
+       "name": "lo",
+       "type": "Number",
+       "doc": "目盛りの下端",
+       "default": ""
+      },
+      {
+       "name": "hi",
+       "type": "Number",
+       "doc": "目盛りの上端",
+       "default": ""
+      },
+      {
+       "name": "size",
+       "type": "Number",
+       "doc": "直径",
+       "default": ""
+      },
+      {
+       "name": "fill",
+       "type": "Color",
+       "doc": "針と進んだ部分の色 (既定 #e04040)",
+       "default": "#e04040"
+      },
+      {
+       "name": "track",
+       "type": "Color",
+       "doc": "背の色 (既定 薄い灰)",
+       "default": "#dedbd4"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が size x (size / 2 + 余白) の View"
+     },
+     "example": "v.place(gauge(72, 0, 100, 3), at = Pos(1, 1, anchor = :topLeft), w = 3)"
+    },
+    {
+     "name": "thermometer",
+     "category": "ゲージ",
+     "isFunc": true,
+     "signature": "thermometer(value: Number, lo: Number, hi: Number, w: Number, h: Number, fill: Color = #e04040, track: Color = #dedbd4)",
+     "call": "thermometer(\n  value: Number,\n  lo: Number,\n  hi: Number,\n  w: Number,\n  h: Number,\n  fill: Color = #e04040,\n  track: Color = #dedbd4,\n)",
+     "summary": "縦の温度計。下が lo、上が hi",
+     "params": [
+      {
+       "name": "value",
+       "type": "Number",
+       "doc": "今の値",
+       "default": ""
+      },
+      {
+       "name": "lo",
+       "type": "Number",
+       "doc": "目盛りの下端",
+       "default": ""
+      },
+      {
+       "name": "hi",
+       "type": "Number",
+       "doc": "目盛りの上端",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "fill",
+       "type": "Color",
+       "doc": "中身の色 (既定 #e04040)",
+       "default": "#e04040"
+      },
+      {
+       "name": "track",
+       "type": "Color",
+       "doc": "管の色 (既定 薄い灰)",
+       "default": "#dedbd4"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(thermometer(24, -10, 40, 0.8, 3), at = Pos(1, 1, anchor = :topLeft), w = 0.8)"
+    },
+    {
+     "name": "stars",
+     "category": "評価",
+     "isFunc": true,
+     "signature": "stars(value: Number, max: Number = 5, size: Number = 1, fill: Color = #e0b040, track: Color = #dedbd4)",
+     "call": "stars(\n  value: Number,\n  max: Number = 5,\n  size: Number = 1,\n  fill: Color = #e0b040,\n  track: Color = #dedbd4,\n)",
+     "summary": "星の評価。半端な値は星を部分的に塗る",
+     "params": [
+      {
+       "name": "value",
+       "type": "Number",
+       "doc": "今の値 0..max",
+       "default": ""
+      },
+      {
+       "name": "max",
+       "type": "Number",
+       "doc": "星の数 (既定 5)",
+       "default": "5"
+      },
+      {
+       "name": "size",
+       "type": "Number",
+       "doc": "星 1 つの大きさ",
+       "default": "1"
+      },
+      {
+       "name": "fill",
+       "type": "Color",
+       "doc": "塗る色 (既定 #e0b040)",
+       "default": "#e0b040"
+      },
+      {
+       "name": "track",
+       "type": "Color",
+       "doc": "空の色 (既定 薄い灰)",
+       "default": "#dedbd4"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が (size * max) x size の View"
+     },
+     "example": "v.place(stars(3.5, 5, 0.6), at = Pos(1, 1, anchor = :topLeft), w = 3)"
+    },
+    {
+     "name": "poll_bars",
+     "category": "進捗",
+     "isFunc": true,
+     "signature": "poll_bars(results: Dict, w: Number, h: Number, colors: List<Color> = [#e04040], label_w: Number = 0)",
+     "call": "poll_bars(\n  results: Dict,\n  w: Number,\n  h: Number,\n  colors: List<Color> = [#e04040],\n  label_w: Number = 0,\n)",
+     "summary": "投票結果の横棒。Dict の順に上から並べる",
+     "params": [
+      {
+       "name": "results",
+       "type": "Dict",
+       "doc": "項目名 → 値",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "全体の高さ",
+       "default": ""
+      },
+      {
+       "name": "colors",
+       "type": "List<Color>",
+       "doc": "棒の色 (足りなければ繰り返す)",
+       "default": "[#e04040]"
+      },
+      {
+       "name": "label_w",
+       "type": "Number",
+       "doc": "名前に使う幅 (既定 全体の 0.3)",
+       "default": "0"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(poll_bars({ \"はい\": 62, \"いいえ\": 38 }, 6, 2), at = Pos(1, 1, anchor = :topLeft), w = 6)"
+    }
+   ]
+  },
+  {
    "name": "fractal",
    "path": "src/stdlib/fractal.moph",
    "entries": [],

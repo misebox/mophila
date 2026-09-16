@@ -1,0 +1,164 @@
+# meter.moph — 1 つの値を絵にする。進捗、ゲージ、星、数字
+#
+# どれも「その時点の値」を受け取って View を返す。値を時間で変えるのは呼ぶ側の motion。
+#
+#   let bar = progress_bar(0.4, 6, 0.5)
+#   v.place(bar, at = Pos(1, 1, anchor = :topLeft), w = 6)
+
+import math
+import { ring_segment } from shape
+import { gray, alpha } from color
+
+## 横に伸びる進捗バー
+## @category 進捗
+## @param progress 進み具合 0..1
+## @param w 幅
+## @param h 高さ
+## @param fill 進んだ部分の色 (既定 #e04040)
+## @param track 背の色 (既定 薄い灰)
+## @returns 箱が w x h の View
+## @example
+## v.place(progress_bar(0.4, 6, 0.4), at = Pos(1, 1, anchor = :topLeft), w = 6)
+export func progress_bar(progress: Number, w: Number, h: Number, fill: Color = #e04040, track: Color = #dedbd4) -> View {
+  let k = math.clamp(progress, 0, 1)
+  let v = View(box = Vector(w, h))
+  v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h, radius = h / 2, fill = track))
+  if k > 0 {
+    v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w * k, h = h, radius = h / 2, fill = fill))
+  }
+  v
+}
+
+## 円形の進捗リング。真上から時計回りに伸びる
+## @category 進捗
+## @param progress 進み具合 0..1
+## @param size 直径
+## @param thickness 輪の太さ
+## @param fill 進んだ部分の色 (既定 #e04040)
+## @param track 背の色 (既定 薄い灰)
+## @returns 箱が size x size の View
+## @example
+## v.place(progress_ring(0.7, 2, 0.3), at = Pos(1, 1, anchor = :topLeft), w = 2)
+export func progress_ring(progress: Number, size: Number, thickness: Number, fill: Color = #e04040, track: Color = #dedbd4) -> View {
+  let k = math.clamp(progress, 0, 1)
+  let r = size / 2
+  let v = View(box = Vector(size, size))
+  v.place(Circle(position = Pos(r, r), radius = r - thickness / 2, stroke = track, strokeWidth = thickness))
+  if k > 0 {
+    v.place(Polygon(points = ring_segment(r, r, r - thickness, r, 0, k * 360), fill = fill))
+  }
+  v
+}
+
+## 半円のメーター。左が range の下端、右が上端
+## @category ゲージ
+## @param value 今の値
+## @param lo 目盛りの下端
+## @param hi 目盛りの上端
+## @param size 直径
+## @param fill 針と進んだ部分の色 (既定 #e04040)
+## @param track 背の色 (既定 薄い灰)
+## @returns 箱が size x (size / 2 + 余白) の View
+## @example
+## v.place(gauge(72, 0, 100, 3), at = Pos(1, 1, anchor = :topLeft), w = 3)
+export func gauge(value: Number, lo: Number, hi: Number, size: Number, fill: Color = #e04040, track: Color = #dedbd4) -> View {
+  let k = if hi == lo { 0 } else { math.clamp((value - lo) / (hi - lo), 0, 1) }
+  let r = size / 2
+  let thickness = size / 8
+  let v = View(box = Vector(size, r + thickness))
+  v.place(Polygon(points = ring_segment(r, r, r - thickness, r, -90, 90), fill = track))
+  v.place(Polygon(points = ring_segment(r, r, r - thickness, r, -90, -90 + k * 180), fill = fill))
+  v
+}
+
+## 縦の温度計。下が lo、上が hi
+## @category ゲージ
+## @param value 今の値
+## @param lo 目盛りの下端
+## @param hi 目盛りの上端
+## @param w 幅
+## @param h 高さ
+## @param fill 中身の色 (既定 #e04040)
+## @param track 管の色 (既定 薄い灰)
+## @returns 箱が w x h の View
+## @example
+## v.place(thermometer(24, -10, 40, 0.8, 3), at = Pos(1, 1, anchor = :topLeft), w = 0.8)
+export func thermometer(value: Number, lo: Number, hi: Number, w: Number, h: Number, fill: Color = #e04040, track: Color = #dedbd4) -> View {
+  let k = if hi == lo { 0 } else { math.clamp((value - lo) / (hi - lo), 0, 1) }
+  let bulb = w * 0.9
+  let tube = h - bulb
+  let v = View(box = Vector(w, h))
+  v.place(Rect(position = Pos(w / 2, 0, anchor = :top), w = w * 0.5, h = tube, radius = w * 0.25, fill = track))
+  v.place(Circle(position = Pos(w / 2, h - bulb / 2), radius = bulb / 2, fill = fill))
+  if k > 0 {
+    v.place(Rect(position = Pos(w / 2, tube, anchor = :bottom), w = w * 0.5, h = tube * k, radius = w * 0.25, fill = fill))
+  }
+  v
+}
+
+## 星の評価。半端な値は星を部分的に塗る
+## @category 評価
+## @param value 今の値 0..max
+## @param max 星の数 (既定 5)
+## @param size 星 1 つの大きさ
+## @param fill 塗る色 (既定 #e0b040)
+## @param track 空の色 (既定 薄い灰)
+## @returns 箱が (size * max) x size の View
+## @example
+## v.place(stars(3.5, 5, 0.6), at = Pos(1, 1, anchor = :topLeft), w = 3)
+export func stars(value: Number, max: Number = 5, size: Number = 1, fill: Color = #e0b040, track: Color = #dedbd4) -> View {
+  let v = View(box = Vector(size * max, size))
+  let r = size * 0.45
+  for i in 0..max {
+    let cx = size * (i + 0.5)
+    let full = math.clamp(value - i, 0, 1)
+    v.place(Polygon(points = star_points(cx, size / 2, r), fill = track))
+    if full > 0 {
+      # 左から full の割合だけ見せる
+      let win = View(box = Vector(size, size), clip = true)
+      win.place(Polygon(points = star_points(size / 2, size / 2, r), fill = fill))
+      let cut = View(box = Vector(size * full, size), clip = true)
+      cut.place(win, at = Pos(0, 0, anchor = :topLeft), w = size)
+      v.place(cut, at = Pos(size * i, 0, anchor = :topLeft), w = size * full)
+    }
+  }
+  v
+}
+
+## 星 1 つの頂点 (内部で使う)
+func star_points(cx: Number, cy: Number, r: Number) -> List<Vector> {
+  let pts = []
+  for i in 0..10 {
+    let radius = if i % 2 == 0 { r } else { r * 0.45 }
+    pts.push(Vector(cx + radius * math.sin(i * math.PI / 5), cy - radius * math.cos(i * math.PI / 5)))
+  }
+  pts
+}
+
+## 投票結果の横棒。Dict の順に上から並べる
+## @category 進捗
+## @param results 項目名 → 値
+## @param w 幅
+## @param h 全体の高さ
+## @param colors 棒の色 (足りなければ繰り返す)
+## @param label_w 名前に使う幅 (既定 全体の 0.3)
+## @returns 箱が w x h の View
+## @example
+## v.place(poll_bars({ "はい": 62, "いいえ": 38 }, 6, 2), at = Pos(1, 1, anchor = :topLeft), w = 6)
+export func poll_bars(results: Dict, w: Number, h: Number, colors: List<Color> = [#e04040], label_w: Number = 0) -> View {
+  let keys = results.keys()
+  let n = keys.len()
+  let total = results.values().sum()
+  let lw = if label_w > 0 { label_w } else { w * 0.3 }
+  let v = View(box = Vector(w, h))
+  if n == 0 { return v }
+  let row_h = h / n
+  let bar_h = row_h * 0.6
+  for (i, key) in keys.enumerate() {
+    let k = if total == 0 { 0 } else { results[key] / total }
+    let cy = row_h * (i + 0.5)
+    v.place(TextArea(position = Pos(0, cy, anchor = :left), text = key, fontSize = bar_h * 0.8, fill = #1a1d23))
+    v.place(Rect(position = Pos(lw, cy, anchor = :left), w = (w - lw) * k, h = bar_h, radius = bar_h / 4, fill = colors[i % colors.len()]))
+  }
+  v
+}

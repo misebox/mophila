@@ -2311,6 +2311,54 @@ alias P = Pos
   stagger: Duration = 0.08s,
 )` -> Timeline, at: Duration, stagger: Duration = 0.08s) -> Nothing — 同じ動きを、少しずつ遅らせて並べて置く
 
+### meter
+
+- `progress_bar(
+  progress: Number,
+  w: Number,
+  h: Number,
+  fill: Color = #e04040,
+  track: Color = #dedbd4,
+)` -> View — 横に伸びる進捗バー
+- `progress_ring(
+  progress: Number,
+  size: Number,
+  thickness: Number,
+  fill: Color = #e04040,
+  track: Color = #dedbd4,
+)` -> View — 円形の進捗リング。真上から時計回りに伸びる
+- `gauge(
+  value: Number,
+  lo: Number,
+  hi: Number,
+  size: Number,
+  fill: Color = #e04040,
+  track: Color = #dedbd4,
+)` -> View — 半円のメーター。左が range の下端、右が上端
+- `thermometer(
+  value: Number,
+  lo: Number,
+  hi: Number,
+  w: Number,
+  h: Number,
+  fill: Color = #e04040,
+  track: Color = #dedbd4,
+)` -> View — 縦の温度計。下が lo、上が hi
+- `stars(
+  value: Number,
+  max: Number = 5,
+  size: Number = 1,
+  fill: Color = #e0b040,
+  track: Color = #dedbd4,
+)` -> View — 星の評価。半端な値は星を部分的に塗る
+- `poll_bars(
+  results: Dict,
+  w: Number,
+  h: Number,
+  colors: List<Color> = [#e04040],
+  label_w: Number = 0,
+)` -> View — 投票結果の横棒。Dict の順に上から並べる
+
 ### fractal
 
 - `escape_time(

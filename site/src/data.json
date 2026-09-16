@@ -3083,6 +3083,238 @@
    ]
   },
   {
+   "name": "easing",
+   "path": "src/stdlib/easing.moph",
+   "entries": [],
+   "items": [
+    {
+     "name": "quad_in",
+     "category": "基本",
+     "isFunc": true,
+     "signature": "quad_in(k: Number)",
+     "call": "quad_in(k: Number)",
+     "summary": "加速する (2 乗)。ゆっくり始まって速く終わる",
+     "params": [
+      {
+       "name": "k",
+       "type": "Number",
+       "doc": "進み具合 0..1",
+       "default": ""
+      }
+     ],
+     "returns": {
+      "type": "Number",
+      "doc": ""
+     },
+     "example": "0..1: o.opacity = quad_in(t)"
+    },
+    {
+     "name": "quad_out",
+     "category": "基本",
+     "isFunc": true,
+     "signature": "quad_out(k: Number)",
+     "call": "quad_out(k: Number)",
+     "summary": "減速する (2 乗)。速く始まってゆっくり終わる",
+     "params": [
+      {
+       "name": "k",
+       "type": "Number",
+       "doc": "進み具合 0..1",
+       "default": ""
+      }
+     ],
+     "returns": {
+      "type": "Number",
+      "doc": ""
+     },
+     "example": ""
+    },
+    {
+     "name": "cubic",
+     "category": "基本",
+     "isFunc": true,
+     "signature": "cubic(k: Number)",
+     "call": "cubic(k: Number)",
+     "summary": "加速してから減速する (3 乗)。行末の :ease より効きが強い",
+     "params": [
+      {
+       "name": "k",
+       "type": "Number",
+       "doc": "進み具合 0..1",
+       "default": ""
+      }
+     ],
+     "returns": {
+      "type": "Number",
+      "doc": ""
+     },
+     "example": ""
+    },
+    {
+     "name": "back",
+     "category": "勢い",
+     "isFunc": true,
+     "signature": "back(k: Number, amount: Number = 1.7)",
+     "call": "back(k: Number, amount: Number = 1.7)",
+     "summary": "行き過ぎてから戻る。引き出しが勢いよく閉まるような動き",
+     "params": [
+      {
+       "name": "k",
+       "type": "Number",
+       "doc": "進み具合 0..1",
+       "default": ""
+      },
+      {
+       "name": "amount",
+       "type": "Number",
+       "doc": "行き過ぎる強さ (既定 1.7)",
+       "default": "1.7"
+      }
+     ],
+     "returns": {
+      "type": "Number",
+      "doc": ""
+     },
+     "example": "# 1.7 を上げるほど大きく行き過ぎる\n0..1: card.position = Pos(2 + 6 * back(t), 2)"
+    },
+    {
+     "name": "bounce",
+     "category": "勢い",
+     "isFunc": true,
+     "signature": "bounce(k: Number)",
+     "call": "bounce(k: Number)",
+     "summary": "跳ねながら止まる。落ちてきたものが弾むような動き",
+     "params": [
+      {
+       "name": "k",
+       "type": "Number",
+       "doc": "進み具合 0..1",
+       "default": ""
+      }
+     ],
+     "returns": {
+      "type": "Number",
+      "doc": ""
+     },
+     "example": ""
+    },
+    {
+     "name": "elastic",
+     "category": "勢い",
+     "isFunc": true,
+     "signature": "elastic(k: Number, cycles: Number = 3, decay: Number = 6)",
+     "call": "elastic(k: Number, cycles: Number = 3, decay: Number = 6)",
+     "summary": "バネのように揺れながら止まる",
+     "params": [
+      {
+       "name": "k",
+       "type": "Number",
+       "doc": "進み具合 0..1",
+       "default": ""
+      },
+      {
+       "name": "cycles",
+       "type": "Number",
+       "doc": "揺れる回数 (既定 3)",
+       "default": "3"
+      },
+      {
+       "name": "decay",
+       "type": "Number",
+       "doc": "収まる速さ。大きいほど早く止まる (既定 6)",
+       "default": "6"
+      }
+     ],
+     "returns": {
+      "type": "Number",
+      "doc": ""
+     },
+     "example": ""
+    },
+    {
+     "name": "steps",
+     "category": "段階",
+     "isFunc": true,
+     "signature": "steps(k: Number, n: Number)",
+     "call": "steps(k: Number, n: Number)",
+     "summary": "段階的に飛ぶ。カウンタやコマ送りの表現に使う",
+     "params": [
+      {
+       "name": "k",
+       "type": "Number",
+       "doc": "進み具合 0..1",
+       "default": ""
+      },
+      {
+       "name": "n",
+       "type": "Number",
+       "doc": "段の数 (1 以上)",
+       "default": ""
+      }
+     ],
+     "returns": {
+      "type": "Number",
+      "doc": ""
+     },
+     "example": "# 5 段階で数字が変わる\n0..1: label.text = \"{}\".format(math.round(steps(t, 5) * 100))"
+    },
+    {
+     "name": "mirror",
+     "category": "組み合わせ",
+     "isFunc": true,
+     "signature": "mirror(f: (Number) -> Number, k: Number)",
+     "call": "mirror(f: (Number) -> Number, k: Number)",
+     "summary": "前半で行って後半で戻る。往復する動きを 1 本で書ける",
+     "params": [
+      {
+       "name": "f",
+       "type": "(Number) -> Number",
+       "doc": "元の曲線 (Number) -> Number",
+       "default": ""
+      },
+      {
+       "name": "k",
+       "type": "Number",
+       "doc": "進み具合 0..1",
+       "default": ""
+      }
+     ],
+     "returns": {
+      "type": "Number, k: Number) -> Number",
+      "doc": ""
+     },
+     "example": "0..1: o.opacity = mirror(quad_out, t)   # 出て、消える"
+    },
+    {
+     "name": "flip",
+     "category": "組み合わせ",
+     "isFunc": true,
+     "signature": "flip(f: (Number) -> Number, k: Number)",
+     "call": "flip(f: (Number) -> Number, k: Number)",
+     "summary": "曲線を逆にする。加速が減速になる",
+     "params": [
+      {
+       "name": "f",
+       "type": "(Number) -> Number",
+       "doc": "元の曲線 (Number) -> Number",
+       "default": ""
+      },
+      {
+       "name": "k",
+       "type": "Number",
+       "doc": "進み具合 0..1",
+       "default": ""
+      }
+     ],
+     "returns": {
+      "type": "Number, k: Number) -> Number",
+      "doc": ""
+     },
+     "example": ""
+    }
+   ]
+  },
+  {
    "name": "animation",
    "path": "src/stdlib/animation.moph",
    "entries": [],

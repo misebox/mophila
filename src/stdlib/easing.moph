@@ -1,0 +1,97 @@
+# easing.moph — 変化の曲線。どれも 0..1 を受け取って 0..1 を返す関数
+#
+# 行末に書ける修飾子は :linear :ease :ease_in :ease_out の 4 つだけ。
+# それ以外の曲線は、範囲行 (0..1:) の中でこれらを使って値を計算する。
+#
+#   0..1: c.position = Pos(1 + 6 * bounce(t), 2)
+
+import math
+
+## 加速する (2 乗)。ゆっくり始まって速く終わる
+## @category 基本
+## @param k 進み具合 0..1
+## @example
+## 0..1: o.opacity = quad_in(t)
+export func quad_in(k: Number) -> Number { k * k }
+
+## 減速する (2 乗)。速く始まってゆっくり終わる
+## @category 基本
+## @param k 進み具合 0..1
+export func quad_out(k: Number) -> Number { 1 - (1 - k) * (1 - k) }
+
+## 加速してから減速する (3 乗)。行末の :ease より効きが強い
+## @category 基本
+## @param k 進み具合 0..1
+export func cubic(k: Number) -> Number {
+  if k < 0.5 { 4 * k * k * k } else { 1 - math.pow(-2 * k + 2, 3) / 2 }
+}
+
+## 行き過ぎてから戻る。引き出しが勢いよく閉まるような動き
+## @category 勢い
+## @param k 進み具合 0..1
+## @param amount 行き過ぎる強さ (既定 1.7)
+## @example
+## # 1.7 を上げるほど大きく行き過ぎる
+## 0..1: card.position = Pos(2 + 6 * back(t), 2)
+export func back(k: Number, amount: Number = 1.7) -> Number {
+  let c = amount + 1
+  1 + c * math.pow(k - 1, 3) + amount * math.pow(k - 1, 2)
+}
+
+## 跳ねながら止まる。落ちてきたものが弾むような動き
+## @category 勢い
+## @param k 進み具合 0..1
+export func bounce(k: Number) -> Number {
+  let n = 7.5625
+  let d = 2.75
+  if k < 1 / d {
+    n * k * k
+  } else if k < 2 / d {
+    let x = k - 1.5 / d
+    n * x * x + 0.75
+  } else if k < 2.5 / d {
+    let x = k - 2.25 / d
+    n * x * x + 0.9375
+  } else {
+    let x = k - 2.625 / d
+    n * x * x + 0.984375
+  }
+}
+
+## バネのように揺れながら止まる
+## @category 勢い
+## @param k 進み具合 0..1
+## @param cycles 揺れる回数 (既定 3)
+## @param decay 収まる速さ。大きいほど早く止まる (既定 6)
+export func elastic(k: Number, cycles: Number = 3, decay: Number = 6) -> Number {
+  if k <= 0 { return 0 }
+  if k >= 1 { return 1 }
+  1 - math.exp(-decay * k) * math.cos(k * cycles * math.TAU)
+}
+
+## 段階的に飛ぶ。カウンタやコマ送りの表現に使う
+## @category 段階
+## @param k 進み具合 0..1
+## @param n 段の数 (1 以上)
+## @example
+## # 5 段階で数字が変わる
+## 0..1: label.text = "{}".format(math.round(steps(t, 5) * 100))
+export func steps(k: Number, n: Number) -> Number {
+  math.clamp(math.floor(k * n), 0, n - 1) / (n - 1)
+}
+
+## 前半で行って後半で戻る。往復する動きを 1 本で書ける
+## @category 組み合わせ
+## @param f 元の曲線 (Number) -> Number
+## @param k 進み具合 0..1
+## @example
+## 0..1: o.opacity = mirror(quad_out, t)   # 出て、消える
+export func mirror(f: (Number) -> Number, k: Number) -> Number {
+  if k < 0.5 { f(k * 2) } else { f((1 - k) * 2) }
+}
+
+## 曲線を逆にする。加速が減速になる
+## @category 組み合わせ
+## @param f 元の曲線 (Number) -> Number
+## @param k 進み具合 0..1
+export func flip(f: (Number) -> Number, k: Number) -> Number { 1 - f(1 - k) }

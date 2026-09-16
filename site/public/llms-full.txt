@@ -2232,6 +2232,18 @@ alias P = Pos
   gap: Number = 0,
 )` -> List<Vector> — 大きさの違うものを縦に積んだときの、各要素の左上
 
+### easing
+
+- `quad_in(k: Number)` -> Number — 加速する (2 乗)。ゆっくり始まって速く終わる
+- `quad_out(k: Number)` -> Number — 減速する (2 乗)。速く始まってゆっくり終わる
+- `cubic(k: Number)` -> Number — 加速してから減速する (3 乗)。行末の :ease より効きが強い
+- `back(k: Number, amount: Number = 1.7)` -> Number — 行き過ぎてから戻る。引き出しが勢いよく閉まるような動き
+- `bounce(k: Number)` -> Number — 跳ねながら止まる。落ちてきたものが弾むような動き
+- `elastic(k: Number, cycles: Number = 3, decay: Number = 6)` -> Number — バネのように揺れながら止まる
+- `steps(k: Number, n: Number)` -> Number — 段階的に飛ぶ。カウンタやコマ送りの表現に使う
+- `mirror(f: (Number) -> Number, k: Number)` -> Number, k: Number) -> Number — 前半で行って後半で戻る。往復する動きを 1 本で書ける
+- `flip(f: (Number) -> Number, k: Number)` -> Number, k: Number) -> Number — 曲線を逆にする。加速が減速になる
+
 ### animation
 
 - `fade_to(

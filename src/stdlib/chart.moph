@@ -1,0 +1,236 @@
+# chart.moph — 数の並びを絵にする
+#
+# どれも「その時点の値」を受け取って View を返す。値が滑らかに変わるのは呼ぶ側の motion の仕事で、
+# ここでは補間しない。軸と目盛りは axes が引く。
+#
+#   v.place(bar([3, 7, 5], ["A", "B", "C"], 6, 4), at = Pos(1, 1, anchor = :topLeft), w = 6)
+
+import math
+import { to_segments, ring_segment } from shape
+import { gray, categorical, alpha } from color
+
+## 軸と目盛り。他のグラフの下に敷く
+## @category 軸
+## @param w 幅
+## @param h 高さ
+## @param x_lo 横軸の下端
+## @param x_hi 横軸の上端
+## @param y_lo 縦軸の下端
+## @param y_hi 縦軸の上端
+## @param x_name 横軸の名前 (既定 無し)
+## @param y_name 縦軸の名前 (既定 無し)
+## @param ticks 目盛りのおおよその数 (既定 5)
+## @returns 箱が w x h の View。原点は左下
+## @example
+## v.place(axes(6, 4, 0, 10, 0, 100, "時間 (秒)", "強さ"), at = Pos(1, 1, anchor = :topLeft), w = 6)
+export func axes(w: Number, h: Number, x_lo: Number, x_hi: Number, y_lo: Number, y_hi: Number,
+                 x_name: String = "", y_name: String = "", ticks: Number = 5) -> View {
+  let v = View(box = Vector(w, h))
+  let size = math.min(w, h) * 0.06
+  let line = gray(150)
+  # 目盛りは切りの良い間隔で
+  let xs = tick_values(x_lo, x_hi, ticks)
+  let ys = tick_values(y_lo, y_hi, ticks)
+  for x in xs {
+    let px = math.map_range(x, x_lo, x_hi, 0, w)
+    v.place(Line(from = Vector(px, 0), to = Vector(px, h), stroke = gray(225), strokeWidth = size * 0.06))
+    v.place(TextArea(position = Pos(px, h + size * 0.3, anchor = :top), text = label(x), fontSize = size, fill = line, align = :center))
+  }
+  for y in ys {
+    let py = math.map_range(y, y_lo, y_hi, h, 0)
+    v.place(Line(from = Vector(0, py), to = Vector(w, py), stroke = gray(225), strokeWidth = size * 0.06))
+    v.place(TextArea(position = Pos(-size * 0.3, py, anchor = :right), text = label(y), fontSize = size, fill = line))
+  }
+  v.place(Line(from = Vector(0, h), to = Vector(w, h), stroke = line, strokeWidth = size * 0.1))
+  v.place(Line(from = Vector(0, 0), to = Vector(0, h), stroke = line, strokeWidth = size * 0.1))
+  if x_name != "" {
+    v.place(TextArea(position = Pos(w / 2, h + size * 1.8, anchor = :top), text = x_name, fontSize = size * 1.1, fill = line, align = :center))
+  }
+  if y_name != "" {
+    v.place(TextArea(position = Pos(0, -size * 0.8, anchor = :bottomLeft), text = y_name, fontSize = size * 1.1, fill = line))
+  }
+  v
+}
+
+## 目盛りに使う値。切りの良い間隔で lo..hi を刻む
+## @category 軸
+## @param lo 下端
+## @param hi 上端
+## @param count おおよその数
+## @example
+## tick_values(0, 8, 5)   # [0, 2, 4, 6, 8]
+export func tick_values(lo: Number, hi: Number, count: Number = 5) -> List<Number> {
+  if hi <= lo { return [lo] }
+  let step = math.nice_step(hi - lo, count)
+  let first = math.ceil(lo / step) * step
+  let out = []
+  let at = first
+  for i in 0..=math.floor((hi - first) / step) {
+    out.push(math.round(first + i * step, 6))
+  }
+  out
+}
+
+## 目盛りの数字。整数なら小数点を出さない
+func label(x: Number) -> String {
+  if x == math.floor(x) { "{}".format(math.round(x)) } else { "{}".format(math.round(x, 2)) }
+}
+
+## 棒グラフ。0 から values の値まで伸びる
+## @category グラフ
+## @param values 値の並び
+## @param labels 棒の下に出す名前 (空なら出さない)
+## @param w 幅
+## @param h 高さ
+## @param colors 棒の色 (足りなければ繰り返す)
+## @param lo 縦軸の下端 (既定 0)
+## @param hi 縦軸の上端 (既定 値の最大)
+## @returns 箱が w x h の View
+## @example
+## v.place(bar([3, 7, 5], ["A", "B", "C"], 6, 4), at = Pos(1, 1, anchor = :topLeft), w = 6)
+export func bar(values: List<Number>, labels: List<String>, w: Number, h: Number,
+                colors: List<Color> = [#e04040], lo: Number = 0, hi: Number = 0) -> View {
+  let v = View(box = Vector(w, h))
+  let n = values.len()
+  if n == 0 { return v }
+  let top = if hi > lo { hi } else { math.max(...values) }
+  let gap = w / n * 0.25
+  let bw = (w - gap * (n - 1)) / n
+  let size = math.min(w, h) * 0.06
+  for (i, value) in values.enumerate() {
+    let bh = math.map_range(value, lo, top, 0, h)
+    let x = i * (bw + gap)
+    v.place(Rect(position = Pos(x, h, anchor = :bottomLeft), w = bw, h = math.max(bh, 0), fill = colors[i % colors.len()]))
+    if i < labels.len() {
+      v.place(TextArea(position = Pos(x + bw / 2, h + size * 0.3, anchor = :top), text = labels[i], fontSize = size, fill = gray(110), align = :center))
+    }
+  }
+  v
+}
+
+## 折れ線。progress で左から描く範囲を決める
+## @category グラフ
+## @param points (x, y) の並び。x は増える順
+## @param w 幅
+## @param h 高さ
+## @param x_lo 横軸の下端
+## @param x_hi 横軸の上端
+## @param y_lo 縦軸の下端
+## @param y_hi 縦軸の上端
+## @param color 線の色 (既定 #e04040)
+## @param progress 描く割合 0..1 (既定 1)
+## @returns 箱が w x h の View
+## @example
+## v.place(line(pts, 6, 4, 0, 10, 0, 100), at = Pos(1, 1, anchor = :topLeft), w = 6)
+export func line(points: List<Vector>, w: Number, h: Number, x_lo: Number, x_hi: Number, y_lo: Number, y_hi: Number,
+                 color: Color = #e04040, progress: Number = 1) -> View {
+  let v = View(box = Vector(w, h))
+  if points.len() < 2 { return v }
+  let pts = points.map(func (p) { Vector(math.map_range(p.x, x_lo, x_hi, 0, w), math.map_range(p.y, y_lo, y_hi, h, 0)) })
+  let path = Path(from = pts[0], segments = to_segments(pts), stroke = color, strokeWidth = math.min(w, h) * 0.012)
+  # progress の分だけ dash で見せる
+  let k = math.clamp(progress, 0, 1)
+  if k < 1 {
+    let total = path.length()
+    path.dash = [total, total]
+    path.dashOffset = total * (1 - k)
+  }
+  v.place(path)
+  v
+}
+
+## 円グラフ。values の割合で切り分ける
+## @category グラフ
+## @param values 値の並び (合計で 1 周)
+## @param size 直径
+## @param colors 切れ端の色 (既定 categorical)
+## @param hole 中央の穴の割合 0..1 (既定 0。0.5 ならドーナツ)
+## @returns 箱が size x size の View
+## @example
+## v.place(pie([3, 2, 1], 3), at = Pos(1, 1, anchor = :topLeft), w = 3)
+export func pie(values: List<Number>, size: Number, colors: List<Color> = [], hole: Number = 0) -> View {
+  let v = View(box = Vector(size, size))
+  let total = values.sum()
+  if total <= 0 { return v }
+  let palette = if colors.len() > 0 { colors } else { categorical(values.len()) }
+  let r = size / 2
+  let at = 0
+  for (i, value) in values.enumerate() {
+    let sweep = value / total * 360
+    v.place(Polygon(points = ring_segment(r, r, r * math.clamp(hole, 0, 0.95), r, at, at + sweep), fill = palette[i % palette.len()]))
+    at = at + sweep
+  }
+  v
+}
+
+## 散布図
+## @category グラフ
+## @param points (x, y) の並び
+## @param w 幅
+## @param h 高さ
+## @param x_lo 横軸の下端
+## @param x_hi 横軸の上端
+## @param y_lo 縦軸の下端
+## @param y_hi 縦軸の上端
+## @param color 点の色 (既定 #4080e0)
+## @param radius 点の大きさ (既定 幅の 1.5%)
+## @returns 箱が w x h の View
+## @example
+## v.place(scatter(pts, 6, 4, 0, 10, 0, 10), at = Pos(1, 1, anchor = :topLeft), w = 6)
+export func scatter(points: List<Vector>, w: Number, h: Number, x_lo: Number, x_hi: Number, y_lo: Number, y_hi: Number,
+                    color: Color = #4080e0, radius: Number = 0) -> View {
+  let v = View(box = Vector(w, h))
+  let r = if radius > 0 { radius } else { math.min(w, h) * 0.015 }
+  for p in points {
+    let x = math.map_range(p.x, x_lo, x_hi, 0, w)
+    let y = math.map_range(p.y, y_lo, y_hi, h, 0)
+    v.place(Circle(position = Pos(x, y), radius = r, fill = alpha(color, 0.8)))
+  }
+  v
+}
+
+## 小さい折れ線。軸も目盛りも出さない
+## @category グラフ
+## @param values 値の並び
+## @param w 幅
+## @param h 高さ
+## @param color 線の色 (既定 #e04040)
+## @returns 箱が w x h の View
+## @example
+## v.place(sparkline([3, 5, 4, 8], 2, 0.6), at = Pos(1, 1, anchor = :topLeft), w = 2)
+export func sparkline(values: List<Number>, w: Number, h: Number, color: Color = #e04040) -> View {
+  let v = View(box = Vector(w, h))
+  let n = values.len()
+  if n < 2 { return v }
+  let lo = math.min(...values)
+  let hi = math.max(...values)
+  let pts = values.enumerate().map(func (pair) {
+    let (i, value) = pair
+    Vector(w * i / (n - 1), if hi == lo { h / 2 } else { math.map_range(value, lo, hi, h, 0) })
+  })
+  v.place(Path(from = pts[0], segments = to_segments(pts), stroke = color, strokeWidth = h * 0.08))
+  v
+}
+
+## 色の凡例
+## @category 軸
+## @param labels 名前の並び
+## @param colors 色の並び
+## @param w 幅
+## @param h 高さ
+## @returns 箱が w x h の View。上から順に並ぶ
+## @example
+## v.place(legend(["A", "B"], categorical(2), 2, 1), at = Pos(1, 1, anchor = :topLeft), w = 2)
+export func legend(labels: List<String>, colors: List<Color>, w: Number, h: Number) -> View {
+  let v = View(box = Vector(w, h))
+  let n = labels.len()
+  if n == 0 { return v }
+  let row = h / n
+  let size = row * 0.6
+  for (i, name) in labels.enumerate() {
+    let cy = row * (i + 0.5)
+    v.place(Rect(position = Pos(0, cy, anchor = :left), w = size, h = size, radius = size * 0.2, fill = colors[i % colors.len()]))
+    v.place(TextArea(position = Pos(size * 1.4, cy, anchor = :left), text = name, fontSize = size, fill = gray(60)))
+  }
+  v
+}

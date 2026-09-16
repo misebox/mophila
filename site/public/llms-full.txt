@@ -2311,6 +2311,60 @@ alias P = Pos
   stagger: Duration = 0.08s,
 )` -> Timeline, at: Duration, stagger: Duration = 0.08s) -> Nothing — 同じ動きを、少しずつ遅らせて並べて置く
 
+### chart
+
+- `axes(
+  w: Number,
+  h: Number,
+  x_lo: Number,
+  x_hi: Number,
+  y_lo: Number,
+  y_hi: Number,
+)` — 軸と目盛り。他のグラフの下に敷く
+- `tick_values(lo: Number, hi: Number, count: Number = 5)` -> List<Number> — 目盛りに使う値。切りの良い間隔で lo..hi を刻む
+- `bar(
+  values: List<Number>,
+  labels: List<String>,
+  w: Number,
+  h: Number,
+)` — 棒グラフ。0 から values の値まで伸びる
+- `line(
+  points: List<Vector>,
+  w: Number,
+  h: Number,
+  x_lo: Number,
+  x_hi: Number,
+  y_lo: Number,
+  y_hi: Number,
+)` — 折れ線。progress で左から描く範囲を決める
+- `pie(
+  values: List<Number>,
+  size: Number,
+  colors: List<Color> = [],
+  hole: Number = 0,
+)` -> View — 円グラフ。values の割合で切り分ける
+- `scatter(
+  points: List<Vector>,
+  w: Number,
+  h: Number,
+  x_lo: Number,
+  x_hi: Number,
+  y_lo: Number,
+  y_hi: Number,
+)` — 散布図
+- `sparkline(
+  values: List<Number>,
+  w: Number,
+  h: Number,
+  color: Color = #e04040,
+)` -> View — 小さい折れ線。軸も目盛りも出さない
+- `legend(
+  labels: List<String>,
+  colors: List<Color>,
+  w: Number,
+  h: Number,
+)` -> View — 色の凡例
+
 ### meter
 
 - `progress_bar(

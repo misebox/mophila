@@ -3778,6 +3778,427 @@
    ]
   },
   {
+   "name": "chart",
+   "path": "src/stdlib/chart.moph",
+   "entries": [],
+   "items": [
+    {
+     "name": "axes",
+     "category": "軸",
+     "isFunc": true,
+     "signature": "axes(w: Number, h: Number, x_lo: Number, x_hi: Number, y_lo: Number, y_hi: Number,",
+     "call": "axes(\n  w: Number,\n  h: Number,\n  x_lo: Number,\n  x_hi: Number,\n  y_lo: Number,\n  y_hi: Number,\n)",
+     "summary": "軸と目盛り。他のグラフの下に敷く",
+     "params": [
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "x_lo",
+       "type": "Number",
+       "doc": "横軸の下端",
+       "default": ""
+      },
+      {
+       "name": "x_hi",
+       "type": "Number",
+       "doc": "横軸の上端",
+       "default": ""
+      },
+      {
+       "name": "y_lo",
+       "type": "Number",
+       "doc": "縦軸の下端",
+       "default": ""
+      },
+      {
+       "name": "y_hi",
+       "type": "Number",
+       "doc": "縦軸の上端",
+       "default": ""
+      },
+      {
+       "name": "x_name",
+       "type": "",
+       "doc": "横軸の名前 (既定 無し)",
+       "default": ""
+      },
+      {
+       "name": "y_name",
+       "type": "",
+       "doc": "縦軸の名前 (既定 無し)",
+       "default": ""
+      },
+      {
+       "name": "ticks",
+       "type": "",
+       "doc": "目盛りのおおよその数 (既定 5)",
+       "default": ""
+      }
+     ],
+     "returns": {
+      "type": "",
+      "doc": "箱が w x h の View。原点は左下"
+     },
+     "example": "v.place(axes(6, 4, 0, 10, 0, 100, \"時間 (秒)\", \"強さ\"), at = Pos(1, 1, anchor = :topLeft), w = 6)"
+    },
+    {
+     "name": "tick_values",
+     "category": "軸",
+     "isFunc": true,
+     "signature": "tick_values(lo: Number, hi: Number, count: Number = 5)",
+     "call": "tick_values(lo: Number, hi: Number, count: Number = 5)",
+     "summary": "目盛りに使う値。切りの良い間隔で lo..hi を刻む",
+     "params": [
+      {
+       "name": "lo",
+       "type": "Number",
+       "doc": "下端",
+       "default": ""
+      },
+      {
+       "name": "hi",
+       "type": "Number",
+       "doc": "上端",
+       "default": ""
+      },
+      {
+       "name": "count",
+       "type": "Number",
+       "doc": "おおよその数",
+       "default": "5"
+      }
+     ],
+     "returns": {
+      "type": "List<Number>",
+      "doc": ""
+     },
+     "example": "tick_values(0, 8, 5)   # [0, 2, 4, 6, 8]"
+    },
+    {
+     "name": "bar",
+     "category": "グラフ",
+     "isFunc": true,
+     "signature": "bar(values: List<Number>, labels: List<String>, w: Number, h: Number,",
+     "call": "bar(\n  values: List<Number>,\n  labels: List<String>,\n  w: Number,\n  h: Number,\n)",
+     "summary": "棒グラフ。0 から values の値まで伸びる",
+     "params": [
+      {
+       "name": "values",
+       "type": "List<Number>",
+       "doc": "値の並び",
+       "default": ""
+      },
+      {
+       "name": "labels",
+       "type": "List<String>",
+       "doc": "棒の下に出す名前 (空なら出さない)",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "colors",
+       "type": "",
+       "doc": "棒の色 (足りなければ繰り返す)",
+       "default": ""
+      },
+      {
+       "name": "lo",
+       "type": "",
+       "doc": "縦軸の下端 (既定 0)",
+       "default": ""
+      },
+      {
+       "name": "hi",
+       "type": "",
+       "doc": "縦軸の上端 (既定 値の最大)",
+       "default": ""
+      }
+     ],
+     "returns": {
+      "type": "",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(bar([3, 7, 5], [\"A\", \"B\", \"C\"], 6, 4), at = Pos(1, 1, anchor = :topLeft), w = 6)"
+    },
+    {
+     "name": "line",
+     "category": "グラフ",
+     "isFunc": true,
+     "signature": "line(points: List<Vector>, w: Number, h: Number, x_lo: Number, x_hi: Number, y_lo: Number, y_hi: Number,",
+     "call": "line(\n  points: List<Vector>,\n  w: Number,\n  h: Number,\n  x_lo: Number,\n  x_hi: Number,\n  y_lo: Number,\n  y_hi: Number,\n)",
+     "summary": "折れ線。progress で左から描く範囲を決める",
+     "params": [
+      {
+       "name": "points",
+       "type": "List<Vector>",
+       "doc": "(x, y) の並び。x は増える順",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "x_lo",
+       "type": "Number",
+       "doc": "横軸の下端",
+       "default": ""
+      },
+      {
+       "name": "x_hi",
+       "type": "Number",
+       "doc": "横軸の上端",
+       "default": ""
+      },
+      {
+       "name": "y_lo",
+       "type": "Number",
+       "doc": "縦軸の下端",
+       "default": ""
+      },
+      {
+       "name": "y_hi",
+       "type": "Number",
+       "doc": "縦軸の上端",
+       "default": ""
+      },
+      {
+       "name": "color",
+       "type": "",
+       "doc": "線の色 (既定 #e04040)",
+       "default": ""
+      },
+      {
+       "name": "progress",
+       "type": "",
+       "doc": "描く割合 0..1 (既定 1)",
+       "default": ""
+      }
+     ],
+     "returns": {
+      "type": "",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(line(pts, 6, 4, 0, 10, 0, 100), at = Pos(1, 1, anchor = :topLeft), w = 6)"
+    },
+    {
+     "name": "pie",
+     "category": "グラフ",
+     "isFunc": true,
+     "signature": "pie(values: List<Number>, size: Number, colors: List<Color> = [], hole: Number = 0)",
+     "call": "pie(\n  values: List<Number>,\n  size: Number,\n  colors: List<Color> = [],\n  hole: Number = 0,\n)",
+     "summary": "円グラフ。values の割合で切り分ける",
+     "params": [
+      {
+       "name": "values",
+       "type": "List<Number>",
+       "doc": "値の並び (合計で 1 周)",
+       "default": ""
+      },
+      {
+       "name": "size",
+       "type": "Number",
+       "doc": "直径",
+       "default": ""
+      },
+      {
+       "name": "colors",
+       "type": "List<Color>",
+       "doc": "切れ端の色 (既定 categorical)",
+       "default": "[]"
+      },
+      {
+       "name": "hole",
+       "type": "Number",
+       "doc": "中央の穴の割合 0..1 (既定 0。0.5 ならドーナツ)",
+       "default": "0"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が size x size の View"
+     },
+     "example": "v.place(pie([3, 2, 1], 3), at = Pos(1, 1, anchor = :topLeft), w = 3)"
+    },
+    {
+     "name": "scatter",
+     "category": "グラフ",
+     "isFunc": true,
+     "signature": "scatter(points: List<Vector>, w: Number, h: Number, x_lo: Number, x_hi: Number, y_lo: Number, y_hi: Number,",
+     "call": "scatter(\n  points: List<Vector>,\n  w: Number,\n  h: Number,\n  x_lo: Number,\n  x_hi: Number,\n  y_lo: Number,\n  y_hi: Number,\n)",
+     "summary": "散布図",
+     "params": [
+      {
+       "name": "points",
+       "type": "List<Vector>",
+       "doc": "(x, y) の並び",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "x_lo",
+       "type": "Number",
+       "doc": "横軸の下端",
+       "default": ""
+      },
+      {
+       "name": "x_hi",
+       "type": "Number",
+       "doc": "横軸の上端",
+       "default": ""
+      },
+      {
+       "name": "y_lo",
+       "type": "Number",
+       "doc": "縦軸の下端",
+       "default": ""
+      },
+      {
+       "name": "y_hi",
+       "type": "Number",
+       "doc": "縦軸の上端",
+       "default": ""
+      },
+      {
+       "name": "color",
+       "type": "",
+       "doc": "点の色 (既定 #4080e0)",
+       "default": ""
+      },
+      {
+       "name": "radius",
+       "type": "",
+       "doc": "点の大きさ (既定 幅の 1.5%)",
+       "default": ""
+      }
+     ],
+     "returns": {
+      "type": "",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(scatter(pts, 6, 4, 0, 10, 0, 10), at = Pos(1, 1, anchor = :topLeft), w = 6)"
+    },
+    {
+     "name": "sparkline",
+     "category": "グラフ",
+     "isFunc": true,
+     "signature": "sparkline(values: List<Number>, w: Number, h: Number, color: Color = #e04040)",
+     "call": "sparkline(\n  values: List<Number>,\n  w: Number,\n  h: Number,\n  color: Color = #e04040,\n)",
+     "summary": "小さい折れ線。軸も目盛りも出さない",
+     "params": [
+      {
+       "name": "values",
+       "type": "List<Number>",
+       "doc": "値の並び",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "color",
+       "type": "Color",
+       "doc": "線の色 (既定 #e04040)",
+       "default": "#e04040"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(sparkline([3, 5, 4, 8], 2, 0.6), at = Pos(1, 1, anchor = :topLeft), w = 2)"
+    },
+    {
+     "name": "legend",
+     "category": "軸",
+     "isFunc": true,
+     "signature": "legend(labels: List<String>, colors: List<Color>, w: Number, h: Number)",
+     "call": "legend(\n  labels: List<String>,\n  colors: List<Color>,\n  w: Number,\n  h: Number,\n)",
+     "summary": "色の凡例",
+     "params": [
+      {
+       "name": "labels",
+       "type": "List<String>",
+       "doc": "名前の並び",
+       "default": ""
+      },
+      {
+       "name": "colors",
+       "type": "List<Color>",
+       "doc": "色の並び",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View。上から順に並ぶ"
+     },
+     "example": "v.place(legend([\"A\", \"B\"], categorical(2), 2, 1), at = Pos(1, 1, anchor = :topLeft), w = 2)"
+    }
+   ]
+  },
+  {
    "name": "meter",
    "path": "src/stdlib/meter.moph",
    "entries": [],

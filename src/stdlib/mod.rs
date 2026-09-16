@@ -19,6 +19,7 @@ pub const SCRIPTS: &[(&str, &str)] = &[
     ("layout", include_str!("layout.moph")),
     ("easing", include_str!("easing.moph")),
     ("animation", include_str!("animation.moph")),
+    ("chart", include_str!("chart.moph")),
     ("meter", include_str!("meter.moph")),
     ("fractal", include_str!("fractal.moph")),
 ];

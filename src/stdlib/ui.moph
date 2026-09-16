@@ -1,0 +1,254 @@
+# ui.moph — 画面の絵。スマホ、ブラウザ、ターミナル、通知などの枠
+#
+# 中身を入れる枠は View を受け取り、枠に合わせて縮めて置く。
+# 行や吹き出しを順に出す部品は revealed で「今いくつ出ているか」を受け取る。
+#
+#   v.place(browser(page, "example.com", 10, 6), at = Pos(3, 1, anchor = :topLeft), w = 10)
+
+import math
+import { gray, alpha, contrast } from color
+import shape
+import { typewriter } from text
+
+## スマホの枠。content を画面の中に置く
+## @category 枠
+## @param content 画面に映すもの
+## @param w 枠の幅
+## @param h 枠の高さ
+## @param body 枠の色 (既定 ほぼ黒)
+## @param screen 中身の後ろの色 (既定 白)
+## @returns 箱が w x h の View
+## @example
+## v.place(phone(page, 3, 6), at = Pos(1, 1, anchor = :topLeft), w = 3)
+export func phone(content: View, w: Number, h: Number, body: Color = #1a1d23, screen: Color = #ffffff) -> View {
+  let v = View(box = Vector(w, h))
+  let edge = w * 0.045
+  v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h, radius = w * 0.13, fill = body))
+  v.place(Rect(position = Pos(edge, edge, anchor = :topLeft), w = w - edge * 2, h = h - edge * 2, radius = w * 0.09, fill = screen))
+  v.place(Rect(position = Pos(w / 2, edge * 1.6, anchor = :top), w = w * 0.34, h = edge * 1.4, radius = edge * 0.7, fill = body))
+  v.place(content, at = Pos(edge, edge, anchor = :topLeft), w = w - edge * 2, h = h - edge * 2)
+  v
+}
+
+## ブラウザの窓。上に url の帯が付く
+## @category 枠
+## @param content 窓に映すもの
+## @param url 帯に出す文字
+## @param w 窓の幅
+## @param h 窓の高さ
+## @param chrome 帯の色 (既定 薄い灰)
+## @param page 中身の後ろの色 (既定 白)
+## @returns 箱が w x h の View
+## @example
+## v.place(browser(page, "example.com", 10, 6), at = Pos(3, 1, anchor = :topLeft), w = 10)
+export func browser(content: View, url: String, w: Number, h: Number, chrome: Color = #e6e2da, page: Color = #ffffff) -> View {
+  let v = View(box = Vector(w, h))
+  let bar = math.min(h * 0.12, w * 0.07)
+  v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h, radius = bar * 0.3, fill = chrome))
+  v.place(Rect(position = Pos(0, bar, anchor = :topLeft), w = w, h = h - bar, fill = page))
+  let r = bar * 0.16
+  for (i, c) in [#e05c4a, #e0b23a, #4aa863].enumerate() {
+    v.place(Circle(position = Pos(bar * 0.5 + i * r * 3, bar / 2), radius = r, fill = c))
+  }
+  let left = bar * 0.5 + r * 8
+  v.place(Rect(position = Pos(left, bar * 0.2, anchor = :topLeft), w = w - left - bar * 0.5, h = bar * 0.6, radius = bar * 0.3, fill = #ffffff))
+  v.place(TextArea(position = Pos(left + bar * 0.35, bar / 2, anchor = :left), text = url, fontSize = bar * 0.36, fill = gray(90)))
+  v.place(content, at = Pos(0, bar, anchor = :topLeft), w = w, h = h - bar)
+  v
+}
+
+## ターミナル。行を上から順に出し、最後の行は 1 文字ずつ出る
+## @category 枠
+## @param lines 出す行
+## @param revealed 出ている行数。小数なら最後の行がその割合だけ出る
+## @param w 幅
+## @param h 高さ
+## @param rows 画面に入る行数 (既定 lines の数)
+## @param back 背の色 (既定 ほぼ黒)
+## @param ink 文字の色 (既定 薄い緑)
+## @param font 文字の書体 (既定 そのときの既定の書体)
+## @returns 箱が w x h の View
+## @example
+## v.place(terminal(["$ mophila render a.moph", "done"], 1.5, 8, 3), at = Pos(1, 1, anchor = :topLeft), w = 8)
+export func terminal(lines: List<String>, revealed: Number, w: Number, h: Number, rows: Number = 0, back: Color = #14161a, ink: Color = #9fe0a0, font: String = "") -> View {
+  let v = View(box = Vector(w, h))
+  v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h, radius = h * 0.04, fill = back))
+  let n = if rows > 0 { rows } else { math.max(lines.len(), 1) }
+  let pad = h * 0.06
+  let line_h = (h - pad * 2) / n
+  let size = line_h * 0.62
+  let full = math.floor(revealed)
+  for (i, line) in lines.enumerate() {
+    if i >= n { break }
+    if i < full {
+      let t = TextArea(position = Pos(pad, pad + line_h * (i + 0.5), anchor = :left), text = line, fontSize = size, fill = ink)
+      if font != "" { t.font = font }
+      v.place(t)
+    } else if i == full {
+      let shown = typewriter(line, line.len() * (revealed - full))
+      if shown != "" {
+        let t = TextArea(position = Pos(pad, pad + line_h * (i + 0.5), anchor = :left), text = shown, fontSize = size, fill = ink)
+        if font != "" { t.font = font }
+        v.place(t)
+      }
+    }
+  }
+  v
+}
+
+## 吹き出しの会話。古い方から順に出る
+## @category 枠
+## @param messages (:left か :right, 文) の並び
+## @param revealed 出ている数
+## @param w 幅
+## @param h 高さ
+## @param left 左の吹き出しの色 (既定 白)
+## @param right 右の吹き出しの色 (既定 青)
+## @returns 箱が w x h の View
+## @example
+## v.place(chat([(:left, "やあ"), (:right, "どうも")], 2, 6, 4), at = Pos(1, 1, anchor = :topLeft), w = 6)
+export func chat(messages: List<Tuple>, revealed: Number, w: Number, h: Number, left: Color = #ffffff, right: Color = #4080e0) -> View {
+  let v = View(box = Vector(w, h))
+  let n = math.clamp(math.floor(revealed), 0, messages.len())
+  if n == 0 { return v }
+  let gap = h * 0.04
+  let row = (h - gap) / messages.len()
+  let size = row * 0.3
+  let max_w = w * 0.68
+  # 下に揃えて、古いものが上に残る
+  let top = h - row * n
+  for i in 0..n {
+    let (side, body) = messages[i]
+    let fill = if side == :right { right } else { left }
+    let inner = TextArea(position = Pos(0, 0), text = body, fontSize = size, w = max_w - size * 1.2)
+    let ts = inner.size()
+    let bw = math.min(ts.x + size * 1.2, max_w)
+    let bh = ts.y + size * 0.8
+    let x = if side == :right { w - bw } else { 0 }
+    let y = top + row * i + (row - bh) / 2
+    v.place(Rect(position = Pos(x, y, anchor = :topLeft), w = bw, h = bh, radius = bh * 0.3, fill = fill))
+    v.place(TextArea(position = Pos(x + bw / 2, y + bh / 2), text = body, fontSize = size, w = bw - size * 1.2, fill = contrast(fill), align = :center))
+  }
+  v
+}
+
+## 通知のバブル。progress が 0 のときは上に隠れている
+## @category 部品
+## @param message 出す文
+## @param w 幅
+## @param h 高さ
+## @param progress 出ている割合 0..1 (既定 1)
+## @param fill 背の色 (既定 ほぼ黒)
+## @param accent 左の丸の色 (既定 緑)
+## @returns 箱が w x h の View
+## @example
+## v.place(toast("保存しました", 5, 1, 0.8), at = Pos(1, 1, anchor = :topLeft), w = 5)
+export func toast(message: String, w: Number, h: Number, progress: Number = 1, fill: Color = #1a1d23, accent: Color = #4aa863) -> View {
+  let v = View(box = Vector(w, h))
+  let k = math.clamp(progress, 0, 1)
+  if k <= 0 { return v }
+  let y = h * (1 - k)
+  v.place(Rect(position = Pos(0, y - h + h * k, anchor = :topLeft), w = w, h = h, radius = h * 0.28, fill = alpha(fill, k)))
+  let cy = y - h + h * k + h / 2
+  v.place(Circle(position = Pos(h * 0.5, cy), radius = h * 0.16, fill = alpha(accent, k)))
+  v.place(TextArea(position = Pos(h * 0.85, cy, anchor = :left), text = message, fontSize = h * 0.34, fill = alpha(contrast(fill), k)))
+  v
+}
+
+## 疑似マウスカーソル。at が先端
+## @category 部品
+## @param at 先端の位置
+## @param size 縦の長さ (既定 0.5)
+## @param fill 中の色 (既定 白)
+## @param edge 縁の色 (既定 ほぼ黒)
+## @returns Polygon
+## @example
+## v.place(cursor(Vector(4, 2)))
+export func cursor(at: Vector, size: Number = 0.5, fill: Color = #ffffff, edge: Color = #1a1d23) -> Polygon {
+  let s = size
+  Polygon(points = [
+    at,
+    at + Vector(0, s),
+    at + Vector(s * 0.22, s * 0.78),
+    at + Vector(s * 0.38, s * 1.1),
+    at + Vector(s * 0.5, s * 1.04),
+    at + Vector(s * 0.34, s * 0.73),
+    at + Vector(s * 0.6, s * 0.7),
+  ], fill = fill, stroke = edge, strokeWidth = s * 0.06)
+}
+
+## キーの絵。押されているキーだけ色を変える
+## @category 部品
+## @param keys キーに書く文字の並び
+## @param w 幅
+## @param h 高さ
+## @param pressed 押されているキーの番号 (-1 でどれも押さない。既定 -1)
+## @param fill キーの色 (既定 白)
+## @param accent 押されたキーの色 (既定 赤)
+## @returns 箱が w x h の View
+## @example
+## v.place(key_press(["⌘", "S"], 3, 1, 1), at = Pos(1, 1, anchor = :topLeft), w = 3)
+export func key_press(keys: List<String>, w: Number, h: Number, pressed: Number = -1, fill: Color = #ffffff, accent: Color = #e04040) -> View {
+  let v = View(box = Vector(w, h))
+  let n = math.max(keys.len(), 1)
+  let gap = h * 0.12
+  let kw = (w - gap * (n - 1)) / n
+  for (i, key) in keys.enumerate() {
+    let down = i == pressed
+    let x = (kw + gap) * i
+    let drop = if down { h * 0.04 } else { 0 }
+    let face = if down { accent } else { fill }
+    v.place(Rect(position = Pos(x, h * 0.08, anchor = :topLeft), w = kw, h = h * 0.92, radius = h * 0.16, fill = gray(160)))
+    v.place(Rect(position = Pos(x, drop, anchor = :topLeft), w = kw, h = h * 0.86, radius = h * 0.16, fill = face))
+    v.place(TextArea(position = Pos(x + kw / 2, drop + h * 0.43), text = key, fontSize = h * 0.4, fill = contrast(face), align = :center))
+  }
+  v
+}
+
+## SNS の投稿
+## @category 枠
+## @param author 名前
+## @param body 本文
+## @param likes いいねの数
+## @param w 幅
+## @param h 高さ
+## @param fill 背の色 (既定 白)
+## @param avatar 丸い顔の色 (既定 青)
+## @returns 箱が w x h の View
+## @example
+## v.place(social_post("だれか", "書いた", 12, 6, 3), at = Pos(1, 1, anchor = :topLeft), w = 6)
+export func social_post(author: String, body: String, likes: Number, w: Number, h: Number, fill: Color = #ffffff, avatar: Color = #4080e0) -> View {
+  let v = View(box = Vector(w, h))
+  let pad = h * 0.1
+  v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h, radius = h * 0.06, fill = fill))
+  let r = h * 0.11
+  let ink = contrast(fill)
+  v.place(Circle(position = Pos(pad + r, pad + r), radius = r, fill = avatar))
+  v.place(TextArea(position = Pos(pad + r * 2.6, pad + r, anchor = :left), text = author, fontSize = r * 0.9, fill = ink))
+  v.place(TextArea(position = Pos(pad, pad + r * 2.6, anchor = :topLeft), text = body, fontSize = r * 0.85, w = w - pad * 2, fill = ink))
+  v.place(Circle(position = Pos(pad + r * 0.5, h - pad - r * 0.5), radius = r * 0.5, fill = #e0506a))
+  v.place(TextArea(position = Pos(pad + r * 1.4, h - pad - r * 0.5, anchor = :left), text = "{n}".format(math.floor(likes)), fontSize = r * 0.75, fill = alpha(ink, 0.6)))
+  v
+}
+
+## ローディングの輪。angle で回す
+## @category 部品
+## @param angle 今の角度 (度)
+## @param w 幅
+## @param h 高さ
+## @param sweep 輪のうち色が付く角度 (既定 270)
+## @param color 輪の色 (既定 青)
+## @param track 残りの色 (既定 薄い灰)
+## @returns 箱が w x h の View
+## @example
+## v.place(spinner(t / 1s * 360, 1, 1), at = Pos(1, 1, anchor = :topLeft), w = 1)
+export func spinner(angle: Number, w: Number, h: Number, sweep: Number = 270, color: Color = #4080e0, track: Color = #e6e2da) -> View {
+  let v = View(box = Vector(w, h))
+  let cx = w / 2
+  let cy = h / 2
+  let r_out = math.min(w, h) / 2
+  let r_in = r_out * 0.74
+  v.place(Polygon(points = shape.ring_segment(cx, cy, r_in, r_out, 0, 360, 48), fill = track))
+  v.place(Polygon(points = shape.ring_segment(cx, cy, r_in, r_out, angle, angle + sweep, 48), fill = color))
+  v
+}

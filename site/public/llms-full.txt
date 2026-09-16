@@ -1233,7 +1233,7 @@ output v      # この View が動画になる。1 つのファイルに 1 つ
 
 - 箱 (View) は `box = Vector(w, h)` で座標系を宣言する。中の座標はその単位
 - `view.place(shape)`。図形の位置は図形の `position` で決まる
-- `view.place(other_view, at = Pos, w =, h =)` で View を入れ子にする。w か h の片方だけなら縦横比を保ち、両方なら比率を保ったまま収める。子の座標は子の box で解釈される
+- `view.place(other_view, at = Pos, w =, h =)` で View を入れ子にする。w か h の片方だけなら縦横比を保ち、両方なら比率を保ったまま収める。子の座標は子の box で解釈される。置き先での位置と大きさは子の属性になるので、同じ View を 2 か所には置けない (`copy()` を置く)
 - `view.addTrack(x)` で、その View の動きとして付ける。`output` した View に付けたものが動画になる。`x` は Timeline、View、Audio、Subtitle のどれかで、引数は `Timeline.place` と同じ
 - クロージャと Timeline はスコープを共有する (複製しない)。定義後に変数を変えれば、その値が見える
 
@@ -1299,7 +1299,7 @@ let v = View(box = Vector(config.width, 9))
 | SyntaxError | `UnexpectedToken` 構文として読めない / `InvalidLiteral` 色の桁数、Duration の形式など |
 | NameError | `UndefinedVariable` / `UndefinedAttribute` / `AssignWithoutLet` let を書かずに初めて代入した / `Reserved` builtin の型の名前を宣言し直した |
 | TypeError | `OperandType` 演算子の左右 / `AttributeType` 属性に入れる値 / `ArgumentType` 引数 / `ArityMismatch` 引数や列の数 / `NotPlaceable` place できない型 |
-| ValueError | `DurationRequired` 時刻の単位が混在、相対時刻なのに duration が無い / `OutOfRange` 型は合うが値が範囲外 |
+| ValueError | `DurationRequired` 時刻の単位が混在、相対時刻なのに duration が無い / `OutOfRange` 型は合うが値が範囲外 / `AlreadyPlaced` 同じ View を 2 か所に置いた |
 | RuntimeError | `DivisionByZero` / `FontNotFound` / `AudioUnreadable` / `ImageUnreadable` / `ShaderCompile` / `ShaderUnavailable` |
 
 `ShaderCompile` と `ShaderUnavailable` は描画のときに出る。`run` では Shader を走らせないので出ない。
@@ -1830,6 +1830,7 @@ View(box = Vector(16, 9))
 メソッド:
 
 - `v.place(o: Placeable, at: Pos, w: Number, h: Number)` -> Nothing — View に置く。別の View を置くときは at と、w か h が要る (比率を保って収める)
+- `v.copy()` -> View — 同じ中身の新しい View。同じ View は 2 か所に置けないので、2 か所目にはこれを置く。中の図形は元と共通で、動かすと両方が動く
 - `v.addTrack(x: Timeline | View | Audio | Subtitle, at: Duration, fadeIn: Duration, fadeOut: Duration, duration: Duration, volume: Number, loop: Bool)` -> Nothing — その View の動きとして付ける。output した View に付いたものが動画になる
 
 ### Timeline
@@ -2072,6 +2073,7 @@ alias P = Pos
 - `TypeError.NotPlaceable` — place できない型を置いた
 - `ValueError.DurationRequired` — 時刻の単位が混ざっている、または 0..1 で書いたのに duration が無い
 - `ValueError.OutOfRange` — 型は合うが値が範囲外
+- `ValueError.AlreadyPlaced` — 同じ View を 2 か所に置いた
 - `RuntimeError.DivisionByZero` — 0 で割った
 - `RuntimeError.FontNotFound` — その名前のフォントが見つからない
 - `RuntimeError.AudioUnreadable` — 音声ファイルを読めない
@@ -2484,6 +2486,81 @@ alias P = Pos
   base: Color = #8a8f98,
 )` -> View — 重みつきの単語を並べる。重いものほど大きく、上に来る
 
+### ui
+
+- `phone(
+  content: View,
+  w: Number,
+  h: Number,
+  body: Color = #1a1d23,
+  screen: Color = #ffffff,
+)` -> View — スマホの枠。content を画面の中に置く
+- `browser(
+  content: View,
+  url: String,
+  w: Number,
+  h: Number,
+  chrome: Color = #e6e2da,
+  page: Color = #ffffff,
+)` -> View — ブラウザの窓。上に url の帯が付く
+- `terminal(
+  lines: List<String>,
+  revealed: Number,
+  w: Number,
+  h: Number,
+  rows: Number = 0,
+  back: Color = #14161a,
+  ink: Color = #9fe0a0,
+  font: String = "",
+)` -> View — ターミナル。行を上から順に出し、最後の行は 1 文字ずつ出る
+- `chat(
+  messages: List<Tuple>,
+  revealed: Number,
+  w: Number,
+  h: Number,
+  left: Color = #ffffff,
+  right: Color = #4080e0,
+)` -> View — 吹き出しの会話。古い方から順に出る
+- `toast(
+  message: String,
+  w: Number,
+  h: Number,
+  progress: Number = 1,
+  fill: Color = #1a1d23,
+  accent: Color = #4aa863,
+)` -> View — 通知のバブル。progress が 0 のときは上に隠れている
+- `cursor(
+  at: Vector,
+  size: Number = 0.5,
+  fill: Color = #ffffff,
+  edge: Color = #1a1d23,
+)` -> Polygon — 疑似マウスカーソル。at が先端
+- `key_press(
+  keys: List<String>,
+  w: Number,
+  h: Number,
+  pressed: Number = -1,
+  fill: Color = #ffffff,
+  accent: Color = #e04040,
+)` -> View — キーの絵。押されているキーだけ色を変える
+- `social_post(
+  author: String,
+  body: String,
+  likes: Number,
+  w: Number,
+  h: Number,
+  fill: Color = #ffffff,
+  avatar: Color = #4080e0,
+)` -> View — SNS の投稿
+- `spinner(
+  angle: Number,
+  w: Number,
+  h: Number,
+  sweep: Number = 270,
+  color: Color = #4080e0,
+  track: Color = #e6e2da,
+)` -> View — ローディングの輪。angle で回す
+
 ### meter
 
 - `progress_bar(
@@ -2802,7 +2879,8 @@ log(["banana", "apple"].sort(), [(2, "b"), (1, "a")].sort())   # [apple, banana]
 # │  └─ NotPlaceable         place できない型
 # ├─ ValueError             型は合うが値が不正
 # │  ├─ DurationRequired     時刻の単位が混在、相対時刻なのに duration が無い
-# │  └─ OutOfRange
+# │  ├─ OutOfRange
+# │  └─ AlreadyPlaced       同じ View を 2 か所に置いた
 # └─ RuntimeError           実行時
 #    ├─ DivisionByZero
 #    ├─ FontNotFound
@@ -2843,6 +2921,9 @@ let m = motion { 0s: 0, 0.5: 1 }   # ValueError.DurationRequired: keyframe times
 let m2 = motion { 5: 0 }       # ValueError.OutOfRange: relative keyframe time must be within 0..1
 tr.place(Subtitle(text = "a"), at = 0s)   # ValueError.DurationRequired: a Subtitle needs duration before it is placed
 v.place(1)                     # TypeError.ArgumentType: View.place expects Placeable, found Number
+let inner = View(box = Vector(1, 1))
+v.place(inner, at = Pos(0, 0), w = 1)
+v.place(inner, at = Pos(1, 1), w = 1)   # ValueError.AlreadyPlaced: this View is already placed; place a copy() of it instead
 output Circle(radius = 1)      # TypeError.ArgumentType: output takes a View, found Circle
 let h = #e04040 * 2            # ValueError.OutOfRange: color channel exceeds 1.0
 

@@ -5,7 +5,7 @@
 mophila を書くときは llms-full.txt を読む。文法は GBNF にしてあるので、生成を制約できるなら使う。
 
 - 図形: Circle, Ellipse, Rect, Line, Polygon, Path, TextArea
-- module: math, color, shape, layout, easing, animation, chart, diagram, text, meter, fractal
+- module: math, color, shape, layout, easing, animation, chart, diagram, text, ui, meter, fractal
 
 ## 読むもの
 

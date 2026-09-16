@@ -104,6 +104,14 @@ pub const METHODS: &[Method] = &[
     },
     Method {
         receivers: &["View"],
+        name: "copy",
+        signature: "v.copy()",
+        returns: "View",
+        doc: "同じ中身の新しい View。同じ View は 2 か所に置けないので、2 か所目にはこれを置く。中の図形は元と共通で、動かすと両方が動く",
+        call: view_copy,
+    },
+    Method {
+        receivers: &["View"],
         name: "addTrack",
         signature: "v.addTrack(x: Timeline | View | Audio | Subtitle, at: Duration, fadeIn: Duration, fadeOut: Duration, duration: Duration, volume: Number, loop: Bool)",
         returns: "Nothing",
@@ -488,6 +496,10 @@ fn on_object(it: &mut Interp, r: Value, name: &str, args: Args) -> Result<Value>
     };
     let obj = obj.clone();
     it.method(&obj, name, args)
+}
+
+fn view_copy(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    on_object(it, r, "copy", args)
 }
 
 fn view_place(it: &mut Interp, r: Value, args: Args) -> Result<Value> {

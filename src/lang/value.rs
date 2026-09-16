@@ -168,6 +168,8 @@ pub struct Object {
     pub decl: Option<Rc<UserType>>,
     pub attrs: HashMap<String, Value>,
     pub children: Vec<ObjRef>,
+    /// View として他の View に置かれたか。置き先の位置と大きさは自分の属性なので、二度置けない
+    pub placed: bool,
     /// View / Timeline に置かれた Timeline
     pub tracks: Vec<Placed>,
 }

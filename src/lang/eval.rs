@@ -971,7 +971,7 @@ impl Interp {
                     for (name, value) in defaults(kind) {
                         attrs.entry((*name).to_string()).or_insert_with(|| value.clone());
                     }
-                    return Ok(Value::Object(Rc::new(RefCell::new(Object { kind: kind.to_string(), decl: None, attrs, children: vec![], tracks: vec![] }))));
+                    return Ok(Value::Object(Rc::new(RefCell::new(Object { kind: kind.to_string(), decl: None, attrs, children: vec![], placed: false, tracks: vec![] }))));
                 }
                 let Some(ty) = self.lookup_type(kind) else {
                     return self.cannot_construct(kind);
@@ -1077,6 +1077,8 @@ impl Interp {
                     decl: src.decl.clone(),
                     attrs,
                     children: src.children.clone(),
+                    // 複製はまだどこにも置かれていない
+                    placed: false,
                     tracks: src.tracks.clone(),
                 })))))
             }
@@ -1141,6 +1143,7 @@ impl Interp {
                 decl: Some(ty.clone()),
                 attrs: fields.into_iter().collect(),
                 children: vec![],
+                placed: false,
                 tracks: vec![],
             })))
         })
@@ -1438,6 +1441,10 @@ impl Interp {
                     if Rc::ptr_eq(child, obj) {
                         return err(Kind::OutOfRange, "a View cannot be placed in itself");
                     }
+                    // 置き先での位置と大きさは子の属性なので、二度置くと後の置き方が前を上書きしてしまう
+                    if child.borrow().placed {
+                        return err(Kind::AlreadyPlaced, "this View is already placed; place a copy() of it instead");
+                    }
                     // 置き先での位置と大きさは子 View の属性として持つ
                     for (name, v) in &args[1..] {
                         match name.as_deref() {
@@ -1453,6 +1460,7 @@ impl Interp {
                         return err(Kind::ArityMismatch, "placing a View needs at: and w: or h:");
                     }
                     drop(c);
+                    child.borrow_mut().placed = true;
                     obj.borrow_mut().children.push(child.clone());
                     Ok(Value::Nothing)
                 }
@@ -1470,6 +1478,20 @@ impl Interp {
                 Some((None, v)) => err(Kind::ArgumentType, format!("View.place expects Placeable, found {}", v.type_name())),
                 _ => err(Kind::ArgumentType, "View.place expects a Shape as the first argument"),
             },
+            ("View", "copy") => {
+                if !args.is_empty() {
+                    return err(Kind::ArityMismatch, "View.copy takes no arguments");
+                }
+                let src = obj.borrow();
+                Ok(Value::Object(Rc::new(RefCell::new(Object {
+                    kind: src.kind.clone(),
+                    decl: src.decl.clone(),
+                    attrs: src.attrs.clone(),
+                    children: src.children.clone(),
+                    placed: false,
+                    tracks: src.tracks.clone(),
+                }))))
+            }
             ("View", "addTrack") => {
                 let placed = self.make_placed(&format!("{kind}.{method}"), &args)?;
                 obj.borrow_mut().tracks.push(placed);
@@ -2005,6 +2027,7 @@ fn deep_copy(v: &Value) -> Value {
                 decl: src.decl.clone(),
                 attrs: src.attrs.iter().map(|(k, v)| (k.clone(), deep_copy(v))).collect(),
                 children: src.children.clone(),
+                placed: false,
                 tracks: src.tracks.clone(),
             })))
         }

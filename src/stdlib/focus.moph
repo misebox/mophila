@@ -1,0 +1,151 @@
+# focus.moph — 見せたい所だけ見せる幕と、切り替え
+#
+# どれも「今どうなっているか」を受け取る。動かすのは呼ぶ側の Timeline。
+#
+#   let cover = spotlight(4, 3, 1.5, 16, 9)
+#   v.place(cover, at = Pos(0, 0, anchor = :topLeft), w = 16)
+
+import math
+import { alpha } from color
+
+## 丸く開けた穴の外を暗くする。中身の上に重ねる
+## @category 幕
+## @param cx 穴の中心の x
+## @param cy 穴の中心の y
+## @param radius 穴の半径
+## @param w 幅
+## @param h 高さ
+## @param dark 外の暗さ 0..1 (既定 0.7)
+## @param color 暗くする色 (既定 黒)
+## @returns 箱が w x h の View
+## @example
+## v.place(spotlight(4, 3, 1.5, 16, 9), at = Pos(0, 0, anchor = :topLeft), w = 16)
+export func spotlight(cx: Number, cy: Number, radius: Number, w: Number, h: Number, dark: Number = 0.7, color: Color = #000000) -> View {
+  # 輪は箱よりずっと大きいので、はみ出す分は箱で切る
+  let v = View(box = Vector(w, h), clip = true)
+  # 太い線の輪で外側を塗りつぶす。輪の内側がちょうど穴になる
+  let thick = math.hypot(w, h) * 2
+  v.place(Circle(position = Pos(cx, cy), radius = radius + thick / 2, stroke = alpha(color, dark), strokeWidth = thick))
+  v
+}
+
+## 円が開く / 閉じる切り替え
+## @category 切り替え
+## @param w 幅
+## @param h 高さ
+## @param progress 開いている割合 0..1。0 で覆い尽くし、1 で全部見える
+## @param cx 円の中心の x (既定 真ん中)
+## @param cy 円の中心の y (既定 真ん中)
+## @param color 幕の色 (既定 黒)
+## @returns 箱が w x h の View
+## @example
+## v.place(iris(16, 9, 0.4), at = Pos(0, 0, anchor = :topLeft), w = 16)
+export func iris(w: Number, h: Number, progress: Number, cx: Number = -1, cy: Number = -1, color: Color = #000000) -> View {
+  let v = View(box = Vector(w, h), clip = true)
+  let x = if cx < 0 { w / 2 } else { cx }
+  let y = if cy < 0 { h / 2 } else { cy }
+  let k = math.clamp(progress, 0, 1)
+  # 四隅まで届く半径。そこまで開けば幕は消える
+  let full = math.max(math.hypot(x, y), math.max(math.hypot(w - x, y), math.max(math.hypot(x, h - y), math.hypot(w - x, h - y))))
+  let r = full * k
+  let thick = full * 2
+  v.place(Circle(position = Pos(x, y), radius = r + thick / 2, stroke = color, strokeWidth = thick))
+  v
+}
+
+## 端から幕が寄せる / 引く切り替え
+## @category 切り替え
+## @param w 幅
+## @param h 高さ
+## @param progress 覆っている割合 0..1
+## @param direction 幕が伸びてくる向き (:left :right :top :bottom。既定 :left)
+## @param color 幕の色 (既定 黒)
+## @returns 箱が w x h の View
+## @example
+## v.place(wipe(16, 9, 0.6, :left), at = Pos(0, 0, anchor = :topLeft), w = 16)
+export func wipe(w: Number, h: Number, progress: Number, direction: Symbol = :left, color: Color = #000000) -> View {
+  let v = View(box = Vector(w, h))
+  let k = math.clamp(progress, 0, 1)
+  if k <= 0 { return v }
+  if direction == :right {
+    v.place(Rect(position = Pos(w, 0, anchor = :topRight), w = w * k, h = h, fill = color))
+  } else if direction == :top {
+    v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h * k, fill = color))
+  } else if direction == :bottom {
+    v.place(Rect(position = Pos(0, h, anchor = :bottomLeft), w = w, h = h * k, fill = color))
+  } else {
+    v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w * k, h = h, fill = color))
+  }
+  v
+}
+
+## 一部を拡大した窓。source の at のあたりを zoom 倍で見せる
+## @category 拡大
+## @param source 拡大して見せる View
+## @param at source の中の、窓の真ん中に来る点
+## @param zoom 拡大率
+## @param w 窓の幅
+## @param h 窓の高さ
+## @param border 縁の色 (既定 白)
+## @returns 箱が w x h の View
+## @example
+## v.place(magnifier(page.copy(), Vector(4, 2), 3, 4, 3), at = Pos(10, 1, anchor = :topLeft), w = 4)
+export func magnifier(source: View, at: Vector, zoom: Number, w: Number, h: Number, border: Color = #ffffff) -> View {
+  let v = View(box = Vector(w, h), clip = true)
+  let sw = source.box.x * zoom
+  v.place(source, at = Pos(w / 2 - at.x * zoom, h / 2 - at.y * zoom, anchor = :topLeft), w = sw)
+  v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h, stroke = border, strokeWidth = math.min(w, h) * 0.02))
+  v
+}
+
+## before と after を境目で分けて見せる
+## @category 比べる
+## @param before 左に出す View
+## @param after 右に出す View
+## @param position 境目の位置 0..1
+## @param w 幅
+## @param h 高さ
+## @param handle 境目の線の色 (既定 白)
+## @returns 箱が w x h の View
+## @example
+## v.place(split_compare(a, b, 0.5, 16, 9), at = Pos(0, 0, anchor = :topLeft), w = 16)
+export func split_compare(before: View, after: View, position: Number, w: Number, h: Number, handle: Color = #ffffff) -> View {
+  let v = View(box = Vector(w, h))
+  let k = math.clamp(position, 0, 1)
+  v.place(before, at = Pos(0, 0, anchor = :topLeft), w = w, h = h)
+  if k < 1 {
+    # 右側だけの窓を作り、その中で after を元の位置に戻す
+    let right = View(box = Vector(w * (1 - k), h), clip = true)
+    right.place(after, at = Pos(-w * k, 0, anchor = :topLeft), w = w)
+    v.place(right, at = Pos(w * k, 0, anchor = :topLeft), w = w * (1 - k))
+  }
+  v.place(Line(from = Vector(w * k, 0), to = Vector(w * k, h), stroke = handle, strokeWidth = w * 0.004))
+  v.place(Circle(position = Pos(w * k, h / 2), radius = h * 0.04, fill = handle))
+  v
+}
+
+## エンドロール。offset で下から上へ流す
+## @category 流す
+## @param lines 流す行
+## @param offset 0 で 1 行目が下端、1 で最後の行が上端を抜ける
+## @param w 幅
+## @param h 高さ
+## @param fontSize 文字の大きさ (既定 高さの 1/12)
+## @param color 文字の色 (既定 白)
+## @returns 箱が w x h の View
+## @example
+## v.place(credits_roll(["監督", "だれか"], 0.5, 6, 9), at = Pos(5, 0, anchor = :topLeft), w = 6)
+export func credits_roll(lines: List<String>, offset: Number, w: Number, h: Number, fontSize: Number = 0, color: Color = #ffffff) -> View {
+  let v = View(box = Vector(w, h), clip = true)
+  let size = if fontSize > 0 { fontSize } else { h / 12 }
+  let step = size * 1.8
+  let total = step * lines.len()
+  let top = h - offset * (h + total)
+  for (i, line) in lines.enumerate() {
+    let y = top + step * i
+    if y > -step and y < h + step {
+      v.place(TextArea(position = Pos(w / 2, y, anchor = :top), text = line, fontSize = size, w = w * 0.9, fill = color, align = :center))
+    }
+  }
+  v
+}

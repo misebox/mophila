@@ -5487,6 +5487,659 @@
    ]
   },
   {
+   "name": "backdrop",
+   "path": "src/stdlib/backdrop.moph",
+   "entries": [],
+   "items": [
+    {
+     "name": "graph_paper",
+     "category": "静止",
+     "isFunc": true,
+     "signature": "graph_paper(w: Number, h: Number, step: Number = 1, major: Number = 5, back: Color = #f6f4ee, line: Color = #c9d4e0)",
+     "call": "graph_paper(\n  w: Number,\n  h: Number,\n  step: Number = 1,\n  major: Number = 5,\n  back: Color = #f6f4ee,\n  line: Color = #c9d4e0,\n)",
+     "summary": "方眼紙。細い線と、太い線を step ごとに引く",
+     "params": [
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "step",
+       "type": "Number",
+       "doc": "細い線の間隔 (既定 1)",
+       "default": "1"
+      },
+      {
+       "name": "major",
+       "type": "Number",
+       "doc": "太い線を引く本数の間隔 (既定 5)",
+       "default": "5"
+      },
+      {
+       "name": "back",
+       "type": "Color",
+       "doc": "紙の色 (既定 生成り)",
+       "default": "#f6f4ee"
+      },
+      {
+       "name": "line",
+       "type": "Color",
+       "doc": "線の色 (既定 薄い青灰)",
+       "default": "#c9d4e0"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(graph_paper(16, 9), at = Pos(0, 0, anchor = :topLeft), w = 16)"
+    },
+    {
+     "name": "vignette",
+     "category": "重ねる",
+     "isFunc": true,
+     "signature": "vignette(w: Number, h: Number, amount: Number = 0.5, color: Color = #000000)",
+     "call": "vignette(\n  w: Number,\n  h: Number,\n  amount: Number = 0.5,\n  color: Color = #000000,\n)",
+     "summary": "周辺減光。真ん中は素通しで、縁だけ暗くする。一番上に重ねる",
+     "params": [
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "amount",
+       "type": "Number",
+       "doc": "縁の暗さ 0..1 (既定 0.5)",
+       "default": "0.5"
+      },
+      {
+       "name": "color",
+       "type": "Color",
+       "doc": "暗くする色 (既定 黒)",
+       "default": "#000000"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(vignette(16, 9, 0.6), at = Pos(0, 0, anchor = :topLeft), w = 16)"
+    },
+    {
+     "name": "particles",
+     "category": "動く",
+     "isFunc": true,
+     "signature": "particles(w: Number, h: Number, duration: Duration, count: Number = 40, color: Color = #ffffff, size: Number = 0)",
+     "call": "particles(\n  w: Number,\n  h: Number,\n  duration: Duration,\n  count: Number = 40,\n  color: Color = #ffffff,\n  size: Number = 0,\n)",
+     "summary": "粒が下から上へ流れる。duration で 1 周する",
+     "params": [
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "流れ切るまでの長さ",
+       "default": ""
+      },
+      {
+       "name": "count",
+       "type": "Number",
+       "doc": "粒の数 (既定 40)",
+       "default": "40"
+      },
+      {
+       "name": "color",
+       "type": "Color",
+       "doc": "粒の色 (既定 白)",
+       "default": "#ffffff"
+      },
+      {
+       "name": "size",
+       "type": "Number",
+       "doc": "粒の半径 (既定 高さの 1/120)",
+       "default": "0"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View。Timeline を持っているので、置けば動く"
+     },
+     "example": "v.place(particles(16, 9, 6s), at = Pos(0, 0, anchor = :topLeft), w = 16)"
+    },
+    {
+     "name": "grid_pulse",
+     "category": "動く",
+     "isFunc": true,
+     "signature": "grid_pulse(w: Number, h: Number, duration: Duration, step: Number = 1, color: Color = #4080e0, back: Color = #12151a)",
+     "call": "grid_pulse(\n  w: Number,\n  h: Number,\n  duration: Duration,\n  step: Number = 1,\n  color: Color = #4080e0,\n  back: Color = #12151a,\n)",
+     "summary": "格子が順に明るくなる。duration で 1 周する",
+     "params": [
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "端から端まで明るさが渡る長さ",
+       "default": ""
+      },
+      {
+       "name": "step",
+       "type": "Number",
+       "doc": "格子の間隔 (既定 1)",
+       "default": "1"
+      },
+      {
+       "name": "color",
+       "type": "Color",
+       "doc": "線の色 (既定 青)",
+       "default": "#4080e0"
+      },
+      {
+       "name": "back",
+       "type": "Color",
+       "doc": "背の色 (既定 ほぼ黒)",
+       "default": "#12151a"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View。Timeline を持っているので、置けば動く"
+     },
+     "example": "v.place(grid_pulse(16, 9, 3s), at = Pos(0, 0, anchor = :topLeft), w = 16)"
+    },
+    {
+     "name": "radar_sweep",
+     "category": "動く",
+     "isFunc": true,
+     "signature": "radar_sweep(w: Number, h: Number, duration: Duration, rings: Number = 3, color: Color = #4aa863, back: Color = #0e1412)",
+     "call": "radar_sweep(\n  w: Number,\n  h: Number,\n  duration: Duration,\n  rings: Number = 3,\n  color: Color = #4aa863,\n  back: Color = #0e1412,\n)",
+     "summary": "レーダーの掃引。duration で 1 回転する",
+     "params": [
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "1 回転の長さ",
+       "default": ""
+      },
+      {
+       "name": "rings",
+       "type": "Number",
+       "doc": "円の本数 (既定 3)",
+       "default": "3"
+      },
+      {
+       "name": "color",
+       "type": "Color",
+       "doc": "線と扇の色 (既定 緑)",
+       "default": "#4aa863"
+      },
+      {
+       "name": "back",
+       "type": "Color",
+       "doc": "背の色 (既定 ほぼ黒)",
+       "default": "#0e1412"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View。Timeline を持っているので、置けば動く"
+     },
+     "example": "v.place(radar_sweep(8, 8, 4s), at = Pos(0, 0, anchor = :topLeft), w = 8)"
+    },
+    {
+     "name": "blobs",
+     "category": "動く",
+     "isFunc": true,
+     "signature": "blobs(w: Number, h: Number, back: Color = #10131a, a: Color = #4080e0, b: Color = #b04ae0, speed: Number = 1)",
+     "call": "blobs(\n  w: Number,\n  h: Number,\n  back: Color = #10131a,\n  a: Color = #4080e0,\n  b: Color = #b04ae0,\n  speed: Number = 1,\n)",
+     "summary": "にじんだ塊が漂う背景 (Shader)",
+     "params": [
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "back",
+       "type": "Color",
+       "doc": "背の色",
+       "default": "#10131a"
+      },
+      {
+       "name": "a",
+       "type": "Color",
+       "doc": "塊の色 その 1",
+       "default": "#4080e0"
+      },
+      {
+       "name": "b",
+       "type": "Color",
+       "doc": "塊の色 その 2",
+       "default": "#b04ae0"
+      },
+      {
+       "name": "speed",
+       "type": "Number",
+       "doc": "漂う速さ (既定 1)",
+       "default": "1"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(blobs(16, 9, #10131a, #4080e0, #b04ae0), at = Pos(0, 0, anchor = :topLeft), w = 16)"
+    },
+    {
+     "name": "grain",
+     "category": "重ねる",
+     "isFunc": true,
+     "signature": "grain(w: Number, h: Number, amount: Number = 0.12, grain_size: Number = 1)",
+     "call": "grain(\n  w: Number,\n  h: Number,\n  amount: Number = 0.12,\n  grain_size: Number = 1,\n)",
+     "summary": "フィルムのざらつき (Shader)。一番上に重ねる",
+     "params": [
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "amount",
+       "type": "Number",
+       "doc": "ざらつきの強さ 0..1 (既定 0.12)",
+       "default": "0.12"
+      },
+      {
+       "name": "grain_size",
+       "type": "Number",
+       "doc": "粒の粗さ。大きいほど粗い (既定 1)",
+       "default": "1"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(grain(16, 9, 0.15), at = Pos(0, 0, anchor = :topLeft), w = 16)"
+    }
+   ]
+  },
+  {
+   "name": "focus",
+   "path": "src/stdlib/focus.moph",
+   "entries": [],
+   "items": [
+    {
+     "name": "spotlight",
+     "category": "幕",
+     "isFunc": true,
+     "signature": "spotlight(cx: Number, cy: Number, radius: Number, w: Number, h: Number, dark: Number = 0.7, color: Color = #000000)",
+     "call": "spotlight(\n  cx: Number,\n  cy: Number,\n  radius: Number,\n  w: Number,\n  h: Number,\n  dark: Number = 0.7,\n  color: Color = #000000,\n)",
+     "summary": "丸く開けた穴の外を暗くする。中身の上に重ねる",
+     "params": [
+      {
+       "name": "cx",
+       "type": "Number",
+       "doc": "穴の中心の x",
+       "default": ""
+      },
+      {
+       "name": "cy",
+       "type": "Number",
+       "doc": "穴の中心の y",
+       "default": ""
+      },
+      {
+       "name": "radius",
+       "type": "Number",
+       "doc": "穴の半径",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "dark",
+       "type": "Number",
+       "doc": "外の暗さ 0..1 (既定 0.7)",
+       "default": "0.7"
+      },
+      {
+       "name": "color",
+       "type": "Color",
+       "doc": "暗くする色 (既定 黒)",
+       "default": "#000000"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(spotlight(4, 3, 1.5, 16, 9), at = Pos(0, 0, anchor = :topLeft), w = 16)"
+    },
+    {
+     "name": "iris",
+     "category": "切り替え",
+     "isFunc": true,
+     "signature": "iris(w: Number, h: Number, progress: Number, cx: Number = -1, cy: Number = -1, color: Color = #000000)",
+     "call": "iris(\n  w: Number,\n  h: Number,\n  progress: Number,\n  cx: Number = -1,\n  cy: Number = -1,\n  color: Color = #000000,\n)",
+     "summary": "円が開く / 閉じる切り替え",
+     "params": [
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "progress",
+       "type": "Number",
+       "doc": "開いている割合 0..1。0 で覆い尽くし、1 で全部見える",
+       "default": ""
+      },
+      {
+       "name": "cx",
+       "type": "Number",
+       "doc": "円の中心の x (既定 真ん中)",
+       "default": "-1"
+      },
+      {
+       "name": "cy",
+       "type": "Number",
+       "doc": "円の中心の y (既定 真ん中)",
+       "default": "-1"
+      },
+      {
+       "name": "color",
+       "type": "Color",
+       "doc": "幕の色 (既定 黒)",
+       "default": "#000000"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(iris(16, 9, 0.4), at = Pos(0, 0, anchor = :topLeft), w = 16)"
+    },
+    {
+     "name": "wipe",
+     "category": "切り替え",
+     "isFunc": true,
+     "signature": "wipe(w: Number, h: Number, progress: Number, direction: Symbol = :left, color: Color = #000000)",
+     "call": "wipe(\n  w: Number,\n  h: Number,\n  progress: Number,\n  direction: Symbol = :left,\n  color: Color = #000000,\n)",
+     "summary": "端から幕が寄せる / 引く切り替え",
+     "params": [
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "progress",
+       "type": "Number",
+       "doc": "覆っている割合 0..1",
+       "default": ""
+      },
+      {
+       "name": "direction",
+       "type": "Symbol",
+       "doc": "幕が伸びてくる向き (:left :right :top :bottom。既定 :left)",
+       "default": ":left"
+      },
+      {
+       "name": "color",
+       "type": "Color",
+       "doc": "幕の色 (既定 黒)",
+       "default": "#000000"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(wipe(16, 9, 0.6, :left), at = Pos(0, 0, anchor = :topLeft), w = 16)"
+    },
+    {
+     "name": "magnifier",
+     "category": "拡大",
+     "isFunc": true,
+     "signature": "magnifier(source: View, at: Vector, zoom: Number, w: Number, h: Number, border: Color = #ffffff)",
+     "call": "magnifier(\n  source: View,\n  at: Vector,\n  zoom: Number,\n  w: Number,\n  h: Number,\n  border: Color = #ffffff,\n)",
+     "summary": "一部を拡大した窓。source の at のあたりを zoom 倍で見せる",
+     "params": [
+      {
+       "name": "source",
+       "type": "View",
+       "doc": "拡大して見せる View",
+       "default": ""
+      },
+      {
+       "name": "at",
+       "type": "Vector",
+       "doc": "source の中の、窓の真ん中に来る点",
+       "default": ""
+      },
+      {
+       "name": "zoom",
+       "type": "Number",
+       "doc": "拡大率",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "窓の幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "窓の高さ",
+       "default": ""
+      },
+      {
+       "name": "border",
+       "type": "Color",
+       "doc": "縁の色 (既定 白)",
+       "default": "#ffffff"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(magnifier(page.copy(), Vector(4, 2), 3, 4, 3), at = Pos(10, 1, anchor = :topLeft), w = 4)"
+    },
+    {
+     "name": "split_compare",
+     "category": "比べる",
+     "isFunc": true,
+     "signature": "split_compare(before: View, after: View, position: Number, w: Number, h: Number, handle: Color = #ffffff)",
+     "call": "split_compare(\n  before: View,\n  after: View,\n  position: Number,\n  w: Number,\n  h: Number,\n  handle: Color = #ffffff,\n)",
+     "summary": "before と after を境目で分けて見せる",
+     "params": [
+      {
+       "name": "before",
+       "type": "View",
+       "doc": "左に出す View",
+       "default": ""
+      },
+      {
+       "name": "after",
+       "type": "View",
+       "doc": "右に出す View",
+       "default": ""
+      },
+      {
+       "name": "position",
+       "type": "Number",
+       "doc": "境目の位置 0..1",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "handle",
+       "type": "Color",
+       "doc": "境目の線の色 (既定 白)",
+       "default": "#ffffff"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(split_compare(a, b, 0.5, 16, 9), at = Pos(0, 0, anchor = :topLeft), w = 16)"
+    },
+    {
+     "name": "credits_roll",
+     "category": "流す",
+     "isFunc": true,
+     "signature": "credits_roll(lines: List<String>, offset: Number, w: Number, h: Number, fontSize: Number = 0, color: Color = #ffffff)",
+     "call": "credits_roll(\n  lines: List<String>,\n  offset: Number,\n  w: Number,\n  h: Number,\n  fontSize: Number = 0,\n  color: Color = #ffffff,\n)",
+     "summary": "エンドロール。offset で下から上へ流す",
+     "params": [
+      {
+       "name": "lines",
+       "type": "List<String>",
+       "doc": "流す行",
+       "default": ""
+      },
+      {
+       "name": "offset",
+       "type": "Number",
+       "doc": "0 で 1 行目が下端、1 で最後の行が上端を抜ける",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "fontSize",
+       "type": "Number",
+       "doc": "文字の大きさ (既定 高さの 1/12)",
+       "default": "0"
+      },
+      {
+       "name": "color",
+       "type": "Color",
+       "doc": "文字の色 (既定 白)",
+       "default": "#ffffff"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(credits_roll([\"監督\", \"だれか\"], 0.5, 6, 9), at = Pos(5, 0, anchor = :topLeft), w = 6)"
+    }
+   ]
+  },
+  {
    "name": "meter",
    "path": "src/stdlib/meter.moph",
    "entries": [],

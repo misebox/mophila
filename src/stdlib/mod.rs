@@ -23,6 +23,8 @@ pub const SCRIPTS: &[(&str, &str)] = &[
     ("diagram", include_str!("diagram.moph")),
     ("text", include_str!("text.moph")),
     ("ui", include_str!("ui.moph")),
+    ("backdrop", include_str!("backdrop.moph")),
+    ("focus", include_str!("focus.moph")),
     ("meter", include_str!("meter.moph")),
     ("fractal", include_str!("fractal.moph")),
 ];

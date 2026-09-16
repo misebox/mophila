@@ -2561,6 +2561,112 @@ alias P = Pos
   track: Color = #e6e2da,
 )` -> View — ローディングの輪。angle で回す
 
+### backdrop
+
+- `graph_paper(
+  w: Number,
+  h: Number,
+  step: Number = 1,
+  major: Number = 5,
+  back: Color = #f6f4ee,
+  line: Color = #c9d4e0,
+)` -> View — 方眼紙。細い線と、太い線を step ごとに引く
+- `vignette(
+  w: Number,
+  h: Number,
+  amount: Number = 0.5,
+  color: Color = #000000,
+)` -> View — 周辺減光。真ん中は素通しで、縁だけ暗くする。一番上に重ねる
+- `particles(
+  w: Number,
+  h: Number,
+  duration: Duration,
+  count: Number = 40,
+  color: Color = #ffffff,
+  size: Number = 0,
+)` -> View — 粒が下から上へ流れる。duration で 1 周する
+- `grid_pulse(
+  w: Number,
+  h: Number,
+  duration: Duration,
+  step: Number = 1,
+  color: Color = #4080e0,
+  back: Color = #12151a,
+)` -> View — 格子が順に明るくなる。duration で 1 周する
+- `radar_sweep(
+  w: Number,
+  h: Number,
+  duration: Duration,
+  rings: Number = 3,
+  color: Color = #4aa863,
+  back: Color = #0e1412,
+)` -> View — レーダーの掃引。duration で 1 回転する
+- `blobs(
+  w: Number,
+  h: Number,
+  back: Color = #10131a,
+  a: Color = #4080e0,
+  b: Color = #b04ae0,
+  speed: Number = 1,
+)` -> View — にじんだ塊が漂う背景 (Shader)
+- `grain(
+  w: Number,
+  h: Number,
+  amount: Number = 0.12,
+  grain_size: Number = 1,
+)` -> View — フィルムのざらつき (Shader)。一番上に重ねる
+
+### focus
+
+- `spotlight(
+  cx: Number,
+  cy: Number,
+  radius: Number,
+  w: Number,
+  h: Number,
+  dark: Number = 0.7,
+  color: Color = #000000,
+)` -> View — 丸く開けた穴の外を暗くする。中身の上に重ねる
+- `iris(
+  w: Number,
+  h: Number,
+  progress: Number,
+  cx: Number = -1,
+  cy: Number = -1,
+  color: Color = #000000,
+)` -> View — 円が開く / 閉じる切り替え
+- `wipe(
+  w: Number,
+  h: Number,
+  progress: Number,
+  direction: Symbol = :left,
+  color: Color = #000000,
+)` -> View — 端から幕が寄せる / 引く切り替え
+- `magnifier(
+  source: View,
+  at: Vector,
+  zoom: Number,
+  w: Number,
+  h: Number,
+  border: Color = #ffffff,
+)` -> View — 一部を拡大した窓。source の at のあたりを zoom 倍で見せる
+- `split_compare(
+  before: View,
+  after: View,
+  position: Number,
+  w: Number,
+  h: Number,
+  handle: Color = #ffffff,
+)` -> View — before と after を境目で分けて見せる
+- `credits_roll(
+  lines: List<String>,
+  offset: Number,
+  w: Number,
+  h: Number,
+  fontSize: Number = 0,
+  color: Color = #ffffff,
+)` -> View — エンドロール。offset で下から上へ流す
+
 ### meter
 
 - `progress_bar(

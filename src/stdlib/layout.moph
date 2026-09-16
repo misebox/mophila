@@ -64,3 +64,65 @@ export func fit(w: Number, h: Number, box_w: Number, box_h: Number) -> Vector {
   let k = if box_w / w < box_h / h { box_w / w } else { box_h / h }
   Vector(w * k, h * k)
 }
+
+## 内側に余白を取った箱。(左上, 幅, 高さ) を返す
+## @category 収める
+## @param x 左上の x
+## @param y 左上の y
+## @param w 幅
+## @param h 高さ
+## @param pad 余白
+## @returns (Vector, 幅, 高さ)
+## @example
+## let (at, w, h) = inset(0, 0, 16, 9, 0.8)
+export func inset(x: Number, y: Number, w: Number, h: Number, pad: Number) -> Tuple {
+  (Vector(x + pad, y + pad), w - pad * 2, h - pad * 2)
+}
+
+## 横一列に n 個並べたときの、各マスの左上と幅
+## @category 並べる
+## @param x 左上の x
+## @param y 左上の y
+## @param w 全体の幅
+## @param n 個数
+## @param gap 間の空き (既定 0)
+## @returns (Vector, 幅) の List
+## @example
+## for (at, cw) in row(0, 0, 16, 4, 0.2) { ... }
+export func row(x: Number, y: Number, w: Number, n: Number, gap: Number = 0) -> List<Tuple> {
+  let cw = (w - gap * (n - 1)) / n
+  (0..n).to_list().map(func (i) { (Vector(x + i * (cw + gap), y), cw) })
+}
+
+## 縦一列に n 個並べたときの、各マスの左上と高さ
+## @category 並べる
+## @param x 左上の x
+## @param y 左上の y
+## @param h 全体の高さ
+## @param n 個数
+## @param gap 間の空き (既定 0)
+## @returns (Vector, 高さ) の List
+## @example
+## for (at, ch) in column(0, 0, 9, 3, 0.2) { ... }
+export func column(x: Number, y: Number, h: Number, n: Number, gap: Number = 0) -> List<Tuple> {
+  let ch = (h - gap * (n - 1)) / n
+  (0..n).to_list().map(func (i) { (Vector(x, y + i * (ch + gap)), ch) })
+}
+
+## 大きさの違うものを縦に積んだときの、各要素の左上
+## @category 並べる
+## @param x 左上の x
+## @param y 左上の y
+## @param heights それぞれの高さ
+## @param gap 間の空き (既定 0)
+## @example
+## let tops = stack(1, 1, [0.8, 1.6, 0.8], 0.2)
+export func stack(x: Number, y: Number, heights: List<Number>, gap: Number = 0) -> List<Vector> {
+  let tops = []
+  let at = y
+  for h in heights {
+    tops.push(Vector(x, at))
+    at = at + h + gap
+  }
+  tops
+}

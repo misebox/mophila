@@ -79,3 +79,94 @@ export func arrow(from: Vector, to: Vector, width: Number, head: Number, head_wi
     from - n * (width / 2),
   ]
 }
+
+## 円弧の上の点。Path の segments か Polygon の points に入れる
+## @category 円
+## @param cx 中心の x
+## @param cy 中心の y
+## @param r 半径
+## @param from 始まりの角度 (度。0 が真上、時計回り)
+## @param to 終わりの角度
+## @param steps 分割数 (既定 32)
+## @example
+## Path(from = arc(4, 2, 1.5, 0, 90)[0], segments = arc(4, 2, 1.5, 0, 90).map(func (p) { (:line, p) }))
+export func arc(cx: Number, cy: Number, r: Number, from: Number, to: Number, steps: Number = 32) -> List<Vector> {
+  (0..=1).steps(steps).map(func (k) { polar(cx, cy, r, from + (to - from) * k) })
+}
+
+## ドーナツの一片。円グラフの 1 切れになる
+## @category 円
+## @param cx 中心の x
+## @param cy 中心の y
+## @param r_in 内側の半径 (0 なら扇形)
+## @param r_out 外側の半径
+## @param from 始まりの角度 (度。0 が真上、時計回り)
+## @param to 終わりの角度
+## @param steps 分割数 (既定 32)
+## @returns Polygon(points = ...) に入れる
+## @example
+## Polygon(points = ring_segment(4, 2, 0.8, 1.5, 0, 120), fill = #e04040)
+export func ring_segment(cx: Number, cy: Number, r_in: Number, r_out: Number, from: Number, to: Number, steps: Number = 32) -> List<Vector> {
+  let outer = arc(cx, cy, r_out, from, to, steps)
+  let inner = arc(cx, cy, r_in, to, from, steps)
+  if r_in <= 0 { return outer + [Vector(cx, cy)] }
+  outer + inner
+}
+
+## 波線の点
+## @category 線
+## @param from 始点
+## @param to 終点
+## @param amplitude 振れ幅 (線に直角な方向)
+## @param cycles 山の数
+## @param steps 分割数 (既定 64)
+## @example
+## Path(from = Vector(0, 2), segments = wave(Vector(0, 2), Vector(8, 2), 0.5, 3).map(func (p) { (:line, p) }))
+export func wave(from: Vector, to: Vector, amplitude: Number, cycles: Number, steps: Number = 64) -> List<Vector> {
+  let d = to - from
+  let len = math.hypot(d.x, d.y)
+  if len == 0 { return [from] }
+  let nx = -d.y / len
+  let ny = d.x / len
+  (0..=1).steps(steps).map(func (k) {
+    let s = math.sin(k * cycles * math.TAU) * amplitude
+    from + d * k + Vector(nx * s, ny * s)
+  })
+}
+
+## 方眼の線。Path を 1 本ずつ引くための、始点と終点の組
+## @category 線
+## @param x 左上の x
+## @param y 左上の y
+## @param w 幅
+## @param h 高さ
+## @param step 目の間隔
+## @returns (始点, 終点) の List
+## @example
+## for (a, b) in grid_lines(0, 0, 16, 9, 1) {
+##   v.place(Line(from = a, to = b, stroke = #e0e0e0, strokeWidth = 0.02))
+## }
+export func grid_lines(x: Number, y: Number, w: Number, h: Number, step: Number) -> List<Tuple> {
+  let lines = []
+  let at = x
+  for i in 0..=math.floor(w / step) {
+    let gx = x + i * step
+    lines.push((Vector(gx, y), Vector(gx, y + h)))
+  }
+  for i in 0..=math.floor(h / step) {
+    let gy = y + i * step
+    lines.push((Vector(x, gy), Vector(x + w, gy)))
+  }
+  lines
+}
+
+## 点の並びを Path の segments にする
+## @category 線
+## @param points 2 点以上
+## @returns (:line, 点) の List。先頭は from に使う
+## @example
+## let pts = wave(Vector(0, 2), Vector(8, 2), 0.5, 3)
+## Path(from = pts[0], segments = to_segments(pts))
+export func to_segments(points: List<Vector>) -> List<Tuple> {
+  points[1..points.len()].map(func (p) { (:line, p) })
+}

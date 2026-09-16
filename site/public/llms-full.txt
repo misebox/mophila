@@ -2122,6 +2122,16 @@ alias P = Pos
 - `alpha(c: Color, a: Number)` -> Color — 不透明度だけ変えた色
 - `hsl(h: Number, s: Number, l: Number)` -> Color — 色相・彩度・明度から作る
 - `gray(v: Number)` -> Color — 灰色。0 が黒、255 が白
+- `to_hsl(c: Color)` -> Tuple — 色相・彩度・明度を取り出す
+- `scale(colors: List<Color>, k: Number)` -> Color — 色の並びから、途中の色を引く。k が 0 なら先頭、1 なら末尾
+- `contrast(
+  bg: Color,
+  dark: Color = #ffffff,
+  light: Color = #1a1d23,
+)` -> Color — その背景の上で読める文字色。明るい背景なら黒、暗い背景なら白
+- `sequential(base: Color, n: Number)` -> List<Color> — 同じ色相で明るさだけ変えた n 色。グラフの系列や、深さの表現に使う
+- `diverging(a: Color, b: Color, n: Number)` -> List<Color> — 2 色の間を n 段階に分けた並び。真ん中は灰色に寄る。増減や賛否の表現に使う
+- `categorical(n: Number, s: Number = 0.6, l: Number = 0.52)` -> List<Color> — 見分けやすい n 色。色相を円周上に散らす
 
 ### shape
 
@@ -2148,6 +2158,38 @@ alias P = Pos
   head: Number,
   head_width: Number = 0,
 )` -> List<Vector> — 矢印の輪郭 (7 点)。from から to へ向く
+- `arc(
+  cx: Number,
+  cy: Number,
+  r: Number,
+  from: Number,
+  to: Number,
+  steps: Number = 32,
+)` -> List<Vector> — 円弧の上の点。Path の segments か Polygon の points に入れる
+- `ring_segment(
+  cx: Number,
+  cy: Number,
+  r_in: Number,
+  r_out: Number,
+  from: Number,
+  to: Number,
+  steps: Number = 32,
+)` -> List<Vector> — ドーナツの一片。円グラフの 1 切れになる
+- `wave(
+  from: Vector,
+  to: Vector,
+  amplitude: Number,
+  cycles: Number,
+  steps: Number = 64,
+)` -> List<Vector> — 波線の点
+- `grid_lines(
+  x: Number,
+  y: Number,
+  w: Number,
+  h: Number,
+  step: Number,
+)` -> List<Tuple> — 方眼の線。Path を 1 本ずつ引くための、始点と終点の組
+- `to_segments(points: List<Vector>)` -> List<Tuple> — 点の並びを Path の segments にする
 
 ### layout
 
@@ -2162,6 +2204,33 @@ alias P = Pos
 - `cell(w: Number, h: Number, cols: Number, rows: Number)` -> Vector — 格子の 1 マスの大きさ
 - `along(from: Vector, to: Vector, n: Number)` -> List<Vector> — from から to まで、両端を含めて n 個の点
 - `fit(w: Number, h: Number, box_w: Number, box_h: Number)` -> Vector — 幅 w、高さ h のものを、比率を保って box_w x box_h に収めたときの大きさ
+- `inset(
+  x: Number,
+  y: Number,
+  w: Number,
+  h: Number,
+  pad: Number,
+)` -> Tuple — 内側に余白を取った箱。(左上, 幅, 高さ) を返す
+- `row(
+  x: Number,
+  y: Number,
+  w: Number,
+  n: Number,
+  gap: Number = 0,
+)` -> List<Tuple> — 横一列に n 個並べたときの、各マスの左上と幅
+- `column(
+  x: Number,
+  y: Number,
+  h: Number,
+  n: Number,
+  gap: Number = 0,
+)` -> List<Tuple> — 縦一列に n 個並べたときの、各マスの左上と高さ
+- `stack(
+  x: Number,
+  y: Number,
+  heights: List<Number>,
+  gap: Number = 0,
+)` -> List<Vector> — 大きさの違うものを縦に積んだときの、各要素の左上
 
 ### animation
 
@@ -2204,6 +2273,31 @@ alias P = Pos
   duration: Duration = 0.5s,
   stagger: Duration = 0s,
 )` -> Nothing — at に現れて end に消え終わるまでを、track に直接置く。 場面の出し入れをまとめて書くためのもので、戻り値は無い
+- `shake(
+  target: Placeable,
+  amount: Number,
+  times: Number = 3,
+  duration: Duration = 0.4s,
+)` -> Timeline — 揺らす。注意を引くときや、失敗を示すときに使う
+- `pulse(
+  target: Placeable,
+  scale: Number = 1.15,
+  duration: Duration = 0.3s,
+)` -> Timeline — 大きくしてから戻す。出てきたものを目立たせる
+- `spring_to(
+  target: Placeable,
+  to: Pos,
+  duration: Duration = 0.8s,
+  bounces: Number = 2,
+  overshoot: Number = 0.25,
+)` -> Timeline — バネのように行き過ぎて戻りながら近づく
+- `stagger(
+  track: Timeline,
+  targets: List<Placeable>,
+  make: (Placeable) -> Timeline,
+  at: Duration,
+  stagger: Duration = 0.08s,
+)` -> Timeline, at: Duration, stagger: Duration = 0.08s) -> Nothing — 同じ動きを、少しずつ遅らせて並べて置く
 
 ### fractal
 

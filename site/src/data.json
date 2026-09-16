@@ -2156,6 +2156,180 @@
       "doc": ""
      },
      "example": "Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = gray(240))"
+    },
+    {
+     "name": "to_hsl",
+     "category": "読む",
+     "isFunc": true,
+     "signature": "to_hsl(c: Color)",
+     "call": "to_hsl(c: Color)",
+     "summary": "色相・彩度・明度を取り出す",
+     "params": [
+      {
+       "name": "c",
+       "type": "Color",
+       "doc": "元の色",
+       "default": ""
+      }
+     ],
+     "returns": {
+      "type": "Tuple",
+      "doc": "(色相 0..360, 彩度 0..1, 明度 0..1)"
+     },
+     "example": "let (h, s, l) = to_hsl(#4080e0)"
+    },
+    {
+     "name": "scale",
+     "category": "混ぜる",
+     "isFunc": true,
+     "signature": "scale(colors: List<Color>, k: Number)",
+     "call": "scale(colors: List<Color>, k: Number)",
+     "summary": "色の並びから、途中の色を引く。k が 0 なら先頭、1 なら末尾",
+     "params": [
+      {
+       "name": "colors",
+       "type": "List<Color>",
+       "doc": "2 色以上",
+       "default": ""
+      },
+      {
+       "name": "k",
+       "type": "Number",
+       "doc": "位置 0..1",
+       "default": ""
+      }
+     ],
+     "returns": {
+      "type": "Color",
+      "doc": ""
+     },
+     "example": "let heat = [#2040a0, #40a040, #e0d040, #e04040]\nscale(heat, 0.5)   # 真ん中あたりの色"
+    },
+    {
+     "name": "contrast",
+     "category": "読む",
+     "isFunc": true,
+     "signature": "contrast(bg: Color, dark: Color = #ffffff, light: Color = #1a1d23)",
+     "call": "contrast(\n  bg: Color,\n  dark: Color = #ffffff,\n  light: Color = #1a1d23,\n)",
+     "summary": "その背景の上で読める文字色。明るい背景なら黒、暗い背景なら白",
+     "params": [
+      {
+       "name": "bg",
+       "type": "Color",
+       "doc": "背景の色",
+       "default": ""
+      },
+      {
+       "name": "dark",
+       "type": "Color",
+       "doc": "暗いときに返す色 (既定 #ffffff)",
+       "default": "#ffffff"
+      },
+      {
+       "name": "light",
+       "type": "Color",
+       "doc": "明るいときに返す色 (既定 #1a1d23)",
+       "default": "#1a1d23"
+      }
+     ],
+     "returns": {
+      "type": "Color",
+      "doc": ""
+     },
+     "example": "let fg = contrast(panel)"
+    },
+    {
+     "name": "sequential",
+     "category": "作る",
+     "isFunc": true,
+     "signature": "sequential(base: Color, n: Number)",
+     "call": "sequential(base: Color, n: Number)",
+     "summary": "同じ色相で明るさだけ変えた n 色。グラフの系列や、深さの表現に使う",
+     "params": [
+      {
+       "name": "base",
+       "type": "Color",
+       "doc": "元の色",
+       "default": ""
+      },
+      {
+       "name": "n",
+       "type": "Number",
+       "doc": "色数 (1 以上)",
+       "default": ""
+      }
+     ],
+     "returns": {
+      "type": "List<Color>",
+      "doc": "明るい方から暗い方へ n 色"
+     },
+     "example": "sequential(#4080e0, 5)"
+    },
+    {
+     "name": "diverging",
+     "category": "作る",
+     "isFunc": true,
+     "signature": "diverging(a: Color, b: Color, n: Number)",
+     "call": "diverging(a: Color, b: Color, n: Number)",
+     "summary": "2 色の間を n 段階に分けた並び。真ん中は灰色に寄る。増減や賛否の表現に使う",
+     "params": [
+      {
+       "name": "a",
+       "type": "Color",
+       "doc": "一方の端の色",
+       "default": ""
+      },
+      {
+       "name": "b",
+       "type": "Color",
+       "doc": "もう一方の端の色",
+       "default": ""
+      },
+      {
+       "name": "n",
+       "type": "Number",
+       "doc": "色数 (2 以上)",
+       "default": ""
+      }
+     ],
+     "returns": {
+      "type": "List<Color>",
+      "doc": ""
+     },
+     "example": "diverging(#4080e0, #e04040, 5)"
+    },
+    {
+     "name": "categorical",
+     "category": "作る",
+     "isFunc": true,
+     "signature": "categorical(n: Number, s: Number = 0.6, l: Number = 0.52)",
+     "call": "categorical(n: Number, s: Number = 0.6, l: Number = 0.52)",
+     "summary": "見分けやすい n 色。色相を円周上に散らす",
+     "params": [
+      {
+       "name": "n",
+       "type": "Number",
+       "doc": "色数",
+       "default": ""
+      },
+      {
+       "name": "s",
+       "type": "Number",
+       "doc": "彩度 0..1 (既定 0.6)",
+       "default": "0.6"
+      },
+      {
+       "name": "l",
+       "type": "Number",
+       "doc": "明度 0..1 (既定 0.52)",
+       "default": "0.52"
+      }
+     ],
+     "returns": {
+      "type": "List<Color>",
+      "doc": ""
+     },
+     "example": "let colors = categorical(6)"
     }
    ]
   },
@@ -2343,6 +2517,225 @@
       "doc": ""
      },
      "example": "Polygon(points = arrow(Vector(2, 4.5), Vector(10, 4.5), 0.2, 0.6), fill = #303030)"
+    },
+    {
+     "name": "arc",
+     "category": "円",
+     "isFunc": true,
+     "signature": "arc(cx: Number, cy: Number, r: Number, from: Number, to: Number, steps: Number = 32)",
+     "call": "arc(\n  cx: Number,\n  cy: Number,\n  r: Number,\n  from: Number,\n  to: Number,\n  steps: Number = 32,\n)",
+     "summary": "円弧の上の点。Path の segments か Polygon の points に入れる",
+     "params": [
+      {
+       "name": "cx",
+       "type": "Number",
+       "doc": "中心の x",
+       "default": ""
+      },
+      {
+       "name": "cy",
+       "type": "Number",
+       "doc": "中心の y",
+       "default": ""
+      },
+      {
+       "name": "r",
+       "type": "Number",
+       "doc": "半径",
+       "default": ""
+      },
+      {
+       "name": "from",
+       "type": "Number",
+       "doc": "始まりの角度 (度。0 が真上、時計回り)",
+       "default": ""
+      },
+      {
+       "name": "to",
+       "type": "Number",
+       "doc": "終わりの角度",
+       "default": ""
+      },
+      {
+       "name": "steps",
+       "type": "Number",
+       "doc": "分割数 (既定 32)",
+       "default": "32"
+      }
+     ],
+     "returns": {
+      "type": "List<Vector>",
+      "doc": ""
+     },
+     "example": "Path(from = arc(4, 2, 1.5, 0, 90)[0], segments = arc(4, 2, 1.5, 0, 90).map(func (p) { (:line, p) }))"
+    },
+    {
+     "name": "ring_segment",
+     "category": "円",
+     "isFunc": true,
+     "signature": "ring_segment(cx: Number, cy: Number, r_in: Number, r_out: Number, from: Number, to: Number, steps: Number = 32)",
+     "call": "ring_segment(\n  cx: Number,\n  cy: Number,\n  r_in: Number,\n  r_out: Number,\n  from: Number,\n  to: Number,\n  steps: Number = 32,\n)",
+     "summary": "ドーナツの一片。円グラフの 1 切れになる",
+     "params": [
+      {
+       "name": "cx",
+       "type": "Number",
+       "doc": "中心の x",
+       "default": ""
+      },
+      {
+       "name": "cy",
+       "type": "Number",
+       "doc": "中心の y",
+       "default": ""
+      },
+      {
+       "name": "r_in",
+       "type": "Number",
+       "doc": "内側の半径 (0 なら扇形)",
+       "default": ""
+      },
+      {
+       "name": "r_out",
+       "type": "Number",
+       "doc": "外側の半径",
+       "default": ""
+      },
+      {
+       "name": "from",
+       "type": "Number",
+       "doc": "始まりの角度 (度。0 が真上、時計回り)",
+       "default": ""
+      },
+      {
+       "name": "to",
+       "type": "Number",
+       "doc": "終わりの角度",
+       "default": ""
+      },
+      {
+       "name": "steps",
+       "type": "Number",
+       "doc": "分割数 (既定 32)",
+       "default": "32"
+      }
+     ],
+     "returns": {
+      "type": "List<Vector>",
+      "doc": "Polygon(points = ...) に入れる"
+     },
+     "example": "Polygon(points = ring_segment(4, 2, 0.8, 1.5, 0, 120), fill = #e04040)"
+    },
+    {
+     "name": "wave",
+     "category": "線",
+     "isFunc": true,
+     "signature": "wave(from: Vector, to: Vector, amplitude: Number, cycles: Number, steps: Number = 64)",
+     "call": "wave(\n  from: Vector,\n  to: Vector,\n  amplitude: Number,\n  cycles: Number,\n  steps: Number = 64,\n)",
+     "summary": "波線の点",
+     "params": [
+      {
+       "name": "from",
+       "type": "Vector",
+       "doc": "始点",
+       "default": ""
+      },
+      {
+       "name": "to",
+       "type": "Vector",
+       "doc": "終点",
+       "default": ""
+      },
+      {
+       "name": "amplitude",
+       "type": "Number",
+       "doc": "振れ幅 (線に直角な方向)",
+       "default": ""
+      },
+      {
+       "name": "cycles",
+       "type": "Number",
+       "doc": "山の数",
+       "default": ""
+      },
+      {
+       "name": "steps",
+       "type": "Number",
+       "doc": "分割数 (既定 64)",
+       "default": "64"
+      }
+     ],
+     "returns": {
+      "type": "List<Vector>",
+      "doc": ""
+     },
+     "example": "Path(from = Vector(0, 2), segments = wave(Vector(0, 2), Vector(8, 2), 0.5, 3).map(func (p) { (:line, p) }))"
+    },
+    {
+     "name": "grid_lines",
+     "category": "線",
+     "isFunc": true,
+     "signature": "grid_lines(x: Number, y: Number, w: Number, h: Number, step: Number)",
+     "call": "grid_lines(\n  x: Number,\n  y: Number,\n  w: Number,\n  h: Number,\n  step: Number,\n)",
+     "summary": "方眼の線。Path を 1 本ずつ引くための、始点と終点の組",
+     "params": [
+      {
+       "name": "x",
+       "type": "Number",
+       "doc": "左上の x",
+       "default": ""
+      },
+      {
+       "name": "y",
+       "type": "Number",
+       "doc": "左上の y",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "step",
+       "type": "Number",
+       "doc": "目の間隔",
+       "default": ""
+      }
+     ],
+     "returns": {
+      "type": "List<Tuple>",
+      "doc": "(始点, 終点) の List"
+     },
+     "example": "for (a, b) in grid_lines(0, 0, 16, 9, 1) {\n  v.place(Line(from = a, to = b, stroke = #e0e0e0, strokeWidth = 0.02))\n}"
+    },
+    {
+     "name": "to_segments",
+     "category": "線",
+     "isFunc": true,
+     "signature": "to_segments(points: List<Vector>)",
+     "call": "to_segments(points: List<Vector>)",
+     "summary": "点の並びを Path の segments にする",
+     "params": [
+      {
+       "name": "points",
+       "type": "List<Vector>",
+       "doc": "2 点以上",
+       "default": ""
+      }
+     ],
+     "returns": {
+      "type": "List<Tuple>",
+      "doc": "(:line, 点) の List。先頭は from に使う"
+     },
+     "example": "let pts = wave(Vector(0, 2), Vector(8, 2), 0.5, 3)\nPath(from = pts[0], segments = to_segments(pts))"
     }
    ]
   },
@@ -2512,6 +2905,180 @@
       "doc": "幅と高さ"
      },
      "example": "let size = fit(1920, 1080, 16, 9)   # Vector(16, 9)"
+    },
+    {
+     "name": "inset",
+     "category": "収める",
+     "isFunc": true,
+     "signature": "inset(x: Number, y: Number, w: Number, h: Number, pad: Number)",
+     "call": "inset(\n  x: Number,\n  y: Number,\n  w: Number,\n  h: Number,\n  pad: Number,\n)",
+     "summary": "内側に余白を取った箱。(左上, 幅, 高さ) を返す",
+     "params": [
+      {
+       "name": "x",
+       "type": "Number",
+       "doc": "左上の x",
+       "default": ""
+      },
+      {
+       "name": "y",
+       "type": "Number",
+       "doc": "左上の y",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "pad",
+       "type": "Number",
+       "doc": "余白",
+       "default": ""
+      }
+     ],
+     "returns": {
+      "type": "Tuple",
+      "doc": "(Vector, 幅, 高さ)"
+     },
+     "example": "let (at, w, h) = inset(0, 0, 16, 9, 0.8)"
+    },
+    {
+     "name": "row",
+     "category": "並べる",
+     "isFunc": true,
+     "signature": "row(x: Number, y: Number, w: Number, n: Number, gap: Number = 0)",
+     "call": "row(\n  x: Number,\n  y: Number,\n  w: Number,\n  n: Number,\n  gap: Number = 0,\n)",
+     "summary": "横一列に n 個並べたときの、各マスの左上と幅",
+     "params": [
+      {
+       "name": "x",
+       "type": "Number",
+       "doc": "左上の x",
+       "default": ""
+      },
+      {
+       "name": "y",
+       "type": "Number",
+       "doc": "左上の y",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "全体の幅",
+       "default": ""
+      },
+      {
+       "name": "n",
+       "type": "Number",
+       "doc": "個数",
+       "default": ""
+      },
+      {
+       "name": "gap",
+       "type": "Number",
+       "doc": "間の空き (既定 0)",
+       "default": "0"
+      }
+     ],
+     "returns": {
+      "type": "List<Tuple>",
+      "doc": "(Vector, 幅) の List"
+     },
+     "example": "for (at, cw) in row(0, 0, 16, 4, 0.2) { ... }"
+    },
+    {
+     "name": "column",
+     "category": "並べる",
+     "isFunc": true,
+     "signature": "column(x: Number, y: Number, h: Number, n: Number, gap: Number = 0)",
+     "call": "column(\n  x: Number,\n  y: Number,\n  h: Number,\n  n: Number,\n  gap: Number = 0,\n)",
+     "summary": "縦一列に n 個並べたときの、各マスの左上と高さ",
+     "params": [
+      {
+       "name": "x",
+       "type": "Number",
+       "doc": "左上の x",
+       "default": ""
+      },
+      {
+       "name": "y",
+       "type": "Number",
+       "doc": "左上の y",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "全体の高さ",
+       "default": ""
+      },
+      {
+       "name": "n",
+       "type": "Number",
+       "doc": "個数",
+       "default": ""
+      },
+      {
+       "name": "gap",
+       "type": "Number",
+       "doc": "間の空き (既定 0)",
+       "default": "0"
+      }
+     ],
+     "returns": {
+      "type": "List<Tuple>",
+      "doc": "(Vector, 高さ) の List"
+     },
+     "example": "for (at, ch) in column(0, 0, 9, 3, 0.2) { ... }"
+    },
+    {
+     "name": "stack",
+     "category": "並べる",
+     "isFunc": true,
+     "signature": "stack(x: Number, y: Number, heights: List<Number>, gap: Number = 0)",
+     "call": "stack(\n  x: Number,\n  y: Number,\n  heights: List<Number>,\n  gap: Number = 0,\n)",
+     "summary": "大きさの違うものを縦に積んだときの、各要素の左上",
+     "params": [
+      {
+       "name": "x",
+       "type": "Number",
+       "doc": "左上の x",
+       "default": ""
+      },
+      {
+       "name": "y",
+       "type": "Number",
+       "doc": "左上の y",
+       "default": ""
+      },
+      {
+       "name": "heights",
+       "type": "List<Number>",
+       "doc": "それぞれの高さ",
+       "default": ""
+      },
+      {
+       "name": "gap",
+       "type": "Number",
+       "doc": "間の空き (既定 0)",
+       "default": "0"
+      }
+     ],
+     "returns": {
+      "type": "List<Vector>",
+      "doc": ""
+     },
+     "example": "let tops = stack(1, 1, [0.8, 1.6, 0.8], 0.2)"
     }
    ]
   },
@@ -2813,6 +3380,168 @@
       "doc": "無し。track に直接置く"
      },
      "example": "# 3 枚を 0.2s ずつずらして出し、6s に消し終える\nshow(track, [a, b, c], at = 1s, end = 6s, stagger = 0.2s)"
+    },
+    {
+     "name": "shake",
+     "category": "動かす",
+     "isFunc": true,
+     "signature": "shake(target: Placeable, amount: Number, times: Number = 3, duration: Duration = 0.4s)",
+     "call": "shake(\n  target: Placeable,\n  amount: Number,\n  times: Number = 3,\n  duration: Duration = 0.4s,\n)",
+     "summary": "揺らす。注意を引くときや、失敗を示すときに使う",
+     "params": [
+      {
+       "name": "target",
+       "type": "Placeable",
+       "doc": "position を持つ図形",
+       "default": ""
+      },
+      {
+       "name": "amount",
+       "type": "Number",
+       "doc": "揺れ幅 (箱の座標)",
+       "default": ""
+      },
+      {
+       "name": "times",
+       "type": "Number",
+       "doc": "往復の回数 (既定 3)",
+       "default": "3"
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "全体の長さ (既定 0.4s)",
+       "default": "0.4s"
+      }
+     ],
+     "returns": {
+      "type": "Timeline",
+      "doc": "元の位置に戻る Timeline"
+     },
+     "example": "track.place(shake(card, 0.15), at = 2s)"
+    },
+    {
+     "name": "pulse",
+     "category": "動かす",
+     "isFunc": true,
+     "signature": "pulse(target: Placeable, scale: Number = 1.15, duration: Duration = 0.3s)",
+     "call": "pulse(\n  target: Placeable,\n  scale: Number = 1.15,\n  duration: Duration = 0.3s,\n)",
+     "summary": "大きくしてから戻す。出てきたものを目立たせる",
+     "params": [
+      {
+       "name": "target",
+       "type": "Placeable",
+       "doc": "radius か w を持つ図形ではなく、View か rotation を持つもの以外は position のまま",
+       "default": ""
+      },
+      {
+       "name": "scale",
+       "type": "Number",
+       "doc": "何倍まで大きくするか (既定 1.15)",
+       "default": "1.15"
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "全体の長さ (既定 0.3s)",
+       "default": "0.3s"
+      }
+     ],
+     "returns": {
+      "type": "Timeline",
+      "doc": "opacity はそのままで、大きさが往復する Timeline"
+     },
+     "example": "track.place(pulse(dot, 1.4), at = 1s)"
+    },
+    {
+     "name": "spring_to",
+     "category": "動かす",
+     "isFunc": true,
+     "signature": "spring_to(target: Placeable, to: Pos, duration: Duration = 0.8s, bounces: Number = 2, overshoot: Number = 0.25)",
+     "call": "spring_to(\n  target: Placeable,\n  to: Pos,\n  duration: Duration = 0.8s,\n  bounces: Number = 2,\n  overshoot: Number = 0.25,\n)",
+     "summary": "バネのように行き過ぎて戻りながら近づく",
+     "params": [
+      {
+       "name": "target",
+       "type": "Placeable",
+       "doc": "動かす図形",
+       "default": ""
+      },
+      {
+       "name": "to",
+       "type": "Pos",
+       "doc": "行き先",
+       "default": ""
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "全体の長さ (既定 0.8s)",
+       "default": "0.8s"
+      },
+      {
+       "name": "bounces",
+       "type": "Number",
+       "doc": "行き過ぎる回数 (既定 2)",
+       "default": "2"
+      },
+      {
+       "name": "overshoot",
+       "type": "Number",
+       "doc": "最初の行き過ぎの割合 (既定 0.25)",
+       "default": "0.25"
+      }
+     ],
+     "returns": {
+      "type": "Timeline",
+      "doc": ""
+     },
+     "example": "track.place(spring_to(card, Pos(8, 4.5)), at = 1s)"
+    },
+    {
+     "name": "stagger",
+     "category": "出し入れ",
+     "isFunc": true,
+     "signature": "stagger(track: Timeline, targets: List<Placeable>, make: (Placeable) -> Timeline, at: Duration, stagger: Duration = 0.08s)",
+     "call": "stagger(\n  track: Timeline,\n  targets: List<Placeable>,\n  make: (Placeable) -> Timeline,\n  at: Duration,\n  stagger: Duration = 0.08s,\n)",
+     "summary": "同じ動きを、少しずつ遅らせて並べて置く",
+     "params": [
+      {
+       "name": "track",
+       "type": "Timeline",
+       "doc": "置き先",
+       "default": ""
+      },
+      {
+       "name": "targets",
+       "type": "List<Placeable>",
+       "doc": "動かすもの",
+       "default": ""
+      },
+      {
+       "name": "make",
+       "type": "(Placeable) -> Timeline",
+       "doc": "1 つぶんの Timeline を作る関数 (target) -> Timeline",
+       "default": ""
+      },
+      {
+       "name": "at",
+       "type": "Duration",
+       "doc": "最初のものが始まる時刻",
+       "default": ""
+      },
+      {
+       "name": "stagger",
+       "type": "Duration",
+       "doc": "次のものが始まるまでの遅れ (既定 0.08s)",
+       "default": "0.08s"
+      }
+     ],
+     "returns": {
+      "type": "Timeline, at: Duration, stagger: Duration = 0.08s) -> Nothing",
+      "doc": "無し。track に直接置く"
+     },
+     "example": "stagger(track, cards, func (c) { fade_in(c, 0.4s) }, at = 1s)"
     }
    ]
   },

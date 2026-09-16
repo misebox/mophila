@@ -65,3 +65,95 @@ export func hsl(h: Number, s: Number, l: Number) -> Color {
 ## @example
 ## Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = gray(240))
 export func gray(v: Number) -> Color { Color(v, v, v) }
+
+## 色相・彩度・明度を取り出す
+## @category 読む
+## @param c 元の色
+## @returns (色相 0..360, 彩度 0..1, 明度 0..1)
+## @example
+## let (h, s, l) = to_hsl(#4080e0)
+export func to_hsl(c: Color) -> Tuple {
+  let r = c.r / 255
+  let g = c.g / 255
+  let b = c.b / 255
+  let hi = math.max(r, g, b)
+  let lo = math.min(r, g, b)
+  let d = hi - lo
+  let l = (hi + lo) / 2
+  let s = if d == 0 { 0 } else { d / (1 - math.abs(2 * l - 1)) }
+  let h = if d == 0 {
+    0
+  } else if hi == r {
+    60 * (((g - b) / d) % 6)
+  } else if hi == g {
+    60 * ((b - r) / d + 2)
+  } else {
+    60 * ((r - g) / d + 4)
+  }
+  ((h % 360 + 360) % 360, s, l)
+}
+
+## 色の並びから、途中の色を引く。k が 0 なら先頭、1 なら末尾
+## @category 混ぜる
+## @param colors 2 色以上
+## @param k 位置 0..1
+## @example
+## let heat = [#2040a0, #40a040, #e0d040, #e04040]
+## scale(heat, 0.5)   # 真ん中あたりの色
+export func scale(colors: List<Color>, k: Number) -> Color {
+  let n = colors.len()
+  if n == 1 { return colors[0] }
+  let x = math.clamp(k, 0, 1) * (n - 1)
+  let i = math.clamp(math.floor(x), 0, n - 2)
+  mix(colors[i], colors[i + 1], x - i)
+}
+
+## その背景の上で読める文字色。明るい背景なら黒、暗い背景なら白
+## @category 読む
+## @param bg 背景の色
+## @param dark 暗いときに返す色 (既定 #ffffff)
+## @param light 明るいときに返す色 (既定 #1a1d23)
+## @example
+## let fg = contrast(panel)
+export func contrast(bg: Color, dark: Color = #ffffff, light: Color = #1a1d23) -> Color {
+  # 目の感じ方に合わせた明るさ。0.55 を境にする
+  let y = (0.2126 * bg.r + 0.7152 * bg.g + 0.0722 * bg.b) / 255
+  if y < 0.55 { dark } else { light }
+}
+
+## 同じ色相で明るさだけ変えた n 色。グラフの系列や、深さの表現に使う
+## @category 作る
+## @param base 元の色
+## @param n 色数 (1 以上)
+## @returns 明るい方から暗い方へ n 色
+## @example
+## sequential(#4080e0, 5)
+export func sequential(base: Color, n: Number) -> List<Color> {
+  if n <= 1 { return [base] }
+  (0..=1).steps(n - 1).map(func (k) { mix(lighten(base, 0.6), darken(base, 0.35), k) })
+}
+
+## 2 色の間を n 段階に分けた並び。真ん中は灰色に寄る。増減や賛否の表現に使う
+## @category 作る
+## @param a 一方の端の色
+## @param b もう一方の端の色
+## @param n 色数 (2 以上)
+## @example
+## diverging(#4080e0, #e04040, 5)
+export func diverging(a: Color, b: Color, n: Number) -> List<Color> {
+  let mid = gray(230)
+  (0..=1).steps(n - 1).map(func (k) {
+    if k < 0.5 { mix(a, mid, k * 2) } else { mix(mid, b, (k - 0.5) * 2) }
+  })
+}
+
+## 見分けやすい n 色。色相を円周上に散らす
+## @category 作る
+## @param n 色数
+## @param s 彩度 0..1 (既定 0.6)
+## @param l 明度 0..1 (既定 0.52)
+## @example
+## let colors = categorical(6)
+export func categorical(n: Number, s: Number = 0.6, l: Number = 0.52) -> List<Color> {
+  (0..n).to_list().map(func (i) { hsl(15 + i * 360 / n, s, l) })
+}

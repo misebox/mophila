@@ -1,6 +1,8 @@
 # animation.moph — 現れる、消える、滑り込む、回る。
 # どの関数も Timeline を返すだけで、そのままでは何も起きない。track.place(tl, at = 時刻) で置いた時刻から動く
 
+import math
+
 ## target の不透明度を from から to へ変える Timeline を返す。
 ## 0 → 1 と 1 → 0 は fade_in / fade_out があるので、途中の値を使うときに呼ぶ
 ## @category 現れる・消える
@@ -153,5 +155,86 @@ export func show(track: Timeline, targets: List<Placeable>, at: Duration, end: D
   for (i, target) in targets.enumerate() {
     track.place(fade_in(target, duration), at = at + stagger * i)
     track.place(fade_out(target, duration), at = end - duration)
+  }
+}
+
+## 揺らす。注意を引くときや、失敗を示すときに使う
+## @category 動かす
+## @param target position を持つ図形
+## @param amount 揺れ幅 (箱の座標)
+## @param times 往復の回数 (既定 3)
+## @param duration 全体の長さ (既定 0.4s)
+## @returns 元の位置に戻る Timeline
+## @example
+## track.place(shake(card, 0.15), at = 2s)
+export func shake(target: Placeable, amount: Number, times: Number = 3, duration: Duration = 0.4s) -> Timeline {
+  let at = target.position
+  let tl = context target as s {
+    motion (t) {
+      0..1: s.position = Pos(at.x + math.sin(t * times * math.TAU) * amount * (1 - t), at.y, anchor = at.anchor)
+    }
+  }
+  tl.duration = duration
+  tl
+}
+
+## 大きくしてから戻す。出てきたものを目立たせる
+## @category 動かす
+## @param target radius か w を持つ図形ではなく、View か rotation を持つもの以外は position のまま
+## @param scale 何倍まで大きくするか (既定 1.15)
+## @param duration 全体の長さ (既定 0.3s)
+## @returns opacity はそのままで、大きさが往復する Timeline
+## @example
+## track.place(pulse(dot, 1.4), at = 1s)
+export func pulse(target: Placeable, scale: Number = 1.15, duration: Duration = 0.3s) -> Timeline {
+  let r = target.radius
+  let tl = context target as s {
+    motion (t) {
+      0: s.radius = r
+      0.5: s.radius = r * scale
+      1: s.radius = r :ease
+    }
+  }
+  tl.duration = duration
+  tl
+}
+
+## バネのように行き過ぎて戻りながら近づく
+## @category 動かす
+## @param target 動かす図形
+## @param to 行き先
+## @param duration 全体の長さ (既定 0.8s)
+## @param bounces 行き過ぎる回数 (既定 2)
+## @param overshoot 最初の行き過ぎの割合 (既定 0.25)
+## @example
+## track.place(spring_to(card, Pos(8, 4.5)), at = 1s)
+export func spring_to(target: Placeable, to: Pos, duration: Duration = 0.8s, bounces: Number = 2, overshoot: Number = 0.25) -> Timeline {
+  let from = target.position
+  let tl = context target as s {
+    motion (t) {
+      # 減衰する振動。t が 1 で必ず to に着く
+      0..1: s.position = Pos(
+        to.x + (from.x - to.x) * math.cos(t * bounces * math.PI) * math.exp(-4 * t) * (1 + overshoot),
+        to.y + (from.y - to.y) * math.cos(t * bounces * math.PI) * math.exp(-4 * t) * (1 + overshoot),
+        anchor = to.anchor)
+    }
+  }
+  tl.duration = duration
+  tl
+}
+
+## 同じ動きを、少しずつ遅らせて並べて置く
+## @category 出し入れ
+## @param track 置き先
+## @param targets 動かすもの
+## @param make 1 つぶんの Timeline を作る関数 (target) -> Timeline
+## @param at 最初のものが始まる時刻
+## @param stagger 次のものが始まるまでの遅れ (既定 0.08s)
+## @returns 無し。track に直接置く
+## @example
+## stagger(track, cards, func (c) { fade_in(c, 0.4s) }, at = 1s)
+export func stagger(track: Timeline, targets: List<Placeable>, make: (Placeable) -> Timeline, at: Duration, stagger: Duration = 0.08s) -> Nothing {
+  for (i, target) in targets.enumerate() {
+    track.place(make(target), at = at + stagger * i)
   }
 }

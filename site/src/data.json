@@ -4199,6 +4199,370 @@
    ]
   },
   {
+   "name": "diagram",
+   "path": "src/stdlib/diagram.moph",
+   "entries": [],
+   "items": [
+    {
+     "name": "connector",
+     "category": "線",
+     "isFunc": true,
+     "signature": "connector(from: Vector, to: Vector, progress: Number = 1, color: Color = #4a4f5a, width: Number = 0.04)",
+     "call": "connector(\n  from: Vector,\n  to: Vector,\n  progress: Number = 1,\n  color: Color = #4a4f5a,\n  width: Number = 0.04,\n)",
+     "summary": "2 点を結ぶ線。progress で from から伸びる",
+     "params": [
+      {
+       "name": "from",
+       "type": "Vector",
+       "doc": "始点",
+       "default": ""
+      },
+      {
+       "name": "to",
+       "type": "Vector",
+       "doc": "終点",
+       "default": ""
+      },
+      {
+       "name": "progress",
+       "type": "Number",
+       "doc": "伸びる割合 0..1 (既定 1)",
+       "default": "1"
+      },
+      {
+       "name": "color",
+       "type": "Color",
+       "doc": "線の色 (既定 濃い灰)",
+       "default": "#4a4f5a"
+      },
+      {
+       "name": "width",
+       "type": "Number",
+       "doc": "線の太さ (既定 0.04)",
+       "default": "0.04"
+      }
+     ],
+     "returns": {
+      "type": "Line",
+      "doc": "箱が from と to を含む View ではなく、置く側の座標で描く図形を持つ View"
+     },
+     "example": "v.place(connector(Vector(1, 1), Vector(5, 3)), at = Pos(0, 0, anchor = :topLeft), w = 8)"
+    },
+    {
+     "name": "arrow",
+     "category": "線",
+     "isFunc": true,
+     "signature": "arrow(from: Vector, to: Vector, progress: Number = 1, color: Color = #4a4f5a, width: Number = 0.04, head: Number = 0)",
+     "call": "arrow(\n  from: Vector,\n  to: Vector,\n  progress: Number = 1,\n  color: Color = #4a4f5a,\n  width: Number = 0.04,\n  head: Number = 0,\n)",
+     "summary": "矢印。線の先に三角が付く。軸と矢じりを合わせた 1 つの Polygon",
+     "params": [
+      {
+       "name": "from",
+       "type": "Vector",
+       "doc": "始点",
+       "default": ""
+      },
+      {
+       "name": "to",
+       "type": "Vector",
+       "doc": "終点",
+       "default": ""
+      },
+      {
+       "name": "progress",
+       "type": "Number",
+       "doc": "伸びる割合 0..1 (既定 1)",
+       "default": "1"
+      },
+      {
+       "name": "color",
+       "type": "Color",
+       "doc": "色 (既定 濃い灰)",
+       "default": "#4a4f5a"
+      },
+      {
+       "name": "width",
+       "type": "Number",
+       "doc": "軸の太さ (既定 0.04)",
+       "default": "0.04"
+      },
+      {
+       "name": "head",
+       "type": "Number",
+       "doc": "矢じりの長さ (既定 軸の太さの 5 倍)",
+       "default": "0"
+      }
+     ],
+     "returns": {
+      "type": "Polygon",
+      "doc": "Polygon。長さ 0 のときは点が空の Polygon"
+     },
+     "example": "v.place(arrow(Vector(1, 1), Vector(5, 3), 0.6, #e04040))"
+    },
+    {
+     "name": "elbow",
+     "category": "線",
+     "isFunc": true,
+     "signature": "elbow(from: Vector, to: Vector, progress: Number = 1, color: Color = #4a4f5a, width: Number = 0.04, vertical: Bool = false)",
+     "call": "elbow(\n  from: Vector,\n  to: Vector,\n  progress: Number = 1,\n  color: Color = #4a4f5a,\n  width: Number = 0.04,\n  vertical: Bool = false,\n)",
+     "summary": "直角に曲がる線。フローチャートの枝分かれに使う",
+     "params": [
+      {
+       "name": "from",
+       "type": "Vector",
+       "doc": "始点",
+       "default": ""
+      },
+      {
+       "name": "to",
+       "type": "Vector",
+       "doc": "終点",
+       "default": ""
+      },
+      {
+       "name": "progress",
+       "type": "Number",
+       "doc": "伸びる割合 0..1 (既定 1)",
+       "default": "1"
+      },
+      {
+       "name": "color",
+       "type": "Color",
+       "doc": "色 (既定 濃い灰)",
+       "default": "#4a4f5a"
+      },
+      {
+       "name": "width",
+       "type": "Number",
+       "doc": "線の太さ (既定 0.04)",
+       "default": "0.04"
+      },
+      {
+       "name": "vertical",
+       "type": "Bool",
+       "doc": "true なら先に縦へ動く (既定 false)",
+       "default": "false"
+      }
+     ],
+     "returns": {
+      "type": "Path",
+      "doc": "Path"
+     },
+     "example": "v.place(elbow(Vector(1, 1), Vector(5, 3)), at = Pos(0, 0, anchor = :topLeft), w = 8)"
+    },
+    {
+     "name": "leader_label",
+     "category": "ラベル",
+     "isFunc": true,
+     "signature": "leader_label(target: Vector, text: String, offset: Vector, w: Number, h: Number, size: Number = 0.3, color: Color = #4a4f5a)",
+     "call": "leader_label(\n  target: Vector,\n  text: String,\n  offset: Vector,\n  w: Number,\n  h: Number,\n  size: Number = 0.3,\n  color: Color = #4a4f5a,\n)",
+     "summary": "対象から引き出した線と、その先のラベル。座標は置く先の View と同じ",
+     "params": [
+      {
+       "name": "target",
+       "type": "Vector",
+       "doc": "指す点",
+       "default": ""
+      },
+      {
+       "name": "text",
+       "type": "String",
+       "doc": "ラベルの文字",
+       "default": ""
+      },
+      {
+       "name": "offset",
+       "type": "Vector",
+       "doc": "ラベルを置く向きと距離",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "置く先の View の幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "置く先の View の高さ",
+       "default": ""
+      },
+      {
+       "name": "size",
+       "type": "Number",
+       "doc": "文字の大きさ (既定 0.3)",
+       "default": "0.3"
+      },
+      {
+       "name": "color",
+       "type": "Color",
+       "doc": "線と文字の色 (既定 濃い灰)",
+       "default": "#4a4f5a"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(leader_label(Vector(4, 2), \"ここ\", Vector(1.5, -1), 16, 9), at = Pos(0, 0, anchor = :topLeft), w = 16)"
+    },
+    {
+     "name": "speech_bubble",
+     "category": "ラベル",
+     "isFunc": true,
+     "signature": "speech_bubble(text: String, w: Number, h: Number, tail: Symbol = :bottom, fill: Color = #ffffff, size: Number = 0)",
+     "call": "speech_bubble(\n  text: String,\n  w: Number,\n  h: Number,\n  tail: Symbol = :bottom,\n  fill: Color = #ffffff,\n  size: Number = 0,\n)",
+     "summary": "吹き出し。尾が指す向きは tail で決める",
+     "params": [
+      {
+       "name": "text",
+       "type": "String",
+       "doc": "中の文字",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "tail",
+       "type": "Symbol",
+       "doc": "尾の向き (:bottom :top :left :right。既定 :bottom)",
+       "default": ":bottom"
+      },
+      {
+       "name": "fill",
+       "type": "Color",
+       "doc": "背の色 (既定 #ffffff)",
+       "default": "#ffffff"
+      },
+      {
+       "name": "size",
+       "type": "Number",
+       "doc": "文字の大きさ (既定 高さの 0.3)",
+       "default": "0"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x (h + 尾) の View"
+     },
+     "example": "v.place(speech_bubble(\"こんにちは\", 3, 1), at = Pos(1, 1, anchor = :topLeft), w = 3)"
+    },
+    {
+     "name": "node_graph",
+     "category": "関係",
+     "isFunc": true,
+     "signature": "node_graph(nodes: Dict, edges: List<Tuple>, w: Number, h: Number, revealed: Number = -1, color: Color = #4080e0)",
+     "call": "node_graph(\n  nodes: Dict,\n  edges: List<Tuple>,\n  w: Number,\n  h: Number,\n  revealed: Number = -1,\n  color: Color = #4080e0,\n)",
+     "summary": "ネットワーク図。ノードは (名前, 位置) の Dict、エッジは (名前, 名前) の組",
+     "params": [
+      {
+       "name": "nodes",
+       "type": "Dict",
+       "doc": "名前 → 位置 (Vector)",
+       "default": ""
+      },
+      {
+       "name": "edges",
+       "type": "List<Tuple>",
+       "doc": "(名前, 名前) の並び",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "revealed",
+       "type": "Number",
+       "doc": "出すノードの数 (既定 全部)。エッジは両端が出ていれば出る",
+       "default": "-1"
+      },
+      {
+       "name": "color",
+       "type": "Color",
+       "doc": "ノードの色 (既定 #4080e0)",
+       "default": "#4080e0"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(node_graph({ \"a\": Vector(1, 1), \"b\": Vector(3, 2) }, [(\"a\", \"b\")], 4, 3), at = Pos(1, 1, anchor = :topLeft), w = 4)"
+    },
+    {
+     "name": "table",
+     "category": "表",
+     "isFunc": true,
+     "signature": "table(headers: List<String>, rows: List<List<String>>, w: Number, h: Number, revealed: Number = -1, accent: Color = #e6e2da)",
+     "call": "table(\n  headers: List<String>,\n  rows: List<List<String>>,\n  w: Number,\n  h: Number,\n  revealed: Number = -1,\n  accent: Color = #e6e2da,\n)",
+     "summary": "比較表。行を順に出せる",
+     "params": [
+      {
+       "name": "headers",
+       "type": "List<String>",
+       "doc": "見出しの並び",
+       "default": ""
+      },
+      {
+       "name": "rows",
+       "type": "List<List<String>>",
+       "doc": "各行の値 (見出しと同じ数)",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "revealed",
+       "type": "Number",
+       "doc": "出す行の数 (既定 全部)",
+       "default": "-1"
+      },
+      {
+       "name": "accent",
+       "type": "Color",
+       "doc": "見出しの背の色 (既定 薄い灰)",
+       "default": "#e6e2da"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(table([\"名前\", \"値\"], [[\"A\", \"3\"], [\"B\", \"7\"]], 5, 2), at = Pos(1, 1, anchor = :topLeft), w = 5)"
+    }
+   ]
+  },
+  {
    "name": "meter",
    "path": "src/stdlib/meter.moph",
    "entries": [],

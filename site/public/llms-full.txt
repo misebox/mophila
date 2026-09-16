@@ -2365,6 +2365,65 @@ alias P = Pos
   h: Number,
 )` -> View — 色の凡例
 
+### diagram
+
+- `connector(
+  from: Vector,
+  to: Vector,
+  progress: Number = 1,
+  color: Color = #4a4f5a,
+  width: Number = 0.04,
+)` -> Line — 2 点を結ぶ線。progress で from から伸びる
+- `arrow(
+  from: Vector,
+  to: Vector,
+  progress: Number = 1,
+  color: Color = #4a4f5a,
+  width: Number = 0.04,
+  head: Number = 0,
+)` -> Polygon — 矢印。線の先に三角が付く。軸と矢じりを合わせた 1 つの Polygon
+- `elbow(
+  from: Vector,
+  to: Vector,
+  progress: Number = 1,
+  color: Color = #4a4f5a,
+  width: Number = 0.04,
+  vertical: Bool = false,
+)` -> Path — 直角に曲がる線。フローチャートの枝分かれに使う
+- `leader_label(
+  target: Vector,
+  text: String,
+  offset: Vector,
+  w: Number,
+  h: Number,
+  size: Number = 0.3,
+  color: Color = #4a4f5a,
+)` -> View — 対象から引き出した線と、その先のラベル。座標は置く先の View と同じ
+- `speech_bubble(
+  text: String,
+  w: Number,
+  h: Number,
+  tail: Symbol = :bottom,
+  fill: Color = #ffffff,
+  size: Number = 0,
+)` -> View — 吹き出し。尾が指す向きは tail で決める
+- `node_graph(
+  nodes: Dict,
+  edges: List<Tuple>,
+  w: Number,
+  h: Number,
+  revealed: Number = -1,
+  color: Color = #4080e0,
+)` -> View — ネットワーク図。ノードは (名前, 位置) の Dict、エッジは (名前, 名前) の組
+- `table(
+  headers: List<String>,
+  rows: List<List<String>>,
+  w: Number,
+  h: Number,
+  revealed: Number = -1,
+  accent: Color = #e6e2da,
+)` -> View — 比較表。行を順に出せる
+
 ### meter
 
 - `progress_bar(

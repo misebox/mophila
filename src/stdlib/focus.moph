@@ -1,9 +1,12 @@
 # focus.moph — 見せたい所だけ見せる幕と、切り替え
 #
-# どれも「今どうなっているか」を受け取る。動かすのは呼ぶ側の Timeline。
+# どれも「今どうなっているか」を受け取る。
 #
-#   let cover = spotlight(4, 3, 1.5, 16, 9)
-#   v.place(cover, at = Pos(0, 0, anchor = :topLeft), w = 16)
+# duration を書くと、その長さで 0 から今の値まで動く Timeline が付いてくるので、置けばそのまま動く。
+# duration が 0s なら渡した値のまま止まる。
+#
+#   v.place(spotlight(4, 3, 1.5, 16, 9), at = Pos(0, 0, anchor = :topLeft), w = 16)
+#   v.place(wipe(16, 9, 1, :left, duration = 0.5s), at = Pos(0, 0, anchor = :topLeft), w = 16)
 
 import math
 import { alpha } from color
@@ -37,10 +40,11 @@ export func spotlight(cx: Number, cy: Number, radius: Number, w: Number, h: Numb
 ## @param cx 円の中心の x (既定 真ん中)
 ## @param cy 円の中心の y (既定 真ん中)
 ## @param color 幕の色 (既定 黒)
-## @returns 箱が w x h の View
+## @param duration 0s より長ければ、その長さで 0 から progress まで開く (既定 0s = 止まったまま)
+## @returns 箱が w x h の View。duration があれば Timeline を持つので、置けば動く
 ## @example
-## v.place(iris(16, 9, 0.4), at = Pos(0, 0, anchor = :topLeft), w = 16)
-export func iris(w: Number, h: Number, progress: Number, cx: Number = -1, cy: Number = -1, color: Color = #000000) -> View {
+## v.place(iris(16, 9, 1, duration = 0.6s), at = Pos(0, 0, anchor = :topLeft), w = 16)
+export func iris(w: Number, h: Number, progress: Number, cx: Number = -1, cy: Number = -1, color: Color = #000000, duration: Duration = 0s) -> View {
   let v = View(box = Vector(w, h), clip = true)
   let x = if cx < 0 { w / 2 } else { cx }
   let y = if cy < 0 { h / 2 } else { cy }
@@ -49,7 +53,14 @@ export func iris(w: Number, h: Number, progress: Number, cx: Number = -1, cy: Nu
   let full = math.max(math.hypot(x, y), math.max(math.hypot(w - x, y), math.max(math.hypot(x, h - y), math.hypot(w - x, h - y))))
   let r = full * k
   let thick = full * 2
-  v.place(Circle(position = Pos(x, y), radius = r + thick / 2, stroke = color, strokeWidth = thick))
+  let hole = Circle(position = Pos(x, y), radius = r + thick / 2, stroke = color, strokeWidth = thick)
+  v.place(hole)
+  if duration > 0s {
+    v.addTrack(motion {
+      0s: hole.radius = thick / 2
+      duration: hole.radius = r + thick / 2
+    })
+  }
   v
 }
 
@@ -60,21 +71,37 @@ export func iris(w: Number, h: Number, progress: Number, cx: Number = -1, cy: Nu
 ## @param progress 覆っている割合 0..1
 ## @param direction 幕が伸びてくる向き (:left :right :top :bottom。既定 :left)
 ## @param color 幕の色 (既定 黒)
-## @returns 箱が w x h の View
+## @param duration 0s より長ければ、その長さで 0 から progress まで動く (既定 0s = 止まったまま)
+## @returns 箱が w x h の View。duration があれば Timeline を持つので、置けば動く
 ## @example
-## v.place(wipe(16, 9, 0.6, :left), at = Pos(0, 0, anchor = :topLeft), w = 16)
-export func wipe(w: Number, h: Number, progress: Number, direction: Symbol = :left, color: Color = #000000) -> View {
+## v.place(wipe(16, 9, 1, :left, duration = 0.5s), at = Pos(0, 0, anchor = :topLeft), w = 16)
+export func wipe(w: Number, h: Number, progress: Number, direction: Symbol = :left, color: Color = #000000, duration: Duration = 0s) -> View {
   let v = View(box = Vector(w, h))
   let k = math.clamp(progress, 0, 1)
-  if k <= 0 { return v }
-  if direction == :right {
-    v.place(Rect(position = Pos(w, 0, anchor = :topRight), w = w * k, h = h, fill = color))
+  if k <= 0 and duration <= 0s { return v }
+  let sideways = direction == :left or direction == :right
+  let curtain = if direction == :right {
+    Rect(position = Pos(w, 0, anchor = :topRight), w = w * k, h = h, fill = color)
   } else if direction == :top {
-    v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h * k, fill = color))
+    Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h * k, fill = color)
   } else if direction == :bottom {
-    v.place(Rect(position = Pos(0, h, anchor = :bottomLeft), w = w, h = h * k, fill = color))
+    Rect(position = Pos(0, h, anchor = :bottomLeft), w = w, h = h * k, fill = color)
   } else {
-    v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w * k, h = h, fill = color))
+    Rect(position = Pos(0, 0, anchor = :topLeft), w = w * k, h = h, fill = color)
+  }
+  v.place(curtain)
+  if duration > 0s {
+    if sideways {
+      v.addTrack(motion {
+        0s: curtain.w = 0
+        duration: curtain.w = w * k
+      })
+    } else {
+      v.addTrack(motion {
+        0s: curtain.h = 0
+        duration: curtain.h = h * k
+      })
+    }
   }
   v
 }
@@ -132,20 +159,27 @@ export func split_compare(before: View, after: View, position: Number, w: Number
 ## @param h 高さ
 ## @param fontSize 文字の大きさ (既定 高さの 1/12)
 ## @param color 文字の色 (既定 白)
-## @returns 箱が w x h の View
+## @param duration 0s より長ければ、その長さで 0 から offset まで流れる (既定 0s = 止まったまま)
+## @returns 箱が w x h の View。duration があれば Timeline を持つので、置けば動く
 ## @example
-## v.place(credits_roll(["監督", "だれか"], 0.5, 6, 9), at = Pos(5, 0, anchor = :topLeft), w = 6)
-export func credits_roll(lines: List<String>, offset: Number, w: Number, h: Number, fontSize: Number = 0, color: Color = #ffffff) -> View {
+## v.place(credits_roll(names, 1, 6, 9, duration = 8s), at = Pos(5, 0, anchor = :topLeft), w = 6)
+export func credits_roll(lines: List<String>, offset: Number, w: Number, h: Number, fontSize: Number = 0, color: Color = #ffffff, duration: Duration = 0s) -> View {
   let v = View(box = Vector(w, h), clip = true)
   let size = if fontSize > 0 { fontSize } else { h / 12 }
   let step = size * 1.8
   let total = step * lines.len()
-  let top = h - offset * (h + total)
+  # 行をまとめた 1 枚を上へ動かす
+  let roll = View(box = Vector(w, total))
   for (i, line) in lines.enumerate() {
-    let y = top + step * i
-    if y > -step and y < h + step {
-      v.place(TextArea(position = Pos(w / 2, y, anchor = :top), text = line, fontSize = size, w = w * 0.9, fill = color, align = :center))
-    }
+    roll.place(TextArea(position = Pos(w / 2, step * i, anchor = :top), text = line, fontSize = size, w = w * 0.9, fill = color, align = :center))
+  }
+  let top = h - offset * (h + total)
+  v.place(roll, at = Pos(0, top, anchor = :topLeft), w = w)
+  if duration > 0s {
+    v.addTrack(motion {
+      0s: roll.position = Pos(0, h, anchor = :topLeft)
+      duration: roll.position = Pos(0, top, anchor = :topLeft)
+    })
   }
   v
 }

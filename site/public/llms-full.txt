@@ -2312,6 +2312,18 @@ alias P = Pos
   at: Duration,
   stagger: Duration = 0.08s,
 )` -> Timeline, at: Duration, stagger: Duration = 0.08s) -> Nothing — 同じ動きを、少しずつ遅らせて並べて置く
+- `reveal_x(
+  window: View,
+  from: Number,
+  to: Number,
+  duration: Duration = 0.5s,
+)` -> Timeline — clip した View の幅を変えて、中身を左から見せていく Timeline を返す。 中身は箱いっぱいの大きさで置いておく。箱と置いた幅を同じだけ変えるので、中身の大きさは変わらない
+- `reveal_y(
+  window: View,
+  from: Number,
+  to: Number,
+  duration: Duration = 0.5s,
+)` -> Timeline — reveal_x の縦version。中身を上から見せていく
 
 ### chart
 
@@ -2344,6 +2356,7 @@ alias P = Pos
   size: Number,
   colors: List<Color> = [],
   hole: Number = 0,
+  duration: Duration = 0s,
 )` -> View — 円グラフ。values の割合で切り分ける
 - `scatter(
   points: List<Vector>,
@@ -2447,6 +2460,7 @@ alias P = Pos
   h: Number,
   revealed: Number = -1,
   color: Color = #4080e0,
+  duration: Duration = 0s,
 )` -> View — ネットワーク図。ノードは (名前, 位置) の Dict、エッジは (名前, 名前) の組
 - `table(
   headers: List<String>,
@@ -2455,6 +2469,7 @@ alias P = Pos
   h: Number,
   revealed: Number = -1,
   accent: Color = #e6e2da,
+  duration: Duration = 0s,
 )` -> View — 比較表。行を順に出せる
 
 ### text
@@ -2483,6 +2498,7 @@ alias P = Pos
   style: Symbol = :marker,
   color: Color = #1a1d23,
   accent: Color = #ffd34d,
+  duration: Duration = 0s,
 )` -> View — 1 行の文字の一部を目立たせる。マーカーか下線
 - `quote_card(
   s: String,
@@ -2500,6 +2516,7 @@ alias P = Pos
   progress: Number = 1,
   fill: Color = #1a1d23,
   accent: Color = #e04040,
+  duration: Duration = 0s,
 )` -> View — 画面下の帯タイトル。progress で左から出てくる
 - `chapter_card(
   title: String,
@@ -2543,6 +2560,7 @@ alias P = Pos
   back: Color = #14161a,
   ink: Color = #9fe0a0,
   font: String = "",
+  duration: Duration = 0s,
 )` -> View — ターミナル。行を上から順に出し、最後の行は 1 文字ずつ出る
 - `chat(
   messages: List<Tuple>,
@@ -2559,6 +2577,7 @@ alias P = Pos
   progress: Number = 1,
   fill: Color = #1a1d23,
   accent: Color = #4aa863,
+  duration: Duration = 0s,
 )` -> View — 通知のバブル。progress が 0 のときは上に隠れている
 - `cursor(
   at: Vector,
@@ -2665,6 +2684,7 @@ alias P = Pos
   cx: Number = -1,
   cy: Number = -1,
   color: Color = #000000,
+  duration: Duration = 0s,
 )` -> View — 円が開く / 閉じる切り替え
 - `wipe(
   w: Number,
@@ -2672,6 +2692,7 @@ alias P = Pos
   progress: Number,
   direction: Symbol = :left,
   color: Color = #000000,
+  duration: Duration = 0s,
 )` -> View — 端から幕が寄せる / 引く切り替え
 - `magnifier(
   source: View,
@@ -2696,6 +2717,7 @@ alias P = Pos
   h: Number,
   fontSize: Number = 0,
   color: Color = #ffffff,
+  duration: Duration = 0s,
 )` -> View — エンドロール。offset で下から上へ流す
 
 ### media
@@ -2737,6 +2759,7 @@ alias P = Pos
   h: Number,
   color: Color = #e04040,
   width: Number = 0,
+  duration: Duration = 0s,
 )` -> View — 経路が伸びる線。点は箱の座標
 - `map_pin(
   at: Vector,
@@ -2745,6 +2768,7 @@ alias P = Pos
   h: Number,
   size: Number = 0.6,
   color: Color = #e04040,
+  duration: Duration = 0s,
 )` -> View — ピンが落ちてくる
 
 ### clock
@@ -2798,6 +2822,7 @@ alias P = Pos
   h: Number,
   color: Color = #e04040,
   track: Color = #e6e2da,
+  duration: Duration = 0s,
 )` -> View — 再生バー。印の付いた所が章の切れ目
 
 ### meter

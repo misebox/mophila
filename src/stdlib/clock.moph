@@ -144,21 +144,28 @@ export func calendar_page(month: String, day: Number, weekday: String, w: Number
 ## @param h 高さ
 ## @param color 進んだ分の色 (既定 赤)
 ## @param track 残りの色 (既定 薄い灰)
-## @returns 箱が w x h の View
+## @param duration 0s より長ければ、その長さで 0 から position まで進む (既定 0s = 止まったまま)
+## @returns 箱が w x h の View。duration があれば Timeline を持つので、置けば動く
 ## @example
-## v.place(timeline_bar([0.25, 0.6], 0.4, 8, 0.4), at = Pos(1, 1, anchor = :topLeft), w = 8)
-export func timeline_bar(markers: List<Number>, position: Number, w: Number, h: Number, color: Color = #e04040, track: Color = #e6e2da) -> View {
+## v.place(timeline_bar([0.25, 0.6], 1, 8, 0.4, duration = 6s), at = Pos(1, 1, anchor = :topLeft), w = 8)
+export func timeline_bar(markers: List<Number>, position: Number, w: Number, h: Number, color: Color = #e04040, track: Color = #e6e2da, duration: Duration = 0s) -> View {
   let v = View(box = Vector(w, h))
   let k = math.clamp(position, 0, 1)
   let bar = h * 0.34
   let cy = h / 2
   v.place(Rect(position = Pos(0, cy - bar / 2, anchor = :topLeft), w = w, h = bar, radius = bar / 2, fill = track))
-  if k > 0 {
-    v.place(Rect(position = Pos(0, cy - bar / 2, anchor = :topLeft), w = w * k, h = bar, radius = bar / 2, fill = color))
-  }
+  let done = Rect(position = Pos(0, cy - bar / 2, anchor = :topLeft), w = w * k, h = bar, radius = bar / 2, fill = color)
+  if k > 0 or duration > 0s { v.place(done) }
   for m in markers {
     v.place(Rect(position = Pos(w * math.clamp(m, 0, 1), cy, anchor = :center), w = bar * 0.28, h = bar * 1.6, fill = gray(120)))
   }
-  v.place(Circle(position = Pos(w * k, cy), radius = h * 0.32, fill = color))
+  let knob = Circle(position = Pos(w * k, cy), radius = h * 0.32, fill = color)
+  v.place(knob)
+  if duration > 0s {
+    v.addTrack(motion {
+      0s: done.w = 0, knob.position = Pos(0, cy)
+      duration: done.w = w * k, knob.position = Pos(w * k, cy)
+    })
+  }
   v
 }

@@ -238,3 +238,43 @@ export func stagger(track: Timeline, targets: List<Placeable>, make: (Placeable)
     track.place(make(target), at = at + stagger * i)
   }
 }
+
+## clip した View の幅を変えて、中身を左から見せていく Timeline を返す。
+## 中身は箱いっぱいの大きさで置いておく。箱と置いた幅を同じだけ変えるので、中身の大きさは変わらない
+## @category 出し入れ
+## @param window clip = true の View。他の View に置いてあること
+## @param from 始まりの幅
+## @param to 終わりの幅
+## @param duration 長さ (既定 0.5s)
+## @returns Timeline
+## @example
+## # 帯を左から出す
+## let window = View(box = Vector(8, 1.6), clip = true)
+## window.place(band, at = Pos(0, 0, anchor = :topLeft), w = 8)
+## v.place(window, at = Pos(1, 6, anchor = :topLeft), w = 8)
+## track.place(reveal_x(window, 0, 8), at = 1s)
+export func reveal_x(window: View, from: Number, to: Number, duration: Duration = 0.5s) -> Timeline {
+  # 幅 0 だと中身の倍率が決まらないので、ごく細いところから始める
+  let a = math.max(from, 0.0001)
+  motion {
+    0s: window.box.x = a, window.w = a
+    duration: window.box.x = to, window.w = to
+  }
+}
+
+## reveal_x の縦version。中身を上から見せていく
+## @category 出し入れ
+## @param window clip = true の View。他の View に置いてあること
+## @param from 始まりの高さ
+## @param to 終わりの高さ
+## @param duration 長さ (既定 0.5s)
+## @returns Timeline
+## @example
+## track.place(reveal_y(window, 0, 4), at = 1s)
+export func reveal_y(window: View, from: Number, to: Number, duration: Duration = 0.5s) -> Timeline {
+  let a = math.max(from, 0.0001)
+  motion {
+    0s: window.box.y = a, window.h = a
+    duration: window.box.y = to, window.h = to
+  }
+}

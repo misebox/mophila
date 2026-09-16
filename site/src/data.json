@@ -3784,6 +3784,84 @@
       "doc": "無し。track に直接置く"
      },
      "example": "stagger(track, cards, func (c) { fade_in(c, 0.4s) }, at = 1s)"
+    },
+    {
+     "name": "reveal_x",
+     "category": "出し入れ",
+     "isFunc": true,
+     "signature": "reveal_x(window: View, from: Number, to: Number, duration: Duration = 0.5s)",
+     "call": "reveal_x(\n  window: View,\n  from: Number,\n  to: Number,\n  duration: Duration = 0.5s,\n)",
+     "summary": "clip した View の幅を変えて、中身を左から見せていく Timeline を返す。 中身は箱いっぱいの大きさで置いておく。箱と置いた幅を同じだけ変えるので、中身の大きさは変わらない",
+     "params": [
+      {
+       "name": "window",
+       "type": "View",
+       "doc": "clip = true の View。他の View に置いてあること",
+       "default": ""
+      },
+      {
+       "name": "from",
+       "type": "Number",
+       "doc": "始まりの幅",
+       "default": ""
+      },
+      {
+       "name": "to",
+       "type": "Number",
+       "doc": "終わりの幅",
+       "default": ""
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "長さ (既定 0.5s)",
+       "default": "0.5s"
+      }
+     ],
+     "returns": {
+      "type": "Timeline",
+      "doc": "Timeline"
+     },
+     "example": "# 帯を左から出す\nlet window = View(box = Vector(8, 1.6), clip = true)\nwindow.place(band, at = Pos(0, 0, anchor = :topLeft), w = 8)\nv.place(window, at = Pos(1, 6, anchor = :topLeft), w = 8)\ntrack.place(reveal_x(window, 0, 8), at = 1s)"
+    },
+    {
+     "name": "reveal_y",
+     "category": "出し入れ",
+     "isFunc": true,
+     "signature": "reveal_y(window: View, from: Number, to: Number, duration: Duration = 0.5s)",
+     "call": "reveal_y(\n  window: View,\n  from: Number,\n  to: Number,\n  duration: Duration = 0.5s,\n)",
+     "summary": "reveal_x の縦version。中身を上から見せていく",
+     "params": [
+      {
+       "name": "window",
+       "type": "View",
+       "doc": "clip = true の View。他の View に置いてあること",
+       "default": ""
+      },
+      {
+       "name": "from",
+       "type": "Number",
+       "doc": "始まりの高さ",
+       "default": ""
+      },
+      {
+       "name": "to",
+       "type": "Number",
+       "doc": "終わりの高さ",
+       "default": ""
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "長さ (既定 0.5s)",
+       "default": "0.5s"
+      }
+     ],
+     "returns": {
+      "type": "Timeline",
+      "doc": "Timeline"
+     },
+     "example": "track.place(reveal_y(window, 0, 4), at = 1s)"
     }
    ]
   },
@@ -3943,13 +4021,25 @@
        "type": "",
        "doc": "縦軸の上端 (既定 値の最大)",
        "default": ""
+      },
+      {
+       "name": "duration",
+       "type": "",
+       "doc": "0s より長ければ、その長さで 0 から値まで伸びる (既定 0s = 止まったまま)",
+       "default": ""
+      },
+      {
+       "name": "stagger",
+       "type": "",
+       "doc": "隣の棒が伸び始めるまでの間 (既定 0s)",
+       "default": ""
       }
      ],
      "returns": {
       "type": "",
-      "doc": "箱が w x h の View"
+      "doc": "箱が w x h の View。duration があれば Timeline を持つので、置けば動く"
      },
-     "example": "v.place(bar([3, 7, 5], [\"A\", \"B\", \"C\"], 6, 4), at = Pos(1, 1, anchor = :topLeft), w = 6)"
+     "example": "v.place(bar([3, 7, 5], [\"A\", \"B\", \"C\"], 6, 4, duration = 0.8s, stagger = 0.1s), at = Pos(1, 1, anchor = :topLeft), w = 6)"
     },
     {
      "name": "line",
@@ -4012,20 +4102,26 @@
        "type": "",
        "doc": "描く割合 0..1 (既定 1)",
        "default": ""
+      },
+      {
+       "name": "duration",
+       "type": "",
+       "doc": "0s より長ければ、その長さで 0 から progress まで描き進む (既定 0s = 止まったまま)",
+       "default": ""
       }
      ],
      "returns": {
       "type": "",
-      "doc": "箱が w x h の View"
+      "doc": "箱が w x h の View。duration があれば Timeline を持つので、置けば動く"
      },
-     "example": "v.place(line(pts, 6, 4, 0, 10, 0, 100), at = Pos(1, 1, anchor = :topLeft), w = 6)"
+     "example": "v.place(line(pts, 6, 4, 0, 10, 0, 100, duration = 1s), at = Pos(1, 1, anchor = :topLeft), w = 6)"
     },
     {
      "name": "pie",
      "category": "グラフ",
      "isFunc": true,
-     "signature": "pie(values: List<Number>, size: Number, colors: List<Color> = [], hole: Number = 0)",
-     "call": "pie(\n  values: List<Number>,\n  size: Number,\n  colors: List<Color> = [],\n  hole: Number = 0,\n)",
+     "signature": "pie(values: List<Number>, size: Number, colors: List<Color> = [], hole: Number = 0, duration: Duration = 0s)",
+     "call": "pie(\n  values: List<Number>,\n  size: Number,\n  colors: List<Color> = [],\n  hole: Number = 0,\n  duration: Duration = 0s,\n)",
      "summary": "円グラフ。values の割合で切り分ける",
      "params": [
       {
@@ -4051,13 +4147,19 @@
        "type": "Number",
        "doc": "中央の穴の割合 0..1 (既定 0。0.5 ならドーナツ)",
        "default": "0"
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "0s より長ければ、その長さで真上から時計回りに開いていく (既定 0s = 止まったまま)",
+       "default": "0s"
       }
      ],
      "returns": {
       "type": "View",
-      "doc": "箱が size x size の View"
+      "doc": "箱が size x size の View。duration があれば Timeline を持つので、置けば動く"
      },
-     "example": "v.place(pie([3, 2, 1], 3), at = Pos(1, 1, anchor = :topLeft), w = 3)"
+     "example": "v.place(pie([3, 2, 1], 3, duration = 1s), at = Pos(1, 1, anchor = :topLeft), w = 3)"
     },
     {
      "name": "scatter",
@@ -4670,8 +4772,8 @@
      "name": "node_graph",
      "category": "関係",
      "isFunc": true,
-     "signature": "node_graph(nodes: Dict, edges: List<Tuple>, w: Number, h: Number, revealed: Number = -1, color: Color = #4080e0)",
-     "call": "node_graph(\n  nodes: Dict,\n  edges: List<Tuple>,\n  w: Number,\n  h: Number,\n  revealed: Number = -1,\n  color: Color = #4080e0,\n)",
+     "signature": "node_graph(nodes: Dict, edges: List<Tuple>, w: Number, h: Number, revealed: Number = -1, color: Color = #4080e0, duration: Duration = 0s)",
+     "call": "node_graph(\n  nodes: Dict,\n  edges: List<Tuple>,\n  w: Number,\n  h: Number,\n  revealed: Number = -1,\n  color: Color = #4080e0,\n  duration: Duration = 0s,\n)",
      "summary": "ネットワーク図。ノードは (名前, 位置) の Dict、エッジは (名前, 名前) の組",
      "params": [
       {
@@ -4709,20 +4811,26 @@
        "type": "Color",
        "doc": "ノードの色 (既定 #4080e0)",
        "default": "#4080e0"
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "0s より長ければ、その長さで 1 つずつ出てくる (既定 0s = revealed のまま止まる)",
+       "default": "0s"
       }
      ],
      "returns": {
       "type": "View",
-      "doc": "箱が w x h の View"
+      "doc": "箱が w x h の View。duration があれば Timeline を持つので、置けば動く"
      },
-     "example": "v.place(node_graph({ \"a\": Vector(1, 1), \"b\": Vector(3, 2) }, [(\"a\", \"b\")], 4, 3), at = Pos(1, 1, anchor = :topLeft), w = 4)"
+     "example": "v.place(node_graph({ \"a\": Vector(1, 1), \"b\": Vector(3, 2) }, [(\"a\", \"b\")], 4, 3, duration = 1s), at = Pos(1, 1, anchor = :topLeft), w = 4)"
     },
     {
      "name": "table",
      "category": "表",
      "isFunc": true,
-     "signature": "table(headers: List<String>, rows: List<List<String>>, w: Number, h: Number, revealed: Number = -1, accent: Color = #e6e2da)",
-     "call": "table(\n  headers: List<String>,\n  rows: List<List<String>>,\n  w: Number,\n  h: Number,\n  revealed: Number = -1,\n  accent: Color = #e6e2da,\n)",
+     "signature": "table(headers: List<String>, rows: List<List<String>>, w: Number, h: Number, revealed: Number = -1, accent: Color = #e6e2da, duration: Duration = 0s)",
+     "call": "table(\n  headers: List<String>,\n  rows: List<List<String>>,\n  w: Number,\n  h: Number,\n  revealed: Number = -1,\n  accent: Color = #e6e2da,\n  duration: Duration = 0s,\n)",
      "summary": "比較表。行を順に出せる",
      "params": [
       {
@@ -4760,13 +4868,19 @@
        "type": "Color",
        "doc": "見出しの背の色 (既定 薄い灰)",
        "default": "#e6e2da"
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "0s より長ければ、その長さで 1 行ずつ出てくる (既定 0s = revealed のまま止まる)",
+       "default": "0s"
       }
      ],
      "returns": {
       "type": "View",
-      "doc": "箱が w x h の View"
+      "doc": "箱が w x h の View。duration があれば Timeline を持つので、置けば動く"
      },
-     "example": "v.place(table([\"名前\", \"値\"], [[\"A\", \"3\"], [\"B\", \"7\"]], 5, 2), at = Pos(1, 1, anchor = :topLeft), w = 5)"
+     "example": "v.place(table([\"名前\", \"値\"], [[\"A\", \"3\"], [\"B\", \"7\"]], 5, 2, duration = 1s), at = Pos(1, 1, anchor = :topLeft), w = 5)"
     }
    ]
   },
@@ -4959,8 +5073,8 @@
      "name": "highlight",
      "category": "見出し",
      "isFunc": true,
-     "signature": "highlight(s: String, from: Number, to: Number, fontSize: Number, style: Symbol = :marker, color: Color = #1a1d23, accent: Color = #ffd34d)",
-     "call": "highlight(\n  s: String,\n  from: Number,\n  to: Number,\n  fontSize: Number,\n  style: Symbol = :marker,\n  color: Color = #1a1d23,\n  accent: Color = #ffd34d,\n)",
+     "signature": "highlight(s: String, from: Number, to: Number, fontSize: Number, style: Symbol = :marker, color: Color = #1a1d23, accent: Color = #ffd34d, duration: Duration = 0s)",
+     "call": "highlight(\n  s: String,\n  from: Number,\n  to: Number,\n  fontSize: Number,\n  style: Symbol = :marker,\n  color: Color = #1a1d23,\n  accent: Color = #ffd34d,\n  duration: Duration = 0s,\n)",
      "summary": "1 行の文字の一部を目立たせる。マーカーか下線",
      "params": [
       {
@@ -5004,13 +5118,19 @@
        "type": "Color",
        "doc": "目立たせる色 (既定 黄)",
        "default": "#ffd34d"
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "0s より長ければ、その長さで左から引かれる (既定 0s = 引かれたまま)",
+       "default": "0s"
       }
      ],
      "returns": {
       "type": "View",
       "doc": "箱が文字全体の大きさの View。中は左上から始まる"
      },
-     "example": "v.place(highlight(\"ここが大事\", 2, 4, 0.6), at = Pos(1, 1, anchor = :topLeft), w = 5)"
+     "example": "v.place(highlight(\"ここが大事\", 2, 4, 0.6, duration = 0.4s), at = Pos(1, 1, anchor = :topLeft), w = 5)"
     },
     {
      "name": "quote_card",
@@ -5067,8 +5187,8 @@
      "name": "lower_third",
      "category": "見出し",
      "isFunc": true,
-     "signature": "lower_third(title: String, subtitle: String, w: Number, h: Number, progress: Number = 1, fill: Color = #1a1d23, accent: Color = #e04040)",
-     "call": "lower_third(\n  title: String,\n  subtitle: String,\n  w: Number,\n  h: Number,\n  progress: Number = 1,\n  fill: Color = #1a1d23,\n  accent: Color = #e04040,\n)",
+     "signature": "lower_third(title: String, subtitle: String, w: Number, h: Number, progress: Number = 1, fill: Color = #1a1d23, accent: Color = #e04040, duration: Duration = 0s)",
+     "call": "lower_third(\n  title: String,\n  subtitle: String,\n  w: Number,\n  h: Number,\n  progress: Number = 1,\n  fill: Color = #1a1d23,\n  accent: Color = #e04040,\n  duration: Duration = 0s,\n)",
      "summary": "画面下の帯タイトル。progress で左から出てくる",
      "params": [
       {
@@ -5112,13 +5232,19 @@
        "type": "Color",
        "doc": "先頭の縦線の色 (既定 赤)",
        "default": "#e04040"
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "0s より長ければ、その長さで 0 から progress まで出てくる (既定 0s = 止まったまま)",
+       "default": "0s"
       }
      ],
      "returns": {
       "type": "View",
-      "doc": "箱が w x h の View"
+      "doc": "箱が w x h の View。duration があれば Timeline を持つので、置けば動く"
      },
-     "example": "v.place(lower_third(\"名前\", \"肩書き\", 8, 1.6, 0.7), at = Pos(1, 6, anchor = :topLeft), w = 8)"
+     "example": "v.place(lower_third(\"名前\", \"肩書き\", 8, 1.6, duration = 0.5s), at = Pos(1, 6, anchor = :topLeft), w = 8)"
     },
     {
      "name": "chapter_card",
@@ -5323,8 +5449,8 @@
      "name": "terminal",
      "category": "枠",
      "isFunc": true,
-     "signature": "terminal(lines: List<String>, revealed: Number, w: Number, h: Number, rows: Number = 0, back: Color = #14161a, ink: Color = #9fe0a0, font: String = \"\")",
-     "call": "terminal(\n  lines: List<String>,\n  revealed: Number,\n  w: Number,\n  h: Number,\n  rows: Number = 0,\n  back: Color = #14161a,\n  ink: Color = #9fe0a0,\n  font: String = \"\",\n)",
+     "signature": "terminal(lines: List<String>, revealed: Number, w: Number, h: Number, rows: Number = 0, back: Color = #14161a, ink: Color = #9fe0a0, font: String = \"\", duration: Duration = 0s)",
+     "call": "terminal(\n  lines: List<String>,\n  revealed: Number,\n  w: Number,\n  h: Number,\n  rows: Number = 0,\n  back: Color = #14161a,\n  ink: Color = #9fe0a0,\n  font: String = \"\",\n  duration: Duration = 0s,\n)",
      "summary": "ターミナル。行を上から順に出し、最後の行は 1 文字ずつ出る",
      "params": [
       {
@@ -5374,13 +5500,19 @@
        "type": "String",
        "doc": "文字の書体 (既定 そのときの既定の書体)",
        "default": "\"\""
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "0s より長ければ、その長さで全行を順に打つ (既定 0s = revealed のまま止まる)",
+       "default": "0s"
       }
      ],
      "returns": {
       "type": "View",
-      "doc": "箱が w x h の View"
+      "doc": "箱が w x h の View。duration があれば Timeline を持つので、置けば動く"
      },
-     "example": "v.place(terminal([\"$ mophila render a.moph\", \"done\"], 1.5, 8, 3), at = Pos(1, 1, anchor = :topLeft), w = 8)"
+     "example": "v.place(terminal([\"$ mophila render a.moph\", \"done\"], 0, 8, 3, duration = 2s), at = Pos(1, 1, anchor = :topLeft), w = 8)"
     },
     {
      "name": "chat",
@@ -5437,8 +5569,8 @@
      "name": "toast",
      "category": "部品",
      "isFunc": true,
-     "signature": "toast(message: String, w: Number, h: Number, progress: Number = 1, fill: Color = #1a1d23, accent: Color = #4aa863)",
-     "call": "toast(\n  message: String,\n  w: Number,\n  h: Number,\n  progress: Number = 1,\n  fill: Color = #1a1d23,\n  accent: Color = #4aa863,\n)",
+     "signature": "toast(message: String, w: Number, h: Number, progress: Number = 1, fill: Color = #1a1d23, accent: Color = #4aa863, duration: Duration = 0s)",
+     "call": "toast(\n  message: String,\n  w: Number,\n  h: Number,\n  progress: Number = 1,\n  fill: Color = #1a1d23,\n  accent: Color = #4aa863,\n  duration: Duration = 0s,\n)",
      "summary": "通知のバブル。progress が 0 のときは上に隠れている",
      "params": [
       {
@@ -5476,13 +5608,19 @@
        "type": "Color",
        "doc": "左の丸の色 (既定 緑)",
        "default": "#4aa863"
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "0s より長ければ、その長さで上から降りてくる (既定 0s = progress のまま止まる)",
+       "default": "0s"
       }
      ],
      "returns": {
       "type": "View",
-      "doc": "箱が w x h の View"
+      "doc": "箱が w x h の View。duration があれば Timeline を持つので、置けば動く"
      },
-     "example": "v.place(toast(\"保存しました\", 5, 1, 0.8), at = Pos(1, 1, anchor = :topLeft), w = 5)"
+     "example": "v.place(toast(\"保存しました\", 5, 1, duration = 0.4s), at = Pos(1, 1, anchor = :topLeft), w = 5)"
     },
     {
      "name": "cursor",
@@ -6090,8 +6228,8 @@
      "name": "iris",
      "category": "切り替え",
      "isFunc": true,
-     "signature": "iris(w: Number, h: Number, progress: Number, cx: Number = -1, cy: Number = -1, color: Color = #000000)",
-     "call": "iris(\n  w: Number,\n  h: Number,\n  progress: Number,\n  cx: Number = -1,\n  cy: Number = -1,\n  color: Color = #000000,\n)",
+     "signature": "iris(w: Number, h: Number, progress: Number, cx: Number = -1, cy: Number = -1, color: Color = #000000, duration: Duration = 0s)",
+     "call": "iris(\n  w: Number,\n  h: Number,\n  progress: Number,\n  cx: Number = -1,\n  cy: Number = -1,\n  color: Color = #000000,\n  duration: Duration = 0s,\n)",
      "summary": "円が開く / 閉じる切り替え",
      "params": [
       {
@@ -6129,20 +6267,26 @@
        "type": "Color",
        "doc": "幕の色 (既定 黒)",
        "default": "#000000"
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "0s より長ければ、その長さで 0 から progress まで開く (既定 0s = 止まったまま)",
+       "default": "0s"
       }
      ],
      "returns": {
       "type": "View",
-      "doc": "箱が w x h の View"
+      "doc": "箱が w x h の View。duration があれば Timeline を持つので、置けば動く"
      },
-     "example": "v.place(iris(16, 9, 0.4), at = Pos(0, 0, anchor = :topLeft), w = 16)"
+     "example": "v.place(iris(16, 9, 1, duration = 0.6s), at = Pos(0, 0, anchor = :topLeft), w = 16)"
     },
     {
      "name": "wipe",
      "category": "切り替え",
      "isFunc": true,
-     "signature": "wipe(w: Number, h: Number, progress: Number, direction: Symbol = :left, color: Color = #000000)",
-     "call": "wipe(\n  w: Number,\n  h: Number,\n  progress: Number,\n  direction: Symbol = :left,\n  color: Color = #000000,\n)",
+     "signature": "wipe(w: Number, h: Number, progress: Number, direction: Symbol = :left, color: Color = #000000, duration: Duration = 0s)",
+     "call": "wipe(\n  w: Number,\n  h: Number,\n  progress: Number,\n  direction: Symbol = :left,\n  color: Color = #000000,\n  duration: Duration = 0s,\n)",
      "summary": "端から幕が寄せる / 引く切り替え",
      "params": [
       {
@@ -6174,13 +6318,19 @@
        "type": "Color",
        "doc": "幕の色 (既定 黒)",
        "default": "#000000"
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "0s より長ければ、その長さで 0 から progress まで動く (既定 0s = 止まったまま)",
+       "default": "0s"
       }
      ],
      "returns": {
       "type": "View",
-      "doc": "箱が w x h の View"
+      "doc": "箱が w x h の View。duration があれば Timeline を持つので、置けば動く"
      },
-     "example": "v.place(wipe(16, 9, 0.6, :left), at = Pos(0, 0, anchor = :topLeft), w = 16)"
+     "example": "v.place(wipe(16, 9, 1, :left, duration = 0.5s), at = Pos(0, 0, anchor = :topLeft), w = 16)"
     },
     {
      "name": "magnifier",
@@ -6288,8 +6438,8 @@
      "name": "credits_roll",
      "category": "流す",
      "isFunc": true,
-     "signature": "credits_roll(lines: List<String>, offset: Number, w: Number, h: Number, fontSize: Number = 0, color: Color = #ffffff)",
-     "call": "credits_roll(\n  lines: List<String>,\n  offset: Number,\n  w: Number,\n  h: Number,\n  fontSize: Number = 0,\n  color: Color = #ffffff,\n)",
+     "signature": "credits_roll(lines: List<String>, offset: Number, w: Number, h: Number, fontSize: Number = 0, color: Color = #ffffff, duration: Duration = 0s)",
+     "call": "credits_roll(\n  lines: List<String>,\n  offset: Number,\n  w: Number,\n  h: Number,\n  fontSize: Number = 0,\n  color: Color = #ffffff,\n  duration: Duration = 0s,\n)",
      "summary": "エンドロール。offset で下から上へ流す",
      "params": [
       {
@@ -6327,13 +6477,19 @@
        "type": "Color",
        "doc": "文字の色 (既定 白)",
        "default": "#ffffff"
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "0s より長ければ、その長さで 0 から offset まで流れる (既定 0s = 止まったまま)",
+       "default": "0s"
       }
      ],
      "returns": {
       "type": "View",
-      "doc": "箱が w x h の View"
+      "doc": "箱が w x h の View。duration があれば Timeline を持つので、置けば動く"
      },
-     "example": "v.place(credits_roll([\"監督\", \"だれか\"], 0.5, 6, 9), at = Pos(5, 0, anchor = :topLeft), w = 6)"
+     "example": "v.place(credits_roll(names, 1, 6, 9, duration = 8s), at = Pos(5, 0, anchor = :topLeft), w = 6)"
     }
    ]
   },
@@ -6436,11 +6592,17 @@
        "type": "",
        "doc": "終わりに真ん中へ来る点 (既定 真ん中)",
        "default": ""
+      },
+      {
+       "name": "duration",
+       "type": "",
+       "doc": "0s より長ければ、その長さで 0 から progress まで動く (既定 0s = 止まったまま)",
+       "default": ""
       }
      ],
      "returns": {
       "type": "",
-      "doc": "箱が w x h の View"
+      "doc": "箱が w x h の View。duration があれば Timeline を持つので、置けば動く"
      },
      "example": "v.place(ken_burns(photo, k, 16, 9, 1, 1.2, Vector(0.4, 0.4), Vector(0.6, 0.55)), at = Pos(0, 0, anchor = :topLeft), w = 16)"
     },
@@ -6571,8 +6733,8 @@
      "name": "map_route",
      "category": "地図",
      "isFunc": true,
-     "signature": "map_route(points: List<Vector>, progress: Number, w: Number, h: Number, color: Color = #e04040, width: Number = 0)",
-     "call": "map_route(\n  points: List<Vector>,\n  progress: Number,\n  w: Number,\n  h: Number,\n  color: Color = #e04040,\n  width: Number = 0,\n)",
+     "signature": "map_route(points: List<Vector>, progress: Number, w: Number, h: Number, color: Color = #e04040, width: Number = 0, duration: Duration = 0s)",
+     "call": "map_route(\n  points: List<Vector>,\n  progress: Number,\n  w: Number,\n  h: Number,\n  color: Color = #e04040,\n  width: Number = 0,\n  duration: Duration = 0s,\n)",
      "summary": "経路が伸びる線。点は箱の座標",
      "params": [
       {
@@ -6610,20 +6772,26 @@
        "type": "Number",
        "doc": "線の太さ (既定 幅の 1/120)",
        "default": "0"
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "0s より長ければ、その長さで 0 から progress まで伸びる (既定 0s = 止まったまま)",
+       "default": "0s"
       }
      ],
      "returns": {
       "type": "View",
-      "doc": "箱が w x h の View"
+      "doc": "箱が w x h の View。duration があれば Timeline を持つので、置けば動く"
      },
-     "example": "v.place(map_route([Vector(1, 4), Vector(4, 2), Vector(7, 3)], 0.6, 8, 4.5), at = Pos(0, 0, anchor = :topLeft), w = 8)"
+     "example": "v.place(map_route([Vector(1, 4), Vector(4, 2), Vector(7, 3)], 1, 8, 4.5, duration = 1.5s), at = Pos(0, 0, anchor = :topLeft), w = 8)"
     },
     {
      "name": "map_pin",
      "category": "地図",
      "isFunc": true,
-     "signature": "map_pin(at: Vector, progress: Number, w: Number, h: Number, size: Number = 0.6, color: Color = #e04040)",
-     "call": "map_pin(\n  at: Vector,\n  progress: Number,\n  w: Number,\n  h: Number,\n  size: Number = 0.6,\n  color: Color = #e04040,\n)",
+     "signature": "map_pin(at: Vector, progress: Number, w: Number, h: Number, size: Number = 0.6, color: Color = #e04040, duration: Duration = 0s)",
+     "call": "map_pin(\n  at: Vector,\n  progress: Number,\n  w: Number,\n  h: Number,\n  size: Number = 0.6,\n  color: Color = #e04040,\n  duration: Duration = 0s,\n)",
      "summary": "ピンが落ちてくる",
      "params": [
       {
@@ -6661,13 +6829,19 @@
        "type": "Color",
        "doc": "ピンの色 (既定 赤)",
        "default": "#e04040"
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "0s より長ければ、その長さで落ちてくる (既定 0s = progress のまま止まる)",
+       "default": "0s"
       }
      ],
      "returns": {
       "type": "View",
-      "doc": "箱が w x h の View"
+      "doc": "箱が w x h の View。duration があれば Timeline を持つので、置けば動く"
      },
-     "example": "v.place(map_pin(Vector(4, 2), 0.8, 8, 4.5), at = Pos(0, 0, anchor = :topLeft), w = 8)"
+     "example": "v.place(map_pin(Vector(4, 2), 1, 8, 4.5, duration = 0.6s), at = Pos(0, 0, anchor = :topLeft), w = 8)"
     }
    ]
   },
@@ -6947,8 +7121,8 @@
      "name": "timeline_bar",
      "category": "帯",
      "isFunc": true,
-     "signature": "timeline_bar(markers: List<Number>, position: Number, w: Number, h: Number, color: Color = #e04040, track: Color = #e6e2da)",
-     "call": "timeline_bar(\n  markers: List<Number>,\n  position: Number,\n  w: Number,\n  h: Number,\n  color: Color = #e04040,\n  track: Color = #e6e2da,\n)",
+     "signature": "timeline_bar(markers: List<Number>, position: Number, w: Number, h: Number, color: Color = #e04040, track: Color = #e6e2da, duration: Duration = 0s)",
+     "call": "timeline_bar(\n  markers: List<Number>,\n  position: Number,\n  w: Number,\n  h: Number,\n  color: Color = #e04040,\n  track: Color = #e6e2da,\n  duration: Duration = 0s,\n)",
      "summary": "再生バー。印の付いた所が章の切れ目",
      "params": [
       {
@@ -6986,13 +7160,19 @@
        "type": "Color",
        "doc": "残りの色 (既定 薄い灰)",
        "default": "#e6e2da"
+      },
+      {
+       "name": "duration",
+       "type": "Duration",
+       "doc": "0s より長ければ、その長さで 0 から position まで進む (既定 0s = 止まったまま)",
+       "default": "0s"
       }
      ],
      "returns": {
       "type": "View",
-      "doc": "箱が w x h の View"
+      "doc": "箱が w x h の View。duration があれば Timeline を持つので、置けば動く"
      },
-     "example": "v.place(timeline_bar([0.25, 0.6], 0.4, 8, 0.4), at = Pos(1, 1, anchor = :topLeft), w = 8)"
+     "example": "v.place(timeline_bar([0.25, 0.6], 1, 8, 0.4, duration = 6s), at = Pos(1, 1, anchor = :topLeft), w = 8)"
     }
    ]
   },

@@ -128,23 +128,45 @@ export func speech_bubble(text: String, w: Number, h: Number, tail: Symbol = :bo
 ## @param h 高さ
 ## @param revealed 出すノードの数 (既定 全部)。エッジは両端が出ていれば出る
 ## @param color ノードの色 (既定 #4080e0)
-## @returns 箱が w x h の View
+## @param duration 0s より長ければ、その長さで 1 つずつ出てくる (既定 0s = revealed のまま止まる)
+## @returns 箱が w x h の View。duration があれば Timeline を持つので、置けば動く
 ## @example
-## v.place(node_graph({ "a": Vector(1, 1), "b": Vector(3, 2) }, [("a", "b")], 4, 3), at = Pos(1, 1, anchor = :topLeft), w = 4)
-export func node_graph(nodes: Dict, edges: List<Tuple>, w: Number, h: Number, revealed: Number = -1, color: Color = #4080e0) -> View {
+## v.place(node_graph({ "a": Vector(1, 1), "b": Vector(3, 2) }, [("a", "b")], 4, 3, duration = 1s), at = Pos(1, 1, anchor = :topLeft), w = 4)
+export func node_graph(nodes: Dict, edges: List<Tuple>, w: Number, h: Number, revealed: Number = -1, color: Color = #4080e0, duration: Duration = 0s) -> View {
   let v = View(box = Vector(w, h))
   let names = nodes.keys()
-  let n = if revealed < 0 { names.len() } else { math.clamp(revealed, 0, names.len()) }
+  let n = if duration > 0s { names.len() } else if revealed < 0 { names.len() } else { math.clamp(revealed, 0, names.len()) }
   let shown = names[0..n]
   let r = math.min(w, h) * 0.06
+  let slot = if names.len() > 0 { duration / names.len() } else { duration }
+  # ノードが出そろう順で、辺は遅い方の端に合わせて出す
   for (a, b) in edges {
     if shown.contains(a) and shown.contains(b) {
-      v.place(Line(from = nodes[a], to = nodes[b], stroke = gray(180), strokeWidth = r * 0.25))
+      let edge = Line(from = nodes[a], to = nodes[b], stroke = gray(180), strokeWidth = r * 0.25)
+      v.place(edge)
+      if duration > 0s {
+        let at = slot * math.max(shown.index_of(a), shown.index_of(b))
+        edge.opacity = 0
+        v.addTrack(motion {
+          at: edge.opacity = 0
+          at + slot: edge.opacity = 1
+        })
+      }
     }
   }
-  for name in shown {
-    v.place(Circle(position = Pos(nodes[name]), radius = r, fill = color))
-    v.place(TextArea(position = Pos(nodes[name].x, nodes[name].y + r * 1.5, anchor = :top), text = name, fontSize = r * 1.2, fill = gray(60), align = :center))
+  for (i, name) in shown.enumerate() {
+    let dot = Circle(position = Pos(nodes[name]), radius = r, fill = color)
+    let label = TextArea(position = Pos(nodes[name].x, nodes[name].y + r * 1.5, anchor = :top), text = name, fontSize = r * 1.2, fill = gray(60), align = :center)
+    v.place(dot)
+    v.place(label)
+    if duration > 0s {
+      dot.opacity = 0
+      label.opacity = 0
+      v.addTrack(motion {
+        slot * i: dot.opacity = 0, dot.radius = 0, label.opacity = 0
+        slot * (i + 1): dot.opacity = 1, dot.radius = r, label.opacity = 1 :ease_out
+      })
+    }
   }
   v
 }
@@ -157,14 +179,16 @@ export func node_graph(nodes: Dict, edges: List<Tuple>, w: Number, h: Number, re
 ## @param h 高さ
 ## @param revealed 出す行の数 (既定 全部)
 ## @param accent 見出しの背の色 (既定 薄い灰)
-## @returns 箱が w x h の View
+## @param duration 0s より長ければ、その長さで 1 行ずつ出てくる (既定 0s = revealed のまま止まる)
+## @returns 箱が w x h の View。duration があれば Timeline を持つので、置けば動く
 ## @example
-## v.place(table(["名前", "値"], [["A", "3"], ["B", "7"]], 5, 2), at = Pos(1, 1, anchor = :topLeft), w = 5)
-export func table(headers: List<String>, rows: List<List<String>>, w: Number, h: Number, revealed: Number = -1, accent: Color = #e6e2da) -> View {
+## v.place(table(["名前", "値"], [["A", "3"], ["B", "7"]], 5, 2, duration = 1s), at = Pos(1, 1, anchor = :topLeft), w = 5)
+export func table(headers: List<String>, rows: List<List<String>>, w: Number, h: Number, revealed: Number = -1, accent: Color = #e6e2da, duration: Duration = 0s) -> View {
   let v = View(box = Vector(w, h))
   let cols = headers.len()
   if cols == 0 { return v }
-  let n = if revealed < 0 { rows.len() } else { math.clamp(revealed, 0, rows.len()) }
+  let n = if duration > 0s { rows.len() } else if revealed < 0 { rows.len() } else { math.clamp(revealed, 0, rows.len()) }
+  let slot = if rows.len() > 0 { duration / rows.len() } else { duration }
   let row_h = h / (rows.len() + 1)
   let col_w = w / cols
   let size = row_h * 0.45
@@ -174,9 +198,25 @@ export func table(headers: List<String>, rows: List<List<String>>, w: Number, h:
   }
   for r in 0..n {
     let y = row_h * (r + 1)
-    v.place(Line(from = Vector(0, y), to = Vector(w, y), stroke = gray(215), strokeWidth = size * 0.05))
+    let rule = Line(from = Vector(0, y), to = Vector(w, y), stroke = gray(215), strokeWidth = size * 0.05)
+    v.place(rule)
+    if duration > 0s { rule.opacity = 0 }
     for (c, cell) in rows[r].enumerate() {
-      v.place(TextArea(position = Pos(col_w * (c + 0.5), y + row_h / 2), text = cell, fontSize = size, fill = gray(50), align = :center))
+      let text = TextArea(position = Pos(col_w * (c + 0.5), y + row_h / 2), text = cell, fontSize = size, fill = gray(50), align = :center)
+      v.place(text)
+      if duration > 0s {
+        text.opacity = 0
+        v.addTrack(motion {
+          slot * r: text.opacity = 0
+          slot * (r + 1): text.opacity = 1
+        })
+      }
+    }
+    if duration > 0s {
+      v.addTrack(motion {
+        slot * r: rule.opacity = 0
+        slot * (r + 1): rule.opacity = 1
+      })
     }
   }
   v

@@ -4563,6 +4563,454 @@
    ]
   },
   {
+   "name": "text",
+   "path": "src/stdlib/text.moph",
+   "entries": [],
+   "items": [
+    {
+     "name": "pad",
+     "category": "書式",
+     "isFunc": true,
+     "signature": "pad(s: String, width: Number, fill: String = \" \", right: Bool = false)",
+     "call": "pad(\n  s: String,\n  width: Number,\n  fill: String = \" \",\n  right: Bool = false,\n)",
+     "summary": "幅を揃える。足りない分を fill で埋める",
+     "params": [
+      {
+       "name": "s",
+       "type": "String",
+       "doc": "元の文字列",
+       "default": ""
+      },
+      {
+       "name": "width",
+       "type": "Number",
+       "doc": "揃える文字数",
+       "default": ""
+      },
+      {
+       "name": "fill",
+       "type": "String",
+       "doc": "埋める 1 文字 (既定 空白)",
+       "default": "\" \""
+      },
+      {
+       "name": "right",
+       "type": "Bool",
+       "doc": "true なら右側を埋める (既定 false)",
+       "default": "false"
+      }
+     ],
+     "returns": {
+      "type": "String",
+      "doc": "width に満たなければ埋めた文字列。足りていれば s のまま"
+     },
+     "example": "pad(\"7\", 2, \"0\")   # \"07\""
+    },
+    {
+     "name": "typewriter",
+     "category": "書式",
+     "isFunc": true,
+     "signature": "typewriter(s: String, revealed: Number)",
+     "call": "typewriter(s: String, revealed: Number)",
+     "summary": "先頭から revealed 文字だけを返す。1 文字ずつ出す字幕に使う",
+     "params": [
+      {
+       "name": "s",
+       "type": "String",
+       "doc": "全文",
+       "default": ""
+      },
+      {
+       "name": "revealed",
+       "type": "Number",
+       "doc": "出す文字数。小数は切り捨て、範囲外は端で止まる",
+       "default": ""
+      }
+     ],
+     "returns": {
+      "type": "String",
+      "doc": "s の先頭 revealed 文字"
+     },
+     "example": "t.text = typewriter(\"こんにちは\", 3)   # \"こんに\""
+    },
+    {
+     "name": "number",
+     "category": "数",
+     "isFunc": true,
+     "signature": "number(value: Number, digits: Number = 0)",
+     "call": "number(value: Number, digits: Number = 0)",
+     "summary": "小数の桁を揃える。足りない桁は 0 で埋める",
+     "params": [
+      {
+       "name": "value",
+       "type": "Number",
+       "doc": "値",
+       "default": ""
+      },
+      {
+       "name": "digits",
+       "type": "Number",
+       "doc": "小数点以下の桁数 (既定 0)",
+       "default": "0"
+      }
+     ],
+     "returns": {
+      "type": "String",
+      "doc": "桁を揃えた文字列"
+     },
+     "example": "number(3.14159, 2)   # \"3.14\""
+    },
+    {
+     "name": "thousands",
+     "category": "数",
+     "isFunc": true,
+     "signature": "thousands(value: Number, digits: Number = 0, sep: String = \",\")",
+     "call": "thousands(\n  value: Number,\n  digits: Number = 0,\n  sep: String = \",\n  \",\n)",
+     "summary": "3 桁ごとに区切る",
+     "params": [
+      {
+       "name": "value",
+       "type": "Number",
+       "doc": "値",
+       "default": ""
+      },
+      {
+       "name": "digits",
+       "type": "Number",
+       "doc": "小数点以下の桁数 (既定 0)",
+       "default": "0"
+      },
+      {
+       "name": "sep",
+       "type": "String",
+       "doc": "区切り文字 (既定 \",\")",
+       "default": "\""
+      }
+     ],
+     "returns": {
+      "type": "String",
+      "doc": "区切りを入れた文字列"
+     },
+     "example": "thousands(1234567)   # \"1,234,567\""
+    },
+    {
+     "name": "percent",
+     "category": "数",
+     "isFunc": true,
+     "signature": "percent(value: Number, digits: Number = 0)",
+     "call": "percent(value: Number, digits: Number = 0)",
+     "summary": "割合を百分率にする",
+     "params": [
+      {
+       "name": "value",
+       "type": "Number",
+       "doc": "0..1 の割合",
+       "default": ""
+      },
+      {
+       "name": "digits",
+       "type": "Number",
+       "doc": "小数点以下の桁数 (既定 0)",
+       "default": "0"
+      }
+     ],
+     "returns": {
+      "type": "String",
+      "doc": "\"25.3%\" のような文字列"
+     },
+     "example": "percent(0.253, 1)   # \"25.3%\""
+    },
+    {
+     "name": "duration",
+     "category": "数",
+     "isFunc": true,
+     "signature": "duration(d: Duration, format: String = \"mm:ss\")",
+     "call": "duration(d: Duration, format: String = \"mm:ss\")",
+     "summary": "Duration を時計の表示にする",
+     "params": [
+      {
+       "name": "d",
+       "type": "Duration",
+       "doc": "長さ",
+       "default": ""
+      },
+      {
+       "name": "format",
+       "type": "String",
+       "doc": "hh mm ss h m s S SS を値に置き換える (既定 \"mm:ss\")",
+       "default": "\"mm:ss\""
+      }
+     ],
+     "returns": {
+      "type": "String",
+      "doc": "置き換えたあとの文字列。負なら先頭に \"-\""
+     },
+     "example": "duration(83.4s)              # \"01:23\"\nduration(83.4s, \"m:ss.S\")    # \"1:23.4\""
+    },
+    {
+     "name": "highlight",
+     "category": "見出し",
+     "isFunc": true,
+     "signature": "highlight(s: String, from: Number, to: Number, fontSize: Number, style: Symbol = :marker, color: Color = #1a1d23, accent: Color = #ffd34d)",
+     "call": "highlight(\n  s: String,\n  from: Number,\n  to: Number,\n  fontSize: Number,\n  style: Symbol = :marker,\n  color: Color = #1a1d23,\n  accent: Color = #ffd34d,\n)",
+     "summary": "1 行の文字の一部を目立たせる。マーカーか下線",
+     "params": [
+      {
+       "name": "s",
+       "type": "String",
+       "doc": "全文 (1 行)",
+       "default": ""
+      },
+      {
+       "name": "from",
+       "type": "Number",
+       "doc": "目立たせ始める文字の位置",
+       "default": ""
+      },
+      {
+       "name": "to",
+       "type": "Number",
+       "doc": "目立たせ終わる文字の位置 (その手前まで)",
+       "default": ""
+      },
+      {
+       "name": "fontSize",
+       "type": "Number",
+       "doc": "文字の大きさ",
+       "default": ""
+      },
+      {
+       "name": "style",
+       "type": "Symbol",
+       "doc": ":marker か :underline (既定 :marker)",
+       "default": ":marker"
+      },
+      {
+       "name": "color",
+       "type": "Color",
+       "doc": "文字の色 (既定 ほぼ黒)",
+       "default": "#1a1d23"
+      },
+      {
+       "name": "accent",
+       "type": "Color",
+       "doc": "目立たせる色 (既定 黄)",
+       "default": "#ffd34d"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が文字全体の大きさの View。中は左上から始まる"
+     },
+     "example": "v.place(highlight(\"ここが大事\", 2, 4, 0.6), at = Pos(1, 1, anchor = :topLeft), w = 5)"
+    },
+    {
+     "name": "quote_card",
+     "category": "見出し",
+     "isFunc": true,
+     "signature": "quote_card(s: String, author: String, w: Number, h: Number, fill: Color = #ffffff, accent: Color = #e04040)",
+     "call": "quote_card(\n  s: String,\n  author: String,\n  w: Number,\n  h: Number,\n  fill: Color = #ffffff,\n  accent: Color = #e04040,\n)",
+     "summary": "引用のカード。本文と、その下に書いた人の名前",
+     "params": [
+      {
+       "name": "s",
+       "type": "String",
+       "doc": "引用する文",
+       "default": ""
+      },
+      {
+       "name": "author",
+       "type": "String",
+       "doc": "書いた人 (空なら出さない)",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "fill",
+       "type": "Color",
+       "doc": "背の色 (既定 白)",
+       "default": "#ffffff"
+      },
+      {
+       "name": "accent",
+       "type": "Color",
+       "doc": "左の縦線の色 (既定 赤)",
+       "default": "#e04040"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(quote_card(\"速いほうがいい\", \"誰か\", 6, 3), at = Pos(1, 1, anchor = :topLeft), w = 6)"
+    },
+    {
+     "name": "lower_third",
+     "category": "見出し",
+     "isFunc": true,
+     "signature": "lower_third(title: String, subtitle: String, w: Number, h: Number, progress: Number = 1, fill: Color = #1a1d23, accent: Color = #e04040)",
+     "call": "lower_third(\n  title: String,\n  subtitle: String,\n  w: Number,\n  h: Number,\n  progress: Number = 1,\n  fill: Color = #1a1d23,\n  accent: Color = #e04040,\n)",
+     "summary": "画面下の帯タイトル。progress で左から出てくる",
+     "params": [
+      {
+       "name": "title",
+       "type": "String",
+       "doc": "大きい方の文字",
+       "default": ""
+      },
+      {
+       "name": "subtitle",
+       "type": "String",
+       "doc": "小さい方の文字 (空なら出さない)",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "progress",
+       "type": "Number",
+       "doc": "出ている割合 0..1 (既定 1)",
+       "default": "1"
+      },
+      {
+       "name": "fill",
+       "type": "Color",
+       "doc": "帯の色 (既定 ほぼ黒)",
+       "default": "#1a1d23"
+      },
+      {
+       "name": "accent",
+       "type": "Color",
+       "doc": "先頭の縦線の色 (既定 赤)",
+       "default": "#e04040"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(lower_third(\"名前\", \"肩書き\", 8, 1.6, 0.7), at = Pos(1, 6, anchor = :topLeft), w = 8)"
+    },
+    {
+     "name": "chapter_card",
+     "category": "見出し",
+     "isFunc": true,
+     "signature": "chapter_card(title: String, w: Number, h: Number, no: Number = 0, fill: Color = #1a1d23, accent: Color = #e04040)",
+     "call": "chapter_card(\n  title: String,\n  w: Number,\n  h: Number,\n  no: Number = 0,\n  fill: Color = #1a1d23,\n  accent: Color = #e04040,\n)",
+     "summary": "章の中割り。番号と題を真ん中に置く",
+     "params": [
+      {
+       "name": "title",
+       "type": "String",
+       "doc": "章の題",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "no",
+       "type": "Number",
+       "doc": "章番号 (0 以下なら出さない。既定 0)",
+       "default": "0"
+      },
+      {
+       "name": "fill",
+       "type": "Color",
+       "doc": "背の色 (既定 ほぼ黒)",
+       "default": "#1a1d23"
+      },
+      {
+       "name": "accent",
+       "type": "Color",
+       "doc": "番号と線の色 (既定 赤)",
+       "default": "#e04040"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(chapter_card(\"はじめに\", 16, 9, 1), at = Pos(0, 0, anchor = :topLeft), w = 16)"
+    },
+    {
+     "name": "word_cloud",
+     "category": "見出し",
+     "isFunc": true,
+     "signature": "word_cloud(words: Dict, w: Number, h: Number, color: Color = #e04040, base: Color = #8a8f98)",
+     "call": "word_cloud(\n  words: Dict,\n  w: Number,\n  h: Number,\n  color: Color = #e04040,\n  base: Color = #8a8f98,\n)",
+     "summary": "重みつきの単語を並べる。重いものほど大きく、上に来る",
+     "params": [
+      {
+       "name": "words",
+       "type": "Dict",
+       "doc": "単語 → 重み",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "幅",
+       "default": ""
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "高さ",
+       "default": ""
+      },
+      {
+       "name": "color",
+       "type": "Color",
+       "doc": "一番重い単語の色 (既定 赤)",
+       "default": "#e04040"
+      },
+      {
+       "name": "base",
+       "type": "Color",
+       "doc": "一番軽い単語の色 (既定 灰)",
+       "default": "#8a8f98"
+      }
+     ],
+     "returns": {
+      "type": "View",
+      "doc": "箱が w x h の View"
+     },
+     "example": "v.place(word_cloud({ \"速い\": 3, \"軽い\": 2, \"小さい\": 1 }, 8, 4), at = Pos(1, 1, anchor = :topLeft), w = 8)"
+    }
+   ]
+  },
+  {
    "name": "meter",
    "path": "src/stdlib/meter.moph",
    "entries": [],

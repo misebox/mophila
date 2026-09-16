@@ -2424,6 +2424,66 @@ alias P = Pos
   accent: Color = #e6e2da,
 )` -> View — 比較表。行を順に出せる
 
+### text
+
+- `pad(
+  s: String,
+  width: Number,
+  fill: String = " ",
+  right: Bool = false,
+)` -> String — 幅を揃える。足りない分を fill で埋める
+- `typewriter(s: String, revealed: Number)` -> String — 先頭から revealed 文字だけを返す。1 文字ずつ出す字幕に使う
+- `number(value: Number, digits: Number = 0)` -> String — 小数の桁を揃える。足りない桁は 0 で埋める
+- `thousands(
+  value: Number,
+  digits: Number = 0,
+  sep: String = ",
+  ",
+)` -> String — 3 桁ごとに区切る
+- `percent(value: Number, digits: Number = 0)` -> String — 割合を百分率にする
+- `duration(d: Duration, format: String = "mm:ss")` -> String — Duration を時計の表示にする
+- `highlight(
+  s: String,
+  from: Number,
+  to: Number,
+  fontSize: Number,
+  style: Symbol = :marker,
+  color: Color = #1a1d23,
+  accent: Color = #ffd34d,
+)` -> View — 1 行の文字の一部を目立たせる。マーカーか下線
+- `quote_card(
+  s: String,
+  author: String,
+  w: Number,
+  h: Number,
+  fill: Color = #ffffff,
+  accent: Color = #e04040,
+)` -> View — 引用のカード。本文と、その下に書いた人の名前
+- `lower_third(
+  title: String,
+  subtitle: String,
+  w: Number,
+  h: Number,
+  progress: Number = 1,
+  fill: Color = #1a1d23,
+  accent: Color = #e04040,
+)` -> View — 画面下の帯タイトル。progress で左から出てくる
+- `chapter_card(
+  title: String,
+  w: Number,
+  h: Number,
+  no: Number = 0,
+  fill: Color = #1a1d23,
+  accent: Color = #e04040,
+)` -> View — 章の中割り。番号と題を真ん中に置く
+- `word_cloud(
+  words: Dict,
+  w: Number,
+  h: Number,
+  color: Color = #e04040,
+  base: Color = #8a8f98,
+)` -> View — 重みつきの単語を並べる。重いものほど大きく、上に来る
+
 ### meter
 
 - `progress_bar(

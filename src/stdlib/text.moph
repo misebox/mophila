@@ -1,0 +1,285 @@
+# text.moph — 文字の出し方と数の書式
+#
+# 書式の関数は String を返すだけなので、TextArea の text にそのまま入れられる。
+# 見出しの部品は View を返す。
+#
+#   t.text = thousands(count)
+#   t.text = typewriter("こんにちは", shown)
+
+import math
+import { contrast, alpha, mix } from color
+
+## 幅を揃える。足りない分を fill で埋める
+## @category 書式
+## @param s 元の文字列
+## @param width 揃える文字数
+## @param fill 埋める 1 文字 (既定 空白)
+## @param right true なら右側を埋める (既定 false)
+## @returns width に満たなければ埋めた文字列。足りていれば s のまま
+## @example
+## pad("7", 2, "0")   # "07"
+export func pad(s: String, width: Number, fill: String = " ", right: Bool = false) -> String {
+  let n = math.floor(width) - s.len()
+  if n <= 0 { return s }
+  let f = fill.repeat(n)
+  if right { s + f } else { f + s }
+}
+
+## 先頭から revealed 文字だけを返す。1 文字ずつ出す字幕に使う
+## @category 書式
+## @param s 全文
+## @param revealed 出す文字数。小数は切り捨て、範囲外は端で止まる
+## @returns s の先頭 revealed 文字
+## @example
+## t.text = typewriter("こんにちは", 3)   # "こんに"
+export func typewriter(s: String, revealed: Number) -> String {
+  s[0..math.clamp(math.floor(revealed), 0, s.len())]
+}
+
+## 小数の桁を揃える。足りない桁は 0 で埋める
+## @category 数
+## @param value 値
+## @param digits 小数点以下の桁数 (既定 0)
+## @returns 桁を揃えた文字列
+## @example
+## number(3.14159, 2)   # "3.14"
+export func number(value: Number, digits: Number = 0) -> String {
+  let d = math.max(math.floor(digits), 0)
+  let scale = math.pow(10, d)
+  let r = math.round(math.abs(value) * scale)
+  let int_part = math.floor(r / scale)
+  let body = if d > 0 {
+    "{int}.{frac}".format(int_part, pad("{}".format(r - int_part * scale), d, "0"))
+  } else {
+    "{}".format(int_part)
+  }
+  if value < 0 and r > 0 { "-" + body } else { body }
+}
+
+## 3 桁ごとに区切る
+## @category 数
+## @param value 値
+## @param digits 小数点以下の桁数 (既定 0)
+## @param sep 区切り文字 (既定 ",")
+## @returns 区切りを入れた文字列
+## @example
+## thousands(1234567)   # "1,234,567"
+export func thousands(value: Number, digits: Number = 0, sep: String = ",") -> String {
+  let s = number(value, digits)
+  let sign = if s[0..1] == "-" { "-" } else { "" }
+  let body = if sign == "-" { s[1..s.len()] } else { s }
+  let parts = body.split(".")
+  let int_part = parts[0]
+  let n = int_part.len()
+  let head = n % 3
+  let out = int_part[0..head]
+  for i in 0..math.floor(n / 3) {
+    let at = head + i * 3
+    let group = int_part[at..at + 3]
+    out = if out == "" { group } else { out + sep + group }
+  }
+  let frac = if parts.len() > 1 { "." + parts[1] } else { "" }
+  sign + out + frac
+}
+
+## 割合を百分率にする
+## @category 数
+## @param value 0..1 の割合
+## @param digits 小数点以下の桁数 (既定 0)
+## @returns "25.3%" のような文字列
+## @example
+## percent(0.253, 1)   # "25.3%"
+export func percent(value: Number, digits: Number = 0) -> String {
+  number(value * 100, digits) + "%"
+}
+
+## Duration を時計の表示にする
+## @category 数
+## @param d 長さ
+## @param format hh mm ss h m s S SS を値に置き換える (既定 "mm:ss")
+## @returns 置き換えたあとの文字列。負なら先頭に "-"
+## @example
+## duration(83.4s)              # "01:23"
+## duration(83.4s, "m:ss.S")    # "1:23.4"
+export func duration(d: Duration, format: String = "mm:ss") -> String {
+  let total = d / 1s
+  let t = math.abs(total)
+  let h = math.floor(t / 3600)
+  let m = math.floor((t - h * 3600) / 60)
+  let s = math.floor(t - h * 3600 - m * 60)
+  let frac = t - math.floor(t)
+  let body = format
+  body = body.replace("hh", pad("{}".format(h), 2, "0"))
+  body = body.replace("mm", pad("{}".format(m), 2, "0"))
+  body = body.replace("ss", pad("{}".format(s), 2, "0"))
+  body = body.replace("SS", pad("{}".format(math.floor(frac * 100)), 2, "0"))
+  body = body.replace("S", "{}".format(math.floor(frac * 10)))
+  body = body.replace("h", "{}".format(h))
+  body = body.replace("m", "{}".format(m))
+  body = body.replace("s", "{}".format(s))
+  if total < 0 { "-" + body } else { body }
+}
+
+## 1 行の文字の一部を目立たせる。マーカーか下線
+## @category 見出し
+## @param s 全文 (1 行)
+## @param from 目立たせ始める文字の位置
+## @param to 目立たせ終わる文字の位置 (その手前まで)
+## @param fontSize 文字の大きさ
+## @param style :marker か :underline (既定 :marker)
+## @param color 文字の色 (既定 ほぼ黒)
+## @param accent 目立たせる色 (既定 黄)
+## @returns 箱が文字全体の大きさの View。中は左上から始まる
+## @example
+## v.place(highlight("ここが大事", 2, 4, 0.6), at = Pos(1, 1, anchor = :topLeft), w = 5)
+export func highlight(s: String, from: Number, to: Number, fontSize: Number, style: Symbol = :marker, color: Color = #1a1d23, accent: Color = #ffd34d) -> View {
+  let whole = TextArea(position = Pos(0, 0), text = s, fontSize = fontSize)
+  let size = whole.size()
+  let v = View(box = size)
+  let a = math.clamp(math.floor(from), 0, s.len())
+  let b = math.clamp(math.floor(to), a, s.len())
+  let x0 = TextArea(position = Pos(0, 0), text = s[0..a], fontSize = fontSize).size().x
+  let x1 = TextArea(position = Pos(0, 0), text = s[0..b], fontSize = fontSize).size().x
+  if b > a {
+    if style == :underline {
+      v.place(Rect(position = Pos(x0, size.y * 0.92, anchor = :topLeft), w = x1 - x0, h = fontSize * 0.08, fill = accent))
+    } else {
+      v.place(Rect(position = Pos(x0, size.y * 0.15, anchor = :topLeft), w = x1 - x0, h = size.y * 0.75, radius = fontSize * 0.06, fill = alpha(accent, 0.6)))
+    }
+  }
+  v.place(TextArea(position = Pos(0, 0, anchor = :topLeft), text = s, fontSize = fontSize, fill = color))
+  v
+}
+
+## 引用のカード。本文と、その下に書いた人の名前
+## @category 見出し
+## @param s 引用する文
+## @param author 書いた人 (空なら出さない)
+## @param w 幅
+## @param h 高さ
+## @param fill 背の色 (既定 白)
+## @param accent 左の縦線の色 (既定 赤)
+## @returns 箱が w x h の View
+## @example
+## v.place(quote_card("速いほうがいい", "誰か", 6, 3), at = Pos(1, 1, anchor = :topLeft), w = 6)
+export func quote_card(s: String, author: String, w: Number, h: Number, fill: Color = #ffffff, accent: Color = #e04040) -> View {
+  let v = View(box = Vector(w, h))
+  let pad_x = h * 0.18
+  v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h, radius = h * 0.06, fill = fill))
+  v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = pad_x * 0.25, h = h, fill = accent))
+  let ink = contrast(fill)
+  let has_author = author != ""
+  let body_h = if has_author { h * 0.7 } else { h }
+  v.place(TextArea(position = Pos(pad_x * 1.2, body_h / 2, anchor = :left), text = s, fontSize = h * 0.16, w = w - pad_x * 2.4, fill = ink))
+  if has_author {
+    v.place(TextArea(position = Pos(w - pad_x, h * 0.82, anchor = :right), text = "— " + author, fontSize = h * 0.1, fill = alpha(ink, 0.6)))
+  }
+  v
+}
+
+## 画面下の帯タイトル。progress で左から出てくる
+## @category 見出し
+## @param title 大きい方の文字
+## @param subtitle 小さい方の文字 (空なら出さない)
+## @param w 幅
+## @param h 高さ
+## @param progress 出ている割合 0..1 (既定 1)
+## @param fill 帯の色 (既定 ほぼ黒)
+## @param accent 先頭の縦線の色 (既定 赤)
+## @returns 箱が w x h の View
+## @example
+## v.place(lower_third("名前", "肩書き", 8, 1.6, 0.7), at = Pos(1, 6, anchor = :topLeft), w = 8)
+export func lower_third(title: String, subtitle: String, w: Number, h: Number, progress: Number = 1, fill: Color = #1a1d23, accent: Color = #e04040) -> View {
+  let v = View(box = Vector(w, h))
+  let k = math.clamp(progress, 0, 1)
+  if k <= 0 { return v }
+  let inner = View(box = Vector(w, h))
+  inner.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h, fill = fill))
+  inner.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = h * 0.1, h = h, fill = accent))
+  let ink = contrast(fill)
+  let has_sub = subtitle != ""
+  let ty = if has_sub { h * 0.36 } else { h / 2 }
+  inner.place(TextArea(position = Pos(h * 0.4, ty, anchor = :left), text = title, fontSize = h * 0.4, fill = ink))
+  if has_sub {
+    inner.place(TextArea(position = Pos(h * 0.4, h * 0.72, anchor = :left), text = subtitle, fontSize = h * 0.22, fill = alpha(ink, 0.7)))
+  }
+  # k のぶんだけ左から見せる。中身は動かさず、窓の方を狭める
+  let window = View(box = Vector(w * k, h), clip = true)
+  window.place(inner, at = Pos(0, 0, anchor = :topLeft), w = w)
+  v.place(window, at = Pos(0, 0, anchor = :topLeft), w = w * k)
+  v
+}
+
+## 章の中割り。番号と題を真ん中に置く
+## @category 見出し
+## @param title 章の題
+## @param w 幅
+## @param h 高さ
+## @param no 章番号 (0 以下なら出さない。既定 0)
+## @param fill 背の色 (既定 ほぼ黒)
+## @param accent 番号と線の色 (既定 赤)
+## @returns 箱が w x h の View
+## @example
+## v.place(chapter_card("はじめに", 16, 9, 1), at = Pos(0, 0, anchor = :topLeft), w = 16)
+export func chapter_card(title: String, w: Number, h: Number, no: Number = 0, fill: Color = #1a1d23, accent: Color = #e04040) -> View {
+  let v = View(box = Vector(w, h))
+  v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h, fill = fill))
+  let ink = contrast(fill)
+  let mid = h / 2
+  if no > 0 {
+    v.place(TextArea(position = Pos(w / 2, mid - h * 0.16, anchor = :bottom), text = "{no}".format(math.floor(no)), fontSize = h * 0.16, fill = accent, align = :center))
+  }
+  v.place(Line(from = Vector(w / 2 - h * 0.1, mid - h * 0.1), to = Vector(w / 2 + h * 0.1, mid - h * 0.1), stroke = accent, strokeWidth = h * 0.006))
+  v.place(TextArea(position = Pos(w / 2, mid + h * 0.02, anchor = :top), text = title, fontSize = h * 0.11, w = w * 0.8, fill = ink, align = :center))
+  v
+}
+
+## 重みつきの単語を並べる。重いものほど大きく、上に来る
+## @category 見出し
+## @param words 単語 → 重み
+## @param w 幅
+## @param h 高さ
+## @param color 一番重い単語の色 (既定 赤)
+## @param base 一番軽い単語の色 (既定 灰)
+## @returns 箱が w x h の View
+## @example
+## v.place(word_cloud({ "速い": 3, "軽い": 2, "小さい": 1 }, 8, 4), at = Pos(1, 1, anchor = :topLeft), w = 8)
+export func word_cloud(words: Dict, w: Number, h: Number, color: Color = #e04040, base: Color = #8a8f98) -> View {
+  let v = View(box = Vector(w, h))
+  let pairs = []
+  for (word, weight) in words { pairs.push((weight, word)) }
+  if pairs.len() == 0 { return v }
+  let sorted = pairs.sort().reverse()
+  let top = sorted[0][0]
+  let low = sorted[sorted.len() - 1][0]
+  # 重みを文字の大きさに移す。1 行に 3 語入るくらいを上限にする
+  let big = h * 0.3
+  let small = big * 0.45
+  let rows = []
+  let row = []
+  let row_w = 0
+  let gap = big * 0.25
+  for (weight, word) in sorted {
+    let k = if top == low { 1 } else { math.unlerp(low, top, weight) }
+    let size = math.lerp(small, big, k)
+    let tw = TextArea(position = Pos(0, 0), text = word, fontSize = size).size().x
+    if row.len() > 0 and row_w + gap + tw > w {
+      rows.push((row_w, row))
+      row = []
+      row_w = 0
+    }
+    row_w = if row.len() == 0 { tw } else { row_w + gap + tw }
+    row.push((word, size, k))
+  }
+  if row.len() > 0 { rows.push((row_w, row)) }
+  let row_h = h / rows.len()
+  for (r, (width, items)) in rows.enumerate() {
+    let x = (w - width) / 2
+    let y = row_h * (r + 0.5)
+    for (word, size, k) in items {
+      v.place(TextArea(position = Pos(x, y, anchor = :left), text = word, fontSize = size, fill = mix(base, color, k)))
+      x = x + TextArea(position = Pos(0, 0), text = word, fontSize = size).size().x + gap
+    }
+  }
+  v
+}

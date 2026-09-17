@@ -1,25 +1,23 @@
 #!/usr/bin/env bash
-# docs/skills/mophila を Claude Code の skills に入れる。
+# docs/skills/mophila を Claude Code の skills にインストールする (複製する)。
 #
-#   scripts/install-skill.sh              # symlink を張る (リポジトリを直せばそのまま反映される)
-#   scripts/install-skill.sh --copy       # その時点の中身を複製する
+#   scripts/install-skill.sh              # 入れる。既に入っていれば入れ直す
 #   scripts/install-skill.sh --uninstall  # 外す
 #
 # 入れ先は $CLAUDE_CONFIG_DIR/skills、無ければ ~/.claude/skills。
+# リポジトリの中身を変えたら、もう一度走らせて入れ直す。
 set -euo pipefail
 
 NAME=mophila
-SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/docs/skills/$NAME"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SRC="$ROOT/docs/skills/$NAME"
 SKILLS="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills"
 DEST="$SKILLS/$NAME"
-mode=link
-force=no
+mode=install
 
 for arg in "$@"; do
   case "$arg" in
-    --copy) mode=copy ;;
     --uninstall) mode=uninstall ;;
-    --force) force=yes ;;
     -h|--help) sed -n '2,8p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
@@ -31,14 +29,7 @@ if [ ! -f "$SRC/SKILL.md" ]; then
 fi
 
 if [ "$mode" = uninstall ]; then
-  if [ -L "$DEST" ]; then
-    rm "$DEST"
-    echo "removed $DEST"
-  elif [ -d "$DEST" ]; then
-    if [ "$force" != yes ]; then
-      echo "$DEST is a real directory. --force を付けると消す" >&2
-      exit 1
-    fi
+  if [ -e "$DEST" ] || [ -L "$DEST" ]; then
     rm -r "$DEST"
     echo "removed $DEST"
   else
@@ -48,29 +39,11 @@ if [ "$mode" = uninstall ]; then
 fi
 
 mkdir -p "$SKILLS"
+# 前に入れたもの (以前の版が張った symlink も含む) を消してから入れる
+rm -rf "$DEST"
+cp -R "$SRC" "$DEST"
 
-# 既にあるものを見てから決める。中身のあるディレクトリは --force なしでは消さない
-if [ -L "$DEST" ]; then
-  current="$(readlink "$DEST")"
-  if [ "$mode" = link ] && [ "$current" = "$SRC" ]; then
-    echo "already linked: $DEST -> $SRC"
-    exit 0
-  fi
-  rm "$DEST"
-elif [ -e "$DEST" ]; then
-  if [ "$force" != yes ]; then
-    echo "$DEST already exists (symlink ではない)。入れ替えるなら --force" >&2
-    exit 1
-  fi
-  rm -r "$DEST"
-fi
-
-if [ "$mode" = link ]; then
-  ln -s "$SRC" "$DEST"
-  echo "linked $DEST -> $SRC"
-else
-  cp -R "$SRC" "$DEST"
-  echo "copied $SRC -> $DEST"
-fi
-
-echo "Claude Code を起動し直すと /$NAME が使える"
+version="$(sed -n 's/^version = "\(.*\)"/\1/p' "$ROOT/Cargo.toml" | head -1)"
+echo "installed mophila $version skill -> $DEST"
+find "$DEST" -type f -name '*.md' | sed "s|$DEST/|  |" | sort
+echo "Claude Code を起動し直すと /$NAME が使える。中身を変えたら、もう一度これを走らせる"

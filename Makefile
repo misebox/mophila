@@ -18,7 +18,7 @@ media:
 	python3 scripts/docgen.py --media
 	cd site && bun run build
 
-## 書き方の skill を ~/.claude/skills に入れる
+## 書き方の skill を ~/.claude/skills に複製する (変えたら入れ直す)
 install-skill:
 	scripts/install-skill.sh
 

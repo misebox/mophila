@@ -32,14 +32,4 @@ code --install-extension mophila-0.1.0.vsix
 
 ## Neovim
 
-`init.lua`:
-
-```lua
-vim.filetype.add({ extension = { moph = "mophila" } })
-vim.api.nvim_create_autocmd("FileType", {
-  pattern = "mophila",
-  callback = function()
-    vim.lsp.start({ name = "mophila", cmd = { "mophila", "lsp" }, root_dir = vim.fs.root(0, { ".git" }) })
-  end,
-})
-```
+[../nvim/README.md](../nvim/README.md) を見る。構文ハイライトの syntax ファイルと LSP の設定がある。

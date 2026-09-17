@@ -101,7 +101,7 @@ config:
 
 ## エディタ
 
-VS Code 拡張と Neovim の設定は `editors/vscode/README.md`。構文ハイライト、診断、補完、定義へ移動など。
+VS Code 拡張は `editors/vscode/README.md`、Neovim の設定は `editors/nvim/README.md`。構文ハイライト、診断、補完、定義へ移動など。
 
 ## 文書
 

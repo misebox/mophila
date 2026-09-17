@@ -170,3 +170,53 @@ export func grid_lines(x: Number, y: Number, w: Number, h: Number, step: Number)
 export func to_segments(points: List<Vector>) -> List<Tuple> {
   points[1..points.len()].map(func (p) { (:line, p) })
 }
+
+## 等角投影。3 次元の点を平面に落とす。x は右下、y は左下、z は上へ伸びる
+## @category 立体
+## @param x 奥行き方向 1 (右下へ)
+## @param y 奥行き方向 2 (左下へ)
+## @param z 高さ (上へ)
+## @param unit 1 単位の長さ (既定 1)
+## @returns 平面の点。置く View の座標に足して使う
+## @example
+## let p = Vector(8, 6) + iso(1, 0, 2, 0.6)
+export func iso(x: Number, y: Number, z: Number, unit: Number = 1) -> Vector {
+  Vector((x - y) * 0.86602540378 * unit, ((x + y) * 0.5 - z) * unit)
+}
+
+## 等角投影での手前らしさ。大きいほど手前。zIndex に入れれば重なり順が決まる
+## @category 立体
+## @param x 奥行き方向 1
+## @param y 奥行き方向 2
+## @param z 高さ
+## @returns Number
+## @example
+## v.place(Polygon(points = pts, fill = #4080e0, zIndex = iso_depth(x, y, z)))
+export func iso_depth(x: Number, y: Number, z: Number) -> Number { x + y + z }
+
+## 直方体の、見える 3 面。奥から手前の順に並ぶ
+## @category 立体
+## @param at 平面での原点 (x = y = z = 0 の点)
+## @param x 角の x
+## @param y 角の y
+## @param z 角の z
+## @param w x 方向の大きさ
+## @param d y 方向の大きさ
+## @param h 高さ
+## @param unit 1 単位の長さ (既定 1)
+## @returns (面の名前, 点の並び) の List。名前は :left :right :top
+## @example
+## for (face, pts) in iso_faces(Vector(8, 6), 0, 0, 0, 1, 1, 1, 0.8) {
+##   v.place(Polygon(points = pts, fill = if face == :top { #8fb8e8 } else { #4080e0 }))
+## }
+export func iso_faces(at: Vector, x: Number, y: Number, z: Number, w: Number, d: Number, h: Number, unit: Number = 1) -> List<Tuple> {
+  let p = func (px: Number, py: Number, pz: Number) -> Vector { at + iso(px, py, pz, unit) }
+  let x1 = x + w
+  let y1 = y + d
+  let z1 = z + h
+  [
+    (:left, [p(x, y1, z), p(x1, y1, z), p(x1, y1, z1), p(x, y1, z1)]),
+    (:right, [p(x1, y, z), p(x1, y1, z), p(x1, y1, z1), p(x1, y, z1)]),
+    (:top, [p(x, y, z1), p(x1, y, z1), p(x1, y1, z1), p(x, y1, z1)]),
+  ]
+}

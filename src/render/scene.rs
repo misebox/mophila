@@ -62,7 +62,7 @@ fn draw_view(scene: &mut Scene, view: &ObjRef, transform: Affine, frame: &Frame,
         };
         scene.push_layer(Fill::NonZero, blend, opacity as f32, Affine::IDENTITY, &area);
     }
-    for child in &v.children {
+    for child in &order(&v.children) {
         if child.borrow().kind == "View" {
             let sub = sub_transform(child, transform)?;
             draw_view(scene, child, sub, frame, cache)?;
@@ -94,6 +94,21 @@ fn draw_view(scene: &mut Scene, view: &ObjRef, transform: Affine, frame: &Frame,
     Ok(())
 }
 
+/// 描く順。zIndex の小さいものから。同じ値なら place した順のまま。
+/// zIndex を 1 つも書いていなければ並べ替えない (ほとんどの View がこちら)
+fn order(children: &[ObjRef]) -> Vec<ObjRef> {
+    let z = |c: &ObjRef| match c.borrow().attrs.get("zIndex") {
+        Some(Value::Number(n, _)) => *n,
+        _ => 0.0,
+    };
+    if !children.iter().any(|c| z(c) != 0.0) {
+        return children.to_vec();
+    }
+    let mut out = children.to_vec();
+    out.sort_by(|a, b| z(a).partial_cmp(&z(b)).unwrap_or(std::cmp::Ordering::Equal));
+    out
+}
+
 /// 親に置かれた View の変換。position と w / h で決まる矩形に、比率を保って収める
 fn sub_transform(child: &ObjRef, parent: Affine) -> Result<Affine> {
     let (bw, bh) = view_box(child)?;
@@ -107,9 +122,25 @@ fn sub_transform(child: &ObjRef, parent: Affine) -> Result<Affine> {
         (None, None) => return err(Kind::ArityMismatch, "a placed View needs w or h"),
     };
     let (cx, cy) = anchored_center(&c.attrs, w, h, "View")?;
-    let scale = (w / bw).min(h / bh);
-    let local = Affine::translate((cx - bw * scale / 2.0, cy - bh * scale / 2.0)) * Affine::scale(scale);
-    Ok(parent * local)
+    let fit = (w / bw).min(h / bh);
+    let local = Affine::translate((cx - bw * fit / 2.0, cy - bh * fit / 2.0)) * Affine::scale(fit);
+    let placed = parent * local;
+    // 中身の座標はそのままに、置いたものを 1 枚として回して寄る。
+    // 中心は pivot (子の箱の座標)。書いていなければ箱の真ん中
+    let center = match c.attrs.get("pivot") {
+        Some(v) => point_of(v, "View.pivot")?,
+        None => Point::new(bw / 2.0, bh / 2.0),
+    };
+    let about = placed * center;
+    let spin = match c.attrs.get("rotation") {
+        Some(Value::Number(deg, _)) if *deg != 0.0 => Affine::rotate_about(deg.to_radians(), about),
+        _ => Affine::IDENTITY,
+    };
+    let zoom = match c.attrs.get("scale") {
+        Some(Value::Number(k, _)) if *k != 1.0 => Affine::scale_about(*k, about),
+        _ => Affine::IDENTITY,
+    };
+    Ok(spin * zoom * placed)
 }
 
 /// fill が Shader ならその実体

@@ -207,7 +207,7 @@ motion (t) {
 | Path | `from` `segments` `closed` |
 | TextArea | `position` `text` `w` (折り返す幅) `fontSize` `font` `align`。`\n` で改行できる |
 
-共通: `fill` `stroke` `strokeWidth` `strokeCap` `strokeJoin` `dash` `dashOffset` `opacity` `rotation` `pivot` `blend`。効きようがないものは持たない (Line に `fill` は無い)。
+共通: `fill` `stroke` `strokeWidth` `strokeCap` `strokeJoin` `dash` `dashOffset` `opacity` `rotation` `pivot` `blend` `zIndex`。効きようがないものは持たない (Line に `fill` は無い)。
 
 測るメソッド:
 
@@ -222,6 +222,7 @@ motion (t) { 0s: p.dashOffset = total      # ずらしを戻していくと、�
 ```
 
 - 回すのは `rotation` (度、時計回り)。中心は外接矩形の中心で、`pivot` で変えられる。頂点を計算し直さない
+- 重なりは place した順。順を変えたくないときは `zIndex` (小さいものが下、既定 0)。背景も同じ View の子なので、下に回したいものは背景より小さい値にする
 - `dashOffset` を motion で動かすと破線が流れる
 - 塗りは Color のほか `Gradient(from =, to =, stops = [...])` (`kind = :radial` なら from を中心に radius まで)
 - `fill` に読み込んだ画像を入れると、その図形の形に切り抜いて敷かれる。大きさは図形の外接矩形に合わせる (縦横比は図形に従う)
@@ -242,7 +243,7 @@ log(photo.width, photo.height, photo.file)                          # 元のピ�
 |---|---|
 | math | `PI` `TAU` `E`、三角関数、`round(x, 桁)` `clamp` `lerp` `unlerp` `map_range` `nice_step`、`pow` `log10` `log2` `hypot` `sign` |
 | color | `mix` `lighten` `darken` `alpha` `hsl` `gray` `to_hsl` `contrast` `scale` `sequential` `diverging` `categorical` |
-| shape | 点の並びを作る。`polar` `regular_polygon` `star` `arrow` `arc` `ring_segment` `wave` `grid_lines` `to_segments` |
+| shape | 点の並びを作る。`polar` `regular_polygon` `star` `arrow` `arc` `ring_segment` `wave` `grid_lines` `to_segments`。等角投影は `iso` `iso_faces` `iso_depth` |
 | layout | 場所を決める。`grid` `cell` `row` `column` `stack` `along` `fit` `inset` |
 | easing | 0..1 を 0..1 に写す。`quad_in` `quad_out` `cubic` `back` `bounce` `elastic` `steps` `mirror` `flip` |
 | animation | Timeline を返す。`fade_in` `fade_out` `fade_to` `slide_in` `slide_out` `move_by` `spin` `shake` `pulse` `spring_to` `show` `stagger` `reveal_x` `reveal_y` |
@@ -258,6 +259,10 @@ log(photo.width, photo.height, photo.file)                          # 元のピ�
 | fractal | `escape_time(formula =, precision =, coloring =, ...)` が Shader を返す |
 
 使った例は <https://misebox.github.io/mophila/#/samples> の showcase (14 module) と report。
+
+`Vector` は複素数としても掛け割りできる。`a.cmul(b)` `a.cdiv(b)` で、回転と拡大が 1 度に書ける (1 次分数変換 `(az + b) / (cz + d)` など)。
+
+立体は等角投影で。`shape.iso_faces` が直方体の見える 3 面を返し、`shape.iso_depth` を `zIndex` に入れると重なり順が決まる。
 
 #### 部品に動きを持たせる
 
@@ -285,6 +290,8 @@ track.place(Subtitle(text = "……です。", duration = 4s), at = 2s)
 ### View の入れ子
 
 `v.place(sub, at = Pos(x, y, anchor = :topLeft), w = 7)` で別の View を比率を保って置く。中の Timeline は親と同じ時間軸で動く。`track.place(sub, at = 3s)` で置けば、その時刻から動き出す。`sub.opacity` で全体をまとめてフェードできる。
+
+`rotation` `scale` `pivot` は、置いたものを 1 枚として回して寄る。中の座標も `place` の書き方も変えなくてよいので、タイル 150 枚をまとめて回すなら、それを入れた View を 1 つ作ってその `rotation` を動かす。`pivot` は子の箱の座標で、書かなければ箱の真ん中。
 
 `clip = true` を付けると、箱からはみ出した中身を描かない。中身を動かして窓から覗かせる形が作れる。
 
@@ -772,6 +779,8 @@ name_1             # 識別子は英字・数字・_。先頭は英字か _
 
 添字と `Range` の両端は整数でなければならない。`xs[1.5]` や `0.5..2.5` は `ValueError.OutOfRange` で、黙って切り捨てることはしない。
 
+`%` の符号は割られる数に従う。`-48 % 5` は `-3`、`48 % -5` は `3`。整数でなくてもよく、`7.5 % 2` は `1.5`。0 以上に寄せたいなら `((a % n) + n) % n` と書く。
+
 比較は続けて書ける。`1 < 2 <= 2` は `(1 < 2) and (2 <= 2)` で、真ん中は 1 度しか評価しない。偽が出たらそこで止まる。`2 == 2 == 2` も `true`。
 
 括弧 `( expr )` は優先順位を変える。リテラル (`( )` `[ ]` `{ }`) と `func` `if` `context` `motion` は優先順位を持たない。3 と 4 を参照。
@@ -995,6 +1004,7 @@ type Mode = :fast | :slow
 | `rotation` | Number | 時計回りの回転 (度) |
 | `pivot` | Vector | 回転の中心。書かなければ、その図形を囲む四角形の中心 |
 | `blend` | Blend | 下の絵との重ね方 |
+| `zIndex` | Number | 同じ View の中で描く順。小さいものが先 (下)。既定は 0 で、同じ値なら place した順 |
 
 | 持たない図形 | 属性 | 理由 |
 |---|---|---|
@@ -1014,7 +1024,13 @@ View(box = Vector(16, 9))
 | `opacity` | Number | 中身をまとめて 1 枚として掛ける。中の図形が重なっても二重に薄くならない |
 | `clip` | Bool | `true` なら箱からはみ出した中身を描かない。既定は `false` |
 | `blend` | Blend | 中身を 1 枚にしてから、下の絵と重ねる |
+| `zIndex` | Number | 親の中で描く順。図形と同じ規則 |
 | `position` `w` `h` | Pos / Number | 別の View に置かれたときの位置と大きさ |
+| `rotation` | Number | 置いたものを 1 枚として回す (度)。中身の座標は変わらない |
+| `scale` | Number | 置いたものを 1 枚として拡大する。既定は 1 |
+| `pivot` | Vector | `rotation` と `scale` の中心。子の箱の座標で書く。書かなければ箱の真ん中 |
+
+`rotation` と `scale` は置いたあとの絵に掛かるので、中の図形の座標や `place` の書き方は変えなくてよい。150 枚のタイルをまとめて回すなら、タイルを入れた View を 1 つ作って、その `rotation` を動かす。
 
 #### 3.13 塗り
 
@@ -1573,6 +1589,11 @@ Vector(8, 4.5)
 - `x`: Number — 横の座標
 - `y`: Number — 縦の座標
 
+メソッド:
+
+- `v.cmul(w: Vector)` -> Vector — 複素数としての積。x + yi として掛ける (回転と拡大)
+- `v.cdiv(w: Vector)` -> Vector — 複素数としての商。w が 0 なら ValueError.DivisionByZero
+
 ### Pos
 
 位置と、その位置がものの どこ を指すか。フィールドは x、y、anchor で、anchor の既定は :center。図形や View の position に入れる
@@ -1616,6 +1637,7 @@ Circle(position = Pos(8, 4.5), radius = 1, fill = #4080e0)
 - `rotation`: Number — 時計回りの回転 (度)
 - `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
 - `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
+- `zIndex`: Number — 
 
 メソッド:
 
@@ -1646,6 +1668,7 @@ Ellipse(position = Pos(8, 4.5), rx = 3, ry = 1.4, fill = #4080e0)
 - `rotation`: Number — 時計回りの回転 (度)
 - `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
 - `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
+- `zIndex`: Number — 
 
 メソッド:
 
@@ -1678,6 +1701,7 @@ Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #f5f4f0)
 - `rotation`: Number — 時計回りの回転 (度)
 - `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
 - `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
+- `zIndex`: Number — 
 
 メソッド:
 
@@ -1706,6 +1730,7 @@ Line(from = Vector(0, 0), to = Vector(4, 3), stroke = #303030, strokeWidth = 0.1
 - `rotation`: Number — 時計回りの回転 (度)
 - `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
 - `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
+- `zIndex`: Number — 
 
 メソッド:
 
@@ -1735,6 +1760,7 @@ Polygon(points = [Vector(0, 0), Vector(2, 0), Vector(1, 2)], fill = #3f9b6d)
 - `rotation`: Number — 時計回りの回転 (度)
 - `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
 - `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
+- `zIndex`: Number — 
 
 メソッド:
 
@@ -1766,6 +1792,7 @@ Path(from = Vector(0, 0), segments = [(:line, Vector(2, 0)), (:curve, Vector(3, 
 - `rotation`: Number — 時計回りの回転 (度)
 - `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
 - `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
+- `zIndex`: Number — 
 
 メソッド:
 
@@ -1797,6 +1824,7 @@ TextArea(text = "hello", position = Pos(8, 4.5), fontSize = 1, fill = #303030)
 - `rotation`: Number — 時計回りの回転 (度)
 - `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
 - `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
+- `zIndex`: Number — 
 
 メソッド:
 
@@ -1877,6 +1905,10 @@ View(box = Vector(16, 9))
 - `opacity`: Number — 中身をまとめて 1 枚として掛ける不透明度
 - `blend`: Blend — 中身をまとめて 1 枚にしてから、下の絵と重ねるときの重ね方
 - `clip`: Bool — 
+- `zIndex`: Number — 
+- `rotation`: Number — 時計回りの回転 (度)
+- `scale`: Number — 
+- `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
 
 メソッド:
 
@@ -2243,6 +2275,18 @@ alias P = Pos
   step: Number,
 )` -> List<Tuple> — 方眼の線。Path を 1 本ずつ引くための、始点と終点の組
 - `to_segments(points: List<Vector>)` -> List<Tuple> — 点の並びを Path の segments にする
+- `iso(x: Number, y: Number, z: Number, unit: Number = 1)` -> Vector — 等角投影。3 次元の点を平面に落とす。x は右下、y は左下、z は上へ伸びる
+- `iso_depth(x: Number, y: Number, z: Number)` -> Number — 等角投影での手前らしさ。大きいほど手前。zIndex に入れれば重なり順が決まる
+- `iso_faces(
+  at: Vector,
+  x: Number,
+  y: Number,
+  z: Number,
+  w: Number,
+  d: Number,
+  h: Number,
+  unit: Number = 1,
+)` -> List<Tuple> — 直方体の、見える 3 面。奥から手前の順に並ぶ
 
 ### layout
 

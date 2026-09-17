@@ -2168,23 +2168,23 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
     const PAINT: Attr = opt("fill", "Paint");
     const LINE: [Attr; 5] = [opt("stroke", "Color"), opt("strokeWidth", "Number"), opt("strokeCap", "StrokeCap"), opt("dash", "List"), opt("dashOffset", "Number")];
     const JOIN: Attr = opt("strokeJoin", "StrokeJoin");
-    const COMMON: [Attr; 4] = [opt("opacity", "Number"), opt("rotation", "Number"), opt("pivot", "Vector"), opt("blend", "Blend")];
+    const COMMON: [Attr; 5] = [opt("opacity", "Number"), opt("rotation", "Number"), opt("pivot", "Vector"), opt("blend", "Blend"), opt("zIndex", "Number")];
     macro_rules! shape {
         (fill: $fill:literal, join: $join:literal, $($extra:expr),*) => {{
             const ATTRS: &[Attr] = &[
                 $($extra,)*
                 PAINT, LINE[0], LINE[1], LINE[2], LINE[3], LINE[4], JOIN,
-                COMMON[0], COMMON[1], COMMON[2], COMMON[3],
+                COMMON[0], COMMON[1], COMMON[2], COMMON[3], COMMON[4],
             ];
             const NO_FILL: &[Attr] = &[
                 $($extra,)*
                 LINE[0], LINE[1], LINE[2], LINE[3], LINE[4],
-                COMMON[0], COMMON[1], COMMON[2], COMMON[3],
+                COMMON[0], COMMON[1], COMMON[2], COMMON[3], COMMON[4],
             ];
             const NO_JOIN: &[Attr] = &[
                 $($extra,)*
                 PAINT, LINE[0], LINE[1], LINE[2], LINE[3], LINE[4],
-                COMMON[0], COMMON[1], COMMON[2], COMMON[3],
+                COMMON[0], COMMON[1], COMMON[2], COMMON[3], COMMON[4],
             ];
             match ($fill, $join) {
                 (true, true) => ATTRS,
@@ -2209,6 +2209,7 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
         COMMON[1],
         COMMON[2],
         COMMON[3],
+        COMMON[4],
     ];
     const VIEW: &[Attr] = &[
         req("box", "Vector"),
@@ -2218,6 +2219,10 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
         opt("opacity", "Number"),
         opt("blend", "Blend"),
         opt("clip", "Bool"),
+        opt("zIndex", "Number"),
+        opt("rotation", "Number"),
+        opt("scale", "Number"),
+        opt("pivot", "Vector"),
     ];
     const SUBTITLE: &[Attr] = &[req("text", "String"), req("duration", "Duration")];
     const SHADER: &[Attr] = &[req("color", "Func"), opt("args", "List"), opt("samples", "Number")];

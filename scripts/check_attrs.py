@@ -59,6 +59,8 @@ TRY = {
     "rotation": ("0", "40", {}),
     "pivot": ("Vector(0, 0)", "Vector(2, 2)", {"rotation": "40"}),
     "blend": (":normal", ":multiply", {}),
+    # 背の四角より後ろに回ると隠れる
+    "zIndex": ("-1", "1", {}),
 }
 
 
@@ -67,14 +69,19 @@ VIEW_BASE = {"box": "Vector(3, 3)"}
 VIEW_PLACE = {"at": "Pos(1, 0.5, anchor = :topLeft)", "w": "3"}
 # place が書く属性は、その引数を動かして見る (position は at が書く)
 BY_PLACE = {"position": "at", "w": "w", "h": "h"}
+# (属性, 値 1, 値 2, 一緒に書いておく属性)
 VIEW_CASES = [
-    ("box", "Vector(3, 3)", "Vector(6, 3)"),
-    ("clip", "false", "true"),
-    ("opacity", "1", "0.2"),
-    ("blend", ":normal", ":multiply"),
-    ("position", "Pos(0.2, 0.5, anchor = :topLeft)", "Pos(1, 0.5, anchor = :topLeft)"),
-    ("w", "2", "3"),
-    ("h", "2", "3"),
+    ("box", "Vector(3, 3)", "Vector(6, 3)", {}),
+    ("clip", "false", "true", {}),
+    ("opacity", "1", "0.2", {}),
+    ("blend", ":normal", ":multiply", {}),
+    ("position", "Pos(0.2, 0.5, anchor = :topLeft)", "Pos(1, 0.5, anchor = :topLeft)", {}),
+    ("w", "2", "3", {}),
+    ("h", "2", "3", {}),
+    ("zIndex", "-1", "1", {}),
+    ("rotation", "0", "30", {}),
+    ("scale", "1", "1.4", {}),
+    ("pivot", "Vector(0, 0)", "Vector(3, 3)", {"rotation": "30"}),
 ]
 
 
@@ -159,20 +166,20 @@ def main() -> int:
                 elif ha == hb:
                     failed.append(f"{kind}.{attr}: 値を変えても絵が変わらない")
         # View は別の置き方で見る
-        for attr, a, b in VIEW_CASES:
+        for attr, a, b, extra in VIEW_CASES:
             checked += 1
             if attr in BY_PLACE:
                 arg = BY_PLACE[attr]
-                ha = draw_view(VIEW_BASE, {**VIEW_PLACE, arg: a}, work)
-                hb = draw_view(VIEW_BASE, {**VIEW_PLACE, arg: b}, work)
+                ha = draw_view({**VIEW_BASE, **extra}, {**VIEW_PLACE, arg: a}, work)
+                hb = draw_view({**VIEW_BASE, **extra}, {**VIEW_PLACE, arg: b}, work)
             else:
-                ha = draw_view({**VIEW_BASE, attr: a}, VIEW_PLACE, work)
-                hb = draw_view({**VIEW_BASE, attr: b}, VIEW_PLACE, work)
+                ha = draw_view({**VIEW_BASE, **extra, attr: a}, VIEW_PLACE, work)
+                hb = draw_view({**VIEW_BASE, **extra, attr: b}, VIEW_PLACE, work)
             if ha.startswith("ERR") or hb.startswith("ERR"):
                 failed.append(f"View.{attr}: {ha if ha.startswith('ERR') else hb}")
             elif ha == hb:
                 failed.append(f"View.{attr}: 値を変えても絵が変わらない")
-        missing = [a for a in types.get("View", []) if a not in {n for n, _, _ in VIEW_CASES}]
+        missing = [a for a in types.get("View", []) if a not in {c[0] for c in VIEW_CASES}]
         if missing:
             failed.append(f"View: 試す値が scripts/check_attrs.py に無い: {' '.join(missing)}")
         n, bad = check_required(doc, work)

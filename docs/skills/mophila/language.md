@@ -135,7 +135,7 @@ motion (t) {
 | Path | `from` `segments` `closed` |
 | TextArea | `position` `text` `w` (折り返す幅) `fontSize` `font` `align`。`\n` で改行できる |
 
-共通: `fill` `stroke` `strokeWidth` `strokeCap` `strokeJoin` `dash` `dashOffset` `opacity` `rotation` `pivot` `blend`。効きようがないものは持たない (Line に `fill` は無い)。
+共通: `fill` `stroke` `strokeWidth` `strokeCap` `strokeJoin` `dash` `dashOffset` `opacity` `rotation` `pivot` `blend` `zIndex`。効きようがないものは持たない (Line に `fill` は無い)。
 
 測るメソッド:
 
@@ -150,6 +150,7 @@ motion (t) { 0s: p.dashOffset = total      # ずらしを戻していくと、�
 ```
 
 - 回すのは `rotation` (度、時計回り)。中心は外接矩形の中心で、`pivot` で変えられる。頂点を計算し直さない
+- 重なりは place した順。順を変えたくないときは `zIndex` (小さいものが下、既定 0)。背景も同じ View の子なので、下に回したいものは背景より小さい値にする
 - `dashOffset` を motion で動かすと破線が流れる
 - 塗りは Color のほか `Gradient(from =, to =, stops = [...])` (`kind = :radial` なら from を中心に radius まで)
 - `fill` に読み込んだ画像を入れると、その図形の形に切り抜いて敷かれる。大きさは図形の外接矩形に合わせる (縦横比は図形に従う)
@@ -170,7 +171,7 @@ log(photo.width, photo.height, photo.file)                          # 元のピ�
 |---|---|
 | math | `PI` `TAU` `E`、三角関数、`round(x, 桁)` `clamp` `lerp` `unlerp` `map_range` `nice_step`、`pow` `log10` `log2` `hypot` `sign` |
 | color | `mix` `lighten` `darken` `alpha` `hsl` `gray` `to_hsl` `contrast` `scale` `sequential` `diverging` `categorical` |
-| shape | 点の並びを作る。`polar` `regular_polygon` `star` `arrow` `arc` `ring_segment` `wave` `grid_lines` `to_segments` |
+| shape | 点の並びを作る。`polar` `regular_polygon` `star` `arrow` `arc` `ring_segment` `wave` `grid_lines` `to_segments`。等角投影は `iso` `iso_faces` `iso_depth` |
 | layout | 場所を決める。`grid` `cell` `row` `column` `stack` `along` `fit` `inset` |
 | easing | 0..1 を 0..1 に写す。`quad_in` `quad_out` `cubic` `back` `bounce` `elastic` `steps` `mirror` `flip` |
 | animation | Timeline を返す。`fade_in` `fade_out` `fade_to` `slide_in` `slide_out` `move_by` `spin` `shake` `pulse` `spring_to` `show` `stagger` `reveal_x` `reveal_y` |
@@ -186,6 +187,10 @@ log(photo.width, photo.height, photo.file)                          # 元のピ�
 | fractal | `escape_time(formula =, precision =, coloring =, ...)` が Shader を返す |
 
 使った例は <https://misebox.github.io/mophila/#/samples> の showcase (14 module) と report。
+
+`Vector` は複素数としても掛け割りできる。`a.cmul(b)` `a.cdiv(b)` で、回転と拡大が 1 度に書ける (1 次分数変換 `(az + b) / (cz + d)` など)。
+
+立体は等角投影で。`shape.iso_faces` が直方体の見える 3 面を返し、`shape.iso_depth` を `zIndex` に入れると重なり順が決まる。
 
 ### 部品に動きを持たせる
 
@@ -213,6 +218,8 @@ track.place(Subtitle(text = "……です。", duration = 4s), at = 2s)
 ## View の入れ子
 
 `v.place(sub, at = Pos(x, y, anchor = :topLeft), w = 7)` で別の View を比率を保って置く。中の Timeline は親と同じ時間軸で動く。`track.place(sub, at = 3s)` で置けば、その時刻から動き出す。`sub.opacity` で全体をまとめてフェードできる。
+
+`rotation` `scale` `pivot` は、置いたものを 1 枚として回して寄る。中の座標も `place` の書き方も変えなくてよいので、タイル 150 枚をまとめて回すなら、それを入れた View を 1 つ作ってその `rotation` を動かす。`pivot` は子の箱の座標で、書かなければ箱の真ん中。
 
 `clip = true` を付けると、箱からはみ出した中身を描かない。中身を動かして窓から覗かせる形が作れる。
 

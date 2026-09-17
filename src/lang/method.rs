@@ -42,6 +42,10 @@ pub const METHODS: &[Method] = &[
     Method { receivers: &["String"], name: "split", signature: "s.split(sep: String)", returns: "List<String>", doc: "sep で区切る。sep が空なら 1 文字ずつ", call: str_split },
     Method { receivers: &["String"], name: "contains", signature: "s.contains(part: String)", returns: "Bool", doc: "その文字列を含むか", call: str_contains },
     Method { receivers: &["String"], name: "repeat", signature: "s.repeat(n: Number)", returns: "String", doc: "n 回つなげる。桁を揃えるのに使う", call: str_repeat },
+    // Vector を複素数 (x + yi) として掛け割りする。回転と拡大が 1 度に書けるので、
+    // 1 次分数変換 (az + b) / (cz + d) のような図がそのまま書ける
+    Method { receivers: &["Vector"], name: "cmul", signature: "v.cmul(w: Vector)", returns: "Vector", doc: "複素数としての積。x + yi として掛ける (回転と拡大)", call: vec_cmul },
+    Method { receivers: &["Vector"], name: "cdiv", signature: "v.cdiv(w: Vector)", returns: "Vector", doc: "複素数としての商。w が 0 なら ValueError.DivisionByZero", call: vec_cdiv },
     Method { receivers: SEQ, name: "len", signature: "xs.len()", returns: "Number", doc: "要素数", call: seq_len },
     Method { receivers: &["List"], name: "push", signature: "xs.push(値: T)", returns: "Nothing", doc: "末尾に追加する。その List 自身が変わる", call: list_push },
     Method { receivers: SEQ, name: "enumerate", signature: "xs.enumerate()", returns: "List<(Number, T)>", doc: "番号と要素の組。for (i, x) in xs.enumerate() で使う", call: seq_enumerate },
@@ -180,6 +184,28 @@ fn one(args: &Args) -> Option<&Value> {
         [(None, v)] => Some(v),
         _ => None,
     }
+}
+
+/// 受け手と引数を複素数として取り出す
+fn two_vectors(m: &str, r: &Value, args: &Args) -> Result<(f64, f64, f64, f64)> {
+    let (Value::Vector(a, b), [(None, Value::Vector(c, d))]) = (r, args.as_slice()) else {
+        return err(Kind::ArgumentType, format!("Vector.{m} takes one Vector"));
+    };
+    Ok((*a, *b, *c, *d))
+}
+
+fn vec_cmul(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    let (a, b, c, d) = two_vectors("cmul", &r, &args)?;
+    Ok(Value::Vector(a * c - b * d, a * d + b * c))
+}
+
+fn vec_cdiv(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    let (a, b, c, d) = two_vectors("cdiv", &r, &args)?;
+    let den = c * c + d * d;
+    if den == 0.0 {
+        return err(Kind::DivisionByZero, "Vector.cdiv by Vector(0, 0)");
+    }
+    Ok(Value::Vector((a * c + b * d) / den, (b * c - a * d) / den))
 }
 
 fn str_len(_: &mut Interp, r: Value, args: Args) -> Result<Value> {

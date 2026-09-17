@@ -16,7 +16,7 @@ description: Write or debug mophila (.moph) motion graphics scripts. Entry point
 **名前はここに書かない。** 型・属性・メソッド・module の関数と引数は変わるので、
 この 4 つの文書は「どう考えて、どう書くか」だけを書く。名前と引数は毎回引く。
 
-- `mophila doc` — いま使っている実行ファイルの一覧 (JSON)。手元で確実
+- `mophila doc` — いま使っている実行ファイルの、型・属性・メソッド・エラー・math (JSON)
 - 下のリファレンス
 - エディタを繋いでいれば補完と hover。`(` の中では必須の引数が先に出る
 
@@ -60,7 +60,7 @@ mophila preview a.moph [--loop] [--at 1s]      # ウィンドウで再生
 mophila timeline a.moph [--filter k=v]         # 何がいつどう変わるかの一覧
 mophila sheet a.moph -o sheet.png --times 3s,12s   # 場面の格子画像
 mophila fonts                                  # 使えるフォント名 (font に書ける名前)
-mophila doc                                    # 型・属性・メソッド・module の一覧 (JSON)
+mophila doc                                    # 型・属性・メソッド・エラーの一覧 (JSON)
 mophila --version                              # 版
 ```
 

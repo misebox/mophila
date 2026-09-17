@@ -109,15 +109,27 @@ def call_form(head: str) -> str:
     return f"{name}(\n{lines},\n)"
 
 
+def declaration(lines: list[str], at: int) -> str:
+    """宣言の 1 行。引数が折り返してあれば、括弧が閉じるまで次の行をつなぐ"""
+    out = ""
+    for line in lines[at:]:
+        out = line if not out else f"{out} {line.strip()}"
+        if out.count("(") <= out.count(")"):
+            break
+    return out
+
+
 def library_docs(path: Path) -> list[dict]:
     """`##` のブロックと、その直後の export をまとめる。category は @category (無ければ空)"""
     items, block = [], []
-    for line in path.read_text().splitlines():
+    lines = path.read_text().splitlines()
+    for i, line in enumerate(lines):
         if line.startswith("##"):
             body = line[2:]
             block.append(body[1:] if body.startswith(" ") else body)
             continue
         if block and line.startswith("export "):
+            line = declaration(lines, i)
             head = signature_of(line)
             name = re.match(r"[A-Za-z_][A-Za-z0-9_]*", head).group(0)
             params, returns, category, summary, example = [], {"type": "", "doc": ""}, "", [], []

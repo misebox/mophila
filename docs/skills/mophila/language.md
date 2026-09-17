@@ -161,12 +161,12 @@ Shader は `func (x, y, t)` を渡すと GPU で全ピクセル分走る。x, y 
 色、座標、並べ方 — よく要るものは module になっている。**自分で図形を並べる前に、
 そこに部品が無いか見る。**
 
-名前と引数はこの文書には書かない (写せば必ず古くなる)。引くのは次のどちらか。
+名前と引数はこの文書には書かない (写せば必ず古くなる)。引くのはこの 3 つ。
 
-- `mophila doc` — いま使っている実行ファイルの、型・属性・メソッド・module の一覧 (JSON)
-- <https://misebox.github.io/mophila/#/lib> (module) と <https://misebox.github.io/mophila/#/builtins> (型)
-
-エディタを繋いでいれば、`.` の後や `(` の中の補完に署名と説明が出る。必須の引数は先に並ぶ。
+- `mophila doc` — いま使っている実行ファイルの、型・属性・メソッド・エラー・math の一覧 (JSON)
+- <https://misebox.github.io/mophila/#/lib> (module の関数と引数) と <https://misebox.github.io/mophila/#/builtins> (型)。
+  どちらもソースから生成している。`llms-full.txt` はその全部を 1 ファイルにしたもの
+- エディタを繋いでいれば、`.` の後や `(` の中の補完に署名と説明が出る。必須の引数が先に並ぶ
 
 `import 名前` で module ごと、`import { 名前 } from module` で名前だけ持ち込む。
 組み合わせた例は <https://misebox.github.io/mophila/#/samples> の showcase と report。

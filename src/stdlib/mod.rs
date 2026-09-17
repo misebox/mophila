@@ -1,5 +1,6 @@
 //! 標準ライブラリ。`import name` で読めるもの。
-//! Rust で書いたもの (math) と、本体に埋め込んだ .moph (fractal) がある
+//! Rust で書いたもの (math) と、本体に埋め込んだ .moph がある。
+//! .moph は include_str! で実行ファイルの中に入るので、別に配るファイルは無い
 
 pub mod math;
 

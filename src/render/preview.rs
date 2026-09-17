@@ -203,7 +203,9 @@ impl Player<'_> {
         }
         let (width, height) = (state.surface.config.width, state.surface.config.height);
         let mut scene = scene::build(&self.view, f64::from(width), f64::from(height), t, self.interp.cache_mut())?;
-        scene::overlay_subtitles(&mut scene, self.interp.cache_mut(), &self.cues, t, f64::from(width), f64::from(height));
+        // 字幕は絵の中に出す。窓の縦横比が違うと、絵の上下左右に帯が空いている
+        let area = scene::picture(&self.view, f64::from(width), f64::from(height))?;
+        scene::overlay_subtitles(&mut scene, self.interp.cache_mut(), &self.cues, t, area);
 
         let handle = &state.context.devices[state.surface.dev_id];
         shader::apply_overrides(&mut state.renderer, self.interp.cache_mut().shaders.as_mut());

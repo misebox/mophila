@@ -471,7 +471,8 @@ fn sheet(src: &str, base_dir: std::path::PathBuf, project: &Option<Rc<project::P
             interp.apply_track(placed, t)?;
         }
         let mut scene = render::scene::build(&view, f64::from(cw), f64::from(ch), t, interp.cache_mut())?;
-        render::scene::overlay_subtitles(&mut scene, interp.cache_mut(), &media.cues, t, f64::from(cw), f64::from(ch));
+        let area = render::scene::picture(&view, f64::from(cw), f64::from(ch))?;
+        render::scene::overlay_subtitles(&mut scene, interp.cache_mut(), &media.cues, t, area);
         // 時刻のラベル
         let label = format!("{t:.1}s");
         let layout = interp.cache_mut().layout(&label, None, (f64::from(ch) * 0.09) as f32, None, render::text::alignment(None));

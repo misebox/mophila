@@ -16,13 +16,22 @@ type Attrs = HashMap<String, Value>;
 /// View を描画命令に変換する。View の box を出力サイズに収め (比率維持)、中央に置く
 /// t は動画の時刻 (秒)。Shader の塗りに渡す
 pub fn build(view: &ObjRef, width: f64, height: f64, t: f64, cache: &mut RenderCache) -> Result<Scene> {
-    let (bw, bh) = view_box(view)?;
-    let scale = (width / bw).min(height / bh);
-    let transform = Affine::translate(((width - bw * scale) / 2.0, (height - bh * scale) / 2.0)) * Affine::scale(scale);
+    let (bw, _) = view_box(view)?;
+    let area = picture(view, width, height)?;
+    let transform = Affine::translate((area.x0, area.y0)) * Affine::scale(area.width() / bw);
     let mut scene = Scene::new();
     let frame = Frame { viewport: Rect::new(0.0, 0.0, width, height), t };
     draw_view(&mut scene, view, transform, &frame, cache)?;
     Ok(scene)
+}
+
+/// 箱を width x height に収めたとき、絵が実際に載る矩形。
+/// 縦横比が合わなければ上下か左右が余る。字幕はこの中に出す
+pub fn picture(view: &ObjRef, width: f64, height: f64) -> Result<Rect> {
+    let (bw, bh) = view_box(view)?;
+    let scale = (width / bw).min(height / bh);
+    let (w, h) = (bw * scale, bh * scale);
+    Ok(Rect::new((width - w) / 2.0, (height - h) / 2.0, (width + w) / 2.0, (height + h) / 2.0))
 }
 
 /// 1 フレームの間、全図形に共通のもの
@@ -524,19 +533,19 @@ fn anchored_center(attrs: &Attrs, w: f64, h: f64, kind: &str) -> Result<(f64, f6
 }
 
 /// preview と sheet で、その時刻に出ている字幕を画面の下に重ねる (プレイヤーの表示に似せる)。動画には入らない
-pub fn overlay_subtitles(scene: &mut Scene, cache: &mut RenderCache, cues: &[crate::render::media::Cue], t: f64, width: f64, height: f64) {
-    let size = (height * 0.045) as f32;
-    let box_w = (width * 0.9) as f32;
+pub fn overlay_subtitles(scene: &mut Scene, cache: &mut RenderCache, cues: &[crate::render::media::Cue], t: f64, area: Rect) {
+    let size = (area.height() * 0.045) as f32;
+    let box_w = (area.width() * 0.9) as f32;
     let pad = f64::from(size) * 0.35;
-    let mut bottom = height * 0.94;
+    let mut bottom = area.y0 + area.height() * 0.94;
     // 同時に出ている字幕は、先に始まったものを下にして積む
     for cue in cues.iter().filter(|c| c.at <= t && t < c.at + c.length) {
         let layout = cache.layout(&cue.text, None, size, Some(box_w), text::alignment(Some("center")));
         let (w, h) = (f64::from(layout.width()), f64::from(layout.height()));
         let top = bottom - h - pad * 2.0;
-        let x0 = (width - w) / 2.0 - pad;
+        let x0 = area.x0 + (area.width() - w) / 2.0 - pad;
         scene.fill(Fill::NonZero, Affine::IDENTITY, Color::from_rgba8(0, 0, 0, 150), None, &RoundedRect::new(x0, top, x0 + w + pad * 2.0, bottom, pad));
-        text::draw(scene, layout, Affine::translate(((width - f64::from(box_w)) / 2.0, top + pad)), Color::WHITE, None);
+        text::draw(scene, layout, Affine::translate((area.x0 + (area.width() - f64::from(box_w)) / 2.0, top + pad)), Color::WHITE, None);
         bottom = top - pad;
     }
 }

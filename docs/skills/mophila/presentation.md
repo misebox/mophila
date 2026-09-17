@@ -76,6 +76,20 @@ for line in lines {
 
 ## 場面を組む部品
 
+よく出るものは標準 module にある。自分で組む前に見る。
+
+| 要るもの | 使うもの |
+|---|---|
+| 章の見出し / 下の帯 / 引用 | `text.chapter_card` `text.lower_third` `text.quote_card` |
+| 数字の書式、一部を目立たせる | `text.thousands` `text.percent` `text.duration` `text.highlight` |
+| グラフ、図、表 | `chart.*` `diagram.node_graph` `diagram.table` `diagram.arrow` |
+| 画面の絵 (端末・ブラウザ・通知) | `ui.terminal` `ui.browser` `ui.toast` `ui.key_press` |
+| 背景、周辺減光 | `backdrop.graph_paper` `backdrop.blobs` `backdrop.vignette` |
+| 場面の切り替え、注目させる | `focus.wipe` `focus.iris` `focus.spotlight` |
+| 出し入れ | `animation.show` `animation.fade_in` `animation.fade_out` |
+
+どれも `duration` と `start` を渡すと自分で動く。場面をまたぐ時刻は動画全体の時刻で書く。4 場面の組み立て方は samples の showcase を見る。
+
 実例は <https://misebox.github.io/mophila/#/samples> の mophila_intro。`main.moph` (章の順番と output) / `theme.moph` (画面、色、時間の決まり) / `slides.moph` (部品) / 場面ごとのファイル (`export func run(now)` が場面を組んで次の開始時刻を返す) に分かれている。新しく書くときは theme と slides を写す。場面の基本形は「左にコード、右にそのコードが実際に動く箱、下にナレーションの字幕」。
 
 | 部品 | すること |

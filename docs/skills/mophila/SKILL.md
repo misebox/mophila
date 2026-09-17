@@ -13,12 +13,15 @@ description: Write or debug mophila (.moph) motion graphics scripts. Entry point
 | [presentation.md](presentation.md) | 解説する動画の作り方。場面の組み立て、読める時間、確認の手順 |
 | [design.md](design.md) | 見た目。色、構図、文字、動きの質 |
 
+図形を自分で並べる前に、標準 module に部品が無いか見る (language.md の「標準ライブラリ」)。
+
 迷ったら、公開されているものを見る。仕様は変わるので、こちらが正。
 
 | | |
 |---|---|
 | <https://misebox.github.io/mophila/#/docs/spec> | 言語仕様 (意味と規則) |
 | <https://misebox.github.io/mophila/#/builtins> | 型・属性・メソッド・エラーの一覧 |
+| <https://misebox.github.io/mophila/#/lib> | 標準 module の関数と引数 (chart / diagram / text / ui / backdrop / focus / media / clock / meter ほか) |
 | <https://misebox.github.io/mophila/#/samples> | 動く例 |
 | <https://misebox.github.io/mophila/#/docs/examples> | 構文ごとの短い見本 |
 | <https://misebox.github.io/mophila/llms-full.txt> | 上の全部を 1 ファイルにしたもの |

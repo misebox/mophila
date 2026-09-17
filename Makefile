@@ -1,5 +1,5 @@
 # 手で覚える順番を減らすための入口。中身は cargo / scripts / site に任せる
-.PHONY: all docs site check media dev
+.PHONY: all docs site check media dev install-skill
 
 # 既定: 検査してからドキュメント一式を作る
 all: check docs
@@ -17,6 +17,10 @@ media:
 	cargo build
 	python3 scripts/docgen.py --media
 	cd site && bun run build
+
+## 書き方の skill を ~/.claude/skills に入れる
+install-skill:
+	scripts/install-skill.sh
 
 ## 全部の検査
 check:

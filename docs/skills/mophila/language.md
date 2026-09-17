@@ -163,16 +163,42 @@ log(photo.width, photo.height, photo.file)                          # 元のピ�
 
 ## 標準ライブラリ
 
-自分で opacity の motion を書く前に、これらを見る。
+自分で図形を並べる前に、ここに部品が無いか見る。全部の関数と引数は
+<https://misebox.github.io/mophila/#/lib> にある。
 
 | module | 中身 |
 |---|---|
-| math | `PI` `TAU` `E`、三角関数、`round(x, 桁)` `clamp` `lerp` `map_range` `nice_step`、`pow` `log10` `log2` `hypot` `sign` |
-| color | `mix` `lighten` `darken` `alpha` `hsl` `gray` |
-| shape | Polygon の points = `regular_polygon` `star` `arrow` |
-| layout | `grid` `cell` `along` `fit` |
-| animation | `fade_in` `fade_out` `fade_to` `slide_in` `slide_out` `move_by` `show` が Timeline を返す |
+| math | `PI` `TAU` `E`、三角関数、`round(x, 桁)` `clamp` `lerp` `unlerp` `map_range` `nice_step`、`pow` `log10` `log2` `hypot` `sign` |
+| color | `mix` `lighten` `darken` `alpha` `hsl` `gray` `to_hsl` `contrast` `scale` `sequential` `diverging` `categorical` |
+| shape | 点の並びを作る。`polar` `regular_polygon` `star` `arrow` `arc` `ring_segment` `wave` `grid_lines` `to_segments` |
+| layout | 場所を決める。`grid` `cell` `row` `column` `stack` `along` `fit` `inset` |
+| easing | 0..1 を 0..1 に写す。`quad_in` `quad_out` `cubic` `back` `bounce` `elastic` `steps` `mirror` `flip` |
+| animation | Timeline を返す。`fade_in` `fade_out` `fade_to` `slide_in` `slide_out` `move_by` `spin` `shake` `pulse` `spring_to` `show` `stagger` `reveal_x` `reveal_y` |
+| chart | `axes` `bar` `line` `pie` `radar` `scatter` `histogram` `heatmap` `sparkline` `bar_race` `legend` `tick_values` |
+| diagram | `connector` `arrow` `elbow` `leader_label` `speech_bubble` `node_graph` `table` |
+| text | 文字と数の書式。`typewriter` `number` `thousands` `percent` `duration` `pad` `highlight` `quote_card` `lower_third` `chapter_card` `word_cloud` |
+| meter | 1 つの値を絵にする。`progress_bar` `progress_ring` `gauge` `thermometer` `stars` `poll_bars` |
+| clock | `analog` `digital` `countdown` `stopwatch` `calendar_page` `timeline_bar` |
+| ui | 画面の絵。`phone` `browser` `terminal` `chat` `toast` `cursor` `key_press` `social_post` `spinner` |
+| backdrop | 背景と重ねる幕。`graph_paper` `vignette` `particles` `grid_pulse` `radar_sweep` `blobs` `grain` |
+| focus | 見せたい所だけ見せる。`spotlight` `iris` `wipe` `magnifier` `split_compare` `credits_roll` |
+| media | 画像と地図。`picture` `ken_burns` `slideshow` `watermark` `project` `map_route` `map_pin` |
 | fractal | `escape_time(formula =, precision =, coloring =, ...)` が Shader を返す |
+
+使った例は <https://misebox.github.io/mophila/#/samples> の showcase (14 module) と report。
+
+### 部品に動きを持たせる
+
+スクリプトはフレームごとには走らない。各フレームは「スクリプトを実行した直後の状態 + その時刻までに始まった Timeline」で決まるので、`progress` のような値を渡すだけでは止まった絵になる。
+
+動かすには `duration` を渡す。その部品が自分の Timeline を持って返るので、置けばそのまま動く。`start` はその動きが始まる時刻 (動画全体の時刻で書く)。
+
+```
+v.place(bar(sales, months, 6, 4, duration = 0.8s, start = 1.2s, stagger = 0.1s), at = Pos(1, 2, anchor = :topLeft), w = 6)
+v.place(wipe(16, 9, 1, :left, duration = 0.5s, start = 3s), at = Pos(0, 0, anchor = :topLeft), w = 16)
+```
+
+`duration` を書かなければ渡した値のまま止まる。1 枚の画像を作るときや、値そのものを自分の motion で動かすときはこちら。
 
 ## 音声と字幕
 
@@ -210,7 +236,14 @@ v.place(clock.output, at = Pos(1, 1, anchor = :topLeft), w = 6)
 track.place(clock.output, at = 2s)             # 2s からその中の Timeline が動く
 ```
 
-同じファイルは 1 度しか実行されないので、2 か所に置くと**同じ実体**が 2 か所に出る。別々に動かしたいなら、View を返す関数を `export` して呼ぶたびに作る。
+同じファイルは 1 度しか実行されないので、`clock.output` はどこから読んでも**同じ実体**になる。置き先での位置と大きさは View 自身の属性なので、同じ View を 2 か所には置けない (`ValueError.AlreadyPlaced`)。2 か所目には `copy()` を置く。中の図形は元と共通なので、動かすと両方が動く。
+
+```
+v.place(clock.output, at = Pos(1, 1, anchor = :topLeft), w = 6)
+v.place(clock.output.copy(), at = Pos(9, 1, anchor = :topLeft), w = 6)   # 2 か所目
+```
+
+別々に動かしたいなら、View を返す関数を `export` して呼ぶたびに作る。
 
 ```
 # walker.moph
@@ -274,5 +307,6 @@ export let pause = 1s
 - `ValueError.DurationRequired` → 0..1 で書いたのに duration が無い、または時刻の単位が混在
 - `NameError.UndefinedVariable: "math" is not defined; add "import math"`
 - `NameError.UndefinedAttribute: Circle has no attribute "width"` → 属性名の綴り
+- `ValueError.AlreadyPlaced` → 同じ View を 2 か所に置いた。2 か所目は `copy()` を置く
 
 全部の種別は <https://misebox.github.io/mophila/#/builtins/errors> にある。

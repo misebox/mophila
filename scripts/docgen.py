@@ -23,7 +23,8 @@ MEDIA = SITE / "public" / "media"
 ONLY_START = {"circle", "first"}
 # サンプルの表示順。intro は長いので動画は付けない
 # 並び順。あとのものが前のものを import するように並べる (grid は orbit / bars / clock / bounce を使う)
-SAMPLES = ["circle", "first", "shapes", "bounce", "bars", "report", "showcase", "clock", "orbit", "fractal", "walker", "passerby", "crowd", "grid", "julia", "burning_ship", "mandelbrot"]
+# 簡単なものから順に。凝ったものほど下
+SAMPLES = ["circle", "first", "shapes", "bounce", "bars", "clock", "orbit", "fractal", "walker", "passerby", "crowd", "grid", "julia", "burning_ship", "mandelbrot", "report", "showcase"]
 
 
 def builtin_docs() -> dict:

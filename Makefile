@@ -1,5 +1,5 @@
 # 手で覚える順番を減らすための入口。中身は cargo / scripts / site に任せる
-.PHONY: all docs site check media dev install-skill
+.PHONY: all docs site check media dev install-skill bump
 
 # 既定: 検査してからドキュメント一式を作る
 all: check docs
@@ -21,6 +21,10 @@ media:
 ## 書き方の skill を ~/.claude/skills に入れる
 install-skill:
 	scripts/install-skill.sh
+
+## patch を 1 つ上げる (minor / major は scripts/bump-version.py minor のように)
+bump:
+	scripts/bump-version.py
 
 ## 全部の検査
 check:

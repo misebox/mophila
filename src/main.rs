@@ -14,6 +14,7 @@ use std::rc::Rc;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
+#[command(version)]
 struct Cli {
     /// 設定ファイル (既定: いま居るディレクトリの mophila.yaml)
     #[arg(short = 'f', long, global = true)]

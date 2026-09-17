@@ -1,0 +1,133 @@
+# showcase.moph — 標準 module を一通り使った 4 場面。表紙 → 数 → 図と画面 → 地図
+#
+# 場面は View ごとに分けて、animation.show で出し入れする。
+# 部品が自分で持つ動き (duration / start) の時刻は、動画全体の時刻で書く
+
+import math
+import { categorical, gray, alpha } from color
+import shape
+import { row } from layout
+import { show, spin, fade_in, fade_out } from animation
+import { blobs, graph_paper, particles, vignette } from backdrop
+import { axes, bar, line, pie } from chart
+import { progress_ring, stars } from meter
+import { countdown, timeline_bar } from clock
+import { node_graph, speech_bubble, leader_label } from diagram
+import { browser, terminal, key_press, toast, cursor } from ui
+import { lower_third, thousands, highlight } from text
+import { spotlight } from focus
+import { map_route, map_pin, project } from media
+
+let v = View(box = Vector(16, 9))
+v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #f4f1ea))
+let track = Timeline(duration = 18.6s)
+v.addTrack(track)
+
+# ---- 1. 表紙 ----
+# 1 場面目は最初の絵なので、薄いところから始めずにそのまま出す
+let cover = View(box = Vector(16, 9))
+cover.place(blobs(16, 9, #10131a, #3f6fb0, #a04ad0, 0.8), at = Pos(0, 0, anchor = :topLeft), w = 16)
+cover.place(particles(16, 9, 9s, 0s, 60, #ffffff), at = Pos(0, 0, anchor = :topLeft), w = 16)
+cover.place(TextArea(position = Pos(8, 3.4), text = "mophila", fontSize = 1.6, fill = #ffffff, align = :center))
+cover.place(TextArea(position = Pos(8, 4.6), text = "動く絵を、書いて作る", fontSize = 0.5, fill = alpha(#ffffff, 0.75), align = :center))
+let badge = Polygon(points = shape.star(13.6, 2.2, 0.8, 0.34, 5), fill = #e0b040, pivot = Vector(13.6, 2.2))
+cover.place(badge)
+track.place(spin(badge, 1, 6s), at = 0.5s)
+cover.place(terminal(["$ mophila render showcase.moph", "showcase 570/570 frames"], 0, 8, 1.6, 2, #14161a, #9fe0a0, "", 1.8s, 1.6s),
+            at = Pos(4, 5.6, anchor = :topLeft), w = 8)
+cover.place(cursor(Vector(11.4, 6.9), 0.4))
+v.place(cover, at = Pos(0, 0, anchor = :topLeft), w = 16)
+track.place(fade_out(cover, 0.5s), at = 4.5s)
+
+# ---- 2. 数を見せる ----
+let data = View(box = Vector(16, 9), opacity = 0)
+data.place(graph_paper(16, 9, 0.5, 4), at = Pos(0, 0, anchor = :topLeft), w = 16)
+data.place(lower_third("数を見せる", "chart / meter / clock", 6, 1.1, 1, #1a1d23, #e04040, 0.5s, 5s), at = Pos(0.6, 0.5, anchor = :topLeft), w = 6)
+
+let sales = [820, 1240, 990, 1560, 1810, 2380]
+let months = ["4月", "5月", "6月", "7月", "8月", "9月"]
+data.place(axes(6, 3.4, 0, 6, 0, 2500, "", "", 5), at = Pos(0.8, 2.4, anchor = :topLeft), w = 6)
+data.place(bar(sales, months, 6, 3.4, [#e04040], 0, 2500, 0.8s, 5.4s, 0.1s), at = Pos(0.8, 2.4, anchor = :topLeft), w = 6)
+data.place(TextArea(position = Pos(6.8, 2.1, anchor = :right), text = thousands(8800) + " 千円", fontSize = 0.42, fill = gray(70)))
+
+let trend = [Vector(0, 12), Vector(1, 18), Vector(2, 16), Vector(3, 24), Vector(4, 29), Vector(5, 38)]
+data.place(axes(6, 3.4, 0, 5, 0, 40, "", "", 4), at = Pos(9.2, 2.4, anchor = :topLeft), w = 6)
+data.place(line(trend, 6, 3.4, 0, 5, 0, 40, #3f6fb0, 1, 1s, 6.4s), at = Pos(9.2, 2.4, anchor = :topLeft), w = 6)
+
+# 下の段に小さい部品を 3 つ
+let slots = row(0.8, 6.3, 14.4, 3, 0.6)
+let (ring_at, slot_w) = slots[0]
+data.place(progress_ring(0.72, 1.7, 0.3, #3f9b6d), at = Pos(ring_at.x + slot_w / 2, ring_at.y, anchor = :top), w = 1.7)
+data.place(TextArea(position = Pos(ring_at.x + slot_w / 2, ring_at.y + 1.9, anchor = :top), text = "達成率 72%", fontSize = 0.34, fill = gray(80), align = :center))
+let (count_at, _) = slots[1]
+data.place(countdown(25s, 60s, 1.7, 1.7), at = Pos(count_at.x + slot_w / 2, count_at.y, anchor = :top), w = 1.7)
+data.place(TextArea(position = Pos(count_at.x + slot_w / 2, count_at.y + 1.9, anchor = :top), text = "残り", fontSize = 0.34, fill = gray(80), align = :center))
+let (pie_at, _) = slots[2]
+data.place(pie([5, 3, 2], 1.7, categorical(3), 0.5, 1s, 7.4s), at = Pos(pie_at.x + slot_w / 2, pie_at.y, anchor = :top), w = 1.7)
+data.place(TextArea(position = Pos(pie_at.x + slot_w / 2, pie_at.y + 1.9, anchor = :top), text = "内訳", fontSize = 0.34, fill = gray(80), align = :center))
+v.place(data, at = Pos(0, 0, anchor = :topLeft), w = 16)
+show(track, [data], at = 4.8s, end = 9.8s, duration = 0.5s)
+
+# ---- 3. 図と画面 ----
+let parts = View(box = Vector(16, 9), opacity = 0)
+parts.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #eef0f3))
+parts.place(lower_third("図と画面", "diagram / ui", 5.4, 1.1, 1, #1a1d23, #3f9b6d, 0.5s, 9.8s), at = Pos(0.6, 0.5, anchor = :topLeft), w = 5.4)
+
+let nodes = { "入力": Vector(1, 1), "解析": Vector(3.4, 0.8), "描画": Vector(5.6, 2), "書き出し": Vector(3.2, 3.4) }
+let edges = [("入力", "解析"), ("解析", "描画"), ("描画", "書き出し")]
+parts.place(node_graph(nodes, edges, 6.6, 4.2, -1, #3f6fb0, 1.6s, 10.2s), at = Pos(0.6, 2.4, anchor = :topLeft), w = 6.6)
+parts.place(speech_bubble("この順で動く", 3, 0.9, :bottom), at = Pos(3.8, 6.9, anchor = :topLeft), w = 3)
+
+let page = View(box = Vector(6, 3.4))
+page.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 6, h = 3.4, fill = #ffffff))
+page.place(TextArea(position = Pos(0.4, 0.5, anchor = :topLeft), text = "mophila", fontSize = 0.5, fill = #1a1d23))
+page.place(Rect(position = Pos(0.4, 1.3, anchor = :topLeft), w = 5.2, h = 0.18, radius = 0.09, fill = gray(210)))
+page.place(Rect(position = Pos(0.4, 1.8, anchor = :topLeft), w = 4.2, h = 0.18, radius = 0.09, fill = gray(210)))
+page.place(Rect(position = Pos(0.4, 2.3, anchor = :topLeft), w = 3.4, h = 0.18, radius = 0.09, fill = gray(210)))
+parts.place(browser(page, "mophila.dev", 7.4, 4.4), at = Pos(8.2, 2, anchor = :topLeft), w = 7.4)
+parts.place(key_press(["⌘", "S"], 2.2, 0.9, 1), at = Pos(8.2, 6.8, anchor = :topLeft), w = 2.2)
+parts.place(toast("保存しました", 4.4, 0.9, 1, #1a1d23, #4aa863, 0.4s, 12.6s), at = Pos(11.2, 6.8, anchor = :topLeft), w = 4.4)
+v.place(parts, at = Pos(0, 0, anchor = :topLeft), w = 16)
+show(track, [parts], at = 9.6s, end = 14.4s, duration = 0.5s)
+
+# ---- 4. 地図 ----
+let map = View(box = Vector(16, 9), opacity = 0)
+map.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #dde6ef))
+map.place(lower_third("地図", "media", 4.4, 1.1, 1, #1a1d23, #e0803a, 0.5s, 14.4s), at = Pos(0.6, 0.5, anchor = :topLeft), w = 4.4)
+
+# 緯度経度を平面に直し、見えている範囲に合わせて箱の座標へ
+let cities = [(33.59, 130.4, "福岡"), (34.69, 135.5, "大阪"), (35.68, 139.77, "東京"), (43.06, 141.35, "札幌")]
+let world = cities.map(func (c) { project(c[0], c[1]) })
+let xs = world.map(func (p) { p.x })
+let ys = world.map(func (p) { p.y })
+let x_lo = math.min(...xs)
+let x_hi = math.max(...xs)
+let y_lo = math.min(...ys)
+let y_hi = math.max(...ys)
+let route = world.map(func (p) {
+  # project の y は北が 0 なので、そのまま下へ向ける
+  Vector(math.map_range(p.x, x_lo, x_hi, 3, 13), math.map_range(p.y, y_lo, y_hi, 2.6, 7.4))
+})
+map.place(map_route(route, 1, 16, 9, #e0803a, 0.06, 1.6s, 14.8s), at = Pos(0, 0, anchor = :topLeft), w = 16)
+for (i, at) in route.enumerate() {
+  map.place(map_pin(at, 1, 16, 9, 0.5, #e04040, 0.5s, 15.2s + 0.4s * i), at = Pos(0, 0, anchor = :topLeft), w = 16)
+  map.place(TextArea(position = Pos(at.x + 0.45, at.y - 0.9, anchor = :left), text = cities[i][2], fontSize = 0.38, fill = gray(60)))
+}
+let lit = spotlight(route[3].x, route[3].y - 0.4, 1.8, 16, 9, 0.35)
+lit.opacity = 0
+map.place(lit, at = Pos(0, 0, anchor = :topLeft), w = 16)
+track.place(fade_in(lit, 0.5s), at = 17.2s)
+let note = leader_label(Vector(route[3].x, route[3].y - 0.4), "ここが終点", Vector(-2.6, 1.2), 16, 9, 0.4, #ffffff)
+note.opacity = 0
+map.place(note, at = Pos(0, 0, anchor = :topLeft), w = 16)
+track.place(fade_in(note, 0.5s), at = 17.3s)
+map.place(highlight("14 module で作った 4 場面", 0, 9, 0.44, :marker, #1a1d23, #ffd34d, 0.6s, 17.6s), at = Pos(0.8, 7.9, anchor = :topLeft), w = 6)
+map.place(stars(4.5, 5, 0.34), at = Pos(13.2, 8, anchor = :center), w = 2)
+v.place(map, at = Pos(0, 0, anchor = :topLeft), w = 16)
+# 最後の場面は消さずに終わる
+track.place(fade_in(map, 0.5s), at = 14.2s)
+
+# ---- 通して出しておくもの ----
+v.place(timeline_bar([0.26, 0.51, 0.75], 1, 5, 0.34, #1a1d23, alpha(#1a1d23, 0.15), 18.6s), at = Pos(5.5, 8.5, anchor = :topLeft), w = 5)
+v.place(vignette(16, 9, 0.3), at = Pos(0, 0, anchor = :topLeft), w = 16)
+output v

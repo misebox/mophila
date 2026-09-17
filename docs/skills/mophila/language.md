@@ -62,8 +62,7 @@ let v = View(box = Vector(config.width, 9))
 
 設定値を使うときに引っかかる所:
 
-- キーフレームの時刻に式は書けない。`config.seconds * 1s: ...` は構文エラー。0..1 で書いて `duration` を後から決めるか、`fit()` を使う
-- 色は設定に書けない (数・文字列・真偽だけ)。色相を数で持って `color` の `hsl` で作る
+- 色は設定に書けない (数・文字列・真偽だけ)。色相を数で持って `color` module で作る
 - `import { a as b }` は書けない。名前がぶつかるなら片方を Module として読む
 
 ## 自分の型を作る
@@ -106,7 +105,7 @@ motion c [:position, :radius] { ... }      # 対象と属性を先に並べる�
 
 - 時刻は Duration か 0..1 の実数 (`50%` も可)。1 つの motion で混ぜない。0..1 で書いたら `duration` が要る
 - 時刻には式を書ける (`dur:` `start + 0.4s:`)。長さを引数で受け取る部品が素直に書ける
-- `duration` は長さ。代入しても行の時刻は動かない (短くすればその先は使われない)。時刻ごと動かすのは `scale(k)` `fit(3s)` `trim(from =, to =)`。どれも新しい Timeline を返す
+- `duration` は長さ。代入しても行の時刻は動かない (短くすればその先は使われない)。時刻そのものを伸縮したり切り出したりするメソッドが別にある。どれも新しい Timeline を返し、元は変わらない
 - `0..1: o.position = Pos(math.cos(math.TAU * t), ...)` のように範囲を書くと、その区間は補間せず毎フレーム式を評価する。円運動・振動はこれで書く。行を刻んで近似しない
 - 行末の修飾子はその行に入る区間に効く。`:ease` (加減速) `:ease_in` (加速) `:ease_out` (減速) `:linear` (既定)
 - 間を補間できるのは Number / Duration / Vector / Pos / Color と、それらを**同じ長さで**並べた Tuple / List。`Path.segments` や `Polygon.points` を動かすと形が変わる。長さが違うと補間せず、次の行の時刻で切り替わる
@@ -117,30 +116,25 @@ motion (t) {
   2s: p.segments = [(:line, Vector(3, 1)), (:line, Vector(5, 3.5))]   # 形が変わる
 }
 ```
-- 出し入れは `o.opacity` を書くか、`animation` の `fade_in` / `fade_out`
-- `tl.reverse()` で逆再生
+- 出し入れは `o.opacity` を自分で書くか、`animation` module の出し入れの関数を使う。逆再生も Timeline のメソッドにある
 - 入れ物: `let track = Timeline()` に `track.place(tl, at = 3s, fadeIn = 1s)`。`v.addTrack(track)`。Timeline は終わった後も最後の状態を保ち、始まる前は何もしない
 - 後から place した Timeline が同じ属性を書けば勝つ
 - 動画の長さは、View に置いたものの終わりの最大
 
 ## 図形と塗り
 
-| 型 | 位置と形 |
-|---|---|
-| Circle | `position` `radius` |
-| Ellipse | `position` `rx` `ry` |
-| Rect | `position` `w` `h` `radius` (角の丸み) |
-| Line | `from` `to` |
-| Polygon | `points` |
-| Path | `from` `segments` `closed` |
-| TextArea | `position` `text` `w` (折り返す幅) `fontSize` `font` `align`。`\n` で改行できる |
+図形は `Circle` `Ellipse` `Rect` `Line` `Polygon` `Path` `TextArea`、入れ物は `View`。
+どの型がどの属性を持つかは変わるので、**書く前に `mophila doc` かリファレンスで引く**。
+必須の属性には印が付いている。
 
-共通: `fill` `stroke` `strokeWidth` `strokeCap` `strokeJoin` `dash` `dashOffset` `opacity` `rotation` `pivot` `blend` `zIndex`。効きようがないものは持たない (Line に `fill` は無い)。
+覚えておくのはこの 3 つ。
 
-測るメソッド:
+- 位置は属性で決まる。`place` は「この View の子にする」だけ (View を入れ子にするときだけ `at` と `w` を渡す)
+- 効きようがない属性は持たない。`Line` に塗りは無い。書けば `NameError.UndefinedAttribute` で止まる
+- 重なりは place した順。順を変えたくないときは、描く順を決める属性を使う
 
-- `t.size()` — TextArea が置いたときに占める幅と高さ (Vector)。`w` を書いていれば幅はその値
-- `p.length()` — 図形の輪郭の長さ。線を少しずつ描き出すときに使う
+線を少しずつ描き出す、文字が占める大きさを測る、といったことはメソッドでできる。
+何があるかは同じ一覧の「メソッド」に出る。線の長さを測って破線のずらしを動かすと、線が伸びて見える。
 
 ```
 let total = p.length()
@@ -149,48 +143,33 @@ motion (t) { 0s: p.dashOffset = total      # ずらしを戻していくと、�
              2s: p.dashOffset = 0 }
 ```
 
-- 回すのは `rotation` (度、時計回り)。中心は外接矩形の中心で、`pivot` で変えられる。頂点を計算し直さない
-- 重なりは place した順。順を変えたくないときは `zIndex` (小さいものが下、既定 0)。背景も同じ View の子なので、下に回したいものは背景より小さい値にする
-- `dashOffset` を motion で動かすと破線が流れる
-- 塗りは Color のほか `Gradient(from =, to =, stops = [...])` (`kind = :radial` なら from を中心に radius まで)
-- `fill` に読み込んだ画像を入れると、その図形の形に切り抜いて敷かれる。大きさは図形の外接矩形に合わせる (縦横比は図形に従う)
+塗りは色のほかに、グラデーション、読み込んだ画像、Shader を入れられる。
+画像は図形の形に切り抜かれる。
 
 ```
 import "photo.jpg" as photo
 v.place(Circle(position = Pos(4, 2), radius = 1.5, fill = photo))   # 丸く切り抜く
-log(photo.width, photo.height, photo.file)                          # 元のピクセル数
 ```
-- ピクセル単位の絵は `fill` に `Shader(color = func (x, y, t) { ... Color })`。x, y は箱の座標、t は秒。GPU で全ピクセル分走るので数値の計算だけ (文字列・図形・Dict は不可、再帰不可)。時間で変える値は t から計算するか、`args` を motion の行で変える。`samples: 4` で 2x2 のアンチエイリアス。複素数は Vector で書ける
+
+Shader は `func (x, y, t)` を渡すと GPU で全ピクセル分走る。x, y は箱の座標、t は秒。
+書けるのは数値の計算だけ (文字列・図形・Dict は不可、再帰不可)。時間で変える値は t から計算するか、
+`args` を motion の行で変える。複素数は Vector で書ける。
 
 ## 標準ライブラリ
 
-自分で図形を並べる前に、ここに部品が無いか見る。全部の関数と引数は
-<https://misebox.github.io/mophila/#/lib> にある。
+グラフ、図、文字の書式、画面の絵、背景、幕、時計、画像と地図、メーター、イージング、
+色、座標、並べ方 — よく要るものは module になっている。**自分で図形を並べる前に、
+そこに部品が無いか見る。**
 
-| module | 中身 |
-|---|---|
-| math | `PI` `TAU` `E`、三角関数、`round(x, 桁)` `clamp` `lerp` `unlerp` `map_range` `nice_step`、`pow` `log10` `log2` `hypot` `sign` |
-| color | `mix` `lighten` `darken` `alpha` `hsl` `gray` `to_hsl` `contrast` `scale` `sequential` `diverging` `categorical` |
-| shape | 点の並びを作る。`polar` `regular_polygon` `star` `arrow` `arc` `ring_segment` `wave` `grid_lines` `to_segments`。等角投影は `iso` `iso_faces` `iso_depth` |
-| layout | 場所を決める。`grid` `cell` `row` `column` `stack` `along` `fit` `inset` |
-| easing | 0..1 を 0..1 に写す。`quad_in` `quad_out` `cubic` `back` `bounce` `elastic` `steps` `mirror` `flip` |
-| animation | Timeline を返す。`fade_in` `fade_out` `fade_to` `slide_in` `slide_out` `move_by` `spin` `shake` `pulse` `spring_to` `show` `stagger` `reveal_x` `reveal_y` |
-| chart | `axes` `bar` `line` `pie` `radar` `scatter` `histogram` `heatmap` `sparkline` `bar_race` `legend` `tick_values` |
-| diagram | `connector` `arrow` `elbow` `leader_label` `speech_bubble` `node_graph` `table` |
-| text | 文字と数の書式。`typewriter` `number` `thousands` `percent` `duration` `pad` `highlight` `quote_card` `lower_third` `chapter_card` `word_cloud` |
-| meter | 1 つの値を絵にする。`progress_bar` `progress_ring` `gauge` `thermometer` `stars` `poll_bars` |
-| clock | `analog` `digital` `countdown` `stopwatch` `calendar_page` `timeline_bar` |
-| ui | 画面の絵。`phone` `browser` `terminal` `chat` `toast` `cursor` `key_press` `social_post` `spinner` |
-| backdrop | 背景と重ねる幕。`graph_paper` `vignette` `particles` `grid_pulse` `radar_sweep` `blobs` `grain` |
-| focus | 見せたい所だけ見せる。`spotlight` `iris` `wipe` `magnifier` `split_compare` `credits_roll` |
-| media | 画像と地図。`picture` `ken_burns` `slideshow` `watermark` `project` `map_route` `map_pin` |
-| fractal | `escape_time(formula =, precision =, coloring =, ...)` が Shader を返す |
+名前と引数はこの文書には書かない (写せば必ず古くなる)。引くのは次のどちらか。
 
-使った例は <https://misebox.github.io/mophila/#/samples> の showcase (14 module) と report。
+- `mophila doc` — いま使っている実行ファイルの、型・属性・メソッド・module の一覧 (JSON)
+- <https://misebox.github.io/mophila/#/lib> (module) と <https://misebox.github.io/mophila/#/builtins> (型)
 
-`Vector` は複素数としても掛け割りできる。`a.cmul(b)` `a.cdiv(b)` で、回転と拡大が 1 度に書ける (1 次分数変換 `(az + b) / (cz + d)` など)。
+エディタを繋いでいれば、`.` の後や `(` の中の補完に署名と説明が出る。必須の引数は先に並ぶ。
 
-立体は等角投影で。`shape.iso_faces` が直方体の見える 3 面を返し、`shape.iso_depth` を `zIndex` に入れると重なり順が決まる。
+`import 名前` で module ごと、`import { 名前 } from module` で名前だけ持ち込む。
+組み合わせた例は <https://misebox.github.io/mophila/#/samples> の showcase と report。
 
 ### 部品に動きを持たせる
 
@@ -238,16 +217,16 @@ win.addTrack(motion (t) { 0s: strip.position = Pos(0, 0, anchor = :topLeft)
 **ファイルを部品にする** — `output` した View は `import` 先から `名前.output` で取れる。
 
 ```
-import .clock                                  # clock.moph の output
-v.place(clock.output, at = Pos(1, 1, anchor = :topLeft), w = 6)
-track.place(clock.output, at = 2s)             # 2s からその中の Timeline が動く
+import .dial                                   # dial.moph の output
+v.place(dial.output, at = Pos(1, 1, anchor = :topLeft), w = 6)
+track.place(dial.output, at = 2s)              # 2s からその中の Timeline が動く
 ```
 
-同じファイルは 1 度しか実行されないので、`clock.output` はどこから読んでも**同じ実体**になる。置き先での位置と大きさは View 自身の属性なので、同じ View を 2 か所には置けない (`ValueError.AlreadyPlaced`)。2 か所目には `copy()` を置く。中の図形は元と共通なので、動かすと両方が動く。
+同じファイルは 1 度しか実行されないので、`dial.output` はどこから読んでも**同じ実体**になる。置き先での位置と大きさは View 自身の属性なので、同じ View を 2 か所には置けない (`ValueError.AlreadyPlaced`)。2 か所目には `copy()` を置く。中の図形は元と共通なので、動かすと両方が動く。
 
 ```
-v.place(clock.output, at = Pos(1, 1, anchor = :topLeft), w = 6)
-v.place(clock.output.copy(), at = Pos(9, 1, anchor = :topLeft), w = 6)   # 2 か所目
+v.place(dial.output, at = Pos(1, 1, anchor = :topLeft), w = 6)
+v.place(dial.output.copy(), at = Pos(9, 1, anchor = :topLeft), w = 6)    # 2 か所目
 ```
 
 別々に動かしたいなら、View を返す関数を `export` して呼ぶたびに作る。
@@ -274,7 +253,7 @@ track.place(pop.scale(2), at = 7s)       # 倍の時間をかけて
 track.place(pop.fit(0.4s), at = 11s)     # 0.4s に収めて
 ```
 
-`reverse` `scale` `fit` `trim` は新しい Timeline を返すので、元はそのまま残る。
+時刻を動かすメソッドはどれも新しい Timeline を返すので、元はそのまま残る。
 
 **形を関数にする** — 同じ図形を何個も書かない。
 

@@ -13,7 +13,14 @@ description: Write or debug mophila (.moph) motion graphics scripts. Entry point
 | [presentation.md](presentation.md) | 解説する動画の作り方。場面の組み立て、読める時間、確認の手順 |
 | [design.md](design.md) | 見た目。色、構図、文字、動きの質 |
 
-図形を自分で並べる前に、標準 module に部品が無いか見る (language.md の「標準ライブラリ」)。
+**名前はここに書かない。** 型・属性・メソッド・module の関数と引数は変わるので、
+この 4 つの文書は「どう考えて、どう書くか」だけを書く。名前と引数は毎回引く。
+
+- `mophila doc` — いま使っている実行ファイルの一覧 (JSON)。手元で確実
+- 下のリファレンス
+- エディタを繋いでいれば補完と hover。`(` の中では必須の引数が先に出る
+
+図形を自分で並べる前に、標準 module に部品が無いか見る。
 
 迷ったら、公開されているものを見る。仕様は変わるので、こちらが正。
 
@@ -21,7 +28,7 @@ description: Write or debug mophila (.moph) motion graphics scripts. Entry point
 |---|---|
 | <https://misebox.github.io/mophila/#/docs/spec> | 言語仕様 (意味と規則) |
 | <https://misebox.github.io/mophila/#/builtins> | 型・属性・メソッド・エラーの一覧 |
-| <https://misebox.github.io/mophila/#/lib> | 標準 module の関数と引数 (chart / diagram / text / ui / backdrop / focus / media / clock / meter ほか) |
+| <https://misebox.github.io/mophila/#/lib> | 標準 module の関数と引数 |
 | <https://misebox.github.io/mophila/#/samples> | 動く例 |
 | <https://misebox.github.io/mophila/#/docs/examples> | 構文ごとの短い見本 |
 | <https://misebox.github.io/mophila/llms-full.txt> | 上の全部を 1 ファイルにしたもの |
@@ -53,7 +60,11 @@ mophila preview a.moph [--loop] [--at 1s]      # ウィンドウで再生
 mophila timeline a.moph [--filter k=v]         # 何がいつどう変わるかの一覧
 mophila sheet a.moph -o sheet.png --times 3s,12s   # 場面の格子画像
 mophila fonts                                  # 使えるフォント名 (font に書ける名前)
+mophila doc                                    # 型・属性・メソッド・module の一覧 (JSON)
+mophila --version                              # 版
 ```
+
+全部の引数は `mophila <コマンド> --help`。
 
 preview は Space で一時停止、← → / h l で 10 秒 (停止中は 1 秒)、Shift で 10% 移動。最後まで行くと最後の場面で止まる。
 

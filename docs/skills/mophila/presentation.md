@@ -64,51 +64,36 @@ let pause = 1s          # 場面の切り替え
 数えるのは要素で、文字ではない。
 
 ```
-func dwell(phrases) { math.max(1.5, 1.2 + phrases * 0.5) * 1s }
-func dwell_code(lines) { math.max(1.5, 1.2 + lines * 1.2) * 1s }
+# 立ち上がり + 新しい要素の数 x 1 要素あたり。下限は min_dwell
+func dwell(elements, per) { (lead_in + elements * per) * 1s }
 
-let clock = start
+let now = start
 for line in lines {
-  show([...], clock)
-  clock = clock + dwell_code(1)
+  # ここでその行を出す
+  now = now + dwell(1, per_line)
 }
 ```
 
 ## 場面を組む部品
 
-よく出るものは標準 module にある。自分で組む前に見る。
+よく出るもの — 章の見出し、下の帯、引用、グラフ、関係の図、表、端末やブラウザの絵、
+背景、周辺減光、場面の切り替え、出し入れ — は標準 module にある。
+自分で図形を並べる前に `mophila doc` かリファレンスで探す。
 
-| 要るもの | 使うもの |
-|---|---|
-| 章の見出し / 下の帯 / 引用 | `text.chapter_card` `text.lower_third` `text.quote_card` |
-| 数字の書式、一部を目立たせる | `text.thousands` `text.percent` `text.duration` `text.highlight` |
-| グラフ、図、表 | `chart.*` `diagram.node_graph` `diagram.table` `diagram.arrow` |
-| 画面の絵 (端末・ブラウザ・通知) | `ui.terminal` `ui.browser` `ui.toast` `ui.key_press` |
-| 背景、周辺減光 | `backdrop.graph_paper` `backdrop.blobs` `backdrop.vignette` |
-| 場面の切り替え、注目させる | `focus.wipe` `focus.iris` `focus.spotlight` |
-| 出し入れ | `animation.show` `animation.fade_in` `animation.fade_out` |
+- 動く部品は、長さと始まる時刻を渡すと自分の Timeline を持って返る。場面をまたぐ時刻は動画全体の時刻で書く
+- 場面そのものは View 1 枚にまとめ、その不透明度で出し入れする。4 場面の組み立ては samples の showcase を見る
 
-どれも `duration` と `start` を渡すと自分で動く。場面をまたぐ時刻は動画全体の時刻で書く。4 場面の組み立て方は samples の showcase を見る。
+長い解説動画は、章ごとにファイルを分けて `export func run(now)` が場面を組んで次の開始時刻を返す形にする。
+実例は <https://misebox.github.io/mophila/#/samples> の mophila_intro で、
+`main.moph` (章の順番と output) / `theme.moph` (画面、色、時間の決まり) / `slides.moph` (その動画だけの部品) /
+場面ごとのファイルに分かれている。新しく書くときは theme と slides を写して直す。
+そこにどんな部品があるかは、写したファイルを読む (ここには書かない。あの動画の都合で変わる)。
 
-実例は <https://misebox.github.io/mophila/#/samples> の mophila_intro。`main.moph` (章の順番と output) / `theme.moph` (画面、色、時間の決まり) / `slides.moph` (部品) / 場面ごとのファイル (`export func run(now)` が場面を組んで次の開始時刻を返す) に分かれている。新しく書くときは theme と slides を写す。場面の基本形は「左にコード、右にそのコードが実際に動く箱、下にナレーションの字幕」。
-
-| 部品 | すること |
-|---|---|
-| `place(o)` | View に置いて返す。図形は `opacity = 0` で作る |
-| `fade(o, at, from, to)` / `show(objs, at, end)` | 出し入れ。`show` は順に 0.08 秒ずらす |
-| `text(s, x, y, size, color, anchor)` / `heading(s)` / `chapter(title, at)` | 文字、上の見出し、章の見出し |
-| `card(lines, x, y, w, size)` | コードのカード。行数から高さが決まる |
-| `outline(x, y, w, h)` | 線だけの枠。先に置いた View を隠さない |
-| `scene()` / `add(sc, objs, at)` / `say(sc, s, at)` / `close(sc, end)` | 場面に出すものと字幕を溜め、終わりが決まったら一斉に置く。`close` は次の場面の開始時刻を返す |
-| `demo(sub, x, y, w, at, end)` | 別の View を箱として置き、at からその Timeline を動かす |
-| `loop_demo(sub, x, y, w, at, every, end)` | every ごとに置き直して繰り返す |
-| `demo_cut(sub, x, y, w, at, len)` | 同じ View を 2 か所の場面で使うとき、先の場面をこれにする |
-
-- `say(sc, "……です。", at)` はナレーション 1 行 (ですます体)。字幕トラックに置き、次の行を出せる時刻を返す。`t = say(sc, "...", t)` で台本を書き、図形は `add(sc, objs, t)` でその行に合わせて出す
-- 字幕は同時に 1 つ。帯は画面下 (y > 7.0 相当) を覆うので、そこに図形や文字を置かない。1 行 36 文字まで (2 行になると帯が y 6.6 まで広がる)。長い文は `say` を 2 回に分ける
-- 右の箱の動きは `loop_demo` / `repeat` で場面の最初から最後まで繰り返す。ナレーションの間に止まった画を見せない
-- `demo_cut` を使う理由: 切らないと、中の Timeline が終わった値 (フェードアウト後の opacity 0 など) を書き続けて、あとの場面で真っ黒になる
-- 時刻は `now` を積み上げる。`clock` は import したモジュール名と衝突するので使わない
+- ナレーション 1 行は字幕トラックに置く。**字幕を TextArea で描かない**
+- 字幕は同時に 1 つ。帯は画面の下を覆うので、そこに図形や文字を置かない。長い文は 2 回に分ける
+- 右の箱の動きは場面の最初から最後まで繰り返す。ナレーションの間に止まった画を見せない
+- 同じ View を 2 つの場面で使うなら、先の場面は長さを決めた Timeline に入れて切る。切らないと、終わった Timeline が最後の値 (フェードアウト後の不透明度 0 など) を書き続けて、あとの場面で見えなくなる
+- 時刻は `now` を積み上げる。`clock` は module 名と衝突するので変数名に使わない
 
 ## 書いた後の確認
 

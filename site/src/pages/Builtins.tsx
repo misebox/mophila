@@ -85,7 +85,7 @@ const TypePage: Component<{ type: TypeDoc }> = (props) => (
         <Table
           columns={[
             { key: "name", header: "名前", render: (v) => <code>{String(v)}</code> },
-            { key: "type", header: "型", render: (v) => <code><TypeText text={String(v)} /></code> },
+            { key: "type", header: "型", render: (v, a) => <><code><TypeText text={String(v)} /></code>{a.required ? <span class="req">必須</span> : null}</> },
             { key: "doc", header: "説明" },
           ]}
           data={props.type.attrs}

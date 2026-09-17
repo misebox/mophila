@@ -2,7 +2,7 @@ import raw from "./data.json";
 
 export interface Entry { name: string; signature: string; returns: string; doc: string }
 export interface Method { name: string; signature: string; returns: string; doc: string }
-export interface Attr { name: string; type: string; doc: string }
+export interface Attr { name: string; type: string; required: boolean; doc: string }
 export interface EnumValue { value: string; doc: string }
 export interface TypeDoc { name: string; category: string; union: string; make: string; values: EnumValue[]; members: string[]; doc: string; attrs: Attr[]; methods: Method[] }
 export interface Param { name: string; type: string; default: string; doc: string }

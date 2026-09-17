@@ -8,8 +8,8 @@ use lsp_types::notification::{DidChangeTextDocument, DidOpenTextDocument, DidSav
 use lsp_types::request::{CodeActionRequest, Completion, DocumentSymbolRequest, GotoDefinition, HoverRequest, References, Rename, Request as _};
 use lsp_types::{
     CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams, CodeActionProviderCapability, CompletionItem, CompletionItemKind,
-    CompletionOptions, CompletionParams, CompletionResponse, Diagnostic, DiagnosticSeverity, DocumentSymbol, DocumentSymbolParams,
-    DocumentSymbolResponse, GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams, HoverProviderCapability,
+    CompletionItemLabelDetails, CompletionOptions, CompletionParams, CompletionResponse, Diagnostic, DiagnosticSeverity, DocumentSymbol, DocumentSymbolParams,
+    DocumentSymbolResponse, Documentation, GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams, HoverProviderCapability,
     Location, MarkupContent, MarkupKind, OneOf, Position, PublishDiagnosticsParams, Range, ReferenceParams, RenameParams,
     ServerCapabilities, SymbolKind, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Uri, WorkspaceEdit,
 };
@@ -17,7 +17,7 @@ use lsp_types::{
 use crate::docs::BUILTINS;
 use crate::lang::method::METHODS;
 use crate::stdlib::math::DOCS as MATH;
-use crate::lang::eval::{Interp, KINDS, schema};
+use crate::lang::eval::{Attr, Interp, KINDS, schema};
 use crate::lang::lexer::{Tok, Token, lex};
 use crate::lang::value::Value;
 
@@ -271,6 +271,24 @@ fn item(label: &str, kind: CompletionItemKind, detail: &str) -> CompletionItem {
     }
 }
 
+/// 属性 1 つ。必須なら型のうしろに出し、一覧の先頭へ並べる
+fn attr_item(a: &Attr, where_: &str) -> CompletionItem {
+    let detail = match (a.required, where_.is_empty()) {
+        (true, true) => format!("{} (必須)", a.ty),
+        (true, false) => format!("{} (必須) — {where_}", a.ty),
+        (false, true) => a.ty.to_string(),
+        (false, false) => format!("{} — {where_}", a.ty),
+    };
+    CompletionItem {
+        label: a.name.to_string(),
+        kind: Some(CompletionItemKind::FIELD),
+        detail: Some(detail),
+        label_details: Some(CompletionItemLabelDetails { detail: Some(if a.required { " 必須".into() } else { String::new() }), description: Some(a.ty.to_string()) }),
+        sort_text: Some(format!("{}{}", if a.required { 0 } else { 1 }, a.name)),
+        ..Default::default()
+    }
+}
+
 fn complete(uri: &Uri, text: &str, pos: Position) -> Vec<CompletionItem> {
     let before = line_before(text, pos);
     let trimmed = before.trim_end_matches(|c: char| c.is_alphanumeric() || c == '_');
@@ -287,14 +305,14 @@ fn complete(uri: &Uri, text: &str, pos: Position) -> Vec<CompletionItem> {
         let owner: String = trimmed.trim_end_matches('.').chars().rev().take_while(|c| c.is_alphanumeric() || *c == '_').collect::<String>().chars().rev().collect();
         if let Some(path) = import_path_for(&tokens, &owner) {
             if let Some(exports) = exports_of(uri, &path) {
-                return exports.into_iter().map(|(n, kind)| item(&n, kind, &path)).collect();
+                return exports;
             }
         }
         let mut items: Vec<CompletionItem> = Vec::new();
         for kind in KINDS {
-            for (attr, ty) in schema(kind).unwrap_or(&[]) {
-                if !items.iter().any(|i| i.label == *attr) {
-                    items.push(item(attr, CompletionItemKind::FIELD, &format!("{ty} ({kind} など)")));
+            for a in schema(kind).unwrap_or(&[]) {
+                if !items.iter().any(|i| i.label == a.name) {
+                    items.push(attr_item(a, &format!("{kind} など")));
                 }
             }
         }
@@ -303,10 +321,13 @@ fn complete(uri: &Uri, text: &str, pos: Position) -> Vec<CompletionItem> {
         }
         return items;
     }
-    // new Circle { の中 → その型の属性
-    if let Some(kind) = enclosing_new(text, pos) {
-        if let Some(attrs) = schema(&kind) {
-            return attrs.iter().map(|(a, t)| item(a, CompletionItemKind::FIELD, t)).collect();
+    // T( の中 → その型の属性。f( の中 → その関数の引数。どちらも必須が先に並ぶ
+    if let Some(callee) = enclosing_call(text, pos) {
+        if let Some(attrs) = schema(&callee) {
+            return attrs.iter().map(|a| attr_item(a, "")).collect();
+        }
+        if let Some(params) = call_params(uri, text, &callee) {
+            return params;
         }
     }
     // それ以外: キーワード、型名、ファイル内の識別子
@@ -325,20 +346,26 @@ fn complete(uri: &Uri, text: &str, pos: Position) -> Vec<CompletionItem> {
     items
 }
 
-/// カーソルが `T(` の中なら T (型の生成の途中)
-fn enclosing_new(text: &str, pos: Position) -> Option<String> {
+/// カーソルが `f(` の中なら、その f の名前 (`Circle` `chart.bar` `dot` など)
+fn enclosing_call(text: &str, pos: Position) -> Option<String> {
     let upto: String = text.lines().take(pos.line as usize).map(|l| format!("{l}\n")).collect::<String>() + &line_before(text, pos);
     let tokens = lex(&upto).ok()?;
     let mut depth: i32 = 0;
-    for w in tokens.windows(2).rev() {
-        match &w[1].tok {
+    for (i, t) in tokens.iter().enumerate().rev() {
+        match &t.tok {
             Tok::RParen => depth += 1,
             Tok::LParen => {
                 if depth == 0 {
-                    return match &w[0].tok {
-                        Tok::Ident(k) if k.starts_with(char::is_uppercase) => Some(k.clone()),
+                    // 直前が 名前、または module . 名前
+                    let Some(Tok::Ident(name)) = tokens.get(i.checked_sub(1)?).map(|t| &t.tok) else { return None };
+                    let owner = match (tokens.get(i.wrapping_sub(2)).map(|t| &t.tok), tokens.get(i.wrapping_sub(3)).map(|t| &t.tok)) {
+                        (Some(Tok::Dot), Some(Tok::Ident(m))) if i >= 3 => Some(m.clone()),
                         _ => None,
                     };
+                    return Some(match owner {
+                        Some(m) => format!("{m}.{name}"),
+                        None => name.clone(),
+                    });
                 }
                 depth -= 1;
             }
@@ -348,38 +375,183 @@ fn enclosing_new(text: &str, pos: Position) -> Option<String> {
     None
 }
 
-/// import 先の export と output
-fn exports_of(uri: &Uri, path: &str) -> Option<Vec<(String, CompletionItemKind)>> {
+/// import 先の export と output。署名と説明も付ける
+fn exports_of(uri: &Uri, path: &str) -> Option<Vec<CompletionItem>> {
     if path == "math" {
-        return Some(MATH.iter().map(|e| (e.name.to_string(), if e.signature.contains('(') { CompletionItemKind::FUNCTION } else { CompletionItemKind::CONSTANT })).collect());
+        return Some(
+            MATH.iter()
+                .map(|e| {
+                    let kind = if e.signature.contains('(') { CompletionItemKind::FUNCTION } else { CompletionItemKind::CONSTANT };
+                    let mut it = item(e.name, kind, e.signature);
+                    it.documentation = Some(Documentation::String(e.doc.to_string()));
+                    it
+                })
+                .collect(),
+        );
     }
     let (_, src) = module_source(uri, path)?;
     let tokens = lex(&src).ok()?;
     let mut out = Vec::new();
     for w in tokens.windows(3) {
         if w[0].tok == Tok::Export {
-            match (&w[1].tok, &w[2].tok) {
-                (Tok::Let, Tok::Ident(n)) => out.push((n.clone(), CompletionItemKind::VARIABLE)),
-                (Tok::Func, Tok::Ident(n)) => out.push((n.clone(), CompletionItemKind::FUNCTION)),
-                _ => {}
+            let (name, kind) = match (&w[1].tok, &w[2].tok) {
+                (Tok::Let, Tok::Ident(n)) => (n.clone(), CompletionItemKind::VARIABLE),
+                (Tok::Func, Tok::Ident(n)) => (n.clone(), CompletionItemKind::FUNCTION),
+                _ => continue,
+            };
+            // 署名を出しておくと、既定値の付いた引数 (= 省ける引数) がその場で分かる
+            let detail = signature_in(&src, &name).unwrap_or_else(|| path.to_string());
+            let mut it = item(&name, kind, &detail);
+            if let Some(doc) = doc_comment_of(&src, &name) {
+                it.documentation = Some(Documentation::MarkupContent(MarkupContent { kind: MarkupKind::Markdown, value: doc }));
             }
+            out.push(it);
         }
     }
     if tokens.iter().any(|t| t.tok == Tok::Output) {
-        out.push(("output".into(), CompletionItemKind::VARIABLE));
+        out.push(item("output", CompletionItemKind::VARIABLE, "output した View"));
     }
     Some(out)
 }
 
+/// その名前を宣言している行の位置。同じ名前が関数の中にもあり得るので、
+/// import した側から見える行頭の宣言を先に取る
+fn declaration_line(src: &str, name: &str) -> Option<usize> {
+    let at = |indented: bool| src.lines().position(|l| defines(l, name) && l.starts_with(char::is_whitespace) == indented);
+    at(false).or_else(|| at(true))
+}
+
+/// その名前を宣言している行。引数が複数行に折り返してあれば、括弧が閉じるまでつなぐ
+fn declaration_of(src: &str, name: &str) -> Option<String> {
+    let lines: Vec<&str> = src.lines().collect();
+    let start = declaration_line(src, name)?;
+    let mut out = String::new();
+    for line in &lines[start..] {
+        if !out.is_empty() {
+            out.push(' ');
+        }
+        out.push_str(line.trim());
+        let depth: i32 = out.chars().map(|c| match c { '(' => 1, ')' => -1, _ => 0 }).sum();
+        if depth <= 0 {
+            break;
+        }
+    }
+    Some(out)
+}
+
+/// その名前を宣言している行の署名
+fn signature_in(src: &str, name: &str) -> Option<String> {
+    Some(signature_of(declaration_of(src, name)?.trim_start_matches("export ").trim()))
+}
+
+/// 関数の引数 1 つ。既定値が無いものが必須
+struct Param {
+    name: String,
+    ty: String,
+    default: Option<String>,
+}
+
+/// 署名の丸括弧の中を引数に分ける。入れ子の括弧と [ ] の中のカンマでは切らない
+fn params_of(signature: &str) -> Vec<Param> {
+    let Some(open) = signature.find('(') else { return Vec::new() };
+    let mut depth = 0;
+    let mut parts: Vec<String> = Vec::new();
+    let mut current = String::new();
+    for c in signature[open..].chars() {
+        match c {
+            '(' | '[' | '{' | '<' => {
+                depth += 1;
+                if depth > 1 {
+                    current.push(c);
+                }
+            }
+            ')' | ']' | '}' | '>' => {
+                depth -= 1;
+                if depth == 0 {
+                    break;
+                }
+                current.push(c);
+            }
+            ',' if depth == 1 => parts.push(std::mem::take(&mut current)),
+            _ => current.push(c),
+        }
+    }
+    parts.push(current);
+    parts
+        .iter()
+        .filter_map(|p| {
+            let p = p.trim();
+            if p.is_empty() {
+                return None;
+            }
+            let (head, default) = match p.split_once('=') {
+                Some((h, d)) => (h.trim(), Some(d.trim().to_string())),
+                None => (p, None),
+            };
+            let (name, ty) = match head.split_once(':') {
+                Some((n, t)) => (n.trim(), t.trim()),
+                None => (head, ""),
+            };
+            Some(Param { name: name.to_string(), ty: ty.to_string(), default })
+        })
+        .collect()
+}
+
+/// 引数 1 つの候補。必須は先に並べ、省けるものは既定値を見せる
+fn param_item(p: &Param) -> CompletionItem {
+    let detail = match (&p.default, p.ty.is_empty()) {
+        (None, true) => "必須".to_string(),
+        (None, false) => format!("{} (必須)", p.ty),
+        (Some(d), true) => format!("既定 {d}"),
+        (Some(d), false) => format!("{} = {d}", p.ty),
+    };
+    CompletionItem {
+        label: p.name.clone(),
+        kind: Some(CompletionItemKind::VARIABLE),
+        detail: Some(detail),
+        insert_text: Some(format!("{} = ", p.name)),
+        sort_text: Some(format!("{}{}", if p.default.is_none() { 0 } else { 1 }, p.name)),
+        ..Default::default()
+    }
+}
+
+/// `f(` の中で、その f の引数を候補にする。module.f と、このファイルの func を見る
+fn call_params(uri: &Uri, text: &str, callee: &str) -> Option<Vec<CompletionItem>> {
+    let signature = match callee.split_once('.') {
+        Some((module, name)) => {
+            if module == "math" {
+                MATH.iter().find(|e| e.name == name).map(|e| e.signature.to_string())?
+            } else {
+                let path = import_path_for(&lex(text).ok()?, module)?;
+                let (_, src) = module_source(uri, &path)?;
+                signature_in(&src, name)?
+            }
+        }
+        None => match BUILTINS.iter().find(|b| b.name == callee) {
+            Some(b) => b.signature.to_string(),
+            None => signature_in(text, callee)?,
+        },
+    };
+    let params = params_of(&signature);
+    if params.is_empty() {
+        return None;
+    }
+    Some(params.iter().map(param_item).collect())
+}
+
+/// 型の属性を 1 行に。必須には * を付ける
 fn attrs_doc(kind: &str) -> String {
-    schema(kind).map(|s| s.iter().map(|(a, t)| format!("{a}: {t}")).collect::<Vec<_>>().join(", ")).unwrap_or_default()
+    let mark = |a: &Attr| format!("{}{}: {}", a.name, if a.required { "*" } else { "" }, a.ty);
+    schema(kind).map(|s| s.iter().map(mark).collect::<Vec<_>>().join(", ")).unwrap_or_default()
 }
 
 fn hover(uri: &Uri, text: &str, globals: &[(String, Value)], pos: Position) -> Option<Hover> {
     let (word, before) = word_at(text, pos)?;
     let body = if let Some(attrs) = schema(&word) {
-        let list = attrs.iter().map(|(a, t)| format!("- `{a}`: {t}")).collect::<Vec<_>>().join("\n");
-        format!("**{word}**\n\n{list}")
+        let line = |a: &Attr| format!("- `{}`: {}{}", a.name, a.ty, if a.required { " **必須**" } else { "" });
+        let need: Vec<String> = attrs.iter().filter(|a| a.required).map(line).collect();
+        let rest: Vec<String> = attrs.iter().filter(|a| !a.required).map(line).collect();
+        format!("**{word}**\n\n{}", [need, rest].concat().join("\n"))
     } else if let Some(doc) = imported_doc(uri, text, &word, &before) {
         doc
     } else if let Some(doc) = doc_comment_of(text, &word) {
@@ -460,38 +632,44 @@ fn signature_of(line: &str) -> String {
 
 /// `##` の並びと、その次の export の 1 行
 fn doc_comment_of(src: &str, name: &str) -> Option<String> {
+    let lines: Vec<&str> = src.lines().collect();
+    let at = declaration_line(src, name)?;
+    // 宣言のすぐ上に続いている ## の並びが説明
     let mut block: Vec<String> = Vec::new();
-    for line in src.lines() {
-        if let Some(rest) = line.strip_prefix("##") {
-            block.push(rest.trim().to_string());
-            continue;
+    for line in lines[..at].iter().rev() {
+        match line.strip_prefix("##") {
+            Some(rest) => block.push(rest.trim().to_string()),
+            None => break,
         }
-        if defines(line, name) {
-            let signature = signature_of(line);
-            let mut out = vec![format!("```\n{signature}\n```")];
-            let summary: Vec<&String> = block.iter().take_while(|b| !b.starts_with('@')).collect();
-            if !summary.is_empty() {
-                out.push(summary.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(" "));
-            }
-            let tags: Vec<String> = block
-                .iter()
-                .filter(|b| b.starts_with("@param ") || b.starts_with("@returns "))
-                .map(|b| match b.strip_prefix("@param ") {
-                    Some(rest) => match rest.split_once(' ') {
-                        Some((n, d)) => format!("- `{n}` — {d}"),
-                        None => format!("- `{rest}`"),
-                    },
-                    None => format!("- 戻り値 — {}", b.trim_start_matches("@returns ")),
-                })
-                .collect();
-            if !tags.is_empty() {
-                out.push(tags.join("\n"));
-            }
-            return Some(out.join("\n\n"));
-        }
-        block.clear();
     }
-    None
+    block.reverse();
+    let signature = signature_in(src, name).unwrap_or_else(|| signature_of(lines[at]));
+    let mut out = vec![format!("```\n{signature}\n```")];
+    let summary: Vec<&String> = block.iter().take_while(|b| !b.starts_with('@')).collect();
+    if !summary.is_empty() {
+        out.push(summary.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(" "));
+    }
+    // @param は必須かどうかが分かるように、署名の既定値と突き合わせて出す
+    let params = params_of(&signature);
+    let tags: Vec<String> = block
+        .iter()
+        .filter(|b| b.starts_with("@param ") || b.starts_with("@returns "))
+        .map(|b| match b.strip_prefix("@param ") {
+            Some(rest) => {
+                let (n, d) = rest.split_once(' ').unwrap_or((rest, ""));
+                let mark = match params.iter().find(|p| p.name == n) {
+                    Some(p) if p.default.is_none() => " (必須)",
+                    _ => "",
+                };
+                format!("- `{n}`{mark} — {d}")
+            }
+            None => format!("- 戻り値 — {}", b.trim_start_matches("@returns ")),
+        })
+        .collect();
+    if !tags.is_empty() {
+        out.push(tags.join("\n"));
+    }
+    Some(out.join("\n\n"))
 }
 
 /// カーソルの下の語と同じ識別子の出現 (ファイル内)
@@ -753,4 +931,84 @@ fn word_at(text: &str, pos: Position) -> Option<(String, String)> {
         return None;
     }
     Some((chars[start..end].iter().collect(), chars[..start].iter().collect()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pos(line: u32, character: u32) -> Position {
+        Position { line, character }
+    }
+
+    #[test]
+    fn params_split_on_top_level_commas_only() {
+        let sig = "bar(values: List<Number>, labels: List<String>, w: Number, colors: List<Color> = [#e04040, #4080e0], duration: Duration = 0s) -> View";
+        let params = params_of(sig);
+        let names: Vec<&str> = params.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, ["values", "labels", "w", "colors", "duration"]);
+        assert!(params[0].default.is_none());
+        assert_eq!(params[0].ty, "List<Number>");
+        assert_eq!(params[3].default.as_deref(), Some("[#e04040, #4080e0]"));
+        assert_eq!(params[4].default.as_deref(), Some("0s"));
+    }
+
+    #[test]
+    fn required_params_come_first() {
+        let params = params_of("f(a: Number, b: Number = 1)");
+        let items: Vec<CompletionItem> = params.iter().map(param_item).collect();
+        assert!(items[0].sort_text < items[1].sort_text);
+        assert_eq!(items[0].detail.as_deref(), Some("Number (必須)"));
+        assert_eq!(items[1].detail.as_deref(), Some("Number = 1"));
+    }
+
+    #[test]
+    fn required_attrs_come_first() {
+        let attrs = schema("Circle").unwrap();
+        let items: Vec<CompletionItem> = attrs.iter().map(|a| attr_item(a, "")).collect();
+        let radius = items.iter().find(|i| i.label == "radius").unwrap();
+        let fill = items.iter().find(|i| i.label == "fill").unwrap();
+        assert_eq!(radius.detail.as_deref(), Some("Number (必須)"));
+        assert_eq!(fill.detail.as_deref(), Some("Paint"));
+        assert!(radius.sort_text < fill.sort_text);
+    }
+
+    #[test]
+    fn callee_is_the_name_before_the_open_paren() {
+        let text = "let v = View(box = Vector(16, 9))\nv.place(Circle(position = Pos(1, 1), ";
+        assert_eq!(enclosing_call(text, pos(1, 36)).as_deref(), Some("Circle"));
+        let text = "import chart\nv.place(chart.bar(values, ";
+        assert_eq!(enclosing_call(text, pos(1, 26)).as_deref(), Some("chart.bar"));
+        let text = "let a = (1 + 2) * 3\n";
+        assert_eq!(enclosing_call(text, pos(1, 0)), None);
+    }
+
+    #[test]
+    fn signature_comes_from_the_defining_line() {
+        let src = "## 説明\nexport func make(w: Number, h: Number = 1) -> View {\n  View(box = Vector(w, h))\n}\n";
+        assert_eq!(signature_in(src, "make").as_deref(), Some("func make(w: Number, h: Number = 1) -> View"));
+    }
+
+    #[test]
+    fn the_top_level_declaration_wins_over_one_inside_a_function() {
+        let src = "func axes() {\n  let line = gray(150)\n}\n\n## 折れ線\nexport func line(points: List<Vector>) -> View {\n  v\n}\n";
+        assert_eq!(signature_in(src, "line").as_deref(), Some("func line(points: List<Vector>) -> View"));
+        assert!(doc_comment_of(src, "line").unwrap().contains("折れ線"));
+    }
+
+    #[test]
+    fn doc_comment_marks_required_params() {
+        let src = "## 説明\n## @param a 幅\n## @param b 高さ\nexport func f(a: Number, b: Number = 1) -> View {\n  v\n}\n";
+        let doc = doc_comment_of(src, "f").unwrap();
+        assert!(doc.contains("- `a` (必須) — 幅"), "{doc}");
+        assert!(doc.contains("- `b` — 高さ"), "{doc}");
+    }
+
+    #[test]
+    fn signature_joins_wrapped_argument_lines() {
+        let src = "export func bar(values: List<Number>, labels: List<String>,\n                w: Number, h: Number = 1) -> View {\n  v\n}\n";
+        let sig = signature_in(src, "bar").unwrap();
+        assert_eq!(sig, "func bar(values: List<Number>, labels: List<String>, w: Number, h: Number = 1) -> View");
+        assert_eq!(params_of(&sig).len(), 4);
+    }
 }

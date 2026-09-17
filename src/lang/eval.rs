@@ -334,8 +334,8 @@ impl Interp {
                 Some(f) => &f.ann.name,
                 None => return err(Kind::UndefinedAttribute, format!("{} has no attribute \"{attr}\"", o.kind)),
             },
-            None => match schema(&o.kind).and_then(|s| s.iter().find(|(n, _)| *n == attr)) {
-                Some((_, t)) => t,
+            None => match schema(&o.kind).and_then(|s| s.iter().find(|a| a.name == attr)) {
+                Some(a) => a.ty,
                 None => return err(Kind::UndefinedAttribute, format!("{} has no attribute \"{attr}\"", o.kind)),
             },
         };
@@ -940,11 +940,11 @@ impl Interp {
             }
             _ => {
                 if let Some(sch) = schema(kind) {
-                    let fields: Vec<&str> = sch.iter().map(|(n, _)| *n).collect();
+                    let fields: Vec<&str> = sch.iter().map(|a| a.name).collect();
                     let map = self.resolve_args(kind, &fields, args)?;
                     let mut attrs = HashMap::new();
                     for (name, v) in map {
-                        let expected = sch.iter().find(|(n, _)| *n == name).map(|(_, t)| *t).expect("field exists");
+                        let expected = sch.iter().find(|a| a.name == name).map(|a| a.ty).expect("field exists");
                         if !self.matches_type(&v, expected) {
                             return Err(self.wrong_type(Kind::ArgumentType, &format!("{kind}.{name}"), expected, &v));
                         }
@@ -2110,10 +2110,10 @@ pub fn defaults(kind: &str) -> Vec<(&'static str, Value)> {
     let num = |n: f64| Value::num(n);
     let sym = |s: &str| Value::Symbol(s.to_string());
     let mut out: Vec<(&'static str, Value)> = Vec::new();
-    if schema(kind).is_some_and(|s| s.iter().any(|(n, _)| *n == "opacity")) {
+    if schema(kind).is_some_and(|s| s.iter().any(|a| a.name == "opacity")) {
         out.push(("opacity", num(1.0)));
     }
-    let has = |name: &str| schema(kind).is_some_and(|s| s.iter().any(|(n, _)| n == &name));
+    let has = |name: &str| schema(kind).is_some_and(|s| s.iter().any(|a| a.name == name));
     if has("rotation") {
         out.push(("rotation", num(0.0)));
     }
@@ -2143,28 +2143,45 @@ pub fn defaults(kind: &str) -> Vec<(&'static str, Value)> {
     out
 }
 
-pub fn schema(kind: &str) -> Option<&'static [(&'static str, &'static str)]> {
+/// 型が持つ属性 1 つ。`required` は「書かないと描けない」もの
+#[derive(Clone, Copy)]
+pub struct Attr {
+    pub name: &'static str,
+    pub ty: &'static str,
+    /// 書かないと描くときに `NameError.UndefinedAttribute` か `TypeError.AttributeType` になる
+    pub required: bool,
+}
+
+const fn opt(name: &'static str, ty: &'static str) -> Attr {
+    Attr { name, ty, required: false }
+}
+
+const fn req(name: &'static str, ty: &'static str) -> Attr {
+    Attr { name, ty, required: true }
+}
+
+pub fn schema(kind: &str) -> Option<&'static [Attr]> {
     // 図形が共通で持つ属性。ただし、その図形で効きようがないものは持たせない
     //   strokeJoin — 角のある図形だけ (Circle / Ellipse / Line には角が無い)
     //   fill        — 面のある図形だけ (Line には面が無い)
     //   strokeCap / dash / dashOffset — 字の輪郭は破線にできないので TextArea は持たない
-    const PAINT: (&str, &str) = ("fill", "Paint");
-    const LINE: [(&str, &str); 5] = [("stroke", "Color"), ("strokeWidth", "Number"), ("strokeCap", "StrokeCap"), ("dash", "List"), ("dashOffset", "Number")];
-    const JOIN: (&str, &str) = ("strokeJoin", "StrokeJoin");
-    const COMMON: [(&str, &str); 4] = [("opacity", "Number"), ("rotation", "Number"), ("pivot", "Vector"), ("blend", "Blend")];
+    const PAINT: Attr = opt("fill", "Paint");
+    const LINE: [Attr; 5] = [opt("stroke", "Color"), opt("strokeWidth", "Number"), opt("strokeCap", "StrokeCap"), opt("dash", "List"), opt("dashOffset", "Number")];
+    const JOIN: Attr = opt("strokeJoin", "StrokeJoin");
+    const COMMON: [Attr; 4] = [opt("opacity", "Number"), opt("rotation", "Number"), opt("pivot", "Vector"), opt("blend", "Blend")];
     macro_rules! shape {
         (fill: $fill:literal, join: $join:literal, $($extra:expr),*) => {{
-            const ATTRS: &[(&str, &str)] = &[
+            const ATTRS: &[Attr] = &[
                 $($extra,)*
                 PAINT, LINE[0], LINE[1], LINE[2], LINE[3], LINE[4], JOIN,
                 COMMON[0], COMMON[1], COMMON[2], COMMON[3],
             ];
-            const NO_FILL: &[(&str, &str)] = &[
+            const NO_FILL: &[Attr] = &[
                 $($extra,)*
                 LINE[0], LINE[1], LINE[2], LINE[3], LINE[4],
                 COMMON[0], COMMON[1], COMMON[2], COMMON[3],
             ];
-            const NO_JOIN: &[(&str, &str)] = &[
+            const NO_JOIN: &[Attr] = &[
                 $($extra,)*
                 PAINT, LINE[0], LINE[1], LINE[2], LINE[3], LINE[4],
                 COMMON[0], COMMON[1], COMMON[2], COMMON[3],
@@ -2176,33 +2193,54 @@ pub fn schema(kind: &str) -> Option<&'static [(&'static str, &'static str)]> {
             }
         }};
     }
+    // 関数呼び出しは 'static に上げてもらえないので、それぞれ const にする
+    const TEXT_AREA: &[Attr] = &[
+        req("position", "Pos"),
+        req("text", "String"),
+        req("fontSize", "Number"),
+        opt("w", "Number"),
+        opt("font", "String"),
+        opt("align", "Align"),
+        PAINT,
+        LINE[0],
+        LINE[1],
+        JOIN,
+        COMMON[0],
+        COMMON[1],
+        COMMON[2],
+        COMMON[3],
+    ];
+    const VIEW: &[Attr] = &[
+        req("box", "Vector"),
+        opt("position", "Pos"),
+        opt("w", "Number"),
+        opt("h", "Number"),
+        opt("opacity", "Number"),
+        opt("blend", "Blend"),
+        opt("clip", "Bool"),
+    ];
+    const SUBTITLE: &[Attr] = &[req("text", "String"), req("duration", "Duration")];
+    const SHADER: &[Attr] = &[req("color", "Func"), opt("args", "List"), opt("samples", "Number")];
+    // to は :linear、radius は :radial のときだけ要るので、必須にはしない
+    const GRADIENT: &[Attr] = &[
+        req("stops", "List"),
+        req("from", "Vector"),
+        opt("kind", "GradientKind"),
+        opt("to", "Vector"),
+        opt("radius", "Number"),
+    ];
     Some(match kind {
-        "Circle" => shape!(fill: true, join: false, ("position", "Pos"), ("radius", "Number")),
-        "Ellipse" => shape!(fill: true, join: false, ("position", "Pos"), ("rx", "Number"), ("ry", "Number")),
-        "Rect" => shape!(fill: true, join: true, ("position", "Pos"), ("w", "Number"), ("h", "Number"), ("radius", "Number")),
-        "Line" => shape!(fill: false, join: false, ("from", "Vector"), ("to", "Vector")),
-        "Polygon" => shape!(fill: true, join: true, ("points", "List")),
-        "Path" => shape!(fill: true, join: true, ("from", "Vector"), ("segments", "List"), ("closed", "Bool")),
-        "TextArea" => &[
-            ("position", "Pos"),
-            ("text", "String"),
-            ("w", "Number"),
-            ("font", "String"),
-            ("fontSize", "Number"),
-            ("align", "Align"),
-            PAINT,
-            LINE[0],
-            LINE[1],
-            JOIN,
-            COMMON[0],
-            COMMON[1],
-            COMMON[2],
-            COMMON[3],
-        ],
-        "View" => &[("box", "Vector"), ("position", "Pos"), ("w", "Number"), ("h", "Number"), ("opacity", "Number"), ("blend", "Blend"), ("clip", "Bool")],
-        "Subtitle" => &[("text", "String"), ("duration", "Duration")],
-        "Shader" => &[("color", "Func"), ("args", "List"), ("samples", "Number")],
-        "Gradient" => &[("kind", "GradientKind"), ("from", "Vector"), ("to", "Vector"), ("radius", "Number"), ("stops", "List")],
+        "Circle" => shape!(fill: true, join: false, req("position", "Pos"), req("radius", "Number")),
+        "Ellipse" => shape!(fill: true, join: false, req("position", "Pos"), req("rx", "Number"), req("ry", "Number")),
+        "Rect" => shape!(fill: true, join: true, req("position", "Pos"), req("w", "Number"), req("h", "Number"), opt("radius", "Number")),
+        "Line" => shape!(fill: false, join: false, req("from", "Vector"), req("to", "Vector")),
+        "Polygon" => shape!(fill: true, join: true, req("points", "List")),
+        "Path" => shape!(fill: true, join: true, req("from", "Vector"), req("segments", "List"), opt("closed", "Bool")),
+        "TextArea" => TEXT_AREA,
+        "View" => VIEW,
+        "Subtitle" => SUBTITLE,
+        "Shader" => SHADER,
+        "Gradient" => GRADIENT,
         _ => return None,
     })
 }

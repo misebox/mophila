@@ -505,7 +505,7 @@ pub fn json() -> Json {
         .iter()
         .map(|t| {
             // 属性は 2 か所から来る: Object の型は schema、値の型は attr の表
-            let mut attrs: Vec<Json> = schema(t.name).unwrap_or(&[]).iter().map(|(a, ty)| json!({ "name": a, "type": ty, "doc": attr_doc(t.name, a) })).collect();
+            let mut attrs: Vec<Json> = schema(t.name).unwrap_or(&[]).iter().map(|a| json!({ "name": a.name, "type": a.ty, "required": a.required, "doc": attr_doc(t.name, a.name) })).collect();
             attrs.extend(
                 crate::lang::attr::ATTRS
                     .iter()

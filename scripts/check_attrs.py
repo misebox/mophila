@@ -5,6 +5,9 @@
 変わらなければ「代入できるのに何も起こらない」属性なので、描画側を直すか宣言から外す。
 属性を足したのにここに書き方が無ければ、それも失敗として出る。
 
+`required` の印も見る。必須と書いた属性は、省くと描けないこと。必須と書いていない属性は、
+全部省いても描けること。印と描画側がずれたら失敗になる。
+
 使い方: scripts/check_attrs.py   (先に cargo build)
 """
 import hashlib
@@ -109,6 +112,32 @@ def draw(kind: str, attrs: dict, work: Path) -> str:
     return hashlib.sha1(out.read_bytes()).hexdigest()
 
 
+def check_required(doc: dict, work: Path) -> tuple[int, list[str]]:
+    """必須の印が描画側と合っているか。省くと描けない / 必須だけで描ける"""
+    required = {t["name"]: [a["name"] for a in t.get("attrs", []) if a.get("required")] for t in doc["types"]}
+    failed, checked = [], 0
+    for kind, base in BASE.items():
+        need = required.get(kind, [])
+        checked += 1
+        only = {k: v for k, v in base.items() if k in need}
+        if len(only) != len(need):
+            failed.append(f"{kind}: 必須と書いた属性の値が scripts/check_attrs.py に無い: {' '.join(sorted(set(need) - set(only)))}")
+        elif draw(kind, only, work).startswith("ERR"):
+            failed.append(f"{kind}: 必須の属性だけでは描けない (必須の印が足りない)")
+        for attr in need:
+            checked += 1
+            if not draw(kind, {k: v for k, v in base.items() if k != attr}, work).startswith("ERR"):
+                failed.append(f"{kind}.{attr}: 必須と書いてあるが、省いても描ける")
+    # View は box だけが必須
+    checked += 1
+    if not draw_view({}, VIEW_PLACE, work).startswith("ERR"):
+        failed.append("View.box: 必須と書いてあるが、省いても描ける")
+    checked += 1
+    if draw_view(VIEW_BASE, VIEW_PLACE, work).startswith("ERR"):
+        failed.append("View: 必須の属性だけでは描けない (必須の印が足りない)")
+    return checked, failed
+
+
 def main() -> int:
     doc = json.loads(subprocess.run([BIN, "doc"], capture_output=True, text=True).stdout)
     types = {t["name"]: [a["name"] for a in t.get("attrs", [])] for t in doc["types"]}
@@ -146,6 +175,9 @@ def main() -> int:
         missing = [a for a in types.get("View", []) if a not in {n for n, _, _ in VIEW_CASES}]
         if missing:
             failed.append(f"View: 試す値が scripts/check_attrs.py に無い: {' '.join(missing)}")
+        n, bad = check_required(doc, work)
+        checked += n
+        failed += bad
     print(f"attrs: {checked - len(failed)}/{checked} ok")
     for line in failed:
         print("  " + line)

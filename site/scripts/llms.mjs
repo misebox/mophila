@@ -108,7 +108,7 @@ function builtinText() {
     if (t.make) out.push("", "作り方:", "", "```", t.make, "```");
     if (t.values.length) out.push("", "値:", "", ...t.values.map((v) => `- \`${v.value}\` — ${v.doc}`));
     if (t.members.length) out.push("", `まとめている型: ${t.members.join(" | ")}`);
-    if (t.attrs.length) out.push("", "属性:", "", ...t.attrs.map((a) => `- \`${a.name}\`: ${a.type} — ${a.doc}`));
+    if (t.attrs.length) out.push("", "属性:", "", ...t.attrs.map((a) => `- \`${a.name}\`: ${a.type}${a.required ? " (必須)" : ""} — ${a.doc}`));
     if (t.methods.length) out.push("", "メソッド:", "", ...t.methods.map((m) => `- \`${m.signature}\`${m.returns ? ` -> ${m.returns}` : ""} — ${m.doc}`));
   }
   out.push("", "## エラー", "", ...data.errors.map((e) => `- \`${e.name}\` — ${e.doc}`));

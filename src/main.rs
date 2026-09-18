@@ -279,9 +279,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             let mut media = render::media::collect(&view, duration);
             if !media.narrations.is_empty() {
                 let cache = render::voice::cache_dir();
-                if media.cues.is_empty() {
-                    media.cues = render::voice::as_cues(&media, &cache);
-                }
+                render::voice::align_cues(&mut media, &cache);
                 render::voice::mix_in(&mut media, &cache)?;
             }
             render::preview::run(file_name(&script), interp, view, duration, size, r#loop, at, &media)
@@ -310,18 +308,15 @@ fn run() -> Result<(), Box<dyn Error>> {
             let trim = trim.unwrap_or(Trim { from: None, to: None });
             let from = trim.from.unwrap_or(0.0).min(duration);
             let to = trim.to.unwrap_or(duration).min(duration);
-            let media = render::media::collect(&view, duration).window(from, to);
-            // 字幕は Subtitle から。Subtitle が無ければ Narration から作る
-            // (台本を 2 度書かなくてよいように。長さは作った音声から測る)
-            let mut cues = media.cues.clone();
-            if cues.is_empty() {
-                cues = render::voice::as_cues(&media, &render::voice::cache_dir());
-            }
+            let mut media = render::media::collect(&view, duration).window(from, to);
+            // 読み上げがあれば、そこに字幕を合わせる (無い字幕は書いたまま)
+            render::voice::align_cues(&mut media, &render::voice::cache_dir());
+            let cues = &media.cues;
             // 形式は拡張子で決める (render と同じ規則)。書かなければ SRT
             let vtt = output.as_deref().is_some_and(|o| o.to_ascii_lowercase().ends_with(".vtt"));
             let text = match vtt {
-                true => render::media::vtt(&cues),
-                false => render::media::srt(&cues),
+                true => render::media::vtt(cues),
+                false => render::media::srt(cues),
             };
             match output {
                 Some(path) => {
@@ -384,10 +379,8 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
     let mut media = render::media::collect(&view, duration);
     if !media.narrations.is_empty() {
         let cache = render::voice::cache_dir();
-        // Subtitle を書いていなければ、読み上げをそのまま字幕にする (台本を 2 度書かない)
-        if media.cues.is_empty() {
-            media.cues = render::voice::as_cues(&media, &cache);
-        }
+        // 字幕は読み上げに合わせる。書いていなければ、読み上げがそのまま字幕になる
+        render::voice::align_cues(&mut media, &cache);
         render::voice::mix_in(&mut media, &cache)?;
     }
     let Some(output) = args.output else {

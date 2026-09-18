@@ -107,6 +107,30 @@ impl Media {
     }
 }
 
+/// 動画に入る音と字幕を、置いたものから組む。
+///
+/// **render も preview も sheet も subs も、必ずここを通す。** 別々に組むと、
+/// 同じ台本から違う字幕ができてしまう (実際、区間で切る順番が違って食い違った)。
+///
+/// `speak` が true なら読み上げを音声にして混ぜる (字幕を出すだけなら engine は要らない)。
+/// `from`..`to` は書き出す区間で、時刻は from が 0 になるようにずらす。
+pub fn prepare(
+    view: &ObjRef,
+    total: f64,
+    from: f64,
+    to: f64,
+    speak: bool,
+    cache: &std::path::Path,
+) -> Result<Media, Box<dyn std::error::Error>> {
+    let mut media = collect(view, total);
+    // 字幕は読み上げから作る (長さは合成した音声から測る)
+    crate::render::voice::set_cues(&mut media, cache);
+    if speak && !media.narrations.is_empty() {
+        crate::render::voice::mix_in(&mut media, cache)?;
+    }
+    Ok(media.window(from, to))
+}
+
 /// total は動画の長さ。繰り返す音声はそこまで鳴らす
 pub fn collect(view: &ObjRef, total: f64) -> Media {
     let mut media = Media::default();

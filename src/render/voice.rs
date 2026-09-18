@@ -231,28 +231,29 @@ fn audio_length(path: &Path) -> Result<f64, Box<dyn Error>> {
     text.trim().parse::<f64>().map_err(|_| format!("cannot read the length of {}", path.display()).into())
 }
 
-/// 読み上げを字幕にする。長さは、作った音声から測る。
-/// 音声を作れない機械では、書いた duration をそのまま使う (字幕を出すだけなら engine は要らない)
-pub fn as_cues(media: &Media, cache: &Path) -> Vec<Cue> {
-    media
-        .narrations
-        .iter()
-        .map(|line| {
-            let measured = by_name(line.engine.as_deref().unwrap_or_default())
-                .or_else(|| default_engine().ok())
-                .and_then(|engine| say(engine, &line.text, &line.settings, cache).ok())
-                .map(|(_, length)| length);
-            // 動画に入る音と同じ長さにする (書いた duration より長ければ、そこで切られる)
-            let length = measured.unwrap_or(line.length).min(line.length);
-            Cue { at: line.at, length, text: line.text.clone() }
-        })
-        .collect()
-}
+/// 字幕が切り替わったと分かるように空ける間隔 (秒)
+const GAP: f64 = 0.2;
 
-/// 読み上げを字幕にする。字幕は読み上げからしか作らないので、声とずれない
-pub fn set_cues(media: &mut Media, cache: &Path) {
-    media.cues = as_cues(media, cache);
-    media.cues.sort_by(|a, b| a.at.total_cmp(&b.at));
+/// 読み上げを字幕にする。
+///
+/// **区間は台本に書いた at と duration そのもの。** 合成した音声の実測長で縮めたり、
+/// 前後に余裕を足したりしない。開始を動かすと timeline が言う時刻と食い違う。
+/// 音声は at に置いて duration で切るので、声は必ずこの区間の中にある。
+///
+/// 隣と GAP 未満しか空かないときだけ、前の字幕の終わりを縮めて GAP 空ける。
+/// 縮めるのは終わりだけで、開始は動かさない
+pub fn set_cues(media: &mut Media, _cache: &Path) {
+    let mut cues: Vec<Cue> =
+        media.narrations.iter().map(|line| Cue { at: line.at, length: line.length, text: line.text.clone() }).collect();
+    cues.sort_by(|a, b| a.at.total_cmp(&b.at));
+    for i in 1..cues.len() {
+        let limit = cues[i].at - GAP;
+        let prev = &mut cues[i - 1];
+        if prev.at + prev.length > limit {
+            prev.length = (limit - prev.at).max(0.0);
+        }
+    }
+    media.cues = cues;
 }
 
 pub fn mix_in(media: &mut Media, cache: &Path) -> Result<(), Box<dyn Error>> {
@@ -278,4 +279,44 @@ pub fn mix_in(media: &mut Media, cache: &Path) -> Result<(), Box<dyn Error>> {
         });
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::render::media::Narration;
+
+    fn media(lines: &[(f64, f64)]) -> Media {
+        let narrations = lines
+            .iter()
+            .map(|(at, length)| Narration {
+                at: *at,
+                length: *length,
+                text: format!("{at}"),
+                engine: None,
+                settings: Settings::default(),
+                volume: 1.0,
+            })
+            .collect();
+        Media { narrations, ..Media::default() }
+    }
+
+    /// timeline が言う時刻と字幕の時刻は同じでなければならない。
+    /// 実測で縮めたり前後に余裕を足したりして、ここが食い違ったことがある
+    #[test]
+    fn cues_are_the_written_intervals() {
+        let mut m = media(&[(0.5, 3.0), (4.0, 3.0), (7.5, 2.0)]);
+        set_cues(&mut m, Path::new("/nonexistent"));
+        let got: Vec<(f64, f64)> = m.cues.iter().map(|c| (c.at, c.length)).collect();
+        assert_eq!(got, vec![(0.5, 3.0), (4.0, 3.0), (7.5, 2.0)]);
+    }
+
+    /// 詰まっているときは、前の字幕の終わりだけを縮めて間隔を空ける。開始は動かさない
+    #[test]
+    fn a_crowded_cue_gives_up_its_tail_not_its_start() {
+        let mut m = media(&[(0.0, 3.0), (3.0, 3.0), (6.1, 3.0)]);
+        set_cues(&mut m, Path::new("/nonexistent"));
+        let got: Vec<(f64, f64)> = m.cues.iter().map(|c| (c.at, (c.length * 1000.0).round() / 1000.0)).collect();
+        assert_eq!(got, vec![(0.0, 2.8), (3.0, 2.9), (6.1, 3.0)]);
+    }
 }

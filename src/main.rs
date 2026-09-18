@@ -276,12 +276,7 @@ fn run() -> Result<(), Box<dyn Error>> {
         Command::Preview { script, size, r#loop, at } => {
             let script = entry(script)?;
             let (interp, view, duration) = load(&std::fs::read_to_string(&script)?, base_dir(&script), None, &project)?;
-            let mut media = render::media::collect(&view, duration);
-            if !media.narrations.is_empty() {
-                let cache = render::voice::cache_dir();
-                render::voice::set_cues(&mut media, &cache);
-                render::voice::mix_in(&mut media, &cache)?;
-            }
+            let media = render::media::prepare(&view, duration, 0.0, duration, true, &render::voice::cache_dir())?;
             render::preview::run(file_name(&script), interp, view, duration, size, r#loop, at, &media)
         }
         Command::Timeline { script, filter } => {
@@ -292,7 +287,8 @@ fn run() -> Result<(), Box<dyn Error>> {
             println!("duration: {duration:.2}s\n");
             println!("# events: start  length  object  attribute  change\n{}", report::format_events(&events, &filter));
             println!("\n# text visibility: from – to  length  text\n{}", report::text_visibility(&events, &filter));
-            let media = render::media::collect(&view, duration);
+            // 動画に入るのと同じものを出す (音声は作らない)
+            let media = render::media::prepare(&view, duration, 0.0, duration, false, &render::voice::cache_dir())?;
             if !media.is_empty() {
                 println!("\n# subtitles and audio: from – to  length  content\n{}", report::media_report(&media, &filter));
             }
@@ -308,9 +304,8 @@ fn run() -> Result<(), Box<dyn Error>> {
             let trim = trim.unwrap_or(Trim { from: None, to: None });
             let from = trim.from.unwrap_or(0.0).min(duration);
             let to = trim.to.unwrap_or(duration).min(duration);
-            let mut media = render::media::collect(&view, duration).window(from, to);
-            // 字幕は読み上げから作る。長さは、その音声から測る
-            render::voice::set_cues(&mut media, &render::voice::cache_dir());
+            // 動画に入るのと同じものを、同じ道で組む (音声は作らない)
+            let media = render::media::prepare(&view, duration, from, to, false, &render::voice::cache_dir())?;
             let cues = &media.cues;
             // 形式は拡張子で決める (render と同じ規則)。書かなければ SRT
             let vtt = output.as_deref().is_some_and(|o| o.to_ascii_lowercase().ends_with(".vtt"));
@@ -376,14 +371,9 @@ fn load(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Source
 fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sources>, project: &Option<Rc<project::Project>>, name: String, args: OutputArgs) -> Result<(), Box<dyn Error>> {
     let (width, height) = args.size;
     let (mut interp, view, duration) = load(src, base_dir, sources, project)?;
-    let mut media = render::media::collect(&view, duration);
-    if !media.narrations.is_empty() {
-        let cache = render::voice::cache_dir();
-        // 字幕は読み上げに合わせる。書いていなければ、読み上げがそのまま字幕になる
-        render::voice::set_cues(&mut media, &cache);
-        render::voice::mix_in(&mut media, &cache)?;
-    }
+    let cache = render::voice::cache_dir();
     let Some(output) = args.output else {
+        let media = render::media::prepare(&view, duration, 0.0, duration, true, &cache)?;
         return render::preview::run(name, interp, view, duration, args.size, args.r#loop, args.at, &media);
     };
 
@@ -402,7 +392,7 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
     if !is_image && to <= from {
         return Err(format!("--trim starts at {from}s but the video ends at {duration}s").into());
     }
-    let media = media.window(from, to);
+    let media = render::media::prepare(&view, duration, from, to, true, &cache)?;
     let mut ffmpeg = render::encode::Ffmpeg::spawn(
         &output,
         render::encode::Settings {
@@ -498,7 +488,8 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
 /// 指定の時刻でフレームを描き、格子に並べて PNG に書く。各コマの左上に時刻を入れる
 fn sheet(src: &str, base_dir: std::path::PathBuf, project: &Option<Rc<project::Project>>, output: &str, every: f64, times: Vec<f64>, cell: (u32, u32), cols: u32) -> Result<(), Box<dyn Error>> {
     let (mut interp, view, duration) = load(src, base_dir, None, project)?;
-    let media = render::media::collect(&view, duration);
+    // 動画と同じ字幕を重ねる (音声は要らないので作らない)
+    let media = render::media::prepare(&view, duration, 0.0, duration, false, &render::voice::cache_dir())?;
     let times: Vec<f64> = if times.is_empty() {
         let n = (duration / every).floor() as u32 + 1;
         (0..n).map(|i| f64::from(i) * every).collect()

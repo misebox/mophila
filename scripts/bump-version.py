@@ -63,6 +63,10 @@ def tag() -> int:
     committed = git("show", "HEAD:Cargo.toml")
     if f'version = "{version}"' not in committed:
         return fail(f"HEAD の Cargo.toml が {version} でない。バージョンを上げたコミットに打つ")
+    # 上げたコミットそのものに打つ。あとから打つと、関係ないコミットに版が付く
+    before = git("show", "HEAD~1:Cargo.toml")
+    if f'version = "{version}"' in before:
+        return fail(f"HEAD は {version} に上げたコミットではない。上げた直後に打つ")
     if name in git("tag", "--list", name).splitlines():
         return fail(f"{name} は既にある ({git('rev-parse', '--short', name)})")
     git("tag", "-a", name, "-m", name)

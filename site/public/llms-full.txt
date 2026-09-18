@@ -273,10 +273,12 @@ v.place(wipe(16, 9, 1, :left, duration = 0.5s, start = 3s), at = Pos(0, 0, ancho
 ```
 import "bgm.m4a" as bgm
 track.place(bgm, at = 0s, loop = true, volume = 0.6, fadeOut = 3s)
-track.place(Subtitle(text = "……です。", duration = 4s), at = 2s)
+track.place(Narration(text = "……です。", duration = 4s), at = 2s)
 ```
 
-`loop = true` は動画の終わりまで繰り返す (動画は延びない)。字幕は画面に描かれず、動画の字幕トラックになる。preview と sheet では下に重ねて見える。**字幕を TextArea で描かない**。
+`loop = true` は動画の終わりまで繰り返す (動画は延びない)。
+
+ナレーションは、その文を読んだ音声が動画の音になり、**同じ文がそのまま字幕になる**。字幕だけを置く型は無い。表示は読み始めから読み終わりまでで、長さは合成した音声から測るので、`duration` の見積もりがずれても声とずれない。画面には描かれないので、**字幕を TextArea で描かない**。
 
 ### View の入れ子
 
@@ -1115,14 +1117,14 @@ motion (t) {
 v.addTrack(track)
 track.place(tl, at = 2s, fadeIn = 0.3s, fadeOut = 0.3s)
 track.place(bgm, at = 0s, duration = 30s, volume = 0.6, loop = true)
-track.place(Subtitle(text = "ここに字幕", duration = 2s), at = 5s)
+track.place(Narration(text = "ここを読み上げる", duration = 2s), at = 5s)
 ```
 
-`fadeIn` は置いた時刻から、`fadeOut` は終わりに向かって、置いたものの不透明度を動かす。View に付けると中身をまとめて 1 枚として掛かる。Subtitle には効かない (`duration` で長さを決める)。
+`fadeIn` は置いた時刻から、`fadeOut` は終わりに向かって、置いたものの不透明度を動かす。View に付けると中身をまとめて 1 枚として掛かる。Narration には効かない (`duration` で長さを決める)。
 
 `duration` を指定した Timeline は、その長さより後を使わない。音声は `duration` で切り (繰り返さなければファイルより長くならない)、`volume` は 1 がそのまま、`loop = true` は `duration` か動画の終わりまで繰り返す (動画は延びない)。同じ音声を何度でも置けて、重なれば混ざる。
 
-読み上げは `Narration`。文と長さだけを持ち、`Subtitle` と同じように置く (画面には描かない)。**どう喋らせるか**は置くときに `voice` で渡す。
+読み上げは `Narration`。文と長さだけを持ち、Timeline に置く (画面には描かない)。**その文を読んだ音声が動画の音になり、同じ文が字幕になる**。**どう喋らせるか**は置くときに `voice` で渡す。
 
 ```
 let kyoko = SayVoiceEngine(voice = "Kyoko")
@@ -1140,6 +1142,8 @@ track.place(Narration(text = "ここは速く", duration = 3s), at = 5s, voice =
 属性はその型のものだけ。無い名前を書けば `NameError.UndefinedAttribute` で止まる。`voice` を渡さなければ、その機械に入っているもので読む。置くときの `volume` で音量を変えられる。
 
 合成した音声が `duration` より長ければ、そこで切って警告を出す。行の時刻は動かない。
+
+字幕は読み上げからしか作らない。出るのは読み始めから読み終わりまでで、長さは作った音声から測る。`duration` の見積もりがずれても、字幕と声はずれない。声を付けない字幕は書けない (書けるようにすると、また人が時刻を見積もることになるため)。
 
 作った音声はビルドの中間物なので、リポジトリではなくキャッシュ (`~/.cache/mophila/voice/`、`$XDG_CACHE_HOME` があればその下) に置く。同じ型・同じ設定・同じ文なら作り直さない。書いたものが音声として読めなければ、そこで止まる (壊れたものをキャッシュに残さない)。
 
@@ -1300,7 +1304,7 @@ output v      # この View が動画になる。1 つのファイルに 1 つ
 - 箱 (View) は `box = Vector(w, h)` で座標系を宣言する。中の座標はその単位
 - `view.place(shape)`。図形の位置は図形の `position` で決まる
 - `view.place(other_view, at = Pos, w =, h =)` で View を入れ子にする。w か h の片方だけなら縦横比を保ち、両方なら比率を保ったまま収める。子の座標は子の box で解釈される。置き先での位置と大きさは子の属性になるので、同じ View を 2 か所には置けない (`copy()` を置く)
-- `view.addTrack(x)` で、その View の動きとして付ける。`output` した View に付けたものが動画になる。`x` は Timeline、View、Audio、Subtitle のどれかで、引数は `Timeline.place` と同じ
+- `view.addTrack(x)` で、その View の動きとして付ける。`output` した View に付けたものが動画になる。`x` は Timeline、View、Audio、Narration のどれかで、引数は `Timeline.place` と同じ
 - クロージャと Timeline はスコープを共有する (複製しない)。定義後に変数を変えれば、その値が見える
 
 ### 6. builtin と標準ライブラリ
@@ -1913,11 +1917,11 @@ View(box = Vector(16, 9))
 
 - `v.place(o: Placeable, at: Pos, w: Number, h: Number)` -> Nothing — View に置く。別の View を置くときは at と、w か h が要る (比率を保って収める)
 - `v.copy()` -> View — 同じ中身の新しい View。同じ View は 2 か所に置けないので、2 か所目にはこれを置く。中の図形は元と共通で、動かすと両方が動く
-- `v.addTrack(x: Timeline | View | Audio | Subtitle, at: Duration, fadeIn: Duration, fadeOut: Duration, duration: Duration, volume: Number, loop: Bool)` -> Nothing — その View の動きとして付ける。output した View に付いたものが動画になる
+- `v.addTrack(x: Timeline | View | Audio | Narration, at: Duration, fadeIn: Duration, fadeOut: Duration, duration: Duration, volume: Number, loop: Bool)` -> Nothing — その View の動きとして付ける。output した View に付いたものが動画になる
 
 ### Timeline
 
-どの対象のどの属性が、いつ、どの値になるかの並び。行に属性への代入を書いた motion がこれになる。別の Timeline、Audio、Subtitle も place で時刻に置ける
+どの対象のどの属性が、いつ、どの値になるかの並び。行に属性への代入を書いた motion がこれになる。別の Timeline、Audio、Narration も place で時刻に置ける
 
 作り方:
 
@@ -1936,7 +1940,7 @@ motion (t) {
 
 メソッド:
 
-- `tl.place(x: Timeline | View | Audio | Subtitle, at: Duration, fadeIn: Duration, fadeOut: Duration, duration: Duration, volume: Number, loop: Bool)` -> Nothing — 中に 1 本置く。at はこの Timeline の中での開始時刻
+- `tl.place(x: Timeline | View | Audio | Narration, at: Duration, fadeIn: Duration, fadeOut: Duration, duration: Duration, volume: Number, loop: Bool)` -> Nothing — 中に 1 本置く。at はこの Timeline の中での開始時刻
 - `tl.reverse()` -> Timeline — 時間の向きを逆にしたもの。ease の in と out も入れ替わる
 - `tl.scale(k: Number)` -> Timeline — 時間の軸を k 倍したもの。時刻も長さも k 倍になる
 - `tl.fit(d: Duration)` -> Timeline — 長さが d になるように時間の軸を伸縮したもの
@@ -1998,24 +2002,9 @@ import "bgm.m4a" as bgm
 - `duration`: Duration — 音声ファイルの長さ
 - `file`: String — import に書いたパス
 
-### Subtitle
-
-字幕。画面には描かず、Timeline に置くと動画の字幕トラックになる
-
-作り方:
-
-```
-Subtitle(text = "ここに字幕", duration = 2s)
-```
-
-属性:
-
-- `text`: String (必須) — 字幕の文字列
-- `duration`: Duration (必須) — 表示する長さ
-
 ### Narration
 
-読み上げ。Timeline に置くと、その文を読んだ音声が動画の音になる。画面には描かない
+読み上げ。Timeline に置くと、その文を読んだ音声が動画の音になり、同じ文が字幕にもなる。画面には描かない
 
 作り方:
 
@@ -3355,12 +3344,12 @@ let ta = TextArea(text = 1)   # TypeError.ArgumentType: TextArea.text expects St
 let mo = motion { 0s: 0, 1s: 1 }
 mo.apply(x, func (x, t, [p, q]) { x.radius = p })   # TypeError.ArityMismatch: motion has 1 column but 2 parameters given
 tr.place(mo, at = 0s)           # TypeError.NotPlaceable: Motion cannot be placed; apply it to make a Timeline
-tr.place(1, at = 0s)            # TypeError.ArgumentType: Timeline.place expects Timeline, Audio or Subtitle, found Number
+tr.place(1, at = 0s)            # TypeError.ArgumentType: Timeline.place expects Timeline, View, Audio or Narration, found Number
 
 # ---- ValueError ----
 let m = motion { 0s: 0, 0.5: 1 }   # ValueError.DurationRequired: keyframe times must be all Duration or all Number (0..1)
 let m2 = motion { 5: 0 }       # ValueError.OutOfRange: relative keyframe time must be within 0..1
-tr.place(Subtitle(text = "a"), at = 0s)   # ValueError.DurationRequired: a Subtitle needs duration before it is placed
+tr.place(Narration(text = "a"), at = 0s)   # ValueError.DurationRequired: a Narration needs duration before it is placed
 v.place(1)                     # TypeError.ArgumentType: View.place expects Placeable, found Number
 let inner = View(box = Vector(1, 1))
 v.place(inner, at = Pos(0, 0), w = 1)
@@ -3438,7 +3427,7 @@ log(c)
 ### media.moph
 
 ```
-# media.moph — 音声と字幕 (すべて仮)。どちらも Timeline に置き、render が動画のトラックにする
+# media.moph — 音声と画像 (すべて仮)。音声は Timeline に置き、render が動画のトラックにする
 
 let v = View(box = Vector(4, 3))
 let track = Timeline()
@@ -3451,11 +3440,8 @@ log(type_of(bgm), bgm.duration, bgm.file)         # Audio 152.52s ../gallery/mop
 track.place(bgm, at = 0s, fadeIn = 1s, duration=5s, fadeOut = 2s)   # 動画の終わりまで繰り返す (動画は延びない)
 track.place(bgm, at = 0.5s, duration = 5s, volume = 0.6)                                        # 3 秒から 5 秒分だけ (重ねて鳴る)
 
-# ---- 字幕。text と duration を持つ。画面には描かず、動画の字幕トラック (mp4 は mov_text) に書く ----
-let s1 = Subtitle(text = "最初の字幕", duration = 3s)
-track.place(s1, at = 1s)
-let s2 = Subtitle(text = "2 行目は\nで分ける", duration = 2s)
-track.place(s2, at = 5s)
+# ---- 読み上げ。音声と字幕になる。書き方は voice.moph ----
+track.place(Narration(text = "最初の行", duration = 3s), at = 1s)
 
 # ---- 画像。図形の fill に入れると、その形に切り抜いて敷かれる ----
 log(pic.file, pic.width, pic.height)      # import に書いたパスと、元のピクセル数
@@ -3764,7 +3750,7 @@ log(t.size())            # 置いたときの幅と高さ (Vector)。w があれ
 # ---- 箱 ----
 let v = View(box = Vector(4, 3))  # box: Vector。座標系 0..4 × 0..3。ピクセルは持たない
 # v.place(o: Placeable, at: Pos, w: Number, h: Number) -> Nothing
-# v.addTrack(x: Timeline | View | Audio | Subtitle, at: Duration, ...) -> Nothing
+# v.addTrack(x: Timeline | View | Audio | Narration, at: Duration, ...) -> Nothing
 
 let win = View(box = Vector(2, 2), clip = true)   # clip: Bool。箱からはみ出した中身を描かない
 win.place(Circle(position = Pos(2, 1), radius = 0.8, fill = #e04040))   # 右にはみ出す
@@ -3815,10 +3801,10 @@ track.place(Narration(text = "こちらは速く読みます。", duration = 2s)
 # 声は行ごとに決まる。音量も置くときに
 track.place(Narration(text = "別の声で、少し小さく読みます。", duration = 3s), at = 10s, voice = SayVoiceEngine(voice = "Otoya"), volume = 0.8)
 
-# ---- 字幕と組にするなら、同じ文で Subtitle も置く (別の型なので、片方だけにもできる) ----
-let say_line = "字幕と音声をそろえます。"
-track.place(Narration(text = say_line, duration = 3s), at = 13.5s, voice = kyoko)
-track.place(Subtitle(text = say_line, duration = 3s), at = 13.5s)
+# ---- 字幕は読み上げから作られる。書くのは台本 1 回だけ ----
+# 出るのは読み始めから読み終わりまで。長さは合成した音声から測るので、
+# duration の見積もりがずれても字幕と声はずれない
+track.place(Narration(text = "この行が、そのまま字幕になります。", duration = 3s), at = 13.5s, voice = kyoko)
 
 v.addTrack(track)
 output v

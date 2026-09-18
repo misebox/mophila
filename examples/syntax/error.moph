@@ -53,12 +53,12 @@ let ta = TextArea(text = 1)   # TypeError.ArgumentType: TextArea.text expects St
 let mo = motion { 0s: 0, 1s: 1 }
 mo.apply(x, func (x, t, [p, q]) { x.radius = p })   # TypeError.ArityMismatch: motion has 1 column but 2 parameters given
 tr.place(mo, at = 0s)           # TypeError.NotPlaceable: Motion cannot be placed; apply it to make a Timeline
-tr.place(1, at = 0s)            # TypeError.ArgumentType: Timeline.place expects Timeline, Audio or Subtitle, found Number
+tr.place(1, at = 0s)            # TypeError.ArgumentType: Timeline.place expects Timeline, View, Audio or Narration, found Number
 
 # ---- ValueError ----
 let m = motion { 0s: 0, 0.5: 1 }   # ValueError.DurationRequired: keyframe times must be all Duration or all Number (0..1)
 let m2 = motion { 5: 0 }       # ValueError.OutOfRange: relative keyframe time must be within 0..1
-tr.place(Subtitle(text = "a"), at = 0s)   # ValueError.DurationRequired: a Subtitle needs duration before it is placed
+tr.place(Narration(text = "a"), at = 0s)   # ValueError.DurationRequired: a Narration needs duration before it is placed
 v.place(1)                     # TypeError.ArgumentType: View.place expects Placeable, found Number
 let inner = View(box = Vector(1, 1))
 v.place(inner, at = Pos(0, 0), w = 1)

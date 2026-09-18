@@ -118,7 +118,7 @@ log(t.size())            # 置いたときの幅と高さ (Vector)。w があれ
 # ---- 箱 ----
 let v = View(box = Vector(4, 3))  # box: Vector。座標系 0..4 × 0..3。ピクセルは持たない
 # v.place(o: Placeable, at: Pos, w: Number, h: Number) -> Nothing
-# v.addTrack(x: Timeline | View | Audio | Subtitle, at: Duration, ...) -> Nothing
+# v.addTrack(x: Timeline | View | Audio | Narration, at: Duration, ...) -> Nothing
 
 let win = View(box = Vector(2, 2), clip = true)   # clip: Bool。箱からはみ出した中身を描かない
 win.place(Circle(position = Pos(2, 1), radius = 0.8, fill = #e04040))   # 右にはみ出す

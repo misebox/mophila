@@ -249,35 +249,10 @@ pub fn as_cues(media: &Media, cache: &Path) -> Vec<Cue> {
         .collect()
 }
 
-/// 字幕を、読み上げに合わせる。
-///
-/// 同じ文の読み上げがある字幕は、その音声の始まりと長さに置き換える。
-/// 手で書いた duration の見積もりがずれても、字幕と声がずれない。
-/// 読み上げの無い字幕 (画面の説明など) は、書いたまま残す。
-pub fn align_cues(media: &mut Media, cache: &Path) {
-    let spoken = as_cues(media, cache);
-    let mut used = vec![false; spoken.len()];
-    for cue in &mut media.cues {
-        let found = spoken.iter().enumerate().find(|(i, s)| !used[*i] && same_text(&s.text, &cue.text));
-        if let Some((i, s)) = found {
-            used[i] = true;
-            cue.at = s.at;
-            cue.length = s.length;
-        }
-    }
-    // 字幕を書いていない読み上げは、そのまま字幕にする
-    for (i, s) in spoken.into_iter().enumerate() {
-        if !used[i] {
-            media.cues.push(s);
-        }
-    }
+/// 読み上げを字幕にする。字幕は読み上げからしか作らないので、声とずれない
+pub fn set_cues(media: &mut Media, cache: &Path) {
+    media.cues = as_cues(media, cache);
     media.cues.sort_by(|a, b| a.at.total_cmp(&b.at));
-}
-
-/// 同じ文か。改行と前後の空白は無視する
-fn same_text(a: &str, b: &str) -> bool {
-    let strip = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
-    strip(a) == strip(b)
 }
 
 pub fn mix_in(media: &mut Media, cache: &Path) -> Result<(), Box<dyn Error>> {

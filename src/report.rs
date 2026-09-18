@@ -99,31 +99,14 @@ fn walk(interp: &mut Interp, placed: &Placed, origin: f64, out: &mut Vec<Event>)
             }
             timeline_events(interp, tl, start, out);
         }
-        Track::Audio(..) | Track::Subtitle(_) | Track::Narration(..) => {}
+        Track::Audio(..) | Track::Narration(..) => {}
     }
 }
 
-/// 字幕と音声を時刻順に。字幕は文字数から見て短いものに SHORT を付ける
+/// 読み上げと音声を時刻順に
 pub fn media_report(media: &Media, filter: &Filter) -> String {
     let in_range = |from: f64, to: f64| !(filter.from.is_some_and(|x| to < x) || filter.to.is_some_and(|x| from > x));
     let mut rows: Vec<(f64, String)> = Vec::new();
-    if filter.kind.as_deref().is_none_or(|k| k == "Subtitle") {
-        for cue in &media.cues {
-            let to = cue.at + cue.length;
-            if !in_range(cue.at, to) || filter.text.as_deref().is_some_and(|t| !cue.text.contains(t)) {
-                continue;
-            }
-            // 読み上げが付いている行は、耳で追うので読む時間の目安は当てはまらない
-            let spoken = media.narrations.iter().any(|n| n.text == cue.text);
-            let chars = cue.text.chars().filter(|c| !c.is_whitespace()).count();
-            let needed = (chars as f64 * 0.25).max(1.5);
-            let note = match !spoken && cue.length < needed {
-                true => format!("  SHORT (needs {needed:.1}s)"),
-                false => String::new(),
-            };
-            rows.push((cue.at, format!("{:>8.2}s – {:>7.2}s  {:>6.1}s  Subtitle \"{}\"{note}", cue.at, to, cue.length, truncate(&cue.text.replace('\n', " / "), 40))));
-        }
-    }
     if filter.kind.as_deref().is_none_or(|k| k == "Narration") {
         for line in &media.narrations {
             let to = line.at + line.length;

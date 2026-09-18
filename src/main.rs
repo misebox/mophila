@@ -279,7 +279,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             let mut media = render::media::collect(&view, duration);
             if !media.narrations.is_empty() {
                 let cache = render::voice::cache_dir();
-                render::voice::align_cues(&mut media, &cache);
+                render::voice::set_cues(&mut media, &cache);
                 render::voice::mix_in(&mut media, &cache)?;
             }
             render::preview::run(file_name(&script), interp, view, duration, size, r#loop, at, &media)
@@ -309,8 +309,8 @@ fn run() -> Result<(), Box<dyn Error>> {
             let from = trim.from.unwrap_or(0.0).min(duration);
             let to = trim.to.unwrap_or(duration).min(duration);
             let mut media = render::media::collect(&view, duration).window(from, to);
-            // 読み上げがあれば、そこに字幕を合わせる (無い字幕は書いたまま)
-            render::voice::align_cues(&mut media, &render::voice::cache_dir());
+            // 字幕は読み上げから作る。長さは、その音声から測る
+            render::voice::set_cues(&mut media, &render::voice::cache_dir());
             let cues = &media.cues;
             // 形式は拡張子で決める (render と同じ規則)。書かなければ SRT
             let vtt = output.as_deref().is_some_and(|o| o.to_ascii_lowercase().ends_with(".vtt"));
@@ -380,7 +380,7 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
     if !media.narrations.is_empty() {
         let cache = render::voice::cache_dir();
         // 字幕は読み上げに合わせる。書いていなければ、読み上げがそのまま字幕になる
-        render::voice::align_cues(&mut media, &cache);
+        render::voice::set_cues(&mut media, &cache);
         render::voice::mix_in(&mut media, &cache)?;
     }
     let Some(output) = args.output else {

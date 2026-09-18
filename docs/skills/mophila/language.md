@@ -189,10 +189,12 @@ v.place(wipe(16, 9, 1, :left, duration = 0.5s, start = 3s), at = Pos(0, 0, ancho
 ```
 import "bgm.m4a" as bgm
 track.place(bgm, at = 0s, loop = true, volume = 0.6, fadeOut = 3s)
-track.place(Subtitle(text = "……です。", duration = 4s), at = 2s)
+track.place(Narration(text = "……です。", duration = 4s), at = 2s)
 ```
 
-`loop = true` は動画の終わりまで繰り返す (動画は延びない)。字幕は画面に描かれず、動画の字幕トラックになる。preview と sheet では下に重ねて見える。**字幕を TextArea で描かない**。
+`loop = true` は動画の終わりまで繰り返す (動画は延びない)。
+
+ナレーションは、その文を読んだ音声が動画の音になり、**同じ文がそのまま字幕になる**。字幕だけを置く型は無い。表示は読み始めから読み終わりまでで、長さは合成した音声から測るので、`duration` の見積もりがずれても声とずれない。画面には描かれないので、**字幕を TextArea で描かない**。
 
 ## View の入れ子
 

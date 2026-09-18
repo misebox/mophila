@@ -22,9 +22,9 @@ export func run(now) {
     "   23.50s    2.50s  View      opacity 1 → 0 :ease_in",
     "",
     "# subtitles and audio: from – to  length  content",
-    "    1.00s –    7.00s     6.0s  Subtitle \"…\"  SHORT (needs 6.3s)",
+    "    1.00s –    7.00s     6.0s  Narration (SayVoiceEngine) \"…\"",
   ], 0.7, 1.8, 14.6, 0.27), t1)
-  t = say(sc, "timeline は、変化の一覧を時刻順に並べます。短すぎる字幕には印が付きます。", t)
+  t = say(sc, "timeline は、変化の一覧を時刻順に並べます。読み上げと音声も出ます。", t)
   t = say(sc, "sheet は、一定の間隔や指定した時刻のコマを 1 枚に並べます。", t)
   t = say(sc, "LLM はこれを読んで、自分で直せます。", t)
   close(sc, t + review)

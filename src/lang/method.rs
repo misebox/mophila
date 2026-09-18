@@ -68,7 +68,7 @@ pub const METHODS: &[Method] = &[
     Method {
         receivers: &["Timeline"],
         name: "place",
-        signature: "tl.place(x: Timeline | View | Audio | Subtitle, at: Duration, fadeIn: Duration, fadeOut: Duration, duration: Duration, volume: Number, loop: Bool)",
+        signature: "tl.place(x: Timeline | View | Audio | Narration, at: Duration, fadeIn: Duration, fadeOut: Duration, duration: Duration, volume: Number, loop: Bool)",
         returns: "Nothing",
         doc: "中に 1 本置く。at はこの Timeline の中での開始時刻",
         call: tl_place,
@@ -117,7 +117,7 @@ pub const METHODS: &[Method] = &[
     Method {
         receivers: &["View"],
         name: "addTrack",
-        signature: "v.addTrack(x: Timeline | View | Audio | Subtitle, at: Duration, fadeIn: Duration, fadeOut: Duration, duration: Duration, volume: Number, loop: Bool)",
+        signature: "v.addTrack(x: Timeline | View | Audio | Narration, at: Duration, fadeIn: Duration, fadeOut: Duration, duration: Duration, volume: Number, loop: Bool)",
         returns: "Nothing",
         doc: "その View の動きとして付ける。output した View に付いたものが動画になる",
         call: view_add_track,

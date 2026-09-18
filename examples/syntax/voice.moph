@@ -16,10 +16,10 @@ track.place(Narration(text = "こちらは速く読みます。", duration = 2s)
 # 声は行ごとに決まる。音量も置くときに
 track.place(Narration(text = "別の声で、少し小さく読みます。", duration = 3s), at = 10s, voice = SayVoiceEngine(voice = "Otoya"), volume = 0.8)
 
-# ---- 字幕と組にするなら、同じ文で Subtitle も置く (別の型なので、片方だけにもできる) ----
-let say_line = "字幕と音声をそろえます。"
-track.place(Narration(text = say_line, duration = 3s), at = 13.5s, voice = kyoko)
-track.place(Subtitle(text = say_line, duration = 3s), at = 13.5s)
+# ---- 字幕は読み上げから作られる。書くのは台本 1 回だけ ----
+# 出るのは読み始めから読み終わりまで。長さは合成した音声から測るので、
+# duration の見積もりがずれても字幕と声はずれない
+track.place(Narration(text = "この行が、そのまま字幕になります。", duration = 3s), at = 13.5s, voice = kyoko)
 
 v.addTrack(track)
 output v

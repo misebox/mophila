@@ -781,12 +781,6 @@ impl Interp {
                     }
                     Some((None, Value::Timeline(tl))) => Track::Timeline(tl.clone()),
                     Some((None, Value::Object(o))) if o.borrow().kind == "View" => Track::Container(o.clone()),
-                    Some((None, Value::Object(o))) if o.borrow().kind == "Subtitle" => {
-                        if !o.borrow().attrs.contains_key("duration") {
-                            return err(Kind::DurationRequired, "a Subtitle needs duration before it is placed");
-                        }
-                        Track::Subtitle(o.clone())
-                    }
                     Some((None, Value::Object(o))) if o.borrow().kind == "Narration" => {
                         if !o.borrow().attrs.contains_key("duration") {
                             return err(Kind::DurationRequired, "a Narration needs duration before it is placed");
@@ -795,8 +789,8 @@ impl Interp {
                     }
                     Some((None, Value::Audio(a))) => Track::Audio(a.clone(), Clip { cut: None, volume: 1.0, looping: false }),
                     Some((None, Value::Motion(_))) => return err(Kind::NotPlaceable, "Motion cannot be placed; apply it to make a Timeline"),
-                    Some((None, v)) => return err(Kind::ArgumentType, format!("{who} expects Timeline, View, Audio, Subtitle or Narration, found {}", v.type_name())),
-                    _ => return err(Kind::ArgumentType, format!("{who} expects a Timeline, View, Audio, Subtitle or Narration as the first argument")),
+                    Some((None, v)) => return err(Kind::ArgumentType, format!("{who} expects Timeline, View, Audio or Narration, found {}", v.type_name())),
+                    _ => return err(Kind::ArgumentType, format!("{who} expects a Timeline, View, Audio or Narration as the first argument")),
                 };
                 let mut placed = Placed { track, at: 0.0, fade_in: 0.0, fade_out: 0.0 };
                 for (name, v) in &args[1..] {
@@ -850,9 +844,8 @@ impl Interp {
                     }
                     let slot = match arg {
                         "at" => &mut placed.at,
-                        "fadeIn" | "fadeOut" if matches!(placed.track, Track::Subtitle(_) | Track::Narration(..)) => {
-                            let kind = if matches!(placed.track, Track::Subtitle(_)) { "Subtitle" } else { "Narration" };
-                            return err(Kind::ArgumentType, format!("{who}: a {kind} has no {arg}; set its duration"));
+                        "fadeIn" | "fadeOut" if matches!(placed.track, Track::Narration(..)) => {
+                            return err(Kind::ArgumentType, format!("{who}: a Narration has no {arg}; set its duration"));
                         }
                         "fadeIn" => &mut placed.fade_in,
                         "fadeOut" => &mut placed.fade_out,
@@ -1643,7 +1636,7 @@ impl Interp {
         let origin = origin + placed.at;
         match &placed.track {
             // 音声と字幕は描画には関わらない (render が動画に付ける)
-            Track::Audio(..) | Track::Subtitle(_) | Track::Narration(..) => {}
+            Track::Audio(..) | Track::Narration(..) => {}
             Track::Container(obj) => {
                 let children = obj.borrow().tracks.clone();
                 for child in &children {
@@ -1996,7 +1989,7 @@ fn collect_from_track(track: &Track, out: &mut Vec<ObjRef>) {
     {
         match track {
             Track::Audio(..) => {}
-            Track::Container(c) | Track::Subtitle(c) | Track::Narration(c, _) => collect_objects(c, out),
+            Track::Container(c) | Track::Narration(c, _) => collect_objects(c, out),
             Track::Timeline(tl) => {
                 for child in tl.tracks.borrow().iter() {
                     collect_from_track(&child.track, out);
@@ -2119,7 +2112,7 @@ fn same_place(before: &Value, after: &Value) -> bool {
 /// 属性の型に値が合うか。builtin の Union (Paint = Color | Shader) もここで見る
 /// builtin 型の名前 (補完用)
 pub const KINDS: &[&str] =
-    &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "View", "Timeline", "Subtitle", "Narration", "SayVoiceEngine", "EspeakVoiceEngine", "Shader", "Gradient", "Color"];
+    &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "View", "Timeline", "Narration", "SayVoiceEngine", "EspeakVoiceEngine", "Shader", "Gradient", "Color"];
 
 /// builtin 型の属性と型
 /// 型の名前は大文字で始まり、builtin の型と union の名前は使えない
@@ -2253,7 +2246,6 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
         opt("scale", "Number"),
         opt("pivot", "Vector"),
     ];
-    const SUBTITLE: &[Attr] = &[req("text", "String"), req("duration", "Duration")];
     // 読み上げ。voice は engine に渡す声の名前、volume は混ぜるときの音量
     const NARRATION: &[Attr] = &[req("text", "String"), req("duration", "Duration"), opt("volume", "Number")];
     const SHADER: &[Attr] = &[req("color", "Func"), opt("args", "List"), opt("samples", "Number")];
@@ -2274,7 +2266,6 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
         "Path" => shape!(fill: true, join: true, req("from", "Vector"), req("segments", "List"), opt("closed", "Bool")),
         "TextArea" => TEXT_AREA,
         "View" => VIEW,
-        "Subtitle" => SUBTITLE,
         "Narration" => NARRATION,
         // engine の型。属性はその engine が持っている
         name if crate::render::voice::by_name(name).is_some() => crate::render::voice::by_name(name).expect("just checked").attrs(),

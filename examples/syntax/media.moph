@@ -1,4 +1,4 @@
-# media.moph — 音声と字幕 (すべて仮)。どちらも Timeline に置き、render が動画のトラックにする
+# media.moph — 音声と画像 (すべて仮)。音声は Timeline に置き、render が動画のトラックにする
 
 let v = View(box = Vector(4, 3))
 let track = Timeline()
@@ -11,11 +11,8 @@ log(type_of(bgm), bgm.duration, bgm.file)         # Audio 152.52s ../gallery/mop
 track.place(bgm, at = 0s, fadeIn = 1s, duration=5s, fadeOut = 2s)   # 動画の終わりまで繰り返す (動画は延びない)
 track.place(bgm, at = 0.5s, duration = 5s, volume = 0.6)                                        # 3 秒から 5 秒分だけ (重ねて鳴る)
 
-# ---- 字幕。text と duration を持つ。画面には描かず、動画の字幕トラック (mp4 は mov_text) に書く ----
-let s1 = Subtitle(text = "最初の字幕", duration = 3s)
-track.place(s1, at = 1s)
-let s2 = Subtitle(text = "2 行目は\nで分ける", duration = 2s)
-track.place(s2, at = 5s)
+# ---- 読み上げ。音声と字幕になる。書き方は voice.moph ----
+track.place(Narration(text = "最初の行", duration = 3s), at = 1s)
 
 # ---- 画像。図形の fill に入れると、その形に切り抜いて敷かれる ----
 log(pic.file, pic.width, pic.height)      # import に書いたパスと、元のピクセル数

@@ -160,17 +160,6 @@ fn walk(placed: &Placed, origin: f64, limit: f64, out: &mut Media) {
                 looping: clip.looping,
             });
         }
-        Track::Subtitle(obj) => {
-            let o = obj.borrow();
-            let text = match o.attrs.get("text") {
-                Some(Value::Str(s)) => s.clone(),
-                _ => String::new(),
-            };
-            let length = (start + placed.track.duration()).min(limit) - start;
-            if length > 0.0 {
-                out.cues.push(Cue { at: start, length, text });
-            }
-        }
         Track::Narration(obj, engine) => {
             let o = obj.borrow();
             let text = match o.attrs.get("text") {

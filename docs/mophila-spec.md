@@ -398,14 +398,14 @@ motion (t) {
 v.addTrack(track)
 track.place(tl, at = 2s, fadeIn = 0.3s, fadeOut = 0.3s)
 track.place(bgm, at = 0s, duration = 30s, volume = 0.6, loop = true)
-track.place(Subtitle(text = "ここに字幕", duration = 2s), at = 5s)
+track.place(Narration(text = "ここを読み上げる", duration = 2s), at = 5s)
 ```
 
-`fadeIn` は置いた時刻から、`fadeOut` は終わりに向かって、置いたものの不透明度を動かす。View に付けると中身をまとめて 1 枚として掛かる。Subtitle には効かない (`duration` で長さを決める)。
+`fadeIn` は置いた時刻から、`fadeOut` は終わりに向かって、置いたものの不透明度を動かす。View に付けると中身をまとめて 1 枚として掛かる。Narration には効かない (`duration` で長さを決める)。
 
 `duration` を指定した Timeline は、その長さより後を使わない。音声は `duration` で切り (繰り返さなければファイルより長くならない)、`volume` は 1 がそのまま、`loop = true` は `duration` か動画の終わりまで繰り返す (動画は延びない)。同じ音声を何度でも置けて、重なれば混ざる。
 
-読み上げは `Narration`。文と長さだけを持ち、`Subtitle` と同じように置く (画面には描かない)。**どう喋らせるか**は置くときに `voice` で渡す。
+読み上げは `Narration`。文と長さだけを持ち、Timeline に置く (画面には描かない)。**その文を読んだ音声が動画の音になり、同じ文が字幕になる**。**どう喋らせるか**は置くときに `voice` で渡す。
 
 ```
 let kyoko = SayVoiceEngine(voice = "Kyoko")
@@ -424,7 +424,7 @@ track.place(Narration(text = "ここは速く", duration = 3s), at = 5s, voice =
 
 合成した音声が `duration` より長ければ、そこで切って警告を出す。行の時刻は動かない。
 
-`Subtitle` を 1 つも置いていなければ、**読み上げがそのまま字幕になる**。表示は読み始めから読み終わりまでで、長さは作った音声から測るので、`duration` の見積もりがずれても字幕と声はずれない。台本を 2 度書きたくなければ `Narration` だけ置く。字幕を別に出したいときは `Subtitle` を置く (そのときは書いた時刻と長さのまま)。
+字幕は読み上げからしか作らない。出るのは読み始めから読み終わりまでで、長さは作った音声から測る。`duration` の見積もりがずれても、字幕と声はずれない。声を付けない字幕は書けない (書けるようにすると、また人が時刻を見積もることになるため)。
 
 作った音声はビルドの中間物なので、リポジトリではなくキャッシュ (`~/.cache/mophila/voice/`、`$XDG_CACHE_HOME` があればその下) に置く。同じ型・同じ設定・同じ文なら作り直さない。書いたものが音声として読めなければ、そこで止まる (壊れたものをキャッシュに残さない)。
 
@@ -585,7 +585,7 @@ output v      # この View が動画になる。1 つのファイルに 1 つ
 - 箱 (View) は `box = Vector(w, h)` で座標系を宣言する。中の座標はその単位
 - `view.place(shape)`。図形の位置は図形の `position` で決まる
 - `view.place(other_view, at = Pos, w =, h =)` で View を入れ子にする。w か h の片方だけなら縦横比を保ち、両方なら比率を保ったまま収める。子の座標は子の box で解釈される。置き先での位置と大きさは子の属性になるので、同じ View を 2 か所には置けない (`copy()` を置く)
-- `view.addTrack(x)` で、その View の動きとして付ける。`output` した View に付けたものが動画になる。`x` は Timeline、View、Audio、Subtitle のどれかで、引数は `Timeline.place` と同じ
+- `view.addTrack(x)` で、その View の動きとして付ける。`output` した View に付けたものが動画になる。`x` は Timeline、View、Audio、Narration のどれかで、引数は `Timeline.place` と同じ
 - クロージャと Timeline はスコープを共有する (複製しない)。定義後に変数を変えれば、その値が見える
 
 ## 6. builtin と標準ライブラリ

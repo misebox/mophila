@@ -95,7 +95,7 @@ export func close(sc, end) {
       let (next_s, next_at) = caps[i + 1]
       stop = next_at
     }
-    track.place(Subtitle(text = s, duration = stop - at), at = at)
+    track.place(Narration(text = s, duration = stop - at), at = at)
   }
   end + pause
 }

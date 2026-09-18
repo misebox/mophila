@@ -190,9 +190,8 @@ pub enum Track {
     Container(ObjRef),
     /// 音声。動画の音声トラックに混ぜる
     Audio(Rc<Audio>, Clip),
-    /// 字幕 (Subtitle オブジェクト)。動画の字幕トラックに書く
-    Subtitle(ObjRef),
-    /// 読み上げ (Narration オブジェクト) と、どう喋らせるか (engine の値。無ければ既定)
+    /// 読み上げ (Narration オブジェクト) と、どう喋らせるか (engine の値。無ければ既定)。
+    /// 音声と字幕の両方になる
     Narration(ObjRef, Option<ObjRef>),
 }
 
@@ -236,7 +235,7 @@ impl Track {
                 }
             }
             Track::Audio(audio, clip) => audio.clip_length(clip),
-            Track::Subtitle(obj) | Track::Narration(obj, _) => match obj.borrow().attrs.get("duration") {
+            Track::Narration(obj, _) => match obj.borrow().attrs.get("duration") {
                 Some(Value::Duration(d)) => *d,
                 _ => 0.0,
             },

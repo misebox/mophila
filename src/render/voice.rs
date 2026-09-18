@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use crate::lang::eval::{Attr, opt};
 use crate::lang::value::Value;
-use crate::render::media::{AudioClip, Media};
+use crate::render::media::{AudioClip, Cue, Media};
 
 /// 作った音声の置き場所。読み直せるものなので、リポジトリではなくキャッシュに置く
 pub fn cache_dir() -> PathBuf {
@@ -232,6 +232,24 @@ fn audio_length(path: &Path) -> Result<f64, Box<dyn Error>> {
 }
 
 /// 集めた読み上げを音声にして、音声トラックに足す。書いた duration は動かさない
+/// 読み上げを字幕にする。長さは、作った音声から測る。
+/// 音声を作れない機械では、書いた duration をそのまま使う (字幕を出すだけなら engine は要らない)
+pub fn as_cues(media: &Media, cache: &Path) -> Vec<Cue> {
+    media
+        .narrations
+        .iter()
+        .map(|line| {
+            let measured = by_name(line.engine.as_deref().unwrap_or_default())
+                .or_else(|| default_engine().ok())
+                .and_then(|engine| say(engine, &line.text, &line.settings, cache).ok())
+                .map(|(_, length)| length);
+            // 動画に入る音と同じ長さにする (書いた duration より長ければ、そこで切られる)
+            let length = measured.unwrap_or(line.length).min(line.length);
+            Cue { at: line.at, length, text: line.text.clone() }
+        })
+        .collect()
+}
+
 pub fn mix_in(media: &mut Media, cache: &Path) -> Result<(), Box<dyn Error>> {
     for line in std::mem::take(&mut media.narrations) {
         let engine = match &line.engine {

@@ -278,7 +278,11 @@ fn run() -> Result<(), Box<dyn Error>> {
             let (interp, view, duration) = load(&std::fs::read_to_string(&script)?, base_dir(&script), None, &project)?;
             let mut media = render::media::collect(&view, duration);
             if !media.narrations.is_empty() {
-                render::voice::mix_in(&mut media, &render::voice::cache_dir())?;
+                let cache = render::voice::cache_dir();
+                if media.cues.is_empty() {
+                    media.cues = render::voice::as_cues(&media, &cache);
+                }
+                render::voice::mix_in(&mut media, &cache)?;
             }
             render::preview::run(file_name(&script), interp, view, duration, size, r#loop, at, &media)
         }
@@ -307,16 +311,22 @@ fn run() -> Result<(), Box<dyn Error>> {
             let from = trim.from.unwrap_or(0.0).min(duration);
             let to = trim.to.unwrap_or(duration).min(duration);
             let media = render::media::collect(&view, duration).window(from, to);
+            // 字幕は Subtitle から。Subtitle が無ければ Narration から作る
+            // (台本を 2 度書かなくてよいように。長さは作った音声から測る)
+            let mut cues = media.cues.clone();
+            if cues.is_empty() {
+                cues = render::voice::as_cues(&media, &render::voice::cache_dir());
+            }
             // 形式は拡張子で決める (render と同じ規則)。書かなければ SRT
             let vtt = output.as_deref().is_some_and(|o| o.to_ascii_lowercase().ends_with(".vtt"));
             let text = match vtt {
-                true => render::media::vtt(&media.cues),
-                false => render::media::srt(&media.cues),
+                true => render::media::vtt(&cues),
+                false => render::media::srt(&cues),
             };
             match output {
                 Some(path) => {
                     std::fs::write(&path, text)?;
-                    eprintln!("{} subtitles -> {path}", media.cues.len());
+                    eprintln!("{} subtitles -> {path}", cues.len());
                 }
                 None => print!("{text}"),
             }
@@ -373,7 +383,12 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
     let (mut interp, view, duration) = load(src, base_dir, sources, project)?;
     let mut media = render::media::collect(&view, duration);
     if !media.narrations.is_empty() {
-        render::voice::mix_in(&mut media, &render::voice::cache_dir())?;
+        let cache = render::voice::cache_dir();
+        // Subtitle を書いていなければ、読み上げをそのまま字幕にする (台本を 2 度書かない)
+        if media.cues.is_empty() {
+            media.cues = render::voice::as_cues(&media, &cache);
+        }
+        render::voice::mix_in(&mut media, &cache)?;
     }
     let Some(output) = args.output else {
         return render::preview::run(name, interp, view, duration, args.size, args.r#loop, args.at, &media);

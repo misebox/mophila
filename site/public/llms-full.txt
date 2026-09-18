@@ -67,6 +67,7 @@ mophila render a.moph -o out.mp4 --trim 00:15..00:30   # 区間だけ
 mophila preview a.moph [--loop] [--at 1s]      # ウィンドウで再生
 mophila timeline a.moph [--filter k=v]         # 何がいつどう変わるかの一覧
 mophila sheet a.moph -o sheet.png --times 3s,12s   # 場面の格子画像
+mophila subs a.moph -o subs.srt                # 字幕だけをファイルに (.vtt も)
 mophila fonts                                  # 使えるフォント名 (font に書ける名前)
 mophila doc                                    # 型・属性・メソッド・エラーの一覧 (JSON)
 mophila --version                              # 版
@@ -1142,7 +1143,9 @@ track.place(Narration(text = "ここは速く", duration = 3s), at = 5s, voice =
 
 作った音声はビルドの中間物なので、リポジトリではなくキャッシュ (`~/.cache/mophila/voice/`、`$XDG_CACHE_HOME` があればその下) に置く。同じ型・同じ設定・同じ文なら作り直さない。書いたものが音声として読めなければ、そこで止まる (壊れたものをキャッシュに残さない)。
 
-`render` は音声を ffmpeg で動画の音声トラックにし、字幕を SRT にして字幕トラックに入れる (mp4 と mov は mov_text、webm は webvtt、mkv は srt)。`preview` は音声を PCM にして鳴らし、字幕を画面の下に重ねる。`sheet` も重ねる。重ねる字幕は、箱を収めた絵の中に出す (窓の縦横比が箱と違えば、余った帯には出ない)。
+`render` は音声を ffmpeg で動画の音声トラックにし、字幕を SRT にして字幕トラックに入れる (mp4 と mov は mov_text、webm は webvtt、mkv は srt)。
+
+`subs` は動画を描かずに字幕だけをファイルに出す (`-o subs.srt` / `-o subs.vtt`。省略すると標準出力)。中身は動画の字幕トラックと同じで、`--trim` も同じように効く。`preview` は音声を PCM にして鳴らし、字幕を画面の下に重ねる。`sheet` も重ねる。重ねる字幕は、箱を収めた絵の中に出す (窓の縦横比が箱と違えば、余った帯には出ない)。
 
 Motion は単独では place できない。動画の長さは、置いたものすべての終わりの最大 (音声と字幕も含む)。
 

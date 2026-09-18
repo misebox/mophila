@@ -208,6 +208,17 @@ pub fn srt(cues: &[Cue]) -> String {
     out
 }
 
+/// WebVTT 形式。YouTube などにそのまま渡せる
+pub fn vtt(cues: &[Cue]) -> String {
+    let mut out = String::from("WEBVTT\n\n");
+    for cue in cues {
+        // 桁は SRT と同じで、秒の区切りだけが .
+        let (from, to) = (timestamp(cue.at).replace(',', "."), timestamp(cue.at + cue.length).replace(',', "."));
+        out.push_str(&format!("{from} --> {to}\n{}\n\n", cue.text));
+    }
+    out
+}
+
 fn timestamp(seconds: f64) -> String {
     let ms = (seconds * 1000.0).round() as u64;
     format!("{:02}:{:02}:{:02},{:03}", ms / 3_600_000, ms / 60_000 % 60, ms / 1000 % 60, ms % 1000)

@@ -92,6 +92,17 @@ enum Command {
     Fonts,
     /// Print the builtin types, functions and methods as JSON (read by scripts/docgen.py)
     Doc,
+    /// Write the subtitles as a file, without rendering the video
+    Subs {
+        /// Script (.moph). Falls back to the entry in mophila.yaml
+        script: Option<String>,
+        /// File to write. .srt or .vtt picks the format. Without it, prints to stdout
+        #[arg(short, long)]
+        output: Option<String>,
+        /// Write only this span, as in render
+        #[arg(long, value_parser = parse_trim)]
+        trim: Option<Trim>,
+    },
     /// Build an executable with the script inside
     Bundle {
         /// Script (.moph). Falls back to the entry in mophila.yaml
@@ -288,6 +299,28 @@ fn run() -> Result<(), Box<dyn Error>> {
         Command::Sheet { script, output, every, times, cell, cols } => {
             let script = entry(script)?;
             sheet(&std::fs::read_to_string(&script)?, base_dir(&script), &project, &output, every, times, cell, cols)
+        }
+        Command::Subs { script, output, trim } => {
+            let script = entry(script)?;
+            let (_, view, duration) = load(&std::fs::read_to_string(&script)?, base_dir(&script), None, &project)?;
+            let trim = trim.unwrap_or(Trim { from: None, to: None });
+            let from = trim.from.unwrap_or(0.0).min(duration);
+            let to = trim.to.unwrap_or(duration).min(duration);
+            let media = render::media::collect(&view, duration).window(from, to);
+            // 形式は拡張子で決める (render と同じ規則)。書かなければ SRT
+            let vtt = output.as_deref().is_some_and(|o| o.to_ascii_lowercase().ends_with(".vtt"));
+            let text = match vtt {
+                true => render::media::vtt(&media.cues),
+                false => render::media::srt(&media.cues),
+            };
+            match output {
+                Some(path) => {
+                    std::fs::write(&path, text)?;
+                    eprintln!("{} subtitles -> {path}", media.cues.len());
+                }
+                None => print!("{text}"),
+            }
+            Ok(())
         }
         Command::Lsp { .. } => lsp::run(),
         Command::Fonts => {

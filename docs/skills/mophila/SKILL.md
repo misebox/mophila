@@ -59,6 +59,7 @@ mophila render a.moph -o out.mp4 --trim 00:15..00:30   # 区間だけ
 mophila preview a.moph [--loop] [--at 1s]      # ウィンドウで再生
 mophila timeline a.moph [--filter k=v]         # 何がいつどう変わるかの一覧
 mophila sheet a.moph -o sheet.png --times 3s,12s   # 場面の格子画像
+mophila subs a.moph -o subs.srt                # 字幕だけをファイルに (.vtt も)
 mophila fonts                                  # 使えるフォント名 (font に書ける名前)
 mophila doc                                    # 型・属性・メソッド・エラーの一覧 (JSON)
 mophila --version                              # 版

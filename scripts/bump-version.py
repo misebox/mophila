@@ -5,9 +5,12 @@
     scripts/bump-version.py minor      minor を 1 つ上げて patch を 0 に
     scripts/bump-version.py major      major を 1 つ上げて minor と patch を 0 に
     scripts/bump-version.py --dry-run  書き換えずに、上げた結果だけ出す
+    scripts/bump-version.py --tag      いまの版で HEAD に v0.1.5 のタグを打つ (上げない)
 
 Cargo.toml が正で、Cargo.lock と editors/vscode/package.json を同じ値に揃える。
-git の操作 (commit / tag) はしない。
+上げるのは実行ファイルの中身が変わったときだけ。文書や skill の修正では上げない。
+
+使う順: bump → コミット → --tag。commit と push はしない。
 """
 import argparse
 import re
@@ -47,11 +50,40 @@ def replace(path: Path, pattern: str, new: str, dry: bool) -> str:
     return f"{path.relative_to(ROOT)}"
 
 
+def git(*args: str) -> str:
+    return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
+
+
+def tag() -> int:
+    """いまの版で HEAD にタグを打つ。コミット済みの版と食い違っていたら止める"""
+    version = ".".join(map(str, current()))
+    name = f"v{version}"
+    if git("status", "--porcelain", "Cargo.toml"):
+        return fail(f"Cargo.toml に未コミットの変更がある。先にコミットする")
+    committed = git("show", "HEAD:Cargo.toml")
+    if f'version = "{version}"' not in committed:
+        return fail(f"HEAD の Cargo.toml が {version} でない。バージョンを上げたコミットに打つ")
+    if name in git("tag", "--list", name).splitlines():
+        return fail(f"{name} は既にある ({git('rev-parse', '--short', name)})")
+    git("tag", "-a", name, "-m", name)
+    print(f"{name} -> {git('rev-parse', '--short', 'HEAD')}  ({git('log', '-1', '--format=%s')})")
+    print("push はしない")
+    return 0
+
+
+def fail(message: str) -> int:
+    print(message, file=sys.stderr)
+    return 1
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="バージョンを 1 つ上げる")
     ap.add_argument("part", nargs="?", default="patch", choices=["major", "minor", "patch"])
     ap.add_argument("-n", "--dry-run", action="store_true", help="書き換えずに結果だけ出す")
+    ap.add_argument("--tag", action="store_true", help="上げずに、いまの版で HEAD にタグを打つ")
     args = ap.parse_args()
+    if args.tag:
+        return tag()
 
     old = current()
     new = bumped(args.part, old)

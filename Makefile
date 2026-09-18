@@ -1,5 +1,5 @@
 # 手で覚える順番を減らすための入口。中身は cargo / scripts / site に任せる
-.PHONY: all docs site check media dev install-skill bump tag
+.PHONY: all docs site check media dev install-skill bump bump-minor bump-major
 
 # 既定: 検査してからドキュメント一式を作る
 all: check docs
@@ -22,13 +22,17 @@ media:
 install-skill:
 	scripts/install-skill.sh
 
-## patch を 1 つ上げる (minor / major は scripts/bump-version.py minor のように)
+## バージョンを上げて、コミットして、タグを打つ (一番下の桁)
 bump:
-	scripts/bump-version.py
+	scripts/bump-version.sh patch
 
-## 上げたコミットに vX.Y.Z のタグを打つ (bump → コミット → tag の順)
-tag:
-	scripts/bump-version.py --tag
+## 真ん中の桁を上げる
+bump-minor:
+	scripts/bump-version.sh minor
+
+## 一番上の桁を上げる
+bump-major:
+	scripts/bump-version.sh major
 
 ## 全部の検査
 check:

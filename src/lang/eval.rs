@@ -69,7 +69,7 @@ impl Interp {
     pub fn new() -> Self {
         // union がまとめる型と、決まった Symbol しか取らない型は docs::TYPES が持っている
         let mut types: HashMap<String, Vec<String>> = HashMap::new();
-        for t in crate::docs::TYPES {
+        for t in crate::docs::types() {
             if !t.members.is_empty() {
                 types.insert(t.name.to_string(), t.members.iter().map(|m| m.to_string()).collect());
             } else if !t.values.is_empty() {
@@ -278,7 +278,7 @@ impl Interp {
             || name.starts_with(':')
             || name == "Func"
             || self.types.contains_key(name)
-            || crate::docs::TYPES.iter().any(|t| t.name == name)
+            || crate::docs::types().iter().any(|t| t.name == name)
             || matches!(self.scopes.iter().rev().find_map(|s| s.borrow().get(name).cloned()), Some(Value::Type(_) | Value::BuiltinType(_)))
     }
 
@@ -787,10 +787,16 @@ impl Interp {
                         }
                         Track::Subtitle(o.clone())
                     }
+                    Some((None, Value::Object(o))) if o.borrow().kind == "Narration" => {
+                        if !o.borrow().attrs.contains_key("duration") {
+                            return err(Kind::DurationRequired, "a Narration needs duration before it is placed");
+                        }
+                        Track::Narration(o.clone(), None)
+                    }
                     Some((None, Value::Audio(a))) => Track::Audio(a.clone(), Clip { cut: None, volume: 1.0, looping: false }),
                     Some((None, Value::Motion(_))) => return err(Kind::NotPlaceable, "Motion cannot be placed; apply it to make a Timeline"),
-                    Some((None, v)) => return err(Kind::ArgumentType, format!("{who} expects Timeline, View, Audio or Subtitle, found {}", v.type_name())),
-                    _ => return err(Kind::ArgumentType, format!("{who} expects a Timeline, View, Audio or Subtitle as the first argument")),
+                    Some((None, v)) => return err(Kind::ArgumentType, format!("{who} expects Timeline, View, Audio, Subtitle or Narration, found {}", v.type_name())),
+                    _ => return err(Kind::ArgumentType, format!("{who} expects a Timeline, View, Audio, Subtitle or Narration as the first argument")),
                 };
                 let mut placed = Placed { track, at: 0.0, fade_in: 0.0, fade_out: 0.0 };
                 for (name, v) in &args[1..] {
@@ -821,10 +827,32 @@ impl Interp {
                             _ => {}
                         }
                     }
+                    // 読み上げだけの引数。どう喋らせるかは置くときに渡す (Narration は文と長さだけ)
+                    if let Track::Narration(narration, engine) = &mut placed.track {
+                        match (arg, v) {
+                            ("voice", Value::Object(o)) if crate::render::voice::by_name(&o.borrow().kind).is_some() => {
+                                *engine = Some(o.clone());
+                                continue;
+                            }
+                            ("voice", v) => {
+                                let names = crate::render::voice::names().join(" ");
+                                return err(Kind::ArgumentType, format!("{who} voice expects one of {names}, found {}", v.type_name()));
+                            }
+                            ("volume", Value::Number(n, _)) => {
+                                narration.borrow_mut().attrs.insert("volume".to_string(), Value::num(*n));
+                                continue;
+                            }
+                            ("volume", v) => {
+                                return err(Kind::ArgumentType, format!("{who} volume expects Number, found {}", v.type_name()));
+                            }
+                            _ => {}
+                        }
+                    }
                     let slot = match arg {
                         "at" => &mut placed.at,
-                        "fadeIn" | "fadeOut" if matches!(placed.track, Track::Subtitle(_)) => {
-                            return err(Kind::ArgumentType, format!("{who}: a Subtitle has no {arg}; set its duration"));
+                        "fadeIn" | "fadeOut" if matches!(placed.track, Track::Subtitle(_) | Track::Narration(..)) => {
+                            let kind = if matches!(placed.track, Track::Subtitle(_)) { "Subtitle" } else { "Narration" };
+                            return err(Kind::ArgumentType, format!("{who}: a {kind} has no {arg}; set its duration"));
                         }
                         "fadeIn" => &mut placed.fade_in,
                         "fadeOut" => &mut placed.fade_out,
@@ -840,7 +868,7 @@ impl Interp {
 
     /// 呼んでは作れない名前。builtin の型なら書き方を示す
     fn cannot_construct(&self, kind: &str) -> Result<Value> {
-        let Some(t) = crate::docs::TYPES.iter().find(|t| t.name == kind) else {
+        let Some(t) = crate::docs::types().iter().find(|t| t.name == kind) else {
             return match self.types.contains_key(kind) {
                 true => err(Kind::ArgumentType, format!("{kind} is a union of types, so it cannot be built")),
                 false => err(Kind::UndefinedVariable, format!("type \"{kind}\" is not defined")),
@@ -1183,7 +1211,7 @@ impl Interp {
 
     /// builtin の型の名前か
     fn is_builtin_type(name: &str) -> bool {
-        crate::docs::TYPES.iter().any(|t| t.name == name)
+        crate::docs::types().iter().any(|t| t.name == name)
     }
 
     /// 大文字で始まる名前は型
@@ -1615,7 +1643,7 @@ impl Interp {
         let origin = origin + placed.at;
         match &placed.track {
             // 音声と字幕は描画には関わらない (render が動画に付ける)
-            Track::Audio(..) | Track::Subtitle(_) => {}
+            Track::Audio(..) | Track::Subtitle(_) | Track::Narration(..) => {}
             Track::Container(obj) => {
                 let children = obj.borrow().tracks.clone();
                 for child in &children {
@@ -1968,7 +1996,7 @@ fn collect_from_track(track: &Track, out: &mut Vec<ObjRef>) {
     {
         match track {
             Track::Audio(..) => {}
-            Track::Container(c) | Track::Subtitle(c) => collect_objects(c, out),
+            Track::Container(c) | Track::Subtitle(c) | Track::Narration(c, _) => collect_objects(c, out),
             Track::Timeline(tl) => {
                 for child in tl.tracks.borrow().iter() {
                     collect_from_track(&child.track, out);
@@ -2090,7 +2118,8 @@ fn same_place(before: &Value, after: &Value) -> bool {
 
 /// 属性の型に値が合うか。builtin の Union (Paint = Color | Shader) もここで見る
 /// builtin 型の名前 (補完用)
-pub const KINDS: &[&str] = &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "View", "Timeline", "Subtitle", "Shader", "Gradient", "Color"];
+pub const KINDS: &[&str] =
+    &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "View", "Timeline", "Subtitle", "Narration", "SayVoiceEngine", "EspeakVoiceEngine", "Shader", "Gradient", "Color"];
 
 /// builtin 型の属性と型
 /// 型の名前は大文字で始まり、builtin の型と union の名前は使えない
@@ -2098,7 +2127,7 @@ fn check_free_name(name: &str) -> Result<()> {
     if !name.starts_with(char::is_uppercase) {
         return err(Kind::Reserved, format!("a type name must start with an uppercase letter; \"{name}\" does not"));
     }
-    if crate::docs::TYPES.iter().any(|t| t.name == name) {
+    if crate::docs::types().iter().any(|t| t.name == name) {
         return err(Kind::Reserved, format!("\"{name}\" is a builtin type and cannot be redeclared"));
     }
     Ok(())
@@ -2152,11 +2181,11 @@ pub struct Attr {
     pub required: bool,
 }
 
-const fn opt(name: &'static str, ty: &'static str) -> Attr {
+pub const fn opt(name: &'static str, ty: &'static str) -> Attr {
     Attr { name, ty, required: false }
 }
 
-const fn req(name: &'static str, ty: &'static str) -> Attr {
+pub const fn req(name: &'static str, ty: &'static str) -> Attr {
     Attr { name, ty, required: true }
 }
 
@@ -2225,6 +2254,8 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
         opt("pivot", "Vector"),
     ];
     const SUBTITLE: &[Attr] = &[req("text", "String"), req("duration", "Duration")];
+    // 読み上げ。voice は engine に渡す声の名前、volume は混ぜるときの音量
+    const NARRATION: &[Attr] = &[req("text", "String"), req("duration", "Duration"), opt("volume", "Number")];
     const SHADER: &[Attr] = &[req("color", "Func"), opt("args", "List"), opt("samples", "Number")];
     // to は :linear、radius は :radial のときだけ要るので、必須にはしない
     const GRADIENT: &[Attr] = &[
@@ -2244,6 +2275,9 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
         "TextArea" => TEXT_AREA,
         "View" => VIEW,
         "Subtitle" => SUBTITLE,
+        "Narration" => NARRATION,
+        // engine の型。属性はその engine が持っている
+        name if crate::render::voice::by_name(name).is_some() => crate::render::voice::by_name(name).expect("just checked").attrs(),
         "Shader" => SHADER,
         "Gradient" => GRADIENT,
         _ => return None,

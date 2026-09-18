@@ -24,7 +24,7 @@ description: Write or debug mophila (.moph) motion graphics scripts. Entry point
 **名前はここに書かない。** 型・属性・メソッド・module の関数と引数は変わるので、
 この 4 つの文書は「どう考えて、どう書くか」だけを書く。名前と引数は毎回引く。
 
-- `mophila doc` — いま使っている実行ファイルの一覧 (JSON)。手元で確実
+- `mophila doc` — いま使っている実行ファイルの、型・属性・メソッド・エラー・math (JSON)
 - 下のリファレンス
 - エディタを繋いでいれば補完と hover。`(` の中では必須の引数が先に出る
 
@@ -68,7 +68,7 @@ mophila preview a.moph [--loop] [--at 1s]      # ウィンドウで再生
 mophila timeline a.moph [--filter k=v]         # 何がいつどう変わるかの一覧
 mophila sheet a.moph -o sheet.png --times 3s,12s   # 場面の格子画像
 mophila fonts                                  # 使えるフォント名 (font に書ける名前)
-mophila doc                                    # 型・属性・メソッド・module の一覧 (JSON)
+mophila doc                                    # 型・属性・メソッド・エラーの一覧 (JSON)
 mophila --version                              # 版
 ```
 
@@ -244,12 +244,12 @@ Shader は `func (x, y, t)` を渡すと GPU で全ピクセル分走る。x, y 
 色、座標、並べ方 — よく要るものは module になっている。**自分で図形を並べる前に、
 そこに部品が無いか見る。**
 
-名前と引数はこの文書には書かない (写せば必ず古くなる)。引くのは次のどちらか。
+名前と引数はこの文書には書かない (写せば必ず古くなる)。引くのはこの 3 つ。
 
-- `mophila doc` — いま使っている実行ファイルの、型・属性・メソッド・module の一覧 (JSON)
-- <https://misebox.github.io/mophila/#/lib> (module) と <https://misebox.github.io/mophila/#/builtins> (型)
-
-エディタを繋いでいれば、`.` の後や `(` の中の補完に署名と説明が出る。必須の引数は先に並ぶ。
+- `mophila doc` — いま使っている実行ファイルの、型・属性・メソッド・エラー・math の一覧 (JSON)
+- <https://misebox.github.io/mophila/#/lib> (module の関数と引数) と <https://misebox.github.io/mophila/#/builtins> (型)。
+  どちらもソースから生成している。`llms-full.txt` はその全部を 1 ファイルにしたもの
+- エディタを繋いでいれば、`.` の後や `(` の中の補完に署名と説明が出る。必須の引数が先に並ぶ
 
 `import 名前` で module ごと、`import { 名前 } from module` で名前だけ持ち込む。
 組み合わせた例は <https://misebox.github.io/mophila/#/samples> の showcase と report。
@@ -1121,6 +1121,27 @@ track.place(Subtitle(text = "ここに字幕", duration = 2s), at = 5s)
 
 `duration` を指定した Timeline は、その長さより後を使わない。音声は `duration` で切り (繰り返さなければファイルより長くならない)、`volume` は 1 がそのまま、`loop = true` は `duration` か動画の終わりまで繰り返す (動画は延びない)。同じ音声を何度でも置けて、重なれば混ざる。
 
+読み上げは `Narration`。文と長さだけを持ち、`Subtitle` と同じように置く (画面には描かない)。**どう喋らせるか**は置くときに `voice` で渡す。
+
+```
+let kyoko = SayVoiceEngine(voice = "Kyoko")
+track.place(Narration(text = "ここを読み上げる", duration = 3s), at = 2s, voice = kyoko)
+track.place(Narration(text = "ここは速く", duration = 3s), at = 5s, voice = SayVoiceEngine(voice = "Kyoko", rate = 300))
+```
+
+`voice` に入れるのは音声合成の型 (`Voice`)。合成ごとに受け取る設定が違うので、型も別になっている。
+
+| 型 | 何を使うか | 属性 |
+|---|---|---|
+| `SayVoiceEngine` | macOS の say | `voice` (`say -v ?` の名前) `rate` (1 分あたりの語数) |
+| `EspeakVoiceEngine` | espeak-ng | `voice` (`espeak-ng --voices` の名前) `speed` `pitch` `gap` |
+
+属性はその型のものだけ。無い名前を書けば `NameError.UndefinedAttribute` で止まる。`voice` を渡さなければ、その機械に入っているもので読む。置くときの `volume` で音量を変えられる。
+
+合成した音声が `duration` より長ければ、そこで切って警告を出す。行の時刻は動かない。
+
+作った音声はビルドの中間物なので、リポジトリではなくキャッシュ (`~/.cache/mophila/voice/`、`$XDG_CACHE_HOME` があればその下) に置く。同じ型・同じ設定・同じ文なら作り直さない。書いたものが音声として読めなければ、そこで止まる (壊れたものをキャッシュに残さない)。
+
 `render` は音声を ffmpeg で動画の音声トラックにし、字幕を SRT にして字幕トラックに入れる (mp4 と mov は mov_text、webm は webvtt、mkv は srt)。`preview` は音声を PCM にして鳴らし、字幕を画面の下に重ねる。`sheet` も重ねる。重ねる字幕は、箱を収めた絵の中に出す (窓の縦横比が箱と違えば、余った帯には出ない)。
 
 Motion は単独では place できない。動画の長さは、置いたものすべての終わりの最大 (音声と字幕も含む)。
@@ -1989,6 +2010,22 @@ Subtitle(text = "ここに字幕", duration = 2s)
 - `text`: String (必須) — 字幕の文字列
 - `duration`: Duration (必須) — 表示する長さ
 
+### Narration
+
+読み上げ。Timeline に置くと、その文を読んだ音声が動画の音になる。画面には描かない
+
+作り方:
+
+```
+Narration(text = "ここを読み上げる", duration = 3s)
+```
+
+属性:
+
+- `text`: String (必須) — 読み上げる文
+- `duration`: Duration (必須) — 読み上げに使う長さ。合成した音声がこれより長ければ切る
+- `volume`: Number — 混ぜるときの音量 (1 がそのまま)
+
 ### Anchor
 
 Pos の anchor。その位置が、置くものの どこ にあたるかを決める
@@ -2115,6 +2152,38 @@ alias P = Pos
 ### Nothing
 
 値を返さなかった関数の戻り値。書き方は無く、log や place のように結果を持たない呼び出しがこれを返す
+
+### SayVoiceEngine
+
+macOS の say で読み上げる。Timeline.place の voice に渡す
+
+作り方:
+
+```
+SayVoiceEngine(voice = "Kyoko")
+```
+
+属性:
+
+- `voice`: String — 声の名前 (say -v ? で出るもの)
+- `rate`: Number — 1 分あたりの語数
+
+### EspeakVoiceEngine
+
+espeak-ng で読み上げる。Timeline.place の voice に渡す
+
+作り方:
+
+```
+EspeakVoiceEngine(voice = "ja")
+```
+
+属性:
+
+- `voice`: String — 声の名前 (espeak-ng --voices で出るもの)
+- `speed`: Number — 1 分あたりの語数 (80..450)
+- `pitch`: Number — 高さ 0..99
+- `gap`: Number — 語の間 (10 ms 単位)
 
 ### エラー
 
@@ -3720,4 +3789,38 @@ type_of(1/3)      # "Number"
 type_of(double)   # "(Number) -> Number"
 
 log(type_of(add), type_of(m), type_of(tl), type_of(tr), type_of(v), type_of(t))
+```
+
+### voice.moph
+
+```
+# voice.moph — 読み上げ (すべて仮)。Narration は文と長さだけを持ち、
+# どう喋らせるかは置くときに voice で渡す
+
+let v = View(box = Vector(4, 3))
+let track = Timeline()
+
+# ---- ナレーション。画面には描かず、その文を読んだ音声が動画の音になる ----
+track.place(Narration(text = "ここを読み上げます。", duration = 3s), at = 0.5s)   # voice を書かなければ、その機械に入っているもの
+
+# ---- 音声合成は型。受け取る設定が違うので、型ごとに分かれている ----
+let kyoko = SayVoiceEngine(voice = "Kyoko")            # macOS の say
+let hayai = SayVoiceEngine(voice = "Kyoko", rate = 300)   # 1 分あたりの語数
+track.place(Narration(text = "こちらは名前を指定した声です。", duration = 3s), at = 4s, voice = kyoko)
+track.place(Narration(text = "こちらは速く読みます。", duration = 2s), at = 7.5s, voice = hayai)
+
+# 声は行ごとに決まる。音量も置くときに
+track.place(Narration(text = "別の声で、少し小さく読みます。", duration = 3s), at = 10s, voice = SayVoiceEngine(voice = "Otoya"), volume = 0.8)
+
+# ---- 字幕と組にするなら、同じ文で Subtitle も置く (別の型なので、片方だけにもできる) ----
+let say_line = "字幕と音声をそろえます。"
+track.place(Narration(text = say_line, duration = 3s), at = 13.5s, voice = kyoko)
+track.place(Subtitle(text = say_line, duration = 3s), at = 13.5s)
+
+v.addTrack(track)
+output v
+
+# 書いた duration が長さ。合成した音声がはみ出したら、そこで切って警告を出す
+# 作った音声は ~/.cache/mophila/voice に置き、同じ型・同じ設定・同じ文なら作り直さない
+# run では合成しない (log と型の確認だけ)。render と preview で鳴る
 ```

@@ -124,7 +124,7 @@ VS Code 拡張は `editors/vscode/README.md`、Neovim の設定は `editors/nvim
 | `make dev` | ドキュメントページをその場で見る |
 | `make media` | サンプルの動画も作り直す (GPU が要る。時間がかかる) |
 | `make install-skill` | 書き方の skill を `~/.claude/skills/mophila` に複製する (`scripts/install-skill.sh --uninstall` で外す) |
-| `make bump` | patch を 1 つ上げる。`scripts/bump-version.py minor` / `major` で他の桁。実行ファイルの中身が変わったコミットだけ (文書や skill の修正では上げない) |
+| `make bump` | patch を 1 つ上げる。`scripts/bump-version.py minor` / `major` で他の桁。**区切りを決めたときだけ**走らせる (コミットごとには上げない) |
 | `make tag` | 上げたコミットに `vX.Y.Z` のタグを打つ。`bump` → コミット → `tag` の順 |
 | `make check` | `cargo test` と、下の 2 つ |
 

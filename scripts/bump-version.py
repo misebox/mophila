@@ -8,7 +8,7 @@
     scripts/bump-version.py --tag      いまの版で HEAD に v0.1.5 のタグを打つ (上げない)
 
 Cargo.toml が正で、Cargo.lock と editors/vscode/package.json を同じ値に揃える。
-上げるのは実行ファイルの中身が変わったときだけ。文書や skill の修正では上げない。
+上げるのは「ここまでで 1 区切り」と決めたときだけ。コミットごとには上げない。
 
 使う順: bump → コミット → --tag。commit と push はしない。
 """

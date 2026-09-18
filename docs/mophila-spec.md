@@ -405,6 +405,27 @@ track.place(Subtitle(text = "ここに字幕", duration = 2s), at = 5s)
 
 `duration` を指定した Timeline は、その長さより後を使わない。音声は `duration` で切り (繰り返さなければファイルより長くならない)、`volume` は 1 がそのまま、`loop = true` は `duration` か動画の終わりまで繰り返す (動画は延びない)。同じ音声を何度でも置けて、重なれば混ざる。
 
+読み上げは `Narration`。文と長さだけを持ち、`Subtitle` と同じように置く (画面には描かない)。**どう喋らせるか**は置くときに `voice` で渡す。
+
+```
+let kyoko = SayVoiceEngine(voice = "Kyoko")
+track.place(Narration(text = "ここを読み上げる", duration = 3s), at = 2s, voice = kyoko)
+track.place(Narration(text = "ここは速く", duration = 3s), at = 5s, voice = SayVoiceEngine(voice = "Kyoko", rate = 300))
+```
+
+`voice` に入れるのは音声合成の型 (`Voice`)。合成ごとに受け取る設定が違うので、型も別になっている。
+
+| 型 | 何を使うか | 属性 |
+|---|---|---|
+| `SayVoiceEngine` | macOS の say | `voice` (`say -v ?` の名前) `rate` (1 分あたりの語数) |
+| `EspeakVoiceEngine` | espeak-ng | `voice` (`espeak-ng --voices` の名前) `speed` `pitch` `gap` |
+
+属性はその型のものだけ。無い名前を書けば `NameError.UndefinedAttribute` で止まる。`voice` を渡さなければ、その機械に入っているもので読む。置くときの `volume` で音量を変えられる。
+
+合成した音声が `duration` より長ければ、そこで切って警告を出す。行の時刻は動かない。
+
+作った音声はビルドの中間物なので、リポジトリではなくキャッシュ (`~/.cache/mophila/voice/`、`$XDG_CACHE_HOME` があればその下) に置く。同じ型・同じ設定・同じ文なら作り直さない。書いたものが音声として読めなければ、そこで止まる (壊れたものをキャッシュに残さない)。
+
 `render` は音声を ffmpeg で動画の音声トラックにし、字幕を SRT にして字幕トラックに入れる (mp4 と mov は mov_text、webm は webvtt、mkv は srt)。`preview` は音声を PCM にして鳴らし、字幕を画面の下に重ねる。`sheet` も重ねる。重ねる字幕は、箱を収めた絵の中に出す (窓の縦横比が箱と違えば、余った帯には出ない)。
 
 Motion は単独では place できない。動画の長さは、置いたものすべての終わりの最大 (音声と字幕も含む)。

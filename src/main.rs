@@ -265,7 +265,10 @@ fn run() -> Result<(), Box<dyn Error>> {
         Command::Preview { script, size, r#loop, at } => {
             let script = entry(script)?;
             let (interp, view, duration) = load(&std::fs::read_to_string(&script)?, base_dir(&script), None, &project)?;
-            let media = render::media::collect(&view, duration);
+            let mut media = render::media::collect(&view, duration);
+            if !media.narrations.is_empty() {
+                render::voice::mix_in(&mut media, &render::voice::cache_dir())?;
+            }
             render::preview::run(file_name(&script), interp, view, duration, size, r#loop, at, &media)
         }
         Command::Timeline { script, filter } => {
@@ -331,10 +334,14 @@ fn load(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Source
     Ok((interp, view, duration))
 }
 
+/// 置かれた読み上げを音声にして混ぜる。voice: を書いていなければ、書いてくれと言う
 fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sources>, project: &Option<Rc<project::Project>>, name: String, args: OutputArgs) -> Result<(), Box<dyn Error>> {
     let (width, height) = args.size;
     let (mut interp, view, duration) = load(src, base_dir, sources, project)?;
-    let media = render::media::collect(&view, duration);
+    let mut media = render::media::collect(&view, duration);
+    if !media.narrations.is_empty() {
+        render::voice::mix_in(&mut media, &render::voice::cache_dir())?;
+    }
     let Some(output) = args.output else {
         return render::preview::run(name, interp, view, duration, args.size, args.r#loop, args.at, &media);
     };

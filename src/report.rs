@@ -99,7 +99,7 @@ fn walk(interp: &mut Interp, placed: &Placed, origin: f64, out: &mut Vec<Event>)
             }
             timeline_events(interp, tl, start, out);
         }
-        Track::Audio(..) | Track::Subtitle(_) => {}
+        Track::Audio(..) | Track::Subtitle(_) | Track::Narration(..) => {}
     }
 }
 
@@ -113,10 +113,35 @@ pub fn media_report(media: &Media, filter: &Filter) -> String {
             if !in_range(cue.at, to) || filter.text.as_deref().is_some_and(|t| !cue.text.contains(t)) {
                 continue;
             }
+            // 読み上げが付いている行は、耳で追うので読む時間の目安は当てはまらない
+            let spoken = media.narrations.iter().any(|n| n.text == cue.text);
             let chars = cue.text.chars().filter(|c| !c.is_whitespace()).count();
             let needed = (chars as f64 * 0.25).max(1.5);
-            let note = if cue.length < needed { format!("  SHORT (needs {needed:.1}s)") } else { String::new() };
+            let note = match !spoken && cue.length < needed {
+                true => format!("  SHORT (needs {needed:.1}s)"),
+                false => String::new(),
+            };
             rows.push((cue.at, format!("{:>8.2}s – {:>7.2}s  {:>6.1}s  Subtitle \"{}\"{note}", cue.at, to, cue.length, truncate(&cue.text.replace('\n', " / "), 40))));
+        }
+    }
+    if filter.kind.as_deref().is_none_or(|k| k == "Narration") {
+        for line in &media.narrations {
+            let to = line.at + line.length;
+            if !in_range(line.at, to) || filter.text.as_deref().is_some_and(|t| !line.text.contains(t)) {
+                continue;
+            }
+            // どの engine のどの声で読むかを出す
+            let how: Vec<String> = line
+                .engine
+                .iter()
+                .cloned()
+                .chain(line.settings.0.iter().map(|(n, v)| format!("{n}={v}")))
+                .collect();
+            let voice = match how.is_empty() {
+                true => String::new(),
+                false => format!(" ({})", how.join(" ")),
+            };
+            rows.push((line.at, format!("{:>8.2}s – {:>7.2}s  {:>6.1}s  Narration{voice} \"{}\"", line.at, to, line.length, truncate(&line.text.replace('\n', " / "), 40))));
         }
     }
     if filter.kind.as_deref().is_none_or(|k| k == "Audio") && filter.text.is_none() {

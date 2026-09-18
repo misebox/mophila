@@ -26,6 +26,7 @@ pub const BUILTINS: &[Entry] = &[
 /// - values は決まった値しか取らない型の、値と意味
 /// - members は union がまとめている型 (union でなければ空)
 /// 属性は eval::schema から、メソッドは METHODS から付ける
+#[derive(Clone, Copy)]
 pub struct Type {
     pub name: &'static str,
     pub category: &'static str,
@@ -34,6 +35,26 @@ pub struct Type {
     pub values: &'static [(&'static str, &'static str)],
     pub members: &'static [&'static str],
     pub doc: &'static str,
+}
+
+/// builtin の型。音声合成の型はそれぞれの engine が持っているので、ここに足して 1 つの並びにする
+pub fn types() -> &'static [Type] {
+    static ALL: std::sync::OnceLock<Vec<Type>> = std::sync::OnceLock::new();
+    ALL.get_or_init(|| {
+        TYPES
+            .iter()
+            .copied()
+            .chain(crate::render::voice::ENGINES.iter().map(|e| Type {
+                name: e.name(),
+                category: "Media",
+                union: "Voice",
+                make: e.make(),
+                values: &[],
+                members: &[],
+                doc: e.doc(),
+            }))
+            .collect()
+    })
 }
 
 /// 分類の並び順
@@ -294,6 +315,15 @@ pub const TYPES: &[Type] = &[
         doc: "字幕。画面には描かず、Timeline に置くと動画の字幕トラックになる",
     },
     Type {
+        name: "Narration",
+        category: "Media",
+        union: "",
+        make: "Narration(text = \"ここを読み上げる\", duration = 3s)",
+        values: &[],
+        members: &[],
+        doc: "読み上げ。Timeline に置くと、その文を読んだ音声が動画の音になる。画面には描かない",
+    },
+    Type {
         name: "Anchor",
         category: "Enum",
         union: "",
@@ -484,6 +514,15 @@ pub const ATTRS: &[(&str, &str, &str)] = &[
     ("Timeline", "duration", "全体の長さ。指定すると、はみ出した分を切る"),
     ("Subtitle", "text", "字幕の文字列"),
     ("Subtitle", "duration", "表示する長さ"),
+    ("Narration", "text", "読み上げる文"),
+    ("Narration", "duration", "読み上げに使う長さ。合成した音声がこれより長ければ切る"),
+    ("SayVoiceEngine", "voice", "声の名前 (say -v ? で出るもの)"),
+    ("SayVoiceEngine", "rate", "1 分あたりの語数"),
+    ("EspeakVoiceEngine", "voice", "声の名前 (espeak-ng --voices で出るもの)"),
+    ("EspeakVoiceEngine", "speed", "1 分あたりの語数 (80..450)"),
+    ("EspeakVoiceEngine", "pitch", "高さ 0..99"),
+    ("EspeakVoiceEngine", "gap", "語の間 (10 ms 単位)"),
+    ("Narration", "volume", "混ぜるときの音量 (1 がそのまま)"),
     ("Gradient", "kind", ":linear (既定) :radial :sweep"),
     ("Gradient", "from", ":linear の始点、:radial と :sweep の中心 (箱の座標)"),
     ("Gradient", "to", ":linear の終点"),
@@ -501,7 +540,7 @@ pub fn attr_doc(kind: &str, attr: &str) -> &'static str {
 
 pub fn json() -> Json {
     let entries = |list: &[Entry]| -> Vec<Json> { list.iter().map(|e| json!({ "name": e.name, "signature": e.signature, "returns": e.returns, "doc": e.doc })).collect() };
-    let types: Vec<Json> = TYPES
+    let types: Vec<Json> = types()
         .iter()
         .map(|t| {
             // 属性は 2 か所から来る: Object の型は schema、値の型は attr の表
@@ -531,7 +570,7 @@ mod tests {
     #[test]
     fn every_enum_value_is_in_the_spec() {
         let spec = include_str!("../docs/mophila-spec.md");
-        for t in super::TYPES.iter().filter(|t| t.category == "Enum") {
+        for t in super::types().iter().filter(|t| t.category == "Enum") {
             for (value, _) in t.values {
                 assert!(spec.contains(&format!("`{value}`")), "{}.{value} が docs/mophila-spec.md に書かれていない", t.name);
             }

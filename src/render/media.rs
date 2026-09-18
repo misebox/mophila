@@ -26,15 +26,30 @@ pub struct Cue {
     pub text: String,
 }
 
+/// 読み上げ 1 つ。音声にするのは voice の仕事で、ここでは置かれた事実だけを持つ
+#[derive(Clone)]
+pub struct Narration {
+    pub at: f64,
+    /// 書いた duration。合成した音声がこれより長ければ切る
+    pub length: f64,
+    pub text: String,
+    /// voice に入れた engine の型の名前。書かなければ既定のもの
+    pub engine: Option<String>,
+    /// その engine の属性をそのまま持ったもの
+    pub settings: crate::render::voice::Settings,
+    pub volume: f64,
+}
+
 #[derive(Default)]
 pub struct Media {
     pub clips: Vec<AudioClip>,
     pub cues: Vec<Cue>,
+    pub narrations: Vec<Narration>,
 }
 
 impl Media {
     pub fn is_empty(&self) -> bool {
-        self.clips.is_empty() && self.cues.is_empty()
+        self.clips.is_empty() && self.cues.is_empty() && self.narrations.is_empty()
     }
 
     /// from..to の区間だけにする。時刻は from が 0 になるようにずらし、区間の外は切る
@@ -73,7 +88,22 @@ impl Media {
                 Some(q)
             })
             .collect();
-        Media { clips, cues }
+        // 読み上げは、切った区間に入るものだけを残す (音声は後で作るので、頭を削らない)
+        let narrations = self
+            .narrations
+            .into_iter()
+            .filter_map(|mut n| {
+                let start = n.at - from;
+                let end = (start + n.length).min(span);
+                if end <= 0.0 || start < 0.0 {
+                    return None;
+                }
+                n.at = start;
+                n.length = end - start;
+                Some(n)
+            })
+            .collect();
+        Media { clips, cues, narrations }
     }
 }
 
@@ -86,6 +116,7 @@ pub fn collect(view: &ObjRef, total: f64) -> Media {
     }
     media.clips.sort_by(|a, b| a.at.total_cmp(&b.at));
     media.cues.sort_by(|a, b| a.at.total_cmp(&b.at));
+    media.narrations.sort_by(|a, b| a.at.total_cmp(&b.at));
     media
 }
 
@@ -138,6 +169,31 @@ fn walk(placed: &Placed, origin: f64, limit: f64, out: &mut Media) {
             let length = (start + placed.track.duration()).min(limit) - start;
             if length > 0.0 {
                 out.cues.push(Cue { at: start, length, text });
+            }
+        }
+        Track::Narration(obj, engine) => {
+            let o = obj.borrow();
+            let text = match o.attrs.get("text") {
+                Some(Value::Str(s)) => s.clone(),
+                _ => String::new(),
+            };
+            // どう喋らせるかは置くときに渡された engine の値が持っている
+            let (engine, settings) = match engine {
+                Some(e) => {
+                    let e = e.borrow();
+                    let settings =
+                        crate::render::voice::Settings(e.attrs.iter().map(|(name, value)| (name.clone(), value.clone())).collect());
+                    (Some(e.kind.clone()), settings)
+                }
+                None => (None, crate::render::voice::Settings::default()),
+            };
+            let volume = match o.attrs.get("volume") {
+                Some(Value::Number(v, _)) => *v,
+                _ => 1.0,
+            };
+            let length = (start + placed.track.duration()).min(limit) - start;
+            if length > 0.0 {
+                out.narrations.push(Narration { at: start, length, text, engine, settings, volume });
             }
         }
     }

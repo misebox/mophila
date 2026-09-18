@@ -192,6 +192,8 @@ pub enum Track {
     Audio(Rc<Audio>, Clip),
     /// 字幕 (Subtitle オブジェクト)。動画の字幕トラックに書く
     Subtitle(ObjRef),
+    /// 読み上げ (Narration オブジェクト) と、どう喋らせるか (engine の値。無ければ既定)
+    Narration(ObjRef, Option<ObjRef>),
 }
 
 /// 置いた音声の切り方と音量
@@ -234,7 +236,7 @@ impl Track {
                 }
             }
             Track::Audio(audio, clip) => audio.clip_length(clip),
-            Track::Subtitle(obj) => match obj.borrow().attrs.get("duration") {
+            Track::Subtitle(obj) | Track::Narration(obj, _) => match obj.borrow().attrs.get("duration") {
                 Some(Value::Duration(d)) => *d,
                 _ => 0.0,
             },

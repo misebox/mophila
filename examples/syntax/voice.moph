@@ -1,0 +1,29 @@
+# voice.moph — 読み上げ (すべて仮)。Narration は文と長さだけを持ち、
+# どう喋らせるかは置くときに voice で渡す
+
+let v = View(box = Vector(4, 3))
+let track = Timeline()
+
+# ---- ナレーション。画面には描かず、その文を読んだ音声が動画の音になる ----
+track.place(Narration(text = "ここを読み上げます。", duration = 3s), at = 0.5s)   # voice を書かなければ、その機械に入っているもの
+
+# ---- 音声合成は型。受け取る設定が違うので、型ごとに分かれている ----
+let kyoko = SayVoiceEngine(voice = "Kyoko")            # macOS の say
+let hayai = SayVoiceEngine(voice = "Kyoko", rate = 300)   # 1 分あたりの語数
+track.place(Narration(text = "こちらは名前を指定した声です。", duration = 3s), at = 4s, voice = kyoko)
+track.place(Narration(text = "こちらは速く読みます。", duration = 2s), at = 7.5s, voice = hayai)
+
+# 声は行ごとに決まる。音量も置くときに
+track.place(Narration(text = "別の声で、少し小さく読みます。", duration = 3s), at = 10s, voice = SayVoiceEngine(voice = "Otoya"), volume = 0.8)
+
+# ---- 字幕と組にするなら、同じ文で Subtitle も置く (別の型なので、片方だけにもできる) ----
+let say_line = "字幕と音声をそろえます。"
+track.place(Narration(text = say_line, duration = 3s), at = 13.5s, voice = kyoko)
+track.place(Subtitle(text = say_line, duration = 3s), at = 13.5s)
+
+v.addTrack(track)
+output v
+
+# 書いた duration が長さ。合成した音声がはみ出したら、そこで切って警告を出す
+# 作った音声は ~/.cache/mophila/voice に置き、同じ型・同じ設定・同じ文なら作り直さない
+# run では合成しない (log と型の確認だけ)。render と preview で鳴る

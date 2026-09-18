@@ -9,3 +9,4 @@ pub mod progress;
 pub mod scene;
 pub mod shader;
 pub mod text;
+pub mod voice;

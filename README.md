@@ -105,33 +105,13 @@ VS Code 拡張は `editors/vscode/README.md`、Neovim の設定は `editors/nvim
 
 ## 文書
 
-- ドキュメントページ (`site/`、bun + SolidJS + soluid)。サンプルの動画、builtin と module の説明、仕様の写し。module の説明はソースの `##` コメントから
+- <https://misebox.github.io/mophila/> — 仕様、型と module のリファレンス、動く例
 - `docs/mophila-spec.md` — 言語仕様
 - `docs/mophila.gbnf` — 文法 (GBNF)
-- `docs/skills/mophila/` — 書き方 (`SKILL.md` 入口 / `language.md` 言語 / `presentation.md` 解説動画 / `design.md` 見た目)。`.claude/skills/mophila` はここへの symlink。他のリポジトリでも使うなら `make install-skill` で `~/.claude/skills/mophila` に複製する (中身を変えたら入れ直す)
-- `site/public/llms.txt` / `llms-full.txt` — LLM 向けの案内と、書くのに要るものを 1 つにまとめたファイル (site の build が作る。直接編集しない)
+- `docs/skills/mophila/` — 書き方 (`SKILL.md` が入口)。`scripts/install-skill.sh` で Claude Code の skills に入る
 - `examples/syntax/` — 構文ごとの短い例
 - `examples/gallery/` — 動画の例。`examples/gallery/mophila_intro/main.moph` がこの言語の紹介動画
-- `src/stdlib/` — 標準ライブラリ。`import math` (Rust) と、本体に埋め込んだ .moph の `color` `shape` `layout` `easing` `animation` `chart` `diagram` `text` `ui` `backdrop` `focus` `media` `clock` `meter` `fractal`
-
-## 作る・確認する
-
-リポジトリの一番上で `make`。個別に回すなら次のとおり。
-
-| コマンド | すること |
-|---|---|
-| `make docs` | ドキュメント一式。`site/src/data.json`、`llms.txt`、`llms-full.txt`、`site/dist` がこれだけで揃う |
-| `make dev` | ドキュメントページをその場で見る |
-| `make media` | サンプルの動画も作り直す (GPU が要る。時間がかかる) |
-| `make install-skill` | 書き方の skill を `~/.claude/skills/mophila` に複製する (`scripts/install-skill.sh --uninstall` で外す) |
-| `make bump` | patch を 1 つ上げる。`scripts/bump-version.py minor` / `major` で他の桁。**区切りを決めたときだけ**走らせる (コミットごとには上げない) |
-| `make tag` | 上げたコミットに `vX.Y.Z` のタグを打つ。`bump` → コミット → `tag` の順 |
-| `make check` | `cargo test` と、下の 2 つ |
-
-```
-python3 scripts/check_examples.py   # examples が動き、error.moph が書いてある種別で止まる
-python3 scripts/check_attrs.py      # 宣言した図形の属性が、本当に絵に効く
-```
+- `mophila doc` — その実行ファイルが持っている型・属性・メソッドの一覧 (JSON)
 
 ## ライセンス
 

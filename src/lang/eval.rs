@@ -414,7 +414,7 @@ impl Interp {
             // import config — mophila.yaml の config: をモジュールとして読む
             ImportSource::Std(name) if name == "config" => {
                 let Some(p) = &self.project else {
-                    return err(Kind::UndefinedVariable, "import config には mophila.yaml が要る");
+                    return err(Kind::UndefinedVariable, "\"import config\" needs a mophila.yaml");
                 };
                 let items = p.config.iter().map(|(k, v)| (k.clone(), v.to_value())).collect();
                 Ok(Value::Module(Rc::new(Module { name: "config".into(), items })))
@@ -437,7 +437,7 @@ impl Interp {
             true => match &self.project {
                 Some(p) => p.resolve(path).map_err(|e| MophError::new(Kind::UndefinedVariable, e.to_string()))?,
                 None => {
-                    return err(Kind::UndefinedVariable, format!("\"{path}\" を読むには mophila.yaml が要る (aliases を書く)"));
+                    return err(Kind::UndefinedVariable, format!("reading \"{path}\" needs a mophila.yaml with that alias"));
                 }
             },
         };

@@ -16,11 +16,11 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(version)]
 struct Cli {
-    /// 設定ファイル (既定: いま居るディレクトリの mophila.yaml)
+    /// Config file (default: mophila.yaml in the current directory)
     #[arg(short = 'f', long, global = true)]
     config: Option<String>,
-    /// config の値を上書きする。名前=値 (複数可)。環境変数 MOPHILA_<名前> でも上書きできる
-    #[arg(long = "set", global = true, value_name = "名前=値")]
+    /// Override a config value as name=value (repeatable). MOPHILA_<NAME> does the same
+    #[arg(long = "set", global = true, value_name = "name=value")]
     set: Vec<String>,
     #[command(subcommand)]
     command: Command,
@@ -28,111 +28,114 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// スクリプトを描画して、動画または画像のファイルを書く
+    /// Render a script into a video or image file
     Render {
-        /// スクリプト (.moph)。省略すると mophila.yaml の entry
+        /// Script (.moph). Falls back to the entry in mophila.yaml
         script: Option<String>,
         #[command(flatten)]
         out: OutputArgs,
     },
-    /// 描画せずにスクリプトを実行する (log の確認用)
+    /// Run a script without drawing (to check log output)
     Run {
-        /// スクリプト (.moph)。省略すると mophila.yaml の entry
+        /// Script (.moph). Falls back to the entry in mophila.yaml
         script: Option<String>,
     },
-    /// ウィンドウを開いて実時間で再生する
+    /// Open a window and play in real time
     Preview {
-        /// スクリプト (.moph)。省略すると mophila.yaml の entry
+        /// Script (.moph). Falls back to the entry in mophila.yaml
         script: Option<String>,
-        /// ウィンドウサイズ
+        /// Window size
         #[arg(long, default_value = "800x600", value_parser = parse_size)]
         size: (u32, u32),
-        /// 最後まで再生したら先頭に戻る
+        /// Start over when it reaches the end
         #[arg(long)]
         r#loop: bool,
-        /// この時刻の画面を一時停止で出す (例: 1.5s, 01:23)
+        /// Open paused at this time (e.g. 1.5s, 01:23)
         #[arg(long, value_parser = parse_duration)]
         at: Option<f64>,
     },
-    /// 何がいつどう変わるかを、時刻順の一覧で表示する。--filter kind=TextArea attr=opacity text=... from=10s to=20s
+    /// List what changes when, in time order. --filter kind=TextArea attr=opacity text=... from=10s to=20s
     Timeline {
-        /// スクリプト (.moph)。省略すると mophila.yaml の entry
+        /// Script (.moph). Falls back to the entry in mophila.yaml
         script: Option<String>,
-        /// 絞り込み (key=value を複数可)
+        /// Narrow the list (key=value, repeatable)
         #[arg(long)]
         filter: Vec<String>,
     },
-    /// 場面ごとのフレームを 1 枚の格子画像にする
+    /// Put one frame per moment into a single grid image
     Sheet {
-        /// スクリプト (.moph)。省略すると mophila.yaml の entry
+        /// Script (.moph). Falls back to the entry in mophila.yaml
         script: Option<String>,
-        /// 出力する画像 (.png)
+        /// Image to write (.png)
         #[arg(short, long, default_value = "sheet.png")]
         output: String,
-        /// この間隔でフレームを取る
+        /// Take a frame every this long
         #[arg(long, default_value = "10s", value_parser = parse_duration)]
         every: f64,
-        /// 取る時刻を直接指定 (カンマ区切り。--every より優先)
+        /// Times to take, comma separated (wins over --every)
         #[arg(long, value_delimiter = ',', value_parser = parse_duration)]
         times: Vec<f64>,
-        /// 1 コマの大きさ
+        /// Size of one cell
         #[arg(long, default_value = "320x180", value_parser = parse_size)]
         cell: (u32, u32),
-        /// 1 行のコマ数
+        /// Cells per row
         #[arg(long, default_value_t = 6)]
         cols: u32,
     },
-    /// Language Server (stdio)。エディタから起動する
+    /// Language server over stdio. Editors start this
     Lsp {
-        /// クライアント (vscode-languageclient など) が付ける印。stdio しかないので無視する
+        /// Flag some clients pass (vscode-languageclient). Ignored; stdio is the only transport
         #[arg(long)]
         stdio: bool,
     },
-    /// この機械で使えるフォント名を並べる (TextArea の font に書ける名前)
+    /// List the font names this machine can use (what TextArea.font accepts)
     Fonts,
-    /// builtin の型・関数・メソッドの説明を JSON で表示する (scripts/docgen.py が読む)
+    /// Print the builtin types, functions and methods as JSON (read by scripts/docgen.py)
     Doc,
-    /// スクリプトを埋め込んだ実行ファイルを作る
+    /// Build an executable with the script inside
     Bundle {
-        /// スクリプト (.moph)。省略すると mophila.yaml の entry
+        /// Script (.moph). Falls back to the entry in mophila.yaml
         script: Option<String>,
-        /// 出力する実行ファイル
+        /// Executable to write
         #[arg(short, long)]
         output: String,
     },
 }
 
-/// 描画と出力のオプション。埋め込み済みバイナリではこれだけを受け取り、-o が無ければウィンドウで再生する
+/// Render and output options. A bundled executable takes only these,
+/// and plays in a window when -o is not given.
+//
+// (この doc コメントは、埋め込み済みバイナリの --help にそのまま出る)
 #[derive(Parser)]
 struct OutputArgs {
-    /// 出力ファイル。拡張子で形式が決まる。
-    /// 動画 mp4 mov mkv webm gif apng / 画像 png jpg webp tiff (--at が要る)。
-    /// render では省略時 output.mp4 (--at 付きなら output.png)
+    /// File to write. The extension picks the format:
+    /// video mp4 mov mkv webm gif apng / image png jpg webp tiff (needs --at).
+    /// render defaults to output.mp4 (output.png with --at)
     #[arg(short, long)]
     output: Option<String>,
-    /// フレームレート
+    /// Frames per second
     #[arg(long, default_value_t = 10)]
     fps: u32,
-    /// 画面サイズ。幅x高さ、または名前: 360p 480p 720p|hd 1080p|fhd 1440p|wqhd 2160p|4k|uhd (16:9), vga svga xga (4:3)
+    /// Frame size as WIDTHxHEIGHT, or a name: 360p 480p 720p|hd 1080p|fhd 1440p|wqhd 2160p|4k|uhd (16:9), vga svga xga (4:3)
     #[arg(long, default_value = "800x600", value_parser = parse_size)]
     size: (u32, u32),
-    /// ffmpeg の映像コーデック (-c:v)。省略時は拡張子から決める
+    /// ffmpeg video codec (-c:v). Taken from the extension if omitted
     #[arg(long)]
     codec: Option<String>,
-    /// ffmpeg のピクセルフォーマット (-pix_fmt)。省略時は拡張子から決める
+    /// ffmpeg pixel format (-pix_fmt). Taken from the extension if omitted
     #[arg(long)]
     pix_fmt: Option<String>,
-    /// 画像出力ならその時刻のフレーム、ウィンドウ再生ならその時刻で一時停止して開く (例: 1.5s, 500ms, 01:23)
+    /// For an image, the frame at this time; for a window, open paused there (e.g. 1.5s, 500ms, 01:23)
     #[arg(long, value_parser = parse_duration)]
     at: Option<f64>,
-    /// ウィンドウ再生のとき、最後まで再生したら先頭に戻る
+    /// In a window, start over when it reaches the end
     #[arg(long)]
     r#loop: bool,
-    /// 動画のこの区間だけを書き出す。00:15..00:30 (15 秒から 30 秒)、00:15 (15 秒以降)、..01:30 (最初から 1 分 30 秒)
+    /// Write only this span: 00:15..00:30 (15s to 30s), 00:15 (from 15s on), ..01:30 (up to 1m30s)
     #[arg(long, value_parser = parse_trim)]
     trim: Option<Trim>,
-    /// フレームを組むスレッドの数 (既定 1)。0 なら CPU の数から決める。
-    /// 組み立てが GPU より重い絵でだけ速くなる。Shader を使う絵は常に 1 本
+    /// Threads that build frames (default 1). 0 picks a number from the CPU count.
+    /// Only helps when building costs more than drawing. A Shader always uses one
     #[arg(long, default_value_t = 1)]
     jobs: usize,
 }
@@ -200,11 +203,11 @@ fn parse_size(s: &str) -> Result<(u32, u32), String> {
         return Ok(*size);
     }
     let Some((w, h)) = s.split_once('x') else {
-        return Err("幅x高さ の形式で指定する (例: 1920x1080)".into());
+        return Err("size must be WIDTHxHEIGHT (e.g. 1920x1080)".into());
     };
     Ok((
-        w.parse().map_err(|_| format!("幅が整数でない: {w}"))?,
-        h.parse().map_err(|_| format!("高さが整数でない: {h}"))?,
+        w.parse().map_err(|_| format!("width is not a whole number: {w}"))?,
+        h.parse().map_err(|_| format!("height is not a whole number: {h}"))?,
     ))
 }
 
@@ -236,7 +239,7 @@ fn run() -> Result<(), Box<dyn Error>> {
         match (script, project.as_ref().and_then(|p| p.entry.clone())) {
             (Some(s), _) => Ok(s),
             (None, Some(e)) => Ok(e.to_string_lossy().into_owned()),
-            (None, None) => Err(format!("スクリプトを指定する (または {} に entry を書く)", project::FILE_NAME).into()),
+            (None, None) => Err(format!("name a script, or put an entry in {}", project::FILE_NAME).into()),
         }
     };
     match cli.command {
@@ -408,9 +411,9 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
             Some(frames) => timing.measure("frame", || -> Result<vello::Scene, Box<dyn Error>> {
                 match frames.recv() {
                     Some(Ok((n, scene))) if n == i => Ok(scene),
-                    Some(Ok((n, _))) => Err(format!("フレームの並びが崩れた ({n} が {i} の位置に来た)").into()),
+                    Some(Ok((n, _))) => Err(format!("frames came back out of order (got {n} where {i} was expected)").into()),
                     Some(Err(e)) => Err(e.into()),
-                    None => Err("フレームを組むスレッドが落ちた".into()),
+                    None => Err("a frame worker died".into()),
                 }
             })?,
             None => {
@@ -426,7 +429,7 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
         };
         // 読み戻しは、次のフレームを組んだ後に行う (GPU が描いている間に CPU が組み立てる)
         if pending.len() >= depth {
-            let prev = pending.pop_front().expect("溜まっている");
+            let prev = pending.pop_front().expect("a frame is waiting");
             timing.measure("readback", || renderer.read_pixels(prev, &mut pixels))?;
             timing.measure("encode", || ffmpeg.write_frame(&pixels))?;
         }

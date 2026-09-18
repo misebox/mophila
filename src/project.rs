@@ -48,7 +48,7 @@ impl Setting {
 
     /// 文字列で来た上書き (環境変数・--set) を、元の型に合わせて読む
     fn parse_like(&self, text: &str, from: &str, name: &str) -> Result<Setting, Box<dyn Error>> {
-        let wrong = || format!("{from} で {name} に \"{text}\" が来たが、{} が要る", self.type_name());
+        let wrong = || format!("{from}: {name} is \"{text}\", but it must be {}", self.type_name());
         Ok(match self {
             Setting::Number(_) => Setting::Number(text.parse().map_err(|_| wrong())?),
             Setting::Bool(_) => Setting::Bool(match text {
@@ -85,15 +85,15 @@ impl Project {
                 false => return Ok(None),
             },
         };
-        let text = std::fs::read_to_string(&path).map_err(|e| format!("{} を読めない: {e}", path.display()))?;
-        let doc: serde_yml::Value = serde_yml::from_str(&text).map_err(|e| format!("{} を読めない: {e}", path.display()))?;
+        let text = std::fs::read_to_string(&path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+        let doc: serde_yml::Value = serde_yml::from_str(&text).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
         let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).map_or_else(|| PathBuf::from("."), Path::to_path_buf);
 
         let at = |key: &str| doc.get(key).cloned();
         let as_path = |v: &serde_yml::Value, key: &str| -> Result<PathBuf, Box<dyn Error>> {
             match v {
                 serde_yml::Value::String(s) => Ok(tidy(dir.join(s))),
-                _ => Err(format!("{}: {key} はパスの文字列で書く", path.display()).into()),
+                _ => Err(format!("{}: {key} must be a path written as a string", path.display()).into()),
             }
         };
 
@@ -108,12 +108,12 @@ impl Project {
         let mut aliases = HashMap::new();
         if let Some(map) = at("aliases") {
             let Some(map) = map.as_mapping() else {
-                return Err(format!("{}: aliases は 名前: パス の並びで書く", path.display()).into());
+                return Err(format!("{}: aliases must be a list of name: path", path.display()).into());
             };
             for (k, v) in map {
                 let name = k.as_str();
                 if name == "/" {
-                    return Err(format!("{}: \"/\" は root のことなので aliases に書けない", path.display()).into());
+                    return Err(format!("{}: \"/\" already means root, so it cannot be an alias", path.display()).into());
                 }
                 aliases.insert(name.to_string(), as_path(v, &format!("aliases.{name}"))?);
             }
@@ -121,7 +121,7 @@ impl Project {
         let mut config = Vec::new();
         if let Some(map) = at("config") {
             let Some(map) = map.as_mapping() else {
-                return Err(format!("{}: config は 名前: 値 の並びで書く", path.display()).into());
+                return Err(format!("{}: config must be a list of name: value", path.display()).into());
             };
             for (k, v) in map {
                 let name = k.as_str();
@@ -129,7 +129,7 @@ impl Project {
                     serde_yml::Value::Bool(b) => Setting::Bool(*b),
                     serde_yml::Value::Number(n) => Setting::Number(n.as_f64()),
                     serde_yml::Value::String(s) => Setting::Str(s.clone()),
-                    _ => return Err(format!("{}: config.{name} は数・文字列・真偽のどれかで書く", path.display()).into()),
+                    _ => return Err(format!("{}: config.{name} must be a number, a string or a bool", path.display()).into()),
                 };
                 config.push((name.to_string(), value));
             }
@@ -155,11 +155,11 @@ impl Project {
     fn apply_overrides(&mut self, overrides: &[String]) -> Result<(), Box<dyn Error>> {
         for one in overrides {
             let Some((name, text)) = one.split_once('=') else {
-                return Err(format!("--set は 名前=値 の形で書く: \"{one}\"").into());
+                return Err(format!("--set takes name=value, found \"{one}\"").into());
             };
             let Some((_, value)) = self.config.iter_mut().find(|(n, _)| n == name) else {
                 let known: Vec<&str> = self.config.iter().map(|(n, _)| n.as_str()).collect();
-                return Err(format!("--set {name}: config に \"{name}\" が無い。あるのは {}", known.join(" ")).into());
+                return Err(format!("--set {name}: config has no \"{name}\". it has {}", known.join(" ")).into());
             };
             *value = value.parse_like(text, "--set", name)?;
         }
@@ -178,7 +178,7 @@ impl Project {
             name => self
                 .aliases
                 .get(name)
-                .ok_or_else(|| format!("\"@{name}\" は mophila.yaml の aliases に無い。あるのは {}", self.alias_names()))?,
+                .ok_or_else(|| format!("\"@{name}\" is not in the aliases in mophila.yaml. they are {}", self.alias_names()))?,
         };
         Ok(base.join(tail))
     }
@@ -187,8 +187,8 @@ impl Project {
         let mut names: Vec<&str> = self.aliases.keys().map(String::as_str).collect();
         names.sort_unstable();
         match names.is_empty() {
-            true => "@/ だけ".to_string(),
-            false => format!("@/ と {}", names.iter().map(|n| format!("@{n}")).collect::<Vec<_>>().join(" ")),
+            true => "only @/".to_string(),
+            false => format!("@/ and {}", names.iter().map(|n| format!("@{n}")).collect::<Vec<_>>().join(" ")),
         }
     }
 
@@ -199,6 +199,6 @@ impl Project {
             true => String::new(),
             false => format!(", config {}", names.join(" ")),
         };
-        eprintln!("{} を読んだ (root {}{settings})", self.path.display(), self.root.display());
+        eprintln!("read {} (root {}{settings})", self.path.display(), self.root.display());
     }
 }

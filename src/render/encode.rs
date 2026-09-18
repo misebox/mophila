@@ -95,13 +95,13 @@ impl Ffmpeg {
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .spawn()
-            .map_err(|e| format!("ffmpeg を起動できない: {e}"))?;
-        let stdin = child.stdin.take().ok_or("ffmpeg の stdin を取得できない")?;
+            .map_err(|e| format!("cannot start ffmpeg: {e}"))?;
+        let stdin = child.stdin.take().ok_or("cannot take the stdin of ffmpeg")?;
         Ok(Self { child, stdin: Some(stdin), codec: s.codec.to_string(), temp_files })
     }
 
     pub fn write_frame(&mut self, rgba: &[u8]) -> Result<(), Box<dyn Error>> {
-        let Some(stdin) = &mut self.stdin else { return Err("ffmpeg は終了している".into()) };
+        let Some(stdin) = &mut self.stdin else { return Err("ffmpeg has already exited".into()) };
         if stdin.write_all(rgba).is_err() {
             // ffmpeg が先に落ちた。理由は ffmpeg が stderr に出している
             self.stdin = None;
@@ -121,7 +121,7 @@ impl Ffmpeg {
 
     /// ffmpeg が理由を stderr に出しているので、こちらは何を頼んだかだけ言う
     fn failed(&self) -> Box<dyn Error> {
-        format!("ffmpeg が異常終了 (-c:v {}). 上の ffmpeg の出力を見る", self.codec).into()
+        format!("ffmpeg failed (-c:v {}). see its output above", self.codec).into()
     }
 }
 

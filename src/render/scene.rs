@@ -569,6 +569,35 @@ fn draw_shader_fill(scene: &mut Scene, path: &BezPath, transform: Affine, opacit
         Some(other) => return err(Kind::AttributeType, format!("Shader.args expects List, found {}", other.type_name())),
         None => Vec::new(),
     };
+    // ズーム動画。中心と、時刻から倍率への表をもらう
+    let zoom = match sh.attrs.get("zoom") {
+        Some(Value::Object(o)) if o.borrow().kind == "ZoomMap" => {
+            let m = o.borrow();
+            let Some(Value::Vector(cx, cy)) = m.attrs.get("center") else {
+                return err(Kind::AttributeType, "ZoomMap.center must be a Vector");
+            };
+            let Some(Value::Duration(duration)) = m.attrs.get("duration") else {
+                return err(Kind::AttributeType, "ZoomMap.duration must be a Duration");
+            };
+            let Some(Value::List(items)) = m.attrs.get("scale") else {
+                return err(Kind::AttributeType, "ZoomMap.scale must be a List of Numbers");
+            };
+            let scale: Vec<f64> = items
+                .borrow()
+                .iter()
+                .map(|v| match v {
+                    Value::Number(n, _) => Ok(*n),
+                    other => err(Kind::AttributeType, format!("ZoomMap.scale must hold Numbers, found {}", other.type_name())),
+                })
+                .collect::<Result<_>>()?;
+            if scale.len() < 2 || *duration <= 0.0 {
+                return err(Kind::AttributeType, "ZoomMap.scale needs 2 or more Numbers and a duration above 0");
+            }
+            Some((*cx, *cy, *duration, scale))
+        }
+        Some(other) => return err(Kind::AttributeType, format!("Shader.zoom expects ZoomMap, found {}", other.type_name())),
+        None => None,
+    };
     let samples = match sh.attrs.get("samples") {
         Some(Value::Number(n, _)) if *n >= 1.0 => *n as u32,
         Some(other) => return err(Kind::AttributeType, format!("Shader.samples must be a Number of 1 or more, found {other}")),
@@ -596,6 +625,11 @@ fn draw_shader_fill(scene: &mut Scene, path: &BezPath, transform: Affine, opacit
         origin: ((x0 - tx) / s, (y0 - ty) / s),
         step: (1.0 / s, 1.0 / s),
         samples,
+        zoom: zoom.as_ref().map(|(cx, cy, duration, scale)| crate::render::shader::ZoomMap {
+            center: (*cx, *cy),
+            scale,
+            duration: *duration,
+        }),
     };
     let image = runner.run(request)?;
     let mut brush = ImageBrush::new(image);

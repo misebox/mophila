@@ -606,10 +606,9 @@ pub fn compile(closure: &Closure) -> Result<String> {
     if ret != Some(Ty::Color) {
         return err(Kind::ArgumentType, format!("Shader.color must return Color, found {}", ret.map_or("nothing".to_string(), Ty::name)));
     }
-    let mut wgsl = String::from(
-        "struct U { t: f32, ox: f32, oy: f32, sx: f32, sy: f32, w: u32, h: u32, n: u32, s: u32, p0: u32, p1: u32, p2: u32 }\n\
-         @group(0) @binding(0) var<uniform> u: U;\n\
-         @group(0) @binding(1) var<storage, read> args: array<f32>;\n\
+    let mut wgsl = String::from(UNIFORM);
+    wgsl.push_str(
+        "@group(0) @binding(1) var<storage, read> args: array<f32>;\n\
          @group(0) @binding(2) var out: texture_storage_2d<rgba8unorm, write>;\n\n",
     );
     for d in &g.decls {
@@ -636,8 +635,70 @@ pub fn compile(closure: &Closure) -> Result<String> {
          \x20   textureStore(out, vec2<i32>(i32(id.x), i32(id.y)), acc / f32(g * g));\n\
          }\n",
     );
+    wgsl.push_str(STRIP);
     Ok(wgsl)
 }
+
+/// 3 つの compute shader で共通の入れ物。zoom で始まる分はズーム動画のときだけ使う
+const UNIFORM: &str = "struct U {\n\
+    \x20   t: f32, ox: f32, oy: f32, sx: f32, sy: f32,\n\
+    \x20   w: u32, h: u32, n: u32, s: u32,\n\
+    \x20   cx: f32, cy: f32, ustart: f32, lnk: f32, cpe: f32,\n\
+    \x20   c0: i32, ring: u32, rows: u32, p0: u32,\n\
+    }\n\
+    @group(0) @binding(0) var<uniform> u: U;\n";
+
+/// 帯を作る。列 c は中心からの距離の対数 u = ustart - c / cpe、行は角度。
+/// 書き込み先は環状バッファなので c を ring で折り返す
+const STRIP: &str = "\n@compute @workgroup_size(8, 8)\n\
+    fn strip(@builtin(global_invocation_id) id: vec3<u32>) {\n\
+    \x20   if (id.x >= u.w || id.y >= u.h) { return; }\n\
+    \x20   let c = u.c0 + i32(id.x);\n\
+    \x20   let g = max(u.s, 1u);\n\
+    \x20   var acc = vec4<f32>(0.0);\n\
+    \x20   for (var j = 0u; j < g; j++) {\n\
+    \x20       for (var i = 0u; i < g; i++) {\n\
+    \x20           let cf = f32(c) + (f32(i) + 0.5) / f32(g) - 0.5;\n\
+    \x20           let x = u.ustart - cf * u.sx;\n\
+    \x20           let y = (f32(id.y) + (f32(j) + 0.5) / f32(g)) * u.sy;\n\
+    \x20           acc += clamp(color(x, y, u.t), vec4<f32>(0.0), vec4<f32>(1.0));\n\
+    \x20       }\n\
+    \x20   }\n\
+    \x20   let col = ((c % i32(u.ring)) + i32(u.ring)) % i32(u.ring);\n\
+    \x20   textureStore(out, vec2<i32>(col, i32(id.y)), acc / f32(g * g));\n\
+    }\n";
+
+/// 帯から 1 フレームを組む。どの Shader でも同じなので、これだけ別のモジュールにする
+const FRAME: &str = "@group(0) @binding(1) var strip: texture_2d<f32>;\n\
+    @group(0) @binding(2) var samp: sampler;\n\
+    @group(0) @binding(3) var out: texture_storage_2d<rgba8unorm, write>;\n\
+    \n\
+    @compute @workgroup_size(8, 8)\n\
+    fn main(@builtin(global_invocation_id) id: vec3<u32>) {\n\
+    \x20   if (id.x >= u.w || id.y >= u.h) { return; }\n\
+    \x20   let dx = f32(id.x) + 0.5 - u.cx;\n\
+    \x20   let dy = f32(id.y) + 0.5 - u.cy;\n\
+    \x20   // 中心の 1 画素は対数が発散するので、半画素で止める\n\
+    \x20   let rho = max(sqrt(dx * dx + dy * dy), 0.5);\n\
+    \x20   var th = atan2(dy, dx);\n\
+    \x20   if (th < 0.0) { th = th + 6.283185307179586; }\n\
+    \x20   let c = (u.ustart - (log(rho) + u.lnk)) * u.cpe;\n\
+    \x20   // 1 画素が覆う帯の広さ。中心に近いほど帯は細かいので、そのぶん平均する\n\
+    \x20   let fc = u.cpe / rho;\n\
+    \x20   let fr = f32(u.rows) / (6.283185307179586 * rho);\n\
+    \x20   let n = i32(clamp(ceil(max(fc, fr)), 1.0, 4.0));\n\
+    \x20   var acc = vec4<f32>(0.0);\n\
+    \x20   for (var j = 0; j < n; j++) {\n\
+    \x20       for (var i = 0; i < n; i++) {\n\
+    \x20           let ox = ((f32(i) + 0.5) / f32(n) - 0.5) * fc;\n\
+    \x20           let oy = ((f32(j) + 0.5) / f32(n) - 0.5) * fr;\n\
+    \x20           // 環状バッファの継ぎ目は repeat で回り込む (隣り合う列は c でも隣り合う)\n\
+    \x20           let uv = vec2<f32>((c + ox + 0.5) / f32(u.ring), (th * f32(u.rows) / 6.283185307179586 + oy + 0.5) / f32(u.rows));\n\
+    \x20           acc += textureSampleLevel(strip, samp, uv, 0.0);\n\
+    \x20       }\n\
+    \x20   }\n\
+    \x20   textureStore(out, vec2<i32>(i32(id.x), i32(id.y)), acc / f32(n * n));\n\
+    }\n";
 
 // ---------- GPU で走らせる ----------
 
@@ -655,11 +716,95 @@ pub struct Request<'a> {
     pub step: (f64, f64),
     /// 1 ピクセルあたりのサンプル数。平方数に切り上げる (4 → 2x2)
     pub samples: u32,
+    /// ズーム動画のとき。1 枚ずつ描かず、対数極座標の帯を伸ばしながら使い回す
+    pub zoom: Option<ZoomMap<'a>>,
+}
+
+/// 中心へ寄っていくだけのズームは、(中心からの距離の対数, 角度) で見ると
+/// どのフレームも同じ絵の平行移動になる。だから全フレーム分を 1 本の帯として持ち、
+/// 各フレームはその窓を読むだけで済む。帯は 1 フレームあたり数列しか伸びない
+pub struct ZoomMap<'a> {
+    /// 箱の座標での、寄っていく先
+    pub center: (f64, f64),
+    /// ln(箱の座標 1 あたりの複素平面の長さ) を、0..duration に等間隔で並べたもの
+    pub scale: &'a [f64],
+    /// scale が覆う時間 (秒)
+    pub duration: f64,
+}
+
+impl ZoomMap<'_> {
+    /// その時刻の ln(スケール)。表の間は直線で結ぶ
+    fn ln_scale(&self, t: f64) -> f64 {
+        let last = self.scale.len() - 1;
+        let at = (t / self.duration * last as f64).clamp(0.0, last as f64);
+        let i = (at.floor() as usize).min(last);
+        let j = (i + 1).min(last);
+        self.scale[i] + (self.scale[j] - self.scale[i]) * (at - i as f64)
+    }
+}
+
+/// uniform の中身。WGSL の struct U と並びを合わせること
+const UNIFORM_BYTES: usize = 80;
+
+#[derive(Default)]
+struct Uniforms {
+    t: f64,
+    origin: (f64, f64),
+    step: (f64, f64),
+    w: u32,
+    h: u32,
+    n: u32,
+    s: u32,
+    center: (f64, f64),
+    ustart: f64,
+    lnk: f64,
+    cpe: f64,
+    c0: i32,
+    ring: u32,
+    rows: u32,
+}
+
+impl Uniforms {
+    fn bytes(&self) -> Vec<u8> {
+        let mut out = Vec::with_capacity(UNIFORM_BYTES);
+        for f in [self.t, self.origin.0, self.origin.1, self.step.0, self.step.1] {
+            out.extend_from_slice(&(f as f32).to_le_bytes());
+        }
+        for n in [self.w, self.h, self.n, self.s] {
+            out.extend_from_slice(&n.to_le_bytes());
+        }
+        for f in [self.center.0, self.center.1, self.ustart, self.lnk, self.cpe] {
+            out.extend_from_slice(&(f as f32).to_le_bytes());
+        }
+        out.extend_from_slice(&self.c0.to_le_bytes());
+        for n in [self.ring, self.rows] {
+            out.extend_from_slice(&n.to_le_bytes());
+        }
+        out.resize(UNIFORM_BYTES, 0);
+        out
+    }
 }
 
 struct Pipeline {
     pipeline: wgpu::ComputePipeline,
+    /// 帯を伸ばすほう。ズーム動画のときだけ使う
+    strip: wgpu::ComputePipeline,
     layout: wgpu::BindGroupLayout,
+}
+
+/// 1 つの図形が持つ帯。列は環状に使い回す
+struct Strip {
+    view: wgpu::TextureView,
+    /// 列数 (環状バッファの幅)
+    ring: u32,
+    /// 行数 (角度の刻み)
+    rows: u32,
+    /// 列 0 の u (中心からの距離の対数)
+    ustart: f64,
+    /// 計算済みの列 [a, b]
+    have: Option<(i64, i64)>,
+    /// 作ったときの図形の大きさ。変わったら作り直す
+    size: (u32, u32),
 }
 
 struct Target {
@@ -680,13 +825,25 @@ pub struct ShaderRunner {
     pipelines: HashMap<usize, Pipeline>,
     /// 図形 → テクスチャ
     targets: HashMap<usize, Target>,
+    /// 図形 → 帯 (ズーム動画のときだけ)
+    strips: HashMap<usize, Strip>,
+    /// 帯から 1 フレームを組む pipeline。どの Shader でも同じなので 1 つだけ
+    frame: Option<(wgpu::ComputePipeline, wgpu::BindGroupLayout, wgpu::Sampler)>,
     /// 描画の前に Vello へ登録する (画像, テクスチャ)
     pub overrides: Vec<(ImageData, wgpu::Texture)>,
 }
 
 impl ShaderRunner {
     pub fn new(device: wgpu::Device, queue: wgpu::Queue) -> Self {
-        Self { device, queue, pipelines: HashMap::new(), targets: HashMap::new(), overrides: Vec::new() }
+        Self {
+            device,
+            queue,
+            pipelines: HashMap::new(),
+            targets: HashMap::new(),
+            strips: HashMap::new(),
+            frame: None,
+            overrides: Vec::new(),
+        }
     }
 
     /// compute shader を投入し、塗りに使う画像を返す。描画の前に overrides を Vello に登録すること
@@ -702,27 +859,35 @@ impl ShaderRunner {
             let target = self.make_target(req.width, req.height);
             self.targets.insert(req.shape, target);
         }
+        let args_len = req.args.len() as u32;
+        {
+            let target = self.targets.get_mut(&req.shape).expect("inserted above");
+            let needed = (req.args.len().max(4) * 4) as u64;
+            if target.args.size() < needed {
+                target.args = self.device.create_buffer(&wgpu::BufferDescriptor { label: Some("mophila shader args"), size: needed, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+            }
+            if !req.args.is_empty() {
+                let data: Vec<u8> = req.args.iter().flat_map(|f| f.to_le_bytes()).collect();
+                self.queue.write_buffer(&target.args, 0, &data);
+            }
+        }
+        let grid = (f64::from(req.samples.max(1)).sqrt().ceil()) as u32;
+        if let Some(map) = &req.zoom {
+            return self.run_zoom(&req, map, key, grid, args_len);
+        }
         let pipeline = &self.pipelines[&key];
         let target = self.targets.get_mut(&req.shape).expect("inserted above");
-
-        // uniform: f32 x5, u32 x4, 詰め物 x3 (16 バイトの倍数にする)
-        let grid = (f64::from(req.samples.max(1)).sqrt().ceil()) as u32;
-        let mut bytes = Vec::with_capacity(48);
-        for f in [req.t as f32, req.origin.0 as f32, req.origin.1 as f32, req.step.0 as f32, req.step.1 as f32] {
-            bytes.extend_from_slice(&f.to_le_bytes());
-        }
-        for n in [req.width, req.height, req.args.len() as u32, grid, 0, 0, 0] {
-            bytes.extend_from_slice(&n.to_le_bytes());
-        }
-        self.queue.write_buffer(&target.uniforms, 0, &bytes);
-        let needed = (req.args.len().max(4) * 4) as u64;
-        if target.args.size() < needed {
-            target.args = self.device.create_buffer(&wgpu::BufferDescriptor { label: Some("mophila shader args"), size: needed, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
-        }
-        if !req.args.is_empty() {
-            let data: Vec<u8> = req.args.iter().flat_map(|f| f.to_le_bytes()).collect();
-            self.queue.write_buffer(&target.args, 0, &data);
-        }
+        let uniforms = Uniforms {
+            t: req.t,
+            origin: req.origin,
+            step: req.step,
+            w: req.width,
+            h: req.height,
+            n: args_len,
+            s: grid,
+            ..Uniforms::default()
+        };
+        self.queue.write_buffer(&target.uniforms, 0, &uniforms.bytes());
 
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("mophila shader"),
@@ -745,6 +910,175 @@ impl ShaderRunner {
         Ok(target.image.clone())
     }
 
+    /// ズーム動画。足りない列だけ帯に足してから、帯を読んで 1 フレームを組む
+    fn run_zoom(&mut self, req: &Request, map: &ZoomMap, key: usize, grid: u32, args_len: u32) -> Result<ImageData> {
+        // 図形の中心が画面のどこかと、いちばん遠い隅までの距離 (ピクセル)
+        let center_px =
+            ((map.center.0 - req.origin.0) / req.step.0, (map.center.1 - req.origin.1) / req.step.1);
+        let corner = |x: f64, y: f64| ((x - center_px.0).powi(2) + (y - center_px.1).powi(2)).sqrt();
+        let radius = corner(0.0, 0.0)
+            .max(corner(f64::from(req.width), 0.0))
+            .max(corner(0.0, f64::from(req.height)))
+            .max(corner(f64::from(req.width), f64::from(req.height)))
+            .max(2.0);
+        // 帯の細かさは、いちばん外側で 1 テクセル = 1 ピクセルになるように。
+        // テクスチャの上限に収まらないときは、そのぶん粗くする (絵は少し甘くなる)
+        let efolds = (2.0 * radius).ln();
+        let max = self.device.limits().max_texture_dimension_2d;
+        let rows = ((std::f64::consts::TAU * radius).ceil() as u32).next_multiple_of(8).clamp(8, max);
+        let want = (efolds * radius).ceil() as u32 + 8;
+        let ring = want.clamp(8, max);
+        let cpe = if ring < want { f64::from(ring - 8) / efolds } else { radius };
+        // ln(スケール) はピクセル単位で持つ (箱 1 あたりの長さと、ピクセル 1 あたりの箱の長さ)
+        let ln_px = req.step.0.abs().ln();
+        let lnk0 = ln_px + map.ln_scale(0.0);
+        let ustart = radius.ln() + lnk0;
+        let fresh = self.strips.get(&req.shape).is_none_or(|s| {
+            s.size != (req.width, req.height) || s.ring != ring || s.rows != rows || (s.ustart - ustart).abs() > 1e-9
+        });
+        if fresh {
+            let strip = self.make_strip(ring, rows, ustart, (req.width, req.height));
+            self.strips.insert(req.shape, strip);
+        }
+        let lnk = ln_px + map.ln_scale(req.t);
+        let lo = ((lnk0 - lnk) * cpe).floor() as i64 - 2;
+        let hi = lo + (efolds * cpe).ceil() as i64 + 4;
+        // 続きなら足りない列だけ、飛んだら窓ごと作り直す
+        let strip = self.strips.get_mut(&req.shape).expect("inserted above");
+        let todo = match strip.have {
+            Some((a, b)) if lo >= a && hi <= b => None,
+            Some((a, b)) if lo >= a && lo <= b + 1 => Some((b + 1, hi)),
+            _ => Some((lo, hi)),
+        };
+        strip.have = Some((lo, hi));
+        self.ensure_frame();
+        let pipeline = &self.pipelines[&key];
+        let frame = self.frame.as_ref().expect("made above");
+        let strip = &self.strips[&req.shape];
+        let target = &self.targets[&req.shape];
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("mophila zoom") });
+        if let Some((a, b)) = todo {
+            let count = (b - a + 1) as u32;
+            let uniforms = Uniforms {
+                t: req.t,
+                w: count,
+                h: rows,
+                n: args_len,
+                s: grid,
+                ustart,
+                step: (1.0 / cpe, std::f64::consts::TAU / f64::from(rows)),
+                c0: a as i32,
+                ring,
+                rows,
+                ..Uniforms::default()
+            };
+            self.queue.write_buffer(&target.uniforms, 0, &uniforms.bytes());
+            let bind = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("mophila zoom strip"),
+                layout: &pipeline.layout,
+                entries: &[
+                    wgpu::BindGroupEntry { binding: 0, resource: target.uniforms.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 1, resource: target.args.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&strip.view) },
+                ],
+            });
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("mophila zoom strip"), timestamp_writes: None });
+            pass.set_pipeline(&pipeline.strip);
+            pass.set_bind_group(0, &bind, &[]);
+            pass.dispatch_workgroups(count.div_ceil(8), rows.div_ceil(8), 1);
+            drop(pass);
+            // 帯と、このあとのフレーム組みは別の uniform なので、ここで一度流す
+            self.queue.submit([encoder.finish()]);
+            encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("mophila zoom") });
+        }
+        let uniforms = Uniforms {
+            t: req.t,
+            w: req.width,
+            h: req.height,
+            center: center_px,
+            ustart,
+            lnk,
+            cpe,
+            ring,
+            rows,
+            ..Uniforms::default()
+        };
+        self.queue.write_buffer(&target.uniforms, 0, &uniforms.bytes());
+        let bind = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("mophila zoom frame"),
+            layout: &frame.1,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: target.uniforms.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&strip.view) },
+                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&frame.2) },
+                wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&target.view) },
+            ],
+        });
+        {
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("mophila zoom frame"), timestamp_writes: None });
+            pass.set_pipeline(&frame.0);
+            pass.set_bind_group(0, &bind, &[]);
+            pass.dispatch_workgroups(req.width.div_ceil(8), req.height.div_ceil(8), 1);
+        }
+        self.queue.submit([encoder.finish()]);
+        self.overrides.push((target.image.clone(), target.texture.clone()));
+        Ok(target.image.clone())
+    }
+
+    /// 帯を作る。列は環状に使い回すので、窓 1 つ分の幅があれば足りる
+    fn make_strip(&self, ring: u32, rows: u32, ustart: f64, size: (u32, u32)) -> Strip {
+        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("mophila zoom strip"),
+            size: wgpu::Extent3d { width: ring, height: rows, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        Strip { view, ring, rows, ustart, have: None, size }
+    }
+
+    /// 帯から 1 フレームを組む pipeline。1 度だけ作る
+    fn ensure_frame(&mut self) {
+        if self.frame.is_some() {
+            return;
+        }
+        let source = format!("{UNIFORM}{FRAME}");
+        let module = self.device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("mophila zoom frame"), source: wgpu::ShaderSource::Wgsl(source.into()) });
+        let entry = |binding, ty| wgpu::BindGroupLayoutEntry { binding, visibility: wgpu::ShaderStages::COMPUTE, ty, count: None };
+        let layout = self.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("mophila zoom frame"),
+            entries: &[
+                entry(0, wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None }),
+                entry(1, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
+                entry(2, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)),
+                entry(3, wgpu::BindingType::StorageTexture { access: wgpu::StorageTextureAccess::WriteOnly, format: wgpu::TextureFormat::Rgba8Unorm, view_dimension: wgpu::TextureViewDimension::D2 }),
+            ],
+        });
+        let pipeline_layout = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("mophila zoom frame"), bind_group_layouts: &[Some(&layout)], immediate_size: 0 });
+        let pipeline = self.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("mophila zoom frame"),
+            layout: Some(&pipeline_layout),
+            module: &module,
+            entry_point: Some("main"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+        // 列も角度も端で回り込む。列が回り込む先は帯の中で隣り合う列なので、これで継ぎ目は出ない
+        let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("mophila zoom strip"),
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+        self.frame = Some((pipeline, layout, sampler));
+    }
+
     fn build_pipeline(&self, wgsl: &str) -> Result<Pipeline> {
         let scope = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
         let module = self.device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("mophila shader"), source: wgpu::ShaderSource::Wgsl(wgsl.into()) });
@@ -757,18 +1091,22 @@ impl ShaderRunner {
             ],
         });
         let pipeline_layout = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("mophila shader"), bind_group_layouts: &[Some(&layout)], immediate_size: 0 });
-        let pipeline = self.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("mophila shader"),
-            layout: Some(&pipeline_layout),
-            module: &module,
-            entry_point: Some("main"),
-            compilation_options: Default::default(),
-            cache: None,
-        });
+        let make = |entry: &str| {
+            self.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("mophila shader"),
+                layout: Some(&pipeline_layout),
+                module: &module,
+                entry_point: Some(entry),
+                compilation_options: Default::default(),
+                cache: None,
+            })
+        };
+        let pipeline = make("main");
+        let strip = make("strip");
         if let Some(e) = pollster::block_on(scope.pop()) {
             return err(KIND, format!("the GPU rejected the shader: {e}\n--- WGSL ---\n{wgsl}"));
         }
-        Ok(Pipeline { pipeline, layout })
+        Ok(Pipeline { pipeline, strip, layout })
     }
 
     fn make_target(&self, width: u32, height: u32) -> Target {
@@ -790,7 +1128,7 @@ impl ShaderRunner {
             width,
             height,
         };
-        let uniforms = self.device.create_buffer(&wgpu::BufferDescriptor { label: Some("mophila shader uniforms"), size: 48, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+        let uniforms = self.device.create_buffer(&wgpu::BufferDescriptor { label: Some("mophila shader uniforms"), size: UNIFORM_BYTES as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
         let args = self.device.create_buffer(&wgpu::BufferDescriptor { label: Some("mophila shader args"), size: 16, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
         Target { texture, view, width, height, image, uniforms, args }
     }

@@ -2117,7 +2117,7 @@ fn same_place(before: &Value, after: &Value) -> bool {
 /// 属性の型に値が合うか。builtin の Union (Paint = Color | Shader) もここで見る
 /// builtin 型の名前 (補完用)
 pub const KINDS: &[&str] =
-    &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "View", "Timeline", "Narration", "SayVoiceEngine", "EspeakVoiceEngine", "Shader", "Gradient", "Color"];
+    &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "View", "Timeline", "Narration", "SayVoiceEngine", "EspeakVoiceEngine", "Shader", "ZoomMap", "Gradient", "Color"];
 
 /// builtin 型の属性と型
 /// 型の名前は大文字で始まり、builtin の型と union の名前は使えない
@@ -2253,7 +2253,8 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
     ];
     // 読み上げ。voice は engine に渡す声の名前、volume は混ぜるときの音量
     const NARRATION: &[Attr] = &[req("text", "String"), req("duration", "Duration"), opt("volume", "Number")];
-    const SHADER: &[Attr] = &[req("color", "Func"), opt("args", "List"), opt("samples", "Number")];
+    const SHADER: &[Attr] = &[req("color", "Func"), opt("args", "List"), opt("samples", "Number"), opt("zoom", "ZoomMap")];
+    const ZOOM_MAP: &[Attr] = &[req("center", "Vector"), req("scale", "List"), req("duration", "Duration")];
     // to は :linear、radius は :radial のときだけ要るので、必須にはしない
     const GRADIENT: &[Attr] = &[
         req("stops", "List"),
@@ -2275,6 +2276,7 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
         // engine の型。属性はその engine が持っている
         name if crate::render::voice::by_name(name).is_some() => crate::render::voice::by_name(name).expect("just checked").attrs(),
         "Shader" => SHADER,
+        "ZoomMap" => ZOOM_MAP,
         "Gradient" => GRADIENT,
         _ => return None,
     })

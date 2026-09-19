@@ -261,6 +261,16 @@ pub const TYPES: &[Type] = &[
         doc: "位置 (x, y) と時刻 t から、そのピクセルの色を返す関数。図形の fill に入れると GPU で走る",
     },
     Type {
+        name: "ZoomMap",
+        category: "Paint",
+        union: "",
+        make: "ZoomMap(center = Vector(8, 4.5), scale = table, duration = 2m)",
+        values: &[],
+        members: &[],
+        doc: "中心へ寄っていくだけのズームの道筋。Shader.zoom に入れると、1 フレームずつ描かずに \
+              対数極座標の帯を伸ばしながら使い回す。fractal の zoom_video が組み立てる",
+    },
+    Type {
         name: "View",
         category: "Scene",
         union: "",
@@ -520,6 +530,10 @@ pub const ATTRS: &[(&str, &str, &str)] = &[
     ("Shader", "color", "func (x, y, t [, args]) -> Color。x y は箱の座標、t は秒"),
     ("Shader", "args", "Number の List。color の 4 つ目の引数。毎フレーム読む"),
     ("Shader", "samples", "1 ピクセルあたりの評価点の数 (4 なら 2x2 の平均。省略は 1)"),
+    ("Shader", "zoom", "ズーム動画の道筋。入れると color の引数が (中心からの距離の対数, 角度, 時刻) になる"),
+    ("ZoomMap", "center", "箱の座標での、寄っていく先"),
+    ("ZoomMap", "scale", "ln(箱の座標 1 あたりの複素平面の長さ) を、0 から duration まで等間隔に並べた List"),
+    ("ZoomMap", "duration", "scale が覆う時間"),
 ];
 
 /// 型と属性の説明。型ごとの説明が無ければ共通のもの

@@ -28,8 +28,11 @@ impl HeadlessRenderer {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         let adapter =
             pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))?;
-        let (device, queue) =
-            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))?;
+        // 既定の上限は 8192。ズーム動画の帯はそれを超えることがあるので、この機械の上限まで上げる
+        let limits = wgpu::Limits { max_texture_dimension_2d: adapter.limits().max_texture_dimension_2d, ..wgpu::Limits::default() };
+        let (device, queue) = pollster::block_on(
+            adapter.request_device(&wgpu::DeviceDescriptor { required_limits: limits, ..Default::default() }),
+        )?;
 
         let renderer = Renderer::new(
             &device,

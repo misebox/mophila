@@ -1,0 +1,16 @@
+# neon.moph — 暗闇に光る色
+
+import { Palette } from .palette
+
+## 暗闇に光る色。彩度が高いので、面ではなく線と文字に使う
+## @category 暗い
+## @type {Palette} 1 つの配色
+export let NEON = Palette(
+  back = #0a0a12,
+  ink = #f5f5ff,
+  sub = #7a7a99,
+  line = #26264a,
+  accent = #ff2e88,
+  track = #16162c,
+  series = [#ff2e88, #00e5ff, #b14aff, #39ff88, #ffe83d],
+)

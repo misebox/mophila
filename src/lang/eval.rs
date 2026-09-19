@@ -458,7 +458,12 @@ impl Interp {
             }
             ImportSource::Std(name) => match stdlib::find(name) {
                 Some(stdlib::Lib::Native(module)) => Ok(Value::Module(Rc::new(module))),
-                Some(stdlib::Lib::Script(src)) => self.run_module(format!("std:{name}"), name, src, self.base_dir.clone()),
+                // 標準ライブラリの中の相対 import が解けるように、埋め込んだ置き場を基準にする
+                Some(stdlib::Lib::Script(path, src)) => {
+                    let full = PathBuf::from(stdlib::ROOT).join(path);
+                    let dir = full.parent().map(|d| d.to_path_buf()).unwrap_or_default();
+                    self.run_module(crate::bundle::normalize(&full), name, src, dir)
+                }
                 None => err(Kind::UndefinedVariable, format!("no module named \"{name}\"")),
             },
             ImportSource::File(path) => self.import_file(path),
@@ -495,8 +500,12 @@ impl Interp {
         }
         let src = match self.sources.get(&key) {
             Some(src) => src.clone(),
-            None => std::fs::read_to_string(&full)
-                .map_err(|e| MophError::new(Kind::UndefinedVariable, format!("cannot read \"{}\": {e}", full.display())))?,
+            // 標準ライブラリのファイルは実行ファイルの中にあり、ディスクには無い
+            None => match stdlib::embedded(&key) {
+                Some(src) => src.to_string(),
+                None => std::fs::read_to_string(&full)
+                    .map_err(|e| MophError::new(Kind::UndefinedVariable, format!("cannot read \"{}\": {e}", full.display())))?,
+            },
         };
         let dir = full.parent().map(|d| d.to_path_buf()).unwrap_or_default();
         self.run_module(key, path, &src, dir)
@@ -2732,5 +2741,17 @@ mod tests {
         }
         assert_eq!(sum, f64::from(n) * f64::from(n - 1) / 2.0);
         assert!(started.elapsed() < std::time::Duration::from_secs(2), "indexing took {:?}", started.elapsed());
+    }
+
+    /// 標準ライブラリは実行ファイルに埋め込んであり、ディスクには無い。
+    /// 何ファイルかに分けたモジュールは、その中で相対 import を解けないと読めない
+    #[test]
+    fn a_stdlib_module_can_be_split_across_files() {
+        let src = "import palette\nlog(palette.NIGHT.ink, palette.HOUSE.accent)\n";
+        let stmts = crate::lang::parser::parse(src).expect("parses");
+        let mut interp = Interp::new();
+        // 呼ぶ側の置き場は、標準ライブラリの中の import と関係が無い
+        interp.base_dir = PathBuf::from("/nowhere");
+        interp.run(&stmts).expect("import palette");
     }
 }

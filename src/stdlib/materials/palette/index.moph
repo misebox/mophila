@@ -1,0 +1,18 @@
+# index.moph — palette の入口。`import palette` で見えるのはここで export したものだけ。
+# 配色そのものは 1 つ 1 ファイルで、ここは名前を出すだけ
+
+import .palette
+import .house
+import .paper
+import .earth
+import .mono
+import .night
+import .neon
+
+export let Palette = palette.Palette
+export let HOUSE = house.HOUSE
+export let PAPER = paper.PAPER
+export let EARTH = earth.EARTH
+export let MONO = mono.MONO
+export let NIGHT = night.NIGHT
+export let NEON = neon.NEON

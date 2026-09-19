@@ -1,0 +1,16 @@
+# earth.moph — 土と草
+
+import { Palette } from .palette
+
+## 土や草の色。地図や、自然を扱う話に合う
+## @category 明るい
+## @type {Palette} 1 つの配色
+export let EARTH = Palette(
+  back = #efe7d8,
+  ink = #33291e,
+  sub = #8a7a63,
+  line = #b8a68a,
+  accent = #a8562c,
+  track = #ddd0ba,
+  series = [#a8562c, #6d7d4b, #3f6b6f, #c99b41, #7d4f3a],
+)

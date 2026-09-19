@@ -1,0 +1,29 @@
+# palette.moph — 配色の型。どの色がどの役目か
+
+## 1 つの配色。どの色をどこに使うかを決めた組。
+## 画面の色をここから取ると、部品をどう組み合わせても全体が揃う
+## @category 型
+## @param back 背景
+## @param ink 本文の文字
+## @param sub 弱い文字。説明や補足
+## @param line 罫線と輪郭
+## @param accent 目を引かせたい所
+## @param track 目盛りや進捗の下地
+## @param series グラフの系列色。5 色
+## @example
+## import palette
+## let p = palette.NIGHT
+## v.place(Rect(w = 16, h = 9, fill = p.back), at = Pos(0, 0, anchor = :topLeft))
+## v.place(TextArea(text = "売上", fontSize = 0.8, fill = p.ink, position = Pos(1, 1)))
+##
+## # 1 色だけ変える
+## let mine = palette.NIGHT.copy(accent = #4aa863)
+export record Palette {
+  back: Color
+  ink: Color
+  sub: Color
+  line: Color
+  accent: Color
+  track: Color
+  series: List<Color>
+}

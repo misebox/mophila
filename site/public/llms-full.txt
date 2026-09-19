@@ -1411,6 +1411,7 @@ String / List / Dict / Range のメソッドは builtin で、`import` は要ら
 | shape | Polygon の `points` を作る。円周上の点、正多角形、星、矢印 |
 | layout | 並べる位置を計算する。格子、直線上の等間隔、比率を保って収めた大きさ |
 | animation | 図形や View を動かす Timeline を返す。現れる、消える、滑る、回る |
+| palette | そのまま使える配色。背景・文字・罫線・強調・系列色の組 (`Palette`) を名前で選ぶ |
 | fractal | エスケープタイム系フラクタルの Shader。反復式と色付けを組み合わせる。倍率は `zoom` / `duration` / `camera` のどれかで決める |
 
 ### 7. プロジェクト設定
@@ -3208,6 +3209,16 @@ EspeakVoiceEngine(voice = "ja")
 )` -> (Number, Vector) -> Color — 脱出の速さから色を決める関数を作る。stops を period 回の反復ごとに 1 周する。 escape_time の coloring に渡す
 - `complex_mul(a: Vector, b: Vector)` -> Vector — 複素数の積。複素数は Vector (x が実部、y が虚部)
 - `abs_squared(z: Vector)` -> Number — 複素数の絶対値の 2 乗
+
+### palette
+
+- `Palette` — 1 つの配色。どの色をどこに使うかを決めた組。 画面の色をここから取ると、部品をどう組み合わせても全体が揃う
+- `HOUSE` -> Palette — 標準ライブラリの既定色。色を省いて呼んだ部品はこの色で描かれるので、 何も指定しない画面はこの配色になっている
+- `PAPER` -> Palette — 紙に刷ったような配色。白を少し落としてあるので、長く映しても目が疲れない
+- `EARTH` -> Palette — 土や草の色。地図や、自然を扱う話に合う
+- `MONO` -> Palette — 白と黒だけ。accent も黒なので、目立たせるときは大きさか太さで差を付ける。 印刷や、色を使えない場面に
+- `NIGHT` -> Palette — 暗い画面。明るい線と文字が浮き上がる
+- `NEON` -> Palette — 暗闇に光る色。彩度が高いので、面ではなく線と文字に使う
 
 
 # 構文の例

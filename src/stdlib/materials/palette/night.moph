@@ -1,0 +1,16 @@
+# night.moph — 暗い画面
+
+import { Palette } from .palette
+
+## 暗い画面。明るい線と文字が浮き上がる
+## @category 暗い
+## @type {Palette} 1 つの配色
+export let NIGHT = Palette(
+  back = #10131a,
+  ink = #f2f4f8,
+  sub = #8a93a6,
+  line = #2b3242,
+  accent = #4cc2ff,
+  track = #1c2230,
+  series = [#4cc2ff, #ff6b6b, #5fd68a, #ffc857, #b085f5],
+)

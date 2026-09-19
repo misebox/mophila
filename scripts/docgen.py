@@ -34,6 +34,8 @@ def builtin_docs() -> dict:
 def signature_of(line: str) -> str:
     """`export func name(params) {` → `name(params)`、`export let name = ...` → `name`。引数の括弧は入れ子を数えて閉じる"""
     body = re.sub(r"^export (func|let) ", "", line)
+    if line.startswith("export record ") or line.startswith("export struct "):
+        return line.split()[2].rstrip("{").strip()
     if line.startswith("export let"):
         return body.split("=")[0].strip()
     depth, end = 0, len(body)
@@ -64,6 +66,17 @@ def param_types(head: str) -> tuple[dict, dict]:
         if default.strip():
             defaults[pname] = default.strip()
     return types, defaults
+
+
+def record_fields(lines: list[str], at: int) -> dict:
+    """record / struct の { } の中の `name: 型` を、引数と同じ型の表にする"""
+    types = {}
+    for line in lines[at + 1:]:
+        if line.startswith("}"):
+            break
+        if m := re.match(r"\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([^=]+?)\s*$", line):
+            types[m.group(1)] = m.group(2)
+    return types
 
 
 def tagged(rest: str, named: bool) -> dict:
@@ -119,6 +132,31 @@ def declaration(lines: list[str], at: int) -> str:
     return out
 
 
+def embedded_files() -> list[tuple[str, str]]:
+    """src/stdlib/mod.rs の FILES を (import する名前, src/stdlib からのパス) で返す。
+    名前が空のものは他のファイルから import されるだけで、それ自体は import できない"""
+    text = (ROOT / "src" / "stdlib" / "mod.rs").read_text()
+    return re.findall(r'\("(\w*)", "([^"]+)", include_str!', text)
+
+
+def where(path: str) -> str:
+    """そのモジュールを見に行く場所。index.moph が束ねているものは、ファイルではなくその場所"""
+    return path[: -len("/index.moph")] if path.endswith("/index.moph") else path
+
+
+def module_docs(files: list[tuple[str, str]], path: str) -> list[dict]:
+    """モジュールの export。index.moph が束ねているものは、同じ場所のファイルを FILES の順に読む。
+    index は名前を出すだけなので読まない (## はどれも束ねられている側にある)"""
+    if not path.endswith("/index.moph"):
+        return library_docs(ROOT / "src" / "stdlib" / path)
+    here = path[: -len("index.moph")]
+    items = []
+    for _, p in files:
+        if p.startswith(here) and p != path:
+            items += library_docs(ROOT / "src" / "stdlib" / p)
+    return items
+
+
 def library_docs(path: Path) -> list[dict]:
     """`##` のブロックと、その直後の export をまとめる。category は @category (無ければ空)"""
     items, block = [], []
@@ -153,6 +191,8 @@ def library_docs(path: Path) -> list[dict]:
                 else:
                     summary.append(b)
             types, defaults = param_types(head)
+            if line.startswith(("export record ", "export struct ")):
+                types = record_fields(lines, i)
             for prm in params:
                 prm["default"] = defaults.get(prm["name"], "")
                 # 型は署名から。書いていなければドキュメントコメントの {型}
@@ -223,9 +263,11 @@ def main() -> None:
     d = builtin_docs()
     # 標準ライブラリ。math は本体の表から、.moph は src/stdlib から。基本的なものが先
     libs = [{"name": "math", "path": "src/stdlib/math.rs", "entries": d["math"], "items": []}]
-    # .moph の順は本体 (src/stdlib/mod.rs の SCRIPTS) と同じ
-    order = re.findall(r'\("(\w+)", include_str!', (ROOT / "src" / "stdlib" / "mod.rs").read_text())
-    libs += [{"name": n, "path": f"src/stdlib/{n}.moph", "entries": [], "items": library_docs(ROOT / "src" / "stdlib" / f"{n}.moph")} for n in order]
+    # .moph の順と置き場は本体 (src/stdlib/mod.rs の FILES) と同じ
+    files = embedded_files()
+    for name, path in files:
+        if name:
+            libs.append({"name": name, "path": f"src/stdlib/{where(path)}", "entries": [], "items": module_docs(files, path)})
     samples = [sample_info(ROOT / "examples/gallery" / f"{n}.moph") for n in SAMPLES]
     if media:
         for s in samples:

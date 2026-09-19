@@ -692,6 +692,7 @@ String / List / Dict / Range のメソッドは builtin で、`import` は要ら
 | shape | Polygon の `points` を作る。円周上の点、正多角形、星、矢印 |
 | layout | 並べる位置を計算する。格子、直線上の等間隔、比率を保って収めた大きさ |
 | animation | 図形や View を動かす Timeline を返す。現れる、消える、滑る、回る |
+| palette | そのまま使える配色。背景・文字・罫線・強調・系列色の組 (`Palette`) を名前で選ぶ |
 | fractal | エスケープタイム系フラクタルの Shader。反復式と色付けを組み合わせる。倍率は `zoom` / `duration` / `camera` のどれかで決める |
 
 ## 7. プロジェクト設定

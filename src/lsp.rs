@@ -389,7 +389,7 @@ fn exports_of(uri: &Uri, path: &str) -> Option<Vec<CompletionItem>> {
                 .collect(),
         );
     }
-    let (_, src) = module_source(uri, path)?;
+    let src = module_source(uri, path)?;
     let tokens = lex(&src).ok()?;
     let mut out = Vec::new();
     for w in tokens.windows(3) {
@@ -523,7 +523,7 @@ fn call_params(uri: &Uri, text: &str, callee: &str) -> Option<Vec<CompletionItem
                 MATH.iter().find(|e| e.name == name).map(|e| e.signature.to_string())?
             } else {
                 let path = import_path_for(&lex(text).ok()?, module)?;
-                let (_, src) = module_source(uri, &path)?;
+                let src = module_source(uri, &path)?;
                 signature_in(&src, name)?
             }
         }
@@ -582,7 +582,7 @@ fn imported_doc(uri: &Uri, text: &str, word: &str, before: &str) -> Option<Strin
     } else {
         import_path_for(&tokens, word)?
     };
-    let (_, src) = module_source(uri, &path)?;
+    let src = module_source(uri, &path)?;
     doc_comment_of(&src, word)
 }
 
@@ -748,48 +748,85 @@ fn definition(uri: &Uri, text: &str, pos: Position) -> Option<Location> {
     if before.ends_with('.') {
         let module: String = before.trim_end_matches('.').chars().rev().take_while(|c| c.is_alphanumeric() || *c == '_').collect::<String>().chars().rev().collect();
         if let Some(path) = import_path_for(&tokens, &module) {
-            let (target, src) = module_source(uri, &path)?;
-            let def = find_definition(&lex(&src).ok()?, &word).or_else(|| if word == "output" { Some((1, 1)) } else { None })?;
-            return Some(Location { uri: file_uri(&target)?, range: point(def) });
+            let files = module_files(uri, &path)?;
+            if let Some(found) = defined_in(&files, &word) {
+                return Some(found);
+            }
+            let (target, _) = files.first()?;
+            return match word == "output" {
+                true => Some(Location { uri: file_uri(target)?, range: point((1, 1)) }),
+                false => None,
+            };
         }
     }
     if let Some(def) = find_definition(&tokens, &word) {
         return Some(Location { uri: uri.clone(), range: point(def) });
     }
     if let Some(path) = import_path_for(&tokens, &word) {
-        let (target, src) = module_source(uri, &path)?;
-        let def = find_definition(&lex(&src).ok()?, &word).unwrap_or((1, 1));
-        return Some(Location { uri: file_uri(&target)?, range: point(def) });
+        let files = module_files(uri, &path)?;
+        if let Some(found) = defined_in(&files, &word) {
+            return Some(found);
+        }
+        let (target, _) = files.first()?;
+        return Some(Location { uri: file_uri(target)?, range: point((1, 1)) });
     }
     None
 }
 
 /// import 先のファイルと中身。標準ライブラリは実行ファイルに埋め込んであるので、
-/// 定義へ飛べるように、読める場所へ書き出してからそこを指す
-fn module_source(uri: &Uri, path: &str) -> Option<(std::path::PathBuf, String)> {
+/// 定義へ飛べるように、読める場所へ書き出してからそこを指す。
+/// index.moph が束ねているモジュールは、束ねられている側のファイルを返す (定義も ## もそちらにある)
+fn module_files(uri: &Uri, path: &str) -> Option<Vec<(std::path::PathBuf, String)>> {
     if path.ends_with(".moph") {
         let target = resolve(uri, path)?;
         let src = std::fs::read_to_string(&target).ok()?;
-        return Some((target, src));
+        return Some(vec![(target, src)]);
     }
-    let (_, src) = crate::stdlib::SCRIPTS.iter().find(|(n, _)| *n == path)?;
+    let (_, file, _) = crate::stdlib::FILES.iter().find(|(n, ..)| *n == path && !n.is_empty())?;
     let dir = std::env::var_os("XDG_CACHE_HOME")
         .map(std::path::PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".cache")))
         .unwrap_or_else(std::env::temp_dir)
         .join("mophila")
         .join("stdlib");
-    std::fs::create_dir_all(&dir).ok()?;
-    let target = dir.join(format!("{path}.moph"));
-    if std::fs::read_to_string(&target).ok().as_deref() != Some(*src) {
-        std::fs::write(&target, src).ok()?;
+    // index.moph は中で同じ場所のファイルを import するので、そのモジュールのファイルをまとめて書き出す
+    let inside = file.strip_suffix("index.moph");
+    let mine = |p: &str| match inside {
+        Some(prefix) => p.starts_with(prefix),
+        None => p == *file,
+    };
+    let mut out = Vec::new();
+    for (_, p, src) in crate::stdlib::FILES.iter().filter(|(_, p, _)| mine(p)) {
+        let target = dir.join(p);
+        std::fs::create_dir_all(target.parent()?).ok()?;
+        if std::fs::read_to_string(&target).ok().as_deref() != Some(*src) {
+            std::fs::write(&target, src).ok()?;
+        }
+        // index 自体は名前を右から左へ移すだけなので、中身を見る側には渡さない
+        if !p.ends_with("index.moph") {
+            out.push((target, (*src).to_string()));
+        }
     }
-    Some((target, (*src).to_string()))
+    Some(out)
+}
+
+/// import 先の中身をつないだもの。名前と ## を探すだけのときに使う
+fn module_source(uri: &Uri, path: &str) -> Option<String> {
+    let joined: Vec<String> = module_files(uri, path)?.into_iter().map(|(_, src)| src).collect();
+    Some(joined.join("\n"))
 }
 
 fn point((line, col): (usize, usize)) -> Range {
     let p = Position::new(line as u32 - 1, col as u32 - 1);
     Range { start: p, end: p }
+}
+
+/// name を定義しているファイルとその位置。モジュールが何ファイルに分かれていても、定義のある方を指す
+fn defined_in(files: &[(std::path::PathBuf, String)], name: &str) -> Option<Location> {
+    files.iter().find_map(|(target, src)| {
+        let def = find_definition(&lex(src).ok()?, name)?;
+        Some(Location { uri: file_uri(target)?, range: point(def) })
+    })
 }
 
 /// let / export let / func / type / record の直後にある name の位置

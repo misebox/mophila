@@ -1,0 +1,16 @@
+# paper.moph — 紙と墨
+
+import { Palette } from .palette
+
+## 紙に刷ったような配色。白を少し落としてあるので、長く映しても目が疲れない
+## @category 明るい
+## @type {Palette} 1 つの配色
+export let PAPER = Palette(
+  back = #faf7f0,
+  ink = #2b2622,
+  sub = #8d857a,
+  line = #c9c0b2,
+  accent = #b6553f,
+  track = #e6dfd2,
+  series = [#b6553f, #5f7a55, #3f6fb0, #c89a3c, #7a5c8d],
+)

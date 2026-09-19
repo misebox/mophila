@@ -6,40 +6,59 @@ pub mod math;
 
 use crate::lang::value::Module;
 
+/// 埋め込んだ .moph の置き場を指す、実在しないパスの頭。
+/// 中の相対 import (`import .night`) はここからの相対で解く
+pub const ROOT: &str = "std:";
+
 pub enum Lib {
     /// Rust の実装
     Native(Module),
-    /// 埋め込んだ .moph のソース。呼ぶ側が別のスコープで実行する
-    Script(&'static str),
+    /// 埋め込んだ .moph の (パス, ソース)。呼ぶ側が別のスコープで実行する
+    Script(&'static str, &'static str),
 }
 
-/// 埋め込む .moph。(名前, ソース)。基本的なものから順
-pub const SCRIPTS: &[(&str, &str)] = &[
-    ("color", include_str!("color.moph")),
-    ("shape", include_str!("shape.moph")),
-    ("layout", include_str!("layout.moph")),
-    ("easing", include_str!("easing.moph")),
-    ("animation", include_str!("animation.moph")),
-    ("chart", include_str!("chart.moph")),
-    ("diagram", include_str!("diagram.moph")),
-    ("text", include_str!("text.moph")),
-    ("ui", include_str!("ui.moph")),
-    ("backdrop", include_str!("backdrop.moph")),
-    ("focus", include_str!("focus.moph")),
-    ("media", include_str!("media.moph")),
-    ("clock", include_str!("clock.moph")),
-    ("meter", include_str!("meter.moph")),
-    ("fractal", include_str!("fractal.moph")),
+/// 埋め込む .moph。(import する名前, src/stdlib からのパス, ソース)。基本的なものから順。
+/// 名前が空のものは他のファイルから import されるだけで、それ自体は import できない
+pub const FILES: &[(&str, &str, &str)] = &[
+    ("color", "color.moph", include_str!("color.moph")),
+    ("shape", "shape.moph", include_str!("shape.moph")),
+    ("layout", "layout.moph", include_str!("layout.moph")),
+    ("easing", "easing.moph", include_str!("easing.moph")),
+    ("animation", "animation.moph", include_str!("animation.moph")),
+    ("chart", "chart.moph", include_str!("chart.moph")),
+    ("diagram", "diagram.moph", include_str!("diagram.moph")),
+    ("text", "text.moph", include_str!("text.moph")),
+    ("ui", "ui.moph", include_str!("ui.moph")),
+    ("backdrop", "backdrop.moph", include_str!("backdrop.moph")),
+    ("focus", "focus.moph", include_str!("focus.moph")),
+    ("media", "media.moph", include_str!("media.moph")),
+    ("clock", "clock.moph", include_str!("clock.moph")),
+    ("meter", "meter.moph", include_str!("meter.moph")),
+    ("fractal", "fractal.moph", include_str!("fractal.moph")),
+    ("palette", "materials/palette/index.moph", include_str!("materials/palette/index.moph")),
+    ("", "materials/palette/palette.moph", include_str!("materials/palette/palette.moph")),
+    ("", "materials/palette/house.moph", include_str!("materials/palette/house.moph")),
+    ("", "materials/palette/paper.moph", include_str!("materials/palette/paper.moph")),
+    ("", "materials/palette/earth.moph", include_str!("materials/palette/earth.moph")),
+    ("", "materials/palette/mono.moph", include_str!("materials/palette/mono.moph")),
+    ("", "materials/palette/night.moph", include_str!("materials/palette/night.moph")),
+    ("", "materials/palette/neon.moph", include_str!("materials/palette/neon.moph")),
 ];
 
 pub fn find(name: &str) -> Option<Lib> {
     if name == "math" {
         return Some(Lib::Native(math::module()));
     }
-    SCRIPTS.iter().find(|(n, _)| *n == name).map(|(_, src)| Lib::Script(src))
+    FILES.iter().find(|(n, ..)| *n == name && !n.is_empty()).map(|(_, path, src)| Lib::Script(path, src))
 }
 
-/// 名前の一覧 (補完や文書に)
+/// 標準ライブラリの中のファイル。key は ROOT から始まる正規化したパス
+pub fn embedded(key: &str) -> Option<&'static str> {
+    let path = key.strip_prefix(ROOT)?.trim_start_matches('/');
+    FILES.iter().find(|(_, p, _)| *p == path).map(|(.., src)| *src)
+}
+
+/// import できる名前の一覧 (補完や文書に)
 pub fn names() -> Vec<&'static str> {
-    std::iter::once("math").chain(SCRIPTS.iter().map(|(n, _)| *n)).collect()
+    std::iter::once("math").chain(FILES.iter().map(|(n, ..)| *n).filter(|n| !n.is_empty())).collect()
 }

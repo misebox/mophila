@@ -1,0 +1,17 @@
+# house.moph — 標準ライブラリが色を省いたときに描く色
+
+import { Palette } from .palette
+
+## 標準ライブラリの既定色。色を省いて呼んだ部品はこの色で描かれるので、
+## 何も指定しない画面はこの配色になっている
+## @category 明るい
+## @type {Palette} 1 つの配色
+export let HOUSE = Palette(
+  back = #f6f4ee,
+  ink = #1a1d23,
+  sub = #8a8f98,
+  line = #4a4f5a,
+  accent = #e04040,
+  track = #dedbd4,
+  series = [#e04040, #4080e0, #4aa863, #e0b040, #b04ae0],
+)

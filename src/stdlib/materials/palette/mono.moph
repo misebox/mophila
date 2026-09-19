@@ -1,0 +1,17 @@
+# mono.moph — 白黒
+
+import { Palette } from .palette
+
+## 白と黒だけ。accent も黒なので、目立たせるときは大きさか太さで差を付ける。
+## 印刷や、色を使えない場面に
+## @category 明るい
+## @type {Palette} 1 つの配色
+export let MONO = Palette(
+  back = #ffffff,
+  ink = #101010,
+  sub = #767676,
+  line = #c8c8c8,
+  accent = #101010,
+  track = #e8e8e8,
+  series = [#101010, #4a4a4a, #7a7a7a, #a6a6a6, #cfcfcf],
+)

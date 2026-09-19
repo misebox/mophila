@@ -83,6 +83,7 @@ VIEW_CASES = [
     ("rotation", "0", "30", {}),
     ("scale", "1", "1.4", {}),
     ("pivot", "Vector(0, 0)", "Vector(3, 3)", {"rotation": "30"}),
+    ("camera", "Camera(from = Vector(1, 1), to = Vector(1.5, 1.5), scale = 1)", "Camera(from = Vector(1, 1), to = Vector(1.5, 1.5), scale = 2)", {}),
 ]
 
 

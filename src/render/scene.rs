@@ -71,6 +71,11 @@ fn draw_view(scene: &mut Scene, view: &ObjRef, transform: Affine, frame: &Frame,
         };
         scene.push_layer(Fill::NonZero, blend, opacity as f32, Affine::IDENTITY, &area);
     }
+    // カメラは枠を動かさず、中身だけ動かす。clip はカメラの前の枠で切る
+    let transform = match camera_of(&v.attrs)? {
+        Some((affine, _, _)) => transform * affine,
+        None => transform,
+    };
     for child in &order(&v.children) {
         if child.borrow().kind == "View" {
             let sub = sub_transform(child, transform)?;
@@ -150,6 +155,31 @@ fn sub_transform(child: &ObjRef, parent: Affine) -> Result<Affine> {
         _ => Affine::IDENTITY,
     };
     Ok(spin * zoom * placed)
+}
+
+/// View.camera の変換。中身の from が to の位置に来るように置いて scale 倍する
+fn camera_of(attrs: &Attrs) -> Result<Option<(Affine, Point, f64)>> {
+    let Some(value) = attrs.get("camera") else { return Ok(None) };
+    let Value::Object(o) = value else {
+        return err(Kind::AttributeType, format!("View.camera expects Camera, found {}", value.type_name()));
+    };
+    let c = o.borrow();
+    if c.kind != "Camera" {
+        return err(Kind::AttributeType, format!("View.camera expects Camera, found {}", c.kind));
+    }
+    let from = vector(&c.attrs, "from", "Camera")?;
+    // to を書かなければ、中身は動かさずに拡大だけする
+    let to = match c.attrs.get("to") {
+        Some(v) => point_of(v, "Camera.to")?,
+        None => from,
+    };
+    let scale = match c.attrs.get("scale") {
+        Some(Value::Number(k, _)) if *k > 0.0 => *k,
+        Some(Value::Number(k, _)) => return err(Kind::OutOfRange, format!("Camera.scale must be above 0, found {k}")),
+        Some(v) => return err(Kind::AttributeType, format!("Camera.scale expects Number, found {}", v.type_name())),
+        None => 1.0,
+    };
+    Ok(Some((Affine::translate(to.to_vec2()) * Affine::scale(scale) * Affine::translate(-from.to_vec2()), to, scale)))
 }
 
 /// fill が Shader ならその実体
@@ -650,6 +680,13 @@ fn draw_shader_fill(scene: &mut Scene, path: &BezPath, transform: Affine, opacit
         Some(other) => return err(Kind::AttributeType, format!("Shader.zoom expects ZoomMap, found {}", other.type_name())),
         None => None,
     };
+    // カメラを入れた Shader は、箱の座標そのものではなく camera.from からの差を受け取る。
+    // 引き算をここ (f64) で済ませるので、倍率をいくつ上げても f32 の刻みが効く
+    let camera = match sh.attrs.get("camera") {
+        Some(Value::Object(o)) if o.borrow().kind == "Camera" => camera_of(&HashMap::from([("camera".to_string(), Value::Object(o.clone()))]))?,
+        Some(other) => return err(Kind::AttributeType, format!("Shader.camera expects Camera, found {}", other.type_name())),
+        None => None,
+    };
     let samples = match sh.attrs.get("samples") {
         Some(Value::Number(n, _)) if *n >= 1.0 => *n as u32,
         Some(other) => return err(Kind::AttributeType, format!("Shader.samples must be a Number of 1 or more, found {other}")),
@@ -674,9 +711,18 @@ fn draw_shader_fill(scene: &mut Scene, path: &BezPath, transform: Affine, opacit
         t: frame.t,
         width,
         height,
-        origin: ((x0 - tx) / s, (y0 - ty) / s),
-        step: (1.0 / s, 1.0 / s),
+        // カメラを入れた Shader は、図形を動かさずにシェーダの座標だけ寄せる。
+        // 箱の座標 q が映す中身の点は from + (q - to) / scale なので、その差を渡す
+        origin: match camera {
+            Some((_, to, k)) => (((x0 - tx) / s - to.x) / k, ((y0 - ty) / s - to.y) / k),
+            None => ((x0 - tx) / s, (y0 - ty) / s),
+        },
+        step: match camera {
+            Some((_, _, k)) => (1.0 / s / k, 1.0 / s / k),
+            None => (1.0 / s, 1.0 / s),
+        },
         samples,
+        camera: camera.map(|(_, _, scale)| scale),
         zoom: zoom.as_ref().map(|(cx, cy, duration, scale)| crate::render::shader::ZoomMap {
             center: (*cx, *cy),
             scale,

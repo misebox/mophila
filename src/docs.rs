@@ -264,11 +264,21 @@ pub const TYPES: &[Type] = &[
         name: "ZoomMap",
         category: "Paint",
         union: "",
-        make: "ZoomMap(center = Vector(8, 4.5), scale = table, duration = 2m)",
+        make: "ZoomMap(center = Vector(8, 4.5), zoom = func (t) { t + 1 }, duration = 2m)",
         values: &[],
         members: &[],
         doc: "中心へ寄っていくだけのズームの道筋。Shader.zoom に入れると、1 フレームずつ描かずに \
               対数極座標の帯を伸ばしながら使い回す。fractal の zoom_video が組み立てる",
+    },
+    Type {
+        name: "Camera",
+        category: "Scene",
+        union: "",
+        make: "Camera(from = Vector(3, 2.5), to = Vector(8, 4.5), scale = 10)",
+        values: &[],
+        members: &[],
+        doc: "箱の中身の寄り引き。View.camera に入れると、中身の from が to の位置に来るように置いて scale 倍する。\
+              枠 (箱の外周) は動かない。位置と大きさを 3 つまとめて持つので、途中で食い違って画面が跳ねない",
     },
     Type {
         name: "View",
@@ -533,8 +543,14 @@ pub const ATTRS: &[(&str, &str, &str)] = &[
     ("Shader", "samples", "1 ピクセルあたりの評価点の数 (4 なら 2x2 の平均。省略は 1)"),
     ("Shader", "zoom", "ズーム動画の道筋。入れると color の引数が (中心からの距離の対数, 角度, 時刻) になる"),
     ("ZoomMap", "center", "箱の座標での、寄っていく先"),
-    ("ZoomMap", "scale", "ln(箱の座標 1 あたりの複素平面の長さ) を、0 から duration まで等間隔に並べた List"),
-    ("ZoomMap", "duration", "scale が覆う時間"),
+    ("ZoomMap", "zoom", "倍率の時間変化。func (t) -> Number。t は秒。増えていくこと (戻ると帯を作り直すので遅い)"),
+    ("ZoomMap", "duration", "zoom を読む範囲。動画の長さ"),
+    ("ZoomMap", "unit", "倍率 1 のときの、箱の座標 1 あたりのシェーダの座標の長さ (省略は 1)"),
+    ("ZoomMap", "scale", "zoom と duration と unit から作った表。書くものではない"),
+    ("Camera", "from", "中身のどの点を映すか (箱の座標)"),
+    ("Camera", "to", "それを画面のどこに置くか (箱の座標。省略は from と同じ = 中身を動かさずに拡大だけする)"),
+    ("Camera", "scale", "倍率 (省略は 1)"),
+    ("View", "camera", "箱の中身の寄り引き。枠は動かさず中身だけ動かす。position や scale は枠ごと動かすもので、別物"),
 ];
 
 /// 型と属性の説明。型ごとの説明が無ければ共通のもの

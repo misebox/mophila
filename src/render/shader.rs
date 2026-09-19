@@ -584,18 +584,21 @@ fn math_call(name: &str, args: &[(String, Ty)]) -> Result<(String, Ty)> {
     }
 }
 
-/// color: func (x, y, t [, args]) を、ピクセルごとに走る compute shader の WGSL にする
-pub fn compile(closure: &Closure) -> Result<String> {
+/// color: func (x, y, t [, scale] [, args]) を、ピクセルごとに走る compute shader の WGSL にする。
+/// camera を入れた Shader は、x y が camera.from からの差になり、4 つ目で倍率を受け取る
+pub fn compile(closure: &Closure, camera: bool) -> Result<String> {
     let params = &closure.def.params;
-    if params.len() != 3 && params.len() != 4 {
-        return err(Kind::ArityMismatch, format!("Shader.color must be func (x, y, t) or func (x, y, t, args), found {} parameters", params.len()));
+    let fixed = if camera { 4 } else { 3 };
+    if params.len() != fixed && params.len() != fixed + 1 {
+        let shape = if camera { "func (x, y, t, scale) or func (x, y, t, scale, args)" } else { "func (x, y, t) or func (x, y, t, args)" };
+        return err(Kind::ArityMismatch, format!("Shader.color must be {shape}, found {} parameters", params.len()));
     }
     let mut g = Gen { decls: Vec::new(), funcs: HashMap::new(), consts: HashMap::new(), counter: 0, stack: Vec::new() };
     let mut env: Env = vec![HashMap::new()];
-    let names = ["x", "y", "t"];
+    let names = ["x", "y", "t", "cam"];
     for (i, p) in params.iter().enumerate() {
         let Pattern::Name(n) = &p.pattern else { return err(KIND, "Shader.color parameters must be plain names") };
-        let entry = if i < 3 { (names[i].to_string(), Ty::Num) } else { ("args".to_string(), Ty::Nums(None)) };
+        let entry = if i < fixed { (names[i].to_string(), Ty::Num) } else { ("args".to_string(), Ty::Nums(None)) };
         env[0].insert(n.clone(), entry);
     }
     let mut body = Body::new(1);
@@ -619,7 +622,8 @@ pub fn compile(closure: &Closure) -> Result<String> {
         wgsl.push_str(d);
         wgsl.push('\n');
     }
-    wgsl.push_str("fn color(x: f32, y: f32, t: f32) -> vec4<f32> {\n");
+    let sig = if camera { "x: f32, y: f32, t: f32, cam: f32" } else { "x: f32, y: f32, t: f32" };
+    wgsl.push_str(&format!("fn color({sig}) -> vec4<f32> {{\n"));
     wgsl.push_str(&body.lines.join("\n"));
     wgsl.push_str("\n}\n\n");
     // 1 ピクセルを s x s の格子で評価して平均する (アンチエイリアス)
@@ -633,14 +637,14 @@ pub fn compile(closure: &Closure) -> Result<String> {
          \x20       for (var i = 0u; i < g; i++) {\n\
          \x20           let x = u.ox + (f32(id.x) + (f32(i) + 0.5) / f32(g)) * u.sx;\n\
          \x20           let y = u.oy + (f32(id.y) + (f32(j) + 0.5) / f32(g)) * u.sy;\n\
-         \x20           acc += clamp(color(x, y, u.t), vec4<f32>(0.0), vec4<f32>(1.0));\n\
+         \x20           acc += clamp(color(x, y, u.t{CAM}), vec4<f32>(0.0), vec4<f32>(1.0));\n\
          \x20       }\n\
          \x20   }\n\
          \x20   textureStore(out, vec2<i32>(i32(id.x), i32(id.y)), acc / f32(g * g));\n\
          }\n",
     );
     wgsl.push_str(STRIP);
-    Ok(wgsl)
+    Ok(wgsl.replace("{CAM}", if camera { ", u.cam" } else { "" }))
 }
 
 /// 3 つの compute shader で共通の入れ物。zoom で始まる分はズーム動画のときだけ使う
@@ -648,7 +652,7 @@ const UNIFORM: &str = "struct U {\n\
     \x20   t: f32, ox: f32, oy: f32, sx: f32, sy: f32,\n\
     \x20   w: u32, h: u32, n: u32, s: u32,\n\
     \x20   cx: f32, cy: f32, ustart: f32, lnk: f32, cpe: f32,\n\
-    \x20   c0: i32, ring: u32, rows: u32, p0: u32,\n\
+    \x20   c0: i32, ring: u32, rows: u32, cam: f32,\n\
     }\n\
     @group(0) @binding(0) var<uniform> u: U;\n";
 
@@ -665,7 +669,7 @@ const STRIP: &str = "\n@compute @workgroup_size(8, 8)\n\
     \x20           let cf = f32(c) + (f32(i) + 0.5) / f32(g) - 0.5;\n\
     \x20           let x = u.ustart - cf * u.sx;\n\
     \x20           let y = (f32(id.y) + (f32(j) + 0.5) / f32(g)) * u.sy;\n\
-    \x20           acc += clamp(color(x, y, u.t), vec4<f32>(0.0), vec4<f32>(1.0));\n\
+    \x20           acc += clamp(color(x, y, u.t{CAM}), vec4<f32>(0.0), vec4<f32>(1.0));\n\
     \x20       }\n\
     \x20   }\n\
     \x20   let col = ((c % i32(u.ring)) + i32(u.ring)) % i32(u.ring);\n\
@@ -722,6 +726,8 @@ pub struct Request<'a> {
     pub samples: u32,
     /// ズーム動画のとき。1 枚ずつ描かず、対数極座標の帯を伸ばしながら使い回す
     pub zoom: Option<ZoomMap<'a>>,
+    /// カメラの倍率。camera を入れた Shader のとき。x y は既に camera.from からの差になっている
+    pub camera: Option<f64>,
 }
 
 /// 中心へ寄っていくだけのズームは、(中心からの距離の対数, 角度) で見ると
@@ -766,6 +772,8 @@ struct Uniforms {
     c0: i32,
     ring: u32,
     rows: u32,
+    /// camera.scale。camera を入れた Shader だけ使う
+    cam: f64,
 }
 
 impl Uniforms {
@@ -784,6 +792,7 @@ impl Uniforms {
         for n in [self.ring, self.rows] {
             out.extend_from_slice(&n.to_le_bytes());
         }
+        out.extend_from_slice(&(self.cam as f32).to_le_bytes());
         out.resize(UNIFORM_BYTES, 0);
         out
     }
@@ -852,9 +861,10 @@ impl ShaderRunner {
 
     /// compute shader を投入し、塗りに使う画像を返す。描画の前に overrides を Vello に登録すること
     pub fn run(&mut self, req: Request) -> Result<ImageData> {
-        let key = Rc::as_ptr(req.closure) as usize;
+        // camera の有無で WGSL が変わるので、鍵に混ぜる
+        let key = Rc::as_ptr(req.closure) as usize | usize::from(req.camera.is_some());
         if !self.pipelines.contains_key(&key) {
-            let wgsl = compile(req.closure)?;
+            let wgsl = compile(req.closure, req.camera.is_some())?;
             let pipeline = self.build_pipeline(&wgsl)?;
             self.pipelines.insert(key, pipeline);
         }
@@ -889,6 +899,7 @@ impl ShaderRunner {
             h: req.height,
             n: args_len,
             s: grid,
+            cam: req.camera.unwrap_or(1.0),
             ..Uniforms::default()
         };
         self.queue.write_buffer(&target.uniforms, 0, &uniforms.bytes());

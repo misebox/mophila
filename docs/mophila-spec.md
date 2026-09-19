@@ -295,10 +295,31 @@ View(box = Vector(16, 9))
 | `rotation` | Number | 置いたものを 1 枚として回す (度)。中身の座標は変わらない |
 | `scale` | Number | 置いたものを 1 枚として拡大する。既定は 1 |
 | `pivot` | Vector | `rotation` と `scale` の中心。子の箱の座標で書く。書かなければ箱の真ん中 |
+| `camera` | Camera | 箱の中身の寄り引き。枠は動かさず中身だけ動かす |
 
 `rotation` と `scale` は置いたあとの絵に掛かるので、中の図形の座標や `place` の書き方は変えなくてよい。150 枚のタイルをまとめて回すなら、タイルを入れた View を 1 つ作って、その `rotation` を動かす。
 
 ### 3.13 塗り
+
+**Camera** — `View.camera` に入れると、箱の**中身**の `from` が `to` の位置に来るように置いて `scale` 倍する。枠 (箱の外周) は動かない。
+
+```
+v.camera = Camera(from = Vector(3, 2.5), to = Vector(8, 4.5), scale = 10)
+```
+
+| 属性 | 型 | 意味 |
+|---|---|---|
+| `from` | Vector | 中身のどの点を映すか (箱の座標) |
+| `to` | Vector | それを画面のどこに置くか (箱の座標)。省略は `from` と同じ = 中身を動かさずに拡大だけする |
+| `scale` | Number | 倍率。省略は 1。0 以下は `ValueError.OutOfRange` |
+
+`position` `w` `h` `pivot` `rotation` `scale` は**置かれた View そのもの**を枠ごと動かすもので、`camera` とは別物。両方書けば掛かり合う。寄ると中身は箱からはみ出すので、`clip = true` と併せて使う。
+
+3 つを別々の属性にせず 1 つの型にしてあるのは、途中で食い違って画面が跳ねないようにするため。動かすときはフィールドを動かす (`Camera` 値そのものは補間しない)。
+
+```
+motion (t) { 0..1: { v.camera.scale = math.exp(math.ln(1e12) * t) } }
+```
 
 `fill` に入れられるのは `Color` `Gradient` `Shader` (`Paint`)。
 
@@ -342,16 +363,17 @@ Shader(color = func (x, y, t) { Color(x * 16, 0, 128) })
 **ZoomMap** — 1 点へ寄っていくだけのズーム動画は、(中心からの距離の対数, 角度) で見るとどのフレームも同じ絵の平行移動になる。`Shader.zoom` に `ZoomMap` を入れると、1 フレームずつ描かずに、その座標系の帯を伸ばしながら使い回す。帯は 1 フレームあたり数列しか伸びないので、1 枚ずつ描くより桁違いに速い。
 
 ```
-Shader(zoom = ZoomMap(center = Vector(8, 4.5), scale = table, duration = 2m), color = func (u, th, t) { ... })
+Shader(zoom = ZoomMap(center = Vector(8, 4.5), zoom = func (t) { t + 1 }, duration = 2m), color = func (u, th, t) { ... })
 ```
 
 | 属性 | 型 | 意味 |
 |---|---|---|
 | `center` | Vector | 箱の座標での、寄っていく先 |
-| `scale` | List | ln(箱の座標 1 あたりの複素平面の長さ) を、0 から `duration` まで等間隔に並べた Number の並び |
-| `duration` | Duration | `scale` が覆う時間 |
+| `zoom` | Func | 倍率の時間変化。`func (t) -> Number`。t は秒 |
+| `duration` | Duration | `zoom` を読む範囲 (動画の長さ) |
+| `unit` | Number | 倍率 1 のときの、箱の座標 1 あたりのシェーダの座標の長さ (省略は 1) |
 
-`zoom` を入れると `color` の引数は `(中心からの距離の対数, 角度, 時刻)` になる。倍率は増えていくこと (戻ると帯を作り直すので遅い)。手で組むものではなく、標準ライブラリ `fractal` の `zoom_video` が組み立てる。
+`zoom` を入れると `color` の引数は `(中心からの距離の対数, 角度, 時刻)` になる。倍率は増えていくこと (戻ると帯を作り直すので遅い)。手で組むものではなく、標準ライブラリ `fractal` の `escape_time` が `duration` を書いたときに組み立てる。
 
 ### 3.14 時間
 
@@ -670,7 +692,7 @@ String / List / Dict / Range のメソッドは builtin で、`import` は要ら
 | shape | Polygon の `points` を作る。円周上の点、正多角形、星、矢印 |
 | layout | 並べる位置を計算する。格子、直線上の等間隔、比率を保って収めた大きさ |
 | animation | 図形や View を動かす Timeline を返す。現れる、消える、滑る、回る |
-| fractal | エスケープタイム系フラクタルの Shader。反復式、精度、色付けを組み合わせる |
+| fractal | エスケープタイム系フラクタルの Shader。反復式と色付けを組み合わせる。倍率は `zoom` / `duration` / `camera` のどれかで決める |
 
 ## 7. プロジェクト設定
 

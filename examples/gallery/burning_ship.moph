@@ -2,7 +2,7 @@
 # 船全体から、左の水平線に浮かぶ小さな船に 50 倍まで寄る。虚軸は慣習どおり下向き (flip)
 
 import math
-import { escape_time, burning_ship, perturbation, smooth } from fractal
+import { escape_time, burning_ship, smooth } from fractal
 
 let v = View(box = Vector(16, 9))
 let total = 40s
@@ -13,7 +13,6 @@ let stops = [#061a3f, #1c4f9c, #5c9be6, #cfe6ff, #ffffff, #cfe6ff, #5c9be6, #1c4
 
 let set = escape_time(
   formula = burning_ship,
-  precision = perturbation,
   coloring = smooth(stops, 64, inside = #061a3f),
   center = Vector(-1.755, -0.02),
   span = 4.0,

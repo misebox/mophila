@@ -1,9 +1,9 @@
 # fractal.moph — エスケープタイム系フラクタルの部品。反復式・精度・色付けを関数で差し替える。
 # escape_time(...) が Shader を返すので、図形の fill に入れて使う。
 #   formula:   反復式 (mandelbrot / burning_ship / multibrot(n) / julia(c))
-#   precision: :plain (32 bit のまま反復) か :perturbation (基準軌道をここで 64 bit で計算し、GPU は差分だけ反復)
 #   coloring:  func (mu, z) -> Color。mu は滑らかな脱出回数 (集合の中は -1)、z は脱出時の値
 #   center / span: 複素平面の中心と、最初に見える横幅。zoom: func (t) -> 倍率。max_iter: func (zoom) -> 反復の上限
+#   duration: 書くと対数極座標の帯を使う。camera: 倍率をカメラから読む
 #   at / box:  塗る図形が占める箱の座標 (既定は (0, 0) から 16 x 9)。flip: true で虚軸を下向きにする (Burning Ship の慣習)
 
 import math
@@ -11,14 +11,24 @@ import math
 # julia の定数。1 つの Vector か、時刻から Vector を返す関数
 type JuliaConstant = Vector | (Number) -> Vector
 
-## エスケープタイム系フラクタルの Shader を作る。図形の fill に入れる
+# camera を受け取る口。Camera か、書かなかったときの :none
+type MaybeCamera = Camera | Symbol
+
+## エスケープタイム系フラクタルの Shader を作る。図形の fill に入れる。
+##
+## 倍率の決め方は 3 通り。`zoom` を書く / `zoom` と `duration` を書く / `camera` を渡す。
+## `duration` を書くと、動画ぜんぶを対数極座標の帯 1 本にして使い回す (中心が動かず、
+## 倍率が増えるだけのときに使える。1 フレームあたりの計算が桁違いに減る)。
+## `camera` を渡すと倍率はカメラから毎フレーム読む (寄る先も動かせる代わりに帯は使えない)。
+## 精度は深さで決まるので選ばない。中の点の軌道をここで 64 bit で計算し、GPU は差分を反復する
 ## @category 描く
 ## @param formula 反復式 (mandelbrot / julia(c) / burning_ship / multibrot(n))
 ## @param coloring 色付け。func (mu, z) -> Color (smooth など)
 ## @param center 複素平面の中心 (Vector)
 ## @param span 最初に見える横幅 (複素平面の単位)
-## @param precision plain か perturbation
 ## @param zoom 倍率の時間変化。func (t) -> Number
+## @param duration 動画の長さ。書くと帯を使う (倍率は増えるだけであること)
+## @param camera 倍率と寄る先をここから読む。zoom と duration は書かない
 ## @param max_iter 反復の上限。func (zoom) -> Number
 ## @param samples 1 ピクセルあたりの評価点の数 (4 で 2x2 のアンチエイリアス)
 ## @param at 塗る図形の左上 (箱の座標)
@@ -37,7 +47,7 @@ type JuliaConstant = Vector | (Number) -> Vector
 ##   span = 0.02,
 ## )
 ## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = set))
-export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, center: Vector, span: Number, precision: Symbol = :perturbation, zoom: (Number) -> Number = func (t) { 1 }, max_iter: (Number) -> Number = func (zoom) { 200 }, samples: Number = 1, at: Vector = Vector(0, 0), box: Vector = Vector(16, 9), flip: Bool = false, bailout: Number = 256, ref_iter: Number = 8000) -> Shader {
+export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, center: Vector, span: Number, zoom: (Number) -> Number = func (t) { 1 }, duration: Duration = 0s, camera: MaybeCamera = :none, max_iter: (Number) -> Number = func (zoom) { 200 }, samples: Number = 1, at: Vector = Vector(0, 0), box: Vector = Vector(16, 9), flip: Bool = false, bailout: Number = 256, ref_iter: Number = 8000) -> Shader {
   let seed = formula["seed"]
   let step = formula["step"]
   let start = formula["start"]
@@ -45,60 +55,107 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
   let param = if formula.has("param") { formula["param"] } else { func (t) { Vector(0, 0) } }
   let limit_of = max_iter
   let zoom_of = zoom
-  # ピクセルの箱の座標 → 中心からの複素座標の差
   let up = if flip { 1 } else { -1 }
-  func offset(x: Number, y: Number, zm: Number) -> Vector {
-    let scale = span / zm / box.x
-    Vector((x - at.x - box.x / 2) * scale, (y - at.y - box.y / 2) * scale * up)
+  let has_camera = type_of(camera) == "Camera"
+  if has_camera and duration > 0s {
+    log("escape_time: camera と duration は一緒に書けない (カメラは帯を使えない)")
   }
+  if not formula.has("delta") {
+    log("escape_time: this formula has no delta; it cannot be drawn")
+  }
+  let delta = formula["delta"]
+
+  # 箱の座標 1 あたりの複素平面の長さ (倍率 1 のとき)
+  let unit = span / box.x
+  # 基準軌道を作る点。カメラがあれば、その寄る先の下にある複素点
+  let focus = if has_camera { camera.from } else { Vector(at.x + box.x / 2, at.y + box.y / 2) }
+  let origin = center + Vector((focus.x - at.x - box.x / 2) * unit, (focus.y - at.y - box.y / 2) * unit * up)
   # 滑らかな脱出回数
   func escaped(n: Number, r2: Number) -> Number { n + 1 - math.ln(math.ln(r2) / 2) / ln_degree }
 
-  if precision == :plain {
-    return Shader(samples = samples,
-      color = func (x, y, t) {
-        let zm = zoom_of(t)
-        let k = param(t)
-        let p = center + offset(x, y, zm)
-        let z = seed(p, k)
-        let limit = limit_of(zm)
-        for n in 0..limit {
-          let r2 = cabs2(z)
-          if r2 > bailout { return coloring(escaped(n, r2), z) }
-          z = step(z, p, k)
-        }
-        coloring(-1, z)
-      })
-  }
-  if precision != :perturbation {
-    log("escape_time: precision must be :plain or :perturbation")
-  }
-  if not formula.has("delta") {
-    log("escape_time: this formula has no delta; use precision: :plain")
-  }
-  let delta = formula["delta"]
-  # 基準軌道 (中心の点の軌道) を 64 bit で。[re, im, re, im, ...]。脱出したらそこまで
+  # 基準軌道 (origin の点の軌道) を 64 bit で。[re, im, re, im, ...]。脱出したらそこまで
   let k0 = param(0)
   func reference() -> List<Number> {
     let orbit = []
-    let Z = seed(center, k0)
+    let Z = seed(origin, k0)
     for n in 0..ref_iter {
       orbit.push(Z.x)
       orbit.push(Z.y)
       if cabs2(Z) > bailout { return orbit }
-      Z = step(Z, center, k0)
+      Z = step(Z, origin, k0)
     }
     orbit
   }
   let orbit = reference()
   let ref_len = orbit.len() / 2
+
+  # 帯を使う版。x は中心からの距離の対数、y は画面の上での角度
+  if duration > 0s {
+    let corner = math.sqrt(box.x * box.x + box.y * box.y) / 2
+    func zoom_at(u: Number) -> Number { corner * unit / math.exp(u) }
+    return Shader(samples = samples,
+      args = orbit,
+      zoom = ZoomMap(center = focus, zoom = zoom_of, duration = duration, unit = unit),
+      color = func (u, th, t, ref) {
+        let r = math.exp(u)
+        let dp = Vector(r * math.cos(th), r * math.sin(th) * up)
+        let limit = limit_of(zoom_at(u))
+        let k = param(0)
+        let d = start(dp)
+        let m = 0
+        for n in 0..limit {
+          let Z = Vector(ref[2 * m], ref[2 * m + 1])
+          let z = Z + d
+          let r2 = cabs2(z)
+          if r2 > bailout { return coloring(escaped(n, r2), z) }
+          if r2 < cabs2(d) or m + 1 >= ref_len {
+            d = z
+            m = 0
+            Z = Vector(ref[0], ref[1])
+          }
+          d = delta(Z, d, dp, k)
+          m = m + 1
+        }
+        coloring(-1, Vector(0, 0))
+      })
+  }
+
+  # カメラを使う版。x y は既にカメラの寄る先からの差になっている
+  if has_camera {
+    return Shader(samples = samples,
+      args = orbit,
+      camera = camera,
+      color = func (x, y, t, cam, ref) {
+        let dp = Vector(x * unit, y * unit * up)
+        let limit = limit_of(cam)
+        let k = param(t)
+        let d = start(dp)
+        let m = 0
+        for n in 0..limit {
+          let Z = Vector(ref[2 * m], ref[2 * m + 1])
+          let z = Z + d
+          let r2 = cabs2(z)
+          if r2 > bailout { return coloring(escaped(n, r2), z) }
+          if r2 < cabs2(d) or m + 1 >= ref_len {
+            d = z
+            m = 0
+            Z = Vector(ref[0], ref[1])
+          }
+          d = delta(Z, d, dp, k)
+          m = m + 1
+        }
+        coloring(-1, Vector(0, 0))
+      })
+  }
+
+  # 毎フレーム全画素を計算する版
   Shader(samples = samples,
     args = orbit,
     color = func (x, y, t, ref) {
       let zm = zoom_of(t)
-      let k = param(t)
-      let dp = offset(x, y, zm)
+      let dp = Vector((x - at.x - box.x / 2) * unit / zm, (y - at.y - box.y / 2) * unit / zm * up)
       let limit = limit_of(zm)
+      let k = param(t)
       let d = start(dp)
       let m = 0
       for n in 0..limit {
@@ -118,7 +175,6 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
       coloring(-1, Vector(0, 0))
     })
 }
-
 # Dict で表す。p はピクセルの複素座標、k は param(t) (Julia の c など)、Z は基準軌道、d は差分、dp は中心からの差
 #   seed(p, k): 最初の z / step(z, p, k): 次の z / start(dp): 差分の初期値 / delta(Z, d, dp, k): 差分の次の値 / degree: 次数
 ## Mandelbrot 集合の反復式 z' = z² + p。z は 0 から始まり、p がピクセルの複素座標。
@@ -202,22 +258,6 @@ export func multibrot(n: Number) -> Dict {
   }
 }
 
-## GPU の 32 bit のまま反復する。escape_time の precision に渡す。
-## 数万倍あたりまでなら、これで足りる
-## @category 精度
-## @type {Symbol} 精度の選び方
-## @example
-## escape_time(formula = mandelbrot, coloring = coloring, center = Vector(0, 0), span = 3, precision = plain)
-export let plain = :plain
-## 中心の点の軌道をスクリプト側の 64 bit で計算し、GPU はそこからの差分だけ反復する (摂動法)。
-## escape_time の precision に渡す。10 兆倍あたりまで寄れる
-## @category 精度
-## @type {Symbol} 精度の選び方
-## @example
-## # 既定はこちら。深く寄るときに要る
-## escape_time(formula = mandelbrot, coloring = coloring, center = deep, span = 1e-9, precision = perturbation)
-export let perturbation = :perturbation
-
 ## 脱出の速さから色を決める関数を作る。stops を period 回の反復ごとに 1 周する。
 ## escape_time の coloring に渡す
 ## @category 色付け
@@ -273,114 +313,4 @@ func diffabs(c: Number, d: Number) -> Number {
   }
   if c + d <= 0 { return -d }
   2 * c + d
-}
-
-## 中心へ寄っていくだけのズーム動画を、けた違いに速く作る。escape_time の代わりに使う。
-## 各フレームを別々に描かず、(中心からの距離の対数, 角度) で 1 本の帯を作り、
-## フレームはその窓を読むだけにする。帯は 1 フレームあたり数列しか伸びないので、
-## 1 フレームの計算量が 100 分の 1 以下になる
-## @category 描く
-## @param formula 反復式 (mandelbrot / burning_ship / multibrot(n))
-## @param coloring 色付け。func (mu, z) -> Color (smooth など)
-## @param center 複素平面の中心。ここへ寄っていく
-## @param span 最初に見える横幅 (複素平面の単位)
-## @param duration 動画の長さ。zoom はこの範囲で読まれる
-## @param zoom 倍率の時間変化。func (t) -> Number。増えていくこと (戻ると作り直しになって遅い)
-## @param max_iter 反復の上限。func (zoom) -> Number
-## @param samples 帯の 1 テクセルあたりの評価点の数
-## @param at 塗る図形の左上 (箱の座標)
-## @param box 塗る図形の大きさ (箱の座標)
-## @param flip true で虚軸を下向きにする
-## @param bailout 脱出とみなす |z|² の閾値
-## @param ref_iter 基準軌道の長さの上限
-## @param steps zoom を何点で表にするか
-## @returns 図形の fill に入れる
-##
-## 使えるのは、中心が動かない純粋なズームだけ。倍率が戻ると帯を作り直すので遅くなる。
-## 時刻で形や色が変わるもの (c を動かす julia など) は帯に載らないので escape_time を使う。
-## max_iter は「その半径が画面の隅に来るときの倍率」で決まる。画面の中心付近は
-## escape_time より多く回るので、潰れずに出る
-## @example
-## import { zoom_video, mandelbrot, smooth } from fractal
-##
-## let set = zoom_video(
-##   formula = mandelbrot,
-##   coloring = smooth([#061a3f, #5c9be6, #ffffff, #061a3f], 96),
-##   center = Vector(-0.7436438870371587, 0.1318259042053120),
-##   span = 4.0,
-##   duration = 2m,
-##   zoom = func (t) { math.exp(27.6 * math.min(1, t / 110)) },
-##   max_iter = func (zoom) { 150 + 110 * math.ln(zoom) },
-## )
-## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = set))
-export func zoom_video(formula: Dict, coloring: (Number, Vector) -> Color, center: Vector, span: Number, duration: Duration, zoom: (Number) -> Number = func (t) { 1 }, max_iter: (Number) -> Number = func (zoom) { 200 }, samples: Number = 1, at: Vector = Vector(0, 0), box: Vector = Vector(16, 9), flip: Bool = false, bailout: Number = 256, ref_iter: Number = 8000, steps: Number = 20000) -> Shader {
-  let seed = formula["seed"]
-  let step = formula["step"]
-  let start = formula["start"]
-  let delta = formula["delta"]
-  let ln_degree = math.ln(formula["degree"])
-  let param = if formula.has("param") { formula["param"] } else { func (t) { Vector(0, 0) } }
-  let limit_of = max_iter
-  let up = if flip { 1 } else { -1 }
-  if not formula.has("delta") {
-    log("zoom_video: this formula has no delta; use escape_time with precision: :plain")
-  }
-  # 箱の座標での、寄っていく先と、そこからいちばん遠い隅までの距離
-  let focus = Vector(at.x + box.x / 2, at.y + box.y / 2)
-  let corner = math.sqrt(box.x * box.x + box.y * box.y) / 2
-  # 帯の列 (距離の対数 u) は、その距離が画面の隅に来るフレームの倍率に対応する
-  func zoom_at(u: Number) -> Number { corner * span / box.x / math.exp(u) }
-  func escaped(n: Number, r2: Number) -> Number { n + 1 - math.ln(math.ln(r2) / 2) / ln_degree }
-
-  # 時刻から ln(箱の座標 1 あたりの複素平面の長さ) への表。エンジンが間を直線で結ぶ
-  let seconds = duration / 1s
-  let scale = []
-  for i in 0..=steps {
-    scale.push(math.ln(span / zoom(seconds * i / steps) / box.x))
-  }
-
-  let k0 = param(0)
-  func reference() -> List<Number> {
-    let orbit = []
-    let Z = seed(center, k0)
-    for n in 0..ref_iter {
-      orbit.push(Z.x)
-      orbit.push(Z.y)
-      if cabs2(Z) > bailout { return orbit }
-      Z = step(Z, center, k0)
-    }
-    orbit
-  }
-  let orbit = reference()
-  let ref_len = orbit.len() / 2
-
-  Shader(samples = samples,
-    args = orbit,
-    zoom = ZoomMap(center = focus, scale = scale, duration = duration),
-    # 帯の 1 テクセル。u は中心からの距離の対数、th は画面の上での角度。
-    # 反復は escape_time の摂動法と同じ。シェーダに渡せるのは名前のある関数だけで、
-    # args (基準軌道) は引数にできないので、ここに同じ形で書いてある。直すときは両方
-    color = func (u, th, t, ref) {
-      let r = math.exp(u)
-      let dp = Vector(r * math.cos(th), r * math.sin(th) * up)
-      let limit = limit_of(zoom_at(u))
-      let k = param(0)
-      let d = start(dp)
-      let m = 0
-      for n in 0..limit {
-        let Z = Vector(ref[2 * m], ref[2 * m + 1])
-        let z = Z + d
-        let r2 = cabs2(z)
-        if r2 > bailout { return coloring(escaped(n, r2), z) }
-        # z が差分より小さくなったら、基準を先頭に戻して差分 = z から数え直す (基準が尽きたときも)
-        if r2 < cabs2(d) or m + 1 >= ref_len {
-          d = z
-          m = 0
-          Z = Vector(ref[0], ref[1])
-        }
-        d = delta(Z, d, dp, k)
-        m = m + 1
-      }
-      coloring(-1, Vector(0, 0))
-    })
 }

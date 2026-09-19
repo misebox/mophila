@@ -1031,7 +1031,9 @@ impl Interp {
                             let Value::Func(closure) = &v else {
                                 return err(Kind::ArgumentType, "Shader.color expects a func written in the script, like func (x, y, t) { ... }");
                             };
-                            crate::render::shader::compile(closure)?;
+                            // camera を入れると引数が 1 つ増えるので、そのつもりで検査する
+                            let has_camera = args.iter().any(|a| a.name.as_deref() == Some("camera"));
+                            crate::render::shader::compile(closure, has_camera)?;
                         }
                         if kind == "TextArea" && name == "font" {
                             if let Value::Str(family) = &v {
@@ -1051,6 +1053,9 @@ impl Interp {
                     // 書かなかった属性も、既定のある分は入れておく。描く側と読む側が同じ値を見る
                     for (name, value) in defaults(kind) {
                         attrs.entry((*name).to_string()).or_insert_with(|| value.clone());
+                    }
+                    if kind == "ZoomMap" {
+                        attrs.insert("scale".into(), self.zoom_table(&attrs)?);
                     }
                     return Ok(Value::Object(Rc::new(RefCell::new(Object { kind: kind.to_string(), decl: None, attrs, children: vec![], placed: false, tracks: vec![] }))));
                 }
@@ -1488,6 +1493,36 @@ impl Interp {
             keyframes.push(TlKeyframe { time: row.time, end: None, assigns, block: None, ease: row.ease.clone() });
         }
         Ok(Value::Timeline(Rc::new(Timeline { param: "t".into(), secs: None, keyframes, relative: motion.relative, duration: Cell::new(motion.duration.get()), tracks: RefCell::new(Vec::new()), groups: RefCell::new(None) }.normalize())))
+    }
+
+    /// ZoomMap の表。倍率 1 のときの 1 箱単位あたりの長さ (unit) を zoom(t) で割り、
+    /// その対数を duration まで等間隔に並べる。描くときに 1 フレームずつ呼び直せないので、
+    /// 作るときに 1 度だけ並べておく
+    fn zoom_table(&mut self, attrs: &HashMap<String, Value>) -> Result<Value> {
+        const STEPS: usize = 20_000;
+        let (Some(Value::Func(zoom)), Some(Value::Duration(duration))) = (attrs.get("zoom"), attrs.get("duration")) else {
+            return err(Kind::AttributeType, "ZoomMap needs zoom (func (t) -> Number) and duration");
+        };
+        if *duration <= 0.0 {
+            return err(Kind::OutOfRange, "ZoomMap.duration must be above 0");
+        }
+        let unit = match attrs.get("unit") {
+            Some(Value::Number(u, _)) if *u > 0.0 => *u,
+            Some(Value::Number(u, _)) => return err(Kind::OutOfRange, format!("ZoomMap.unit must be above 0, found {u}")),
+            _ => 1.0,
+        };
+        let (zoom, duration) = (zoom.clone(), *duration);
+        let mut out = Vec::with_capacity(STEPS + 1);
+        for i in 0..=STEPS {
+            let t = duration * i as f64 / STEPS as f64;
+            // t は秒の Number。同じ関数がシェーダの中でも走るので Duration にはできない
+            match self.apply(&zoom, vec![(None, Value::num(t))])? {
+                Value::Number(k, _) if k > 0.0 => out.push(Value::num((unit / k).ln())),
+                Value::Number(k, _) => return err(Kind::OutOfRange, format!("ZoomMap.zoom must stay above 0, found {k} at {t}s")),
+                other => return err(Kind::AttributeType, format!("ZoomMap.zoom must return Number, found {}", other.type_name())),
+            }
+        }
+        Ok(Value::List(Rc::new(RefCell::new(out))))
     }
 
     /// 点の並びをつないだ Path。segments の組を手で書かずに済む
@@ -2279,7 +2314,7 @@ fn same_place(before: &Value, after: &Value) -> bool {
 /// 属性の型に値が合うか。builtin の Union (Paint = Color | Shader) もここで見る
 /// builtin 型の名前 (補完用)
 pub const KINDS: &[&str] =
-    &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "View", "Timeline", "Narration", "SayVoiceEngine", "EspeakVoiceEngine", "Shader", "ZoomMap", "Gradient", "Color"];
+    &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "View", "Timeline", "Narration", "SayVoiceEngine", "EspeakVoiceEngine", "Shader", "ZoomMap", "Camera", "Gradient", "Color"];
 
 /// builtin 型の属性と型
 /// 型の名前は大文字で始まり、builtin の型と union の名前は使えない
@@ -2435,11 +2470,16 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
         opt("rotation", "Number"),
         opt("scale", "Number"),
         opt("pivot", "Vector"),
+        opt("camera", "Camera"),
     ];
     // 読み上げ。voice は engine に渡す声の名前、volume は混ぜるときの音量
     const NARRATION: &[Attr] = &[req("text", "String"), req("duration", "Duration"), opt("volume", "Number")];
-    const SHADER: &[Attr] = &[req("color", "Func"), opt("args", "List"), opt("samples", "Number"), opt("zoom", "ZoomMap")];
-    const ZOOM_MAP: &[Attr] = &[req("center", "Vector"), req("scale", "List"), req("duration", "Duration")];
+    const SHADER: &[Attr] = &[req("color", "Func"), opt("args", "List"), opt("samples", "Number"), opt("zoom", "ZoomMap"), opt("camera", "Camera")];
+    // 倍率の表は zoom と duration と unit から作る (作るのは construct)。scale は作った結果
+    const ZOOM_MAP: &[Attr] =
+        &[req("center", "Vector"), req("zoom", "Func"), req("duration", "Duration"), opt("unit", "Number"), opt("scale", "List")];
+    // 箱の中身の寄り引き。from を to に、scale 倍で置く
+    const CAMERA: &[Attr] = &[req("from", "Vector"), opt("to", "Vector"), opt("scale", "Number")];
     // to は :linear、radius は :radial のときだけ要るので、必須にはしない
     const GRADIENT: &[Attr] = &[
         req("stops", "List"),
@@ -2462,6 +2502,7 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
         name if crate::render::voice::by_name(name).is_some() => crate::render::voice::by_name(name).expect("just checked").attrs(),
         "Shader" => SHADER,
         "ZoomMap" => ZOOM_MAP,
+        "Camera" => CAMERA,
         "Gradient" => GRADIENT,
         _ => return None,
     })

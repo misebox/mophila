@@ -340,7 +340,64 @@ pub struct Timeline {
 }
 
 /// (対象, 属性パス, その属性を書くキーフレームの並び)
-pub type Groups = Vec<(ObjRef, Vec<String>, Vec<(usize, usize)>)>;
+pub type Groups = Vec<(TlTarget, Vec<String>, Vec<(usize, usize)>)>;
+
+/// キーフレームの書き込み先。図形の属性か、普通の変数か
+#[derive(Clone)]
+pub enum TlTarget {
+    /// 図形。path はその属性
+    Object(ObjRef),
+    /// 変数。定義されていたスコープに書く。path は値の中 (p.x など)
+    Var(Scope, String),
+}
+
+impl TlTarget {
+    /// 同じ書き込み先か
+    pub fn same(&self, other: &TlTarget) -> bool {
+        match (self, other) {
+            (TlTarget::Object(a), TlTarget::Object(b)) => Rc::ptr_eq(a, b),
+            (TlTarget::Var(sa, na), TlTarget::Var(sb, nb)) => Rc::ptr_eq(sa, sb) && na == nb,
+            _ => false,
+        }
+    }
+
+    /// 図形ならその実体
+    pub fn object(&self) -> Option<&ObjRef> {
+        match self {
+            TlTarget::Object(o) => Some(o),
+            TlTarget::Var(..) => None,
+        }
+    }
+
+    /// いま入っている値。属性パスをたどる
+    pub fn get(&self, path: &[String]) -> Option<Value> {
+        match self {
+            TlTarget::Object(o) => {
+                let [attr, rest @ ..] = path else { return None };
+                let v = o.borrow().attrs.get(attr).cloned()?;
+                follow(v, rest)
+            }
+            TlTarget::Var(scope, name) => {
+                let v = scope.borrow().get(name).cloned()?;
+                follow(v, path)
+            }
+        }
+    }
+}
+
+/// 値の中の属性をたどる (Vector.x など)
+fn follow(mut v: Value, path: &[String]) -> Option<Value> {
+    for field in path {
+        v = match (v, field.as_str()) {
+            (Value::Vector(x, _), "x") | (Value::Apos(_, x, _), "x") => Value::num(x),
+            (Value::Vector(_, y), "y") | (Value::Apos(_, _, y), "y") => Value::num(y),
+            (Value::Apos(_, x, y), "vector") => Value::Vector(x, y),
+            (Value::Apos(a, _, _), "anchor") => Value::Symbol(a),
+            _ => return None,
+        };
+    }
+    Some(v)
+}
 
 impl Timeline {
     /// 中身のない入れ物
@@ -380,7 +437,7 @@ pub struct TlBlock {
 }
 
 pub struct TlAssign {
-    pub target: ObjRef,
+    pub target: TlTarget,
     /// 属性パス。[position, x] なら position の中の x
     pub path: Vec<String>,
     pub expr: Expr,
@@ -405,7 +462,7 @@ impl Timeline {
         let mut out: Groups = Vec::new();
         for (ki, kf) in self.keyframes.iter().enumerate() {
             for (ai, a) in kf.assigns.iter().enumerate() {
-                match out.iter_mut().find(|(o, path, _)| Rc::ptr_eq(o, &a.target) && *path == a.path) {
+                match out.iter_mut().find(|(o, path, _)| o.same(&a.target) && *path == a.path) {
                     Some((_, _, list)) => list.push((ki, ai)),
                     None => out.push((a.target.clone(), a.path.clone(), vec![(ki, ai)])),
                 }

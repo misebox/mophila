@@ -7,7 +7,7 @@ use std::cell::Cell;
 
 use crate::lang::ast::{Arg, BinOp, DictKey, Expr, ImportKind, ImportSource, MotionDef, Pattern, RowItem, Stmt, StmtKind};
 use crate::lang::error::{Kind, MophError, Result, err};
-use crate::lang::value::{Audio, Clip, Closure, Module, Motion, MotionRowVal, ObjRef, Object, Placed, Ratio, Record, Scopes, Timeline, TlAssign, TlKeyframe, Track, UserType, Value, new_scope};
+use crate::lang::value::{Audio, Clip, Closure, Module, Motion, MotionRowVal, ObjRef, Object, Placed, Ratio, Record, Scopes, Timeline, TlAssign, TlKeyframe, TlTarget, Track, UserType, Value, new_scope};
 use crate::stdlib;
 
 /// 文の実行結果。return で関数を抜けるときに伝える
@@ -35,7 +35,7 @@ pub struct Interp {
     /// フォント検索、テキストレイアウト、描画命令のキャッシュ。初回に必要になったときに作る
     cache: Option<crate::render::text::RenderCache>,
     /// 終わった Timeline の最後の値。キーは (Timeline のポインタ, 絶対開始時刻のビット)
-    finished: HashMap<(usize, u64), Vec<(ObjRef, Vec<String>, Value)>>,
+    finished: HashMap<(usize, u64), Vec<(TlTarget, Vec<String>, Value)>>,
     /// 前回描いた時刻。戻ったら finished を捨てる
     last_t: f64,
     /// 実行中のファイルのディレクトリ。import "file" の相対パスの基準
@@ -379,6 +379,26 @@ impl Interp {
     }
 
     /// 属性パスに値を書く。[position, x] なら position (Pos) の x だけを変える
+    /// キーフレームの値を書く。図形なら属性、変数ならそのスコープへ
+    fn write_target(&self, target: &TlTarget, path: &[String], value: Value) -> Result<()> {
+        match target {
+            TlTarget::Object(o) => self.set_path(o, path, value),
+            TlTarget::Var(scope, name) => {
+                let value = match path {
+                    [] => value,
+                    path => {
+                        let Some(current) = scope.borrow().get(name).cloned() else {
+                            return err(Kind::UndefinedVariable, format!("\"{name}\" is not defined"));
+                        };
+                        self.write_path(current, path, value)?
+                    }
+                };
+                scope.borrow_mut().insert(name.clone(), value);
+                Ok(())
+            }
+        }
+    }
+
     fn set_path(&self, obj: &ObjRef, path: &[String], value: Value) -> Result<()> {
         match path {
             [] => err(Kind::UndefinedAttribute, "empty attribute path"),
@@ -597,6 +617,25 @@ impl Interp {
                 let hint = if stdlib::find(name).is_some() { format!("; add \"import {name}\"") } else { String::new() };
                 MophError::new(Kind::UndefinedVariable, format!("\"{name}\" is not defined{hint}"))
             })
+    }
+
+    /// キーフレームの書き込み先。図形なら属性、素の名前なら変数そのもの
+    fn keyframe_target(&mut self, base: &Expr, path: &[String]) -> Result<TlTarget> {
+        // 素の名前で、指しているのが図形でなければ変数として動かす
+        if let Expr::Ident(name) = base {
+            let scope = self.scopes.iter().rev().find(|s| s.borrow().contains_key(name));
+            let Some(scope) = scope else {
+                return err(Kind::UndefinedVariable, format!("\"{name}\" is not defined"));
+            };
+            let is_object = matches!(scope.borrow().get(name), Some(Value::Object(_)));
+            if !is_object {
+                return Ok(TlTarget::Var(scope.clone(), name.clone()));
+            }
+        }
+        if path.is_empty() {
+            return err(Kind::UnexpectedToken, "a keyframe writes to a variable or to an attribute of a shape");
+        }
+        Ok(TlTarget::Object(self.eval_object(base)?))
     }
 
     fn eval_object(&mut self, e: &Expr) -> Result<ObjRef> {
@@ -1340,7 +1379,7 @@ impl Interp {
                     .zip(paths)
                     .map(|(item, path)| {
                         let RowItem::Value(e) = item else { unreachable!() };
-                        TlAssign { target: target.clone(), path: path.clone(), expr: e.clone(), scopes: self.scopes.clone() }
+                        TlAssign { target: TlTarget::Object(target.clone()), path: path.clone(), expr: e.clone(), scopes: self.scopes.clone() }
                     })
                     .collect();
                 keyframes.push(TlKeyframe { time, end, assigns, block: None, ease: row.ease.clone() });
@@ -1369,10 +1408,7 @@ impl Interp {
                 let mut assigns = Vec::new();
                 for item in &row.items {
                     let RowItem::Assign(obj, path, e) = item else { unreachable!() };
-                    if path.is_empty() {
-                        return err(Kind::UnexpectedToken, "keyframe must assign to an attribute");
-                    }
-                    let target = self.eval_object(obj)?;
+                    let target = self.keyframe_target(obj, path)?;
                     assigns.push(TlAssign { target, path: path.clone(), expr: e.clone(), scopes: self.scopes.clone() });
                 }
                 keyframes.push(TlKeyframe { time, end, assigns, block: None, ease: row.ease.clone() });
@@ -1439,7 +1475,14 @@ impl Interp {
             }
             let assigns = attrs
                 .into_iter()
-                .filter_map(|attr| target.borrow().attrs.get(&attr).map(|v| TlAssign { target: target.clone(), path: vec![attr.clone()], expr: Expr::from_value(v), scopes: vec![] }))
+                .filter_map(|attr| {
+                    target.borrow().attrs.get(&attr).map(|v| TlAssign {
+                        target: TlTarget::Object(target.clone()),
+                        path: vec![attr.clone()],
+                        expr: Expr::from_value(v),
+                        scopes: vec![],
+                    })
+                })
                 .collect();
             target.borrow_mut().attrs = before;
             keyframes.push(TlKeyframe { time: row.time, end: None, assigns, block: None, ease: row.ease.clone() });
@@ -1731,17 +1774,17 @@ impl Interp {
                 if let Some(values) = self.finished.get(&key) {
                     // 借りたまま回す。毎フレーム通るので (対象, パス, 値) を作り直さない
                     for (target, path, value) in values {
-                        self.set_path(target, path, value.clone())?;
+                        self.write_target(target, path, value.clone())?;
                     }
                     return Ok(());
                 }
                 self.apply_timeline(tl, local)?;
                 let mut values = Vec::new();
                 for a in tl.keyframes.iter().flat_map(|k| &k.assigns) {
-                    if values.iter().any(|(o, p, _): &(ObjRef, Vec<String>, Value)| Rc::ptr_eq(o, &a.target) && *p == a.path) {
+                    if values.iter().any(|(o, p, _): &(TlTarget, Vec<String>, Value)| o.same(&a.target) && *p == a.path) {
                         continue;
                     }
-                    if let Some(v) = get_path(&a.target, &a.path) {
+                    if let Some(v) = a.target.get(&a.path) {
                         values.push((a.target.clone(), a.path.clone(), v));
                     }
                 }
@@ -1753,8 +1796,11 @@ impl Interp {
                 }
                 self.apply_timeline(tl, local)?;
                 if let Some(factor) = fade_factor(placed, elapsed, local, duration) {
+                    // フェードが掛かるのは図形だけ。変数には不透明度が無い
                     for target in timeline_targets(tl) {
-                        self.set_attr(&target, "opacity", Value::num(factor))?;
+                        if let Some(o) = target.object() {
+                            self.set_attr(o, "opacity", Value::num(factor))?;
+                        }
                     }
                 }
             }
@@ -1774,7 +1820,7 @@ impl Interp {
             // 範囲の行の中なら、その時刻で式を評価するだけ
             if let Some((_, a)) = indices.iter().map(at).find(|(kf, _)| kf.end.is_some_and(|e| kf.time <= t && t <= e)) {
                 let value = self.eval_assign(tl, a, t)?;
-                self.set_path(target, path, value)?;
+                self.write_target(target, path, value)?;
                 continue;
             }
             // 点の列。範囲の行は始点と終点の 2 点になる
@@ -1798,7 +1844,7 @@ impl Interp {
                 }
                 _ => v0,
             };
-            self.set_path(target, path, value)?;
+            self.write_target(target, path, value)?;
         }
         // ブロックの行。属性ごとに分けられないので、区間の間まるごと走らせる。
         // 同じ属性を書いていたら、上の行より後に書いたこちらが残る
@@ -2051,10 +2097,10 @@ pub(crate) fn equals(a: &Value, b: &Value) -> bool {
 }
 
 /// Timeline が書き込む対象の一覧 (重複なし)
-fn timeline_targets(tl: &Timeline) -> Vec<ObjRef> {
-    let mut out: Vec<ObjRef> = Vec::new();
+fn timeline_targets(tl: &Timeline) -> Vec<TlTarget> {
+    let mut out: Vec<TlTarget> = Vec::new();
     for a in tl.keyframes.iter().flat_map(|k| &k.assigns) {
-        if !out.iter().any(|o| Rc::ptr_eq(o, &a.target)) {
+        if !out.iter().any(|o| o.same(&a.target)) {
             out.push(a.target.clone());
         }
     }
@@ -2129,28 +2175,15 @@ fn collect_from_track(track: &Track, out: &mut Vec<ObjRef>) {
                     collect_from_track(&child.track, out);
                 }
                 for a in tl.keyframes.iter().flat_map(|k| &k.assigns) {
-                    collect_objects(&a.target, out);
+                    if let Some(o) = a.target.object() {
+                        collect_objects(o, out);
+                    }
                 }
             }
         }
     }
 }
 
-/// 属性パスの値を読む
-fn get_path(obj: &ObjRef, path: &[String]) -> Option<Value> {
-    let [attr, rest @ ..] = path else { return None };
-    let mut v = obj.borrow().attrs.get(attr).cloned()?;
-    for field in rest {
-        v = match (v, field.as_str()) {
-            (Value::Vector(x, _), "x") | (Value::Apos(_, x, _), "x") => Value::num(x),
-            (Value::Vector(_, y), "y") | (Value::Apos(_, _, y), "y") => Value::num(y),
-            (Value::Apos(_, x, y), "vector") => Value::Vector(x, y),
-            (Value::Apos(a, _, _), "anchor") => Value::Symbol(a),
-            _ => return None,
-        };
-    }
-    Some(v)
-}
 
 /// fadeIn / fadeOut の途中なら、掛ける不透明度。
 /// fadeIn は置いた時刻からの経過だけで決まる。fadeOut は終わりが要るので、長さのあるものだけ

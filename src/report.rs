@@ -5,13 +5,13 @@ use std::rc::Rc;
 
 use crate::lang::eval::Interp;
 use crate::render::media::Media;
-use crate::lang::value::{ObjRef, Placed, Timeline, Track, Value};
+use crate::lang::value::{ObjRef, Placed, Timeline, TlTarget, Track, Value};
 
 /// 1 つの変化。区間 (from..to) で attr が v0 から v1 に変わる
 pub struct Event {
     pub from: f64,
     pub to: f64,
-    pub target: ObjRef,
+    pub target: TlTarget,
     pub attr: String,
     pub v0: Option<Value>,
     pub v1: Value,
@@ -50,16 +50,19 @@ impl Filter {
     }
 
     fn accepts(&self, e: &Event) -> bool {
-        let o = e.target.borrow();
-        if self.kind.as_deref().is_some_and(|k| k != o.kind) {
-            return false;
+        // 変数には kind も text も無いので、それで絞ったら外れる
+        let obj = e.target.object();
+        if let Some(k) = self.kind.as_deref() {
+            if obj.is_none_or(|o| o.borrow().kind != k) {
+                return false;
+            }
         }
         if self.attr.as_deref().is_some_and(|a| a != e.attr) {
             return false;
         }
         if let Some(t) = &self.text {
-            let content = match o.attrs.get("text") {
-                Some(Value::Str(s)) => s.clone(),
+            let content = match obj.and_then(|o| o.borrow().attrs.get("text").cloned()) {
+                Some(Value::Str(s)) => s,
                 _ => String::new(),
             };
             if !content.contains(t.as_str()) {
@@ -156,15 +159,16 @@ pub fn media_report(media: &Media, filter: &Filter) -> String {
 fn timeline_events(interp: &mut Interp, tl: &Rc<Timeline>, start: f64, out: &mut Vec<Event>) {
     let scale = tl.time_scale();
     // (対象, 属性パス) ごとに、時刻順の (時刻, 終わり, 値, ease)
-    let mut series: Vec<(ObjRef, String, Vec<(f64, Option<f64>, Value, Option<String>)>)> = Vec::new();
+    let mut series: Vec<(TlTarget, String, Vec<(f64, Option<f64>, Value, Option<String>)>)> = Vec::new();
     for kf in &tl.keyframes {
         // ブロックの行は走らせてみないと何を書くか分からない。始まりと終わりで 1 度ずつ試す
         if let (Some(block), Some(end)) = (&kf.block, kf.end) {
             for (obj, attr, value) in interp.probe_tl_block(tl, &block.clone(), kf.time) {
                 let entry = (start + kf.time * scale, Some(start + end * scale), value, kf.ease.clone());
-                match series.iter_mut().find(|(o, p, _)| Rc::ptr_eq(o, &obj) && *p == attr) {
+                let target = TlTarget::Object(obj);
+                match series.iter_mut().find(|(o, p, _)| TlTarget::same(o, &target) && *p == attr) {
                     Some((_, _, list)) => list.push(entry),
-                    None => series.push((obj, attr, vec![entry])),
+                    None => series.push((target, attr, vec![entry])),
                 }
             }
             continue;
@@ -173,7 +177,7 @@ fn timeline_events(interp: &mut Interp, tl: &Rc<Timeline>, start: f64, out: &mut
             let path = a.path.join(".");
             let value = interp.eval_assign_pub(tl, a, kf.time).unwrap_or(Value::Nothing);
             let entry = (start + kf.time * scale, kf.end.map(|e| start + e * scale), value, kf.ease.clone());
-            match series.iter_mut().find(|(o, p, _)| Rc::ptr_eq(o, &a.target) && *p == path) {
+            match series.iter_mut().find(|(o, p, _)| TlTarget::same(o, &a.target) && *p == path) {
                 Some((_, _, list)) => list.push(entry),
                 None => series.push((a.target.clone(), path, vec![entry])),
             }
@@ -201,7 +205,11 @@ fn timeline_events(interp: &mut Interp, tl: &Rc<Timeline>, start: f64, out: &mut
     }
 }
 
-fn label(o: &ObjRef) -> String {
+fn label(target: &TlTarget) -> String {
+    let TlTarget::Object(o) = target else {
+        let TlTarget::Var(_, name) = target else { unreachable!() };
+        return name.clone();
+    };
     let b = o.borrow();
     match b.attrs.get("text") {
         Some(Value::Str(s)) => format!("{} \"{}\"", b.kind, truncate(s, 24)),
@@ -239,8 +247,9 @@ pub fn format_events(events: &[Event], filter: &Filter) -> String {
 /// TextArea ごとに、opacity が 0 より大きい区間と、文字数から見た読める時間の目安
 pub fn text_visibility(events: &[Event], filter: &Filter) -> String {
     let mut by_obj: HashMap<usize, (ObjRef, Vec<(f64, f64)>)> = HashMap::new();
-    for e in events.iter().filter(|e| e.attr == "opacity" && e.target.borrow().kind == "TextArea") {
-        let entry = by_obj.entry(Rc::as_ptr(&e.target) as usize).or_insert_with(|| (e.target.clone(), Vec::new()));
+    for e in events.iter().filter(|e| e.attr == "opacity") {
+        let Some(obj) = e.target.object().filter(|o| o.borrow().kind == "TextArea") else { continue };
+        let entry = by_obj.entry(Rc::as_ptr(obj) as usize).or_insert_with(|| (obj.clone(), Vec::new()));
         let v1 = match e.v1 { Value::Number(n, _) => n, _ => 0.0 };
         entry.1.push((e.to, v1));
     }

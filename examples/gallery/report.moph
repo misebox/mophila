@@ -1,7 +1,7 @@
 # report.moph — 部品を並べて作る報告の画面。棒が伸び、線が描かれ、表が 1 行ずつ出る
 
 import { graph_paper, vignette } from backdrop
-import { bar, line, axes } from chart
+import { bar, line_chart, axes } from chart
 import { arrow, leader_label } from diagram
 import { table } from diagram
 import { lower_third, thousands } from text
@@ -37,7 +37,7 @@ track.place(fade_in(point, 0.4s), at = 2.6s)
 # 折れ線。左から描かれる
 let trend = [Vector(0, 12), Vector(1, 18), Vector(2, 16), Vector(3, 24), Vector(4, 29), Vector(5, 38)]
 v.place(axes(6.4, 3.2, 0, 5, 0, 40, "", "", 4), at = Pos(9, 2.6, anchor = :topLeft), w = 6.4)
-v.place(line(trend, 6.4, 3.2, 0, 5, 0, 40, #3f6fb0, 1, duration = 1.2s, start = 3.6s), at = Pos(9, 2.6, anchor = :topLeft), w = 6.4)
+v.place(line_chart(trend, 6.4, 3.2, 0, 5, 0, 40, #3f6fb0, 1, duration = 1.2s, start = 3.6s), at = Pos(9, 2.6, anchor = :topLeft), w = 6.4)
 # 折れ線の右端 (9 + 6.4, 2.6 + 3.2 * (1 - 38/40)) を指す
 let note = leader_label(Vector(15.4, 2.76), "伸び続けている", Vector(-2.4, 1.1), 16, 9, 0.38, #3f6fb0)
 note.opacity = 0

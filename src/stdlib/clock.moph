@@ -55,7 +55,7 @@ export func analog(time: Duration, w: Number, h: Number, face: Color = #ffffff, 
 export func digital(time: Duration, w: Number, h: Number, format: String = "hh:mm", back: Color = #14161a, ink: Color = #9fe0a0) -> View {
   let v = View(box = Vector(w, h))
   v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h, radius = h * 0.12, fill = back))
-  v.place(TextArea(position = Pos(w / 2, h / 2), text = text.duration(time, format), fontSize = h * 0.5, fill = ink, align = :center))
+  v.place(TextArea(position = Pos(w / 2, h / 2), text = text.clock_text(time, format), fontSize = h * 0.5, fill = ink, align = :center))
   v
 }
 
@@ -82,7 +82,7 @@ export func countdown(remaining: Duration, total: Duration, w: Number, h: Number
   if k > 0 {
     v.place(Polygon(points = shape.ring_segment(cx, cy, r_in, r_out, 0, 360 * k, 48), fill = color))
   }
-  v.place(TextArea(position = Pos(cx, cy), text = text.duration(remaining, format), fontSize = r_out * 0.42, fill = #1a1d23, align = :center))
+  v.place(TextArea(position = Pos(cx, cy), text = text.clock_text(remaining, format), fontSize = r_out * 0.42, fill = #1a1d23, align = :center))
   v
 }
 
@@ -104,7 +104,7 @@ export func stopwatch(elapsed: Duration, w: Number, h: Number, format: String = 
   let r = math.min(w, h) / 2
   v.place(Circle(position = Pos(cx, cy), radius = r * 0.94, stroke = track, strokeWidth = r * 0.08))
   v.place(Circle(position = Pos(shape.polar(cx, cy, r * 0.94, (elapsed / 1s % 60) * 6)), radius = r * 0.08, fill = color))
-  v.place(TextArea(position = Pos(cx, cy), text = text.duration(elapsed, format), fontSize = r * 0.4, fill = color, align = :center))
+  v.place(TextArea(position = Pos(cx, cy), text = text.clock_text(elapsed, format), fontSize = r * 0.4, fill = color, align = :center))
   v
 }
 

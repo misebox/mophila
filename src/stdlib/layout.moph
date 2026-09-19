@@ -11,10 +11,10 @@
 ## @returns cols * rows 個
 ## @example
 ## # 画面全体を 4 列 3 行に分け、各マスの中心に円を置く
-## for p in grid(0, 0, 16, 9, 4, 3) {
+## for p in grid_centers(0, 0, 16, 9, 4, 3) {
 ##   v.place(Circle(position = Pos(p), radius = 0.4, fill = #4080e0))
 ## }
-export func grid(x: Number, y: Number, w: Number, h: Number, cols: Number, rows: Number) -> List<Vector> {
+export func grid_centers(x: Number, y: Number, w: Number, h: Number, cols: Number, rows: Number) -> List<Vector> {
   let cw = w / cols
   let ch = h / rows
   let cells = []

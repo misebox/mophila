@@ -41,7 +41,7 @@ export func arrow(from: Vector, to: Vector, progress: Number = 1, color: Color =
   let len = math.hypot(d.x, d.y)
   if len <= 0 { return Polygon(points = [], fill = color) }
   let hl = math.min(if head > 0 { head } else { width * 5 }, len)
-  Polygon(points = shape.arrow(from, tip, width, hl), fill = color)
+  Polygon(points = shape.arrow_points(from, tip, width, hl), fill = color)
 }
 
 ## 直角に曲がる線。フローチャートの枝分かれに使う

@@ -61,8 +61,8 @@ export func star(cx: Number, cy: Number, outer: Number, inner: Number, n: Number
 ## @param head 矢じりの長さ
 ## @param head_width 矢じりの幅 (既定は width の 3 倍)
 ## @example
-## Polygon(points = arrow(Vector(2, 4.5), Vector(10, 4.5), 0.2, 0.6), fill = #303030)
-export func arrow(from: Vector, to: Vector, width: Number, head: Number, head_width: Number = 0) -> List<Vector> {
+## Polygon(points = arrow_points(Vector(2, 4.5), Vector(10, 4.5), 0.2, 0.6), fill = #303030)
+export func arrow_points(from: Vector, to: Vector, width: Number, head: Number, head_width: Number = 0) -> List<Vector> {
   let hw = if head_width == 0 { width * 3 } else { head_width }
   let d = to - from
   let len = math.sqrt(d.x * d.x + d.y * d.y)

@@ -43,8 +43,8 @@ export func typewriter(s: String, revealed: Number) -> String {
 ## @param digits 小数点以下の桁数 (既定 0)
 ## @returns 桁を揃えた文字列
 ## @example
-## number(3.14159, 2)   # "3.14"
-export func number(value: Number, digits: Number = 0) -> String {
+## decimals(3.14159, 2)   # "3.14"
+export func decimals(value: Number, digits: Number = 0) -> String {
   let d = math.max(math.floor(digits), 0)
   let scale = math.pow(10, d)
   let r = math.round(math.abs(value) * scale)
@@ -66,7 +66,7 @@ export func number(value: Number, digits: Number = 0) -> String {
 ## @example
 ## thousands(1234567)   # "1,234,567"
 export func thousands(value: Number, digits: Number = 0, sep: String = ",") -> String {
-  let s = number(value, digits)
+  let s = decimals(value, digits)
   let sign = if s[0..1] == "-" { "-" } else { "" }
   let body = if sign == "-" { s[1..s.len()] } else { s }
   let parts = body.split(".")
@@ -91,7 +91,7 @@ export func thousands(value: Number, digits: Number = 0, sep: String = ",") -> S
 ## @example
 ## percent(0.253, 1)   # "25.3%"
 export func percent(value: Number, digits: Number = 0) -> String {
-  number(value * 100, digits) + "%"
+  decimals(value * 100, digits) + "%"
 }
 
 ## Duration を時計の表示にする
@@ -100,9 +100,9 @@ export func percent(value: Number, digits: Number = 0) -> String {
 ## @param format hh mm ss h m s S SS を値に置き換える (既定 "mm:ss")
 ## @returns 置き換えたあとの文字列。負なら先頭に "-"
 ## @example
-## duration(83.4s)              # "01:23"
-## duration(83.4s, "m:ss.S")    # "1:23.4"
-export func duration(d: Duration, format: String = "mm:ss") -> String {
+## clock_text(83.4s)              # "01:23"
+## clock_text(83.4s, "m:ss.S")    # "1:23.4"
+export func clock_text(d: Duration, format: String = "mm:ss") -> String {
   let total = d / 1s
   let t = math.abs(total)
   let h = math.floor(t / 3600)

@@ -99,8 +99,8 @@ export func to_hsl(c: Color) -> Tuple {
 ## @param k 位置 0..1
 ## @example
 ## let heat = [#2040a0, #40a040, #e0d040, #e04040]
-## scale(heat, 0.5)   # 真ん中あたりの色
-export func scale(colors: List<Color>, k: Number) -> Color {
+## ramp(heat, 0.5)   # 真ん中あたりの色
+export func ramp(colors: List<Color>, k: Number) -> Color {
   let n = colors.len()
   if n == 1 { return colors[0] }
   let x = math.clamp(k, 0, 1) * (n - 1)

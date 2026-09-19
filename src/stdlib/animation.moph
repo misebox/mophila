@@ -150,8 +150,8 @@ export func spin(target: Placeable, turns: Number, duration: Duration = 1s) -> T
 ## @returns 無し。track に直接置く
 ## @example
 ## # 3 枚を 0.2s ずつずらして出し、6s に消し終える
-## show(track, [a, b, c], at = 1s, end = 6s, stagger = 0.2s)
-export func show(track: Timeline, targets: List<Placeable>, at: Duration, end: Duration, duration: Duration = 0.5s, stagger: Duration = 0s) -> Nothing {
+## show_between(track, [a, b, c], at = 1s, end = 6s, stagger = 0.2s)
+export func show_between(track: Timeline, targets: List<Placeable>, at: Duration, end: Duration, duration: Duration = 0.5s, stagger: Duration = 0s) -> Nothing {
   for (i, target) in targets.enumerate() {
     track.place(fade_in(target, duration), at = at + stagger * i)
     track.place(fade_out(target, duration), at = end - duration)

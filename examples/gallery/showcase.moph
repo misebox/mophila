@@ -7,16 +7,16 @@ import math
 import { categorical, gray, alpha } from color
 import shape
 import { row } from layout
-import { show, spin, fade_in, fade_out } from animation
+import { show_between, spin, fade_in, fade_out } from animation
 import { blobs, graph_paper, particles, vignette } from backdrop
-import { axes, bar, line, pie } from chart
+import { axes, bar, line_chart, pie } from chart
 import { progress_ring, stars } from meter
 import { countdown, timeline_bar } from clock
 import { node_graph, speech_bubble, leader_label } from diagram
 import { browser, terminal, key_press, toast, cursor } from ui
 import { lower_third, thousands, highlight } from text
 import { spotlight } from focus
-import { map_route, map_pin, project } from media
+import { map_route, map_pin, to_mercator } from media
 
 let v = View(box = Vector(16, 9))
 v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #f4f1ea))
@@ -52,7 +52,7 @@ data.place(TextArea(position = Pos(6.8, 2.1, anchor = :right), text = thousands(
 
 let trend = [Vector(0, 12), Vector(1, 18), Vector(2, 16), Vector(3, 24), Vector(4, 29), Vector(5, 38)]
 data.place(axes(6, 3.4, 0, 5, 0, 40, "", "", 4), at = Pos(9.2, 2.4, anchor = :topLeft), w = 6)
-data.place(line(trend, 6, 3.4, 0, 5, 0, 40, #3f6fb0, 1, 1s, 6.4s), at = Pos(9.2, 2.4, anchor = :topLeft), w = 6)
+data.place(line_chart(trend, 6, 3.4, 0, 5, 0, 40, #3f6fb0, 1, 1s, 6.4s), at = Pos(9.2, 2.4, anchor = :topLeft), w = 6)
 
 # 下の段に小さい部品を 3 つ
 let slots = row(0.8, 6.3, 14.4, 3, 0.6)
@@ -66,7 +66,7 @@ let (pie_at, _) = slots[2]
 data.place(pie([5, 3, 2], 1.7, categorical(3), 0.5, 1s, 7.4s), at = Pos(pie_at.x + slot_w / 2, pie_at.y, anchor = :top), w = 1.7)
 data.place(TextArea(position = Pos(pie_at.x + slot_w / 2, pie_at.y + 1.9, anchor = :top), text = "内訳", fontSize = 0.34, fill = gray(80), align = :center))
 v.place(data, at = Pos(0, 0, anchor = :topLeft), w = 16)
-show(track, [data], at = 4.8s, end = 9.8s, duration = 0.5s)
+show_between(track, [data], at = 4.8s, end = 9.8s, duration = 0.5s)
 
 # ---- 3. 図と画面 ----
 let parts = View(box = Vector(16, 9), opacity = 0)
@@ -88,7 +88,7 @@ parts.place(browser(page, "mophila.dev", 7.4, 4.4), at = Pos(8.2, 2, anchor = :t
 parts.place(key_press(["⌘", "S"], 2.2, 0.9, 1), at = Pos(8.2, 6.8, anchor = :topLeft), w = 2.2)
 parts.place(toast("保存しました", 4.4, 0.9, 1, #1a1d23, #4aa863, 0.4s, 12.6s), at = Pos(11.2, 6.8, anchor = :topLeft), w = 4.4)
 v.place(parts, at = Pos(0, 0, anchor = :topLeft), w = 16)
-show(track, [parts], at = 9.6s, end = 14.4s, duration = 0.5s)
+show_between(track, [parts], at = 9.6s, end = 14.4s, duration = 0.5s)
 
 # ---- 4. 地図 ----
 let map = View(box = Vector(16, 9), opacity = 0)
@@ -97,7 +97,7 @@ map.place(lower_third("地図", "media", 4.4, 1.1, 1, #1a1d23, #e0803a, 0.5s, 14
 
 # 緯度経度を平面に直し、見えている範囲に合わせて箱の座標へ
 let cities = [(33.59, 130.4, "福岡"), (34.69, 135.5, "大阪"), (35.68, 139.77, "東京"), (43.06, 141.35, "札幌")]
-let world = cities.map(func (c) { project(c[0], c[1]) })
+let world = cities.map(func (c) { to_mercator(c[0], c[1]) })
 let xs = world.map(func (p) { p.x })
 let ys = world.map(func (p) { p.y })
 let x_lo = math.min(...xs)

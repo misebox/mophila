@@ -94,4 +94,4 @@ export func mirror(f: (Number) -> Number, k: Number) -> Number {
 ## @category 組み合わせ
 ## @param f 元の曲線 (Number) -> Number
 ## @param k 進み具合 0..1
-export func flip(f: (Number) -> Number, k: Number) -> Number { 1 - f(1 - k) }
+export func reverse_curve(f: (Number) -> Number, k: Number) -> Number { 1 - f(1 - k) }

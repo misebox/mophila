@@ -139,8 +139,8 @@ export func bar(values: List<Number>, labels: List<String>, w: Number, h: Number
 ## @param duration 0s より長ければ、その長さで 0 から progress まで描き進む (既定 0s = 止まったまま)
 ## @returns 箱が w x h の View。duration があれば Timeline を持つので、置けば動く
 ## @example
-## v.place(line(pts, 6, 4, 0, 10, 0, 100, duration = 1s), at = Pos(1, 1, anchor = :topLeft), w = 6)
-export func line(points: List<Vector>, w: Number, h: Number, x_lo: Number, x_hi: Number, y_lo: Number, y_hi: Number,
+## v.place(line_chart(pts, 6, 4, 0, 10, 0, 100, duration = 1s), at = Pos(1, 1, anchor = :topLeft), w = 6)
+export func line_chart(points: List<Vector>, w: Number, h: Number, x_lo: Number, x_hi: Number, y_lo: Number, y_hi: Number,
                  color: Color = #e04040, progress: Number = 1, duration: Duration = 0s, start: Duration = 0s) -> View {
   let v = View(box = Vector(w, h))
   if points.len() < 2 { return v }

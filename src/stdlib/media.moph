@@ -131,8 +131,8 @@ export func watermark(image: Image, w: Number, h: Number, corner: Symbol = :bott
 ## @param lon 経度 (度。-180..180)
 ## @returns Vector(x, y)。x は西が 0、y は北が 0
 ## @example
-## let p = project(35.68, 139.77)   # 東京
-export func project(lat: Number, lon: Number) -> Vector {
+## let p = to_mercator(35.68, 139.77)   # 東京
+export func to_mercator(lat: Number, lon: Number) -> Vector {
   let phi = math.clamp(lat, -85.05112878, 85.05112878) * math.PI / 180
   let x = (lon + 180) / 360
   let y = 0.5 - math.ln(math.tan(math.PI / 4 + phi / 2)) / (2 * math.PI)

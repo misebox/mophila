@@ -3221,6 +3221,12 @@ EspeakVoiceEngine(voice = "ja")
 - `MONO` -> Palette — 白と黒だけ。accent も黒なので、目立たせるときは大きさか太さで差を付ける。 印刷や、色を使えない場面に
 - `NIGHT` -> Palette — 暗い画面。明るい線と文字が浮き上がる
 - `NEON` -> Palette — 暗闇に光る色。彩度が高いので、面ではなく線と文字に使う
+- `OCEAN` -> Palette — 水と空の色。涼しく、静かな話に
+- `SLATE` -> Palette — 落ち着いた青灰色。仕事の画面や、数字を並べる話に
+- `CANDY` -> Palette — 淡くて柔らかい色。軽い話や、子ども向けに
+- `FOREST` -> Palette — 暗い緑。落ち着いた暗い画面に
+- `SUNSET` -> Palette — 日が落ちた後の色。暖かい色が暗い地に映える
+- `BLUEPRINT` -> Palette — 図面の青焼き。線と文字で説明する話に
 
 ### pattern
 
@@ -3264,6 +3270,56 @@ EspeakVoiceEngine(voice = "ja")
   samples: Number = 4,
 )` -> Shader — 方眼の塗り。backdrop の graph_paper と違って線を 1 本ずつ置かないので、 どれだけ細かくしても図形は 1 つで済む
 - `GRID` -> Shader — 既定の色の方眼
+- `cross_hatch(
+  back: Color,
+  line: Color,
+  pitch: Number = 0.35,
+  width: Number = 0.03,
+  angle: Number = 45,
+  samples: Number = 4,
+)` -> Shader — 向きの違う細線を 2 方向に重ねたもの。hatch を交差させた網目
+- `CROSS_HATCH` -> Shader — 既定の色の網目
+- `waves(
+  a: Color,
+  b: Color,
+  pitch: Number = 0.5,
+  amplitude: Number = 0.25,
+  wavelength: Number = 2,
+  samples: Number = 4,
+)` -> Shader — 波打つ縞。stripes の線を横に揺らしたもの
+- `WAVES` -> Shader — 既定の色の波
+- `zigzag(
+  a: Color,
+  b: Color,
+  pitch: Number = 0.5,
+  amplitude: Number = 0.4,
+  wavelength: Number = 1.4,
+  samples: Number = 4,
+)` -> Shader — 折れ曲がる縞。waves の曲線を折れ線にしたもの
+- `ZIGZAG` -> Shader — 既定の色のぎざぎざ
+- `diamonds(
+  a: Color,
+  b: Color,
+  size: Number = 0.6,
+  samples: Number = 4,
+)` -> Shader — 菱形を敷き詰めたもの。checker を 45 度ひねった並び
+- `DIAMONDS` -> Shader — 既定の色の菱形
+- `triangles(
+  a: Color,
+  b: Color,
+  size: Number = 0.5,
+  samples: Number = 4,
+)` -> Shader — マスを対角線で分けた三角の並び
+- `TRIANGLES` -> Shader — 既定の色の三角
+- `bricks(
+  back: Color,
+  line: Color,
+  w: Number = 0.8,
+  h: Number = 0.32,
+  width: Number = 0.04,
+  samples: Number = 4,
+)` -> Shader — 煉瓦積み。1 段ごとに半分ずれる
+- `BRICKS` -> Shader — 既定の色の煉瓦
 - `noise(a: Color, b: Color, scale: Number = 80)` -> Shader — ざらついた塗り。2 色の間をピクセルごとに散らす。 同じ場所は毎フレーム同じ色になるので、動画にしてもちらつかない
 - `NOISE` -> Shader — 既定の色のざらつき
 
@@ -3286,6 +3342,9 @@ EspeakVoiceEngine(voice = "ja")
 - `CROSS` -> List<List<Vector>> — ばつ。違うこと、閉じることに
 - `PLUS` -> List<List<Vector>> — 十字。足すこと、増やすことに
 - `MINUS` -> List<List<Vector>> — 横棒。引くこと、減らすことに
+- `CIRCLE` -> List<List<Vector>> — 丸。点や印に。線を付ければ輪になる
+- `TRIANGLE` -> List<List<Vector>> — 上を向いた三角。注意や、向きの印に。rotation で向きを変える
+- `STAR` -> List<List<Vector>> — 五芒星。評価や、目立たせたいものに
 - `ARROW` -> List<List<Vector>> — 上を向いた矢印。rotation で向きを変える (90 で右、180 で下)
 - `CHEVRON` -> List<List<Vector>> — 上を向いた山形。続きがあること、たためることに。rotation で向きを変える
 - `PLAY` -> List<List<Vector>> — 右を向いた三角。再生に
@@ -3296,6 +3355,17 @@ EspeakVoiceEngine(voice = "ja")
 - `BOLT` -> List<List<Vector>> — 稲妻。速さ、電気、急なことに
 - `PIN` -> List<List<Vector>> — 地図のピン。場所を指すことに
 - `SEARCH` -> List<List<Vector>> — 虫眼鏡。探すこと、詳しく見ることに。輪の内側が抜けている
+- `FLAG` -> List<List<Vector>> — 旗。目印や、区切りに
+- `CLOUD` -> List<List<Vector>> — 雲。天気や、手元にないものに。重なった丸と下の台
+- `USER` -> List<List<Vector>> — 人。頭と肩。誰か、持ち主に
+- `MAIL` -> List<List<Vector>> — 封筒。便りや、送ることに。上のふたは逆回りに書いた穴
+- `FOLDER` -> List<List<Vector>> — フォルダ。まとめたもの、入れ物に
+- `FILE` -> List<List<Vector>> — 書類。角を折った紙。1 つの文書に
+- `CLOCK` -> List<List<Vector>> — 時計。時刻や待ち時間に。輪の内側が抜けていて、針が 2 本
+- `GEAR` -> List<List<Vector>> — 歯車。設定や仕組みに。中が抜けている
+- `LOCK` -> List<List<Vector>> — 錠。鍵が掛かっていること、守られていることに
+- `BELL` -> List<List<Vector>> — ベル。知らせや、気付いてほしいことに
+- `CHAT` -> List<List<Vector>> — 吹き出し。話や、書き込みに
 
 
 # 構文の例

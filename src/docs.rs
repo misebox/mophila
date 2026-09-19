@@ -495,6 +495,7 @@ pub const ATTRS: &[(&str, &str, &str)] = &[
     ("Path", "from", "始点"),
     ("Path", "segments", "(:move | :line | :quad | :curve, 点...) の List。:quad は制御点 1 つ、:curve は 2 つを先に書く"),
     ("Path", "closed", "true なら始点に戻って閉じる (既定は false)"),
+    ("Path", "upto", "segments の先頭から何割を描くか (0..1、既定は 1)。点の列はそのままに、描く範囲だけ動かせる"),
     ("Rect", "w", "幅"),
     ("Rect", "h", "高さ"),
     ("Rect", "radius", "角の丸み (省略は 0)"),

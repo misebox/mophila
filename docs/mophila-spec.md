@@ -241,12 +241,19 @@ type Mode = :fast | :slow
 | Rect | `w: Number` `h: Number` `radius: Number` (角の丸み。省略は 0) |
 | Line | `from: Vector` `to: Vector` |
 | Polygon | `points: List<Vector>` |
-| Path | `from: Vector` `segments: List<Tuple>` `closed: Bool` |
+| Path | `from: Vector` `segments: List<Tuple>` `closed: Bool` `upto: Number` |
 | TextArea | `text: String` (`\n` で改行) `w: Number` (折り返す幅) `font: String` `fontSize: Number` `align: Align`。`size()` で置いたときの幅と高さ (Vector) を返す |
 
 図形は `length()` で輪郭の長さを返す。`dash` と `dashOffset` で線を少しずつ描き出すときに使う。
 
-`Path` の `segments` は `(:move | :line | :quad | :curve, 点...)` の並び。`:quad` は制御点 1 つ、`:curve` は 2 つを、終点より前に書く。`closed = true` なら始点に戻って閉じる。
+`Path` の `segments` は `(:move | :line | :quad | :curve, 点...)` の並び。`:quad` は制御点 1 つ、`:curve` は 2 つを、終点より前に書く。`closed = true` なら始点に戻って閉じる。`Path.through(points, closed =)` は点の並びをつないだ Path を作る。
+
+`upto` は「`segments` の先頭から何割を描くか」(0..1、既定は 1)。点の列はそのままに、描く範囲だけ動かせる。最後の 1 区間は途中で切るので、線の先は滑らかに伸びる。`p.point_at(1)` がその先の点なので、ペン先を置くものを合わせられる。`upto` が 1 未満なら閉じない。
+
+```
+line.upto = t                    # 範囲の行で動かす
+pen.position = Pos(line.point_at(1))
+```
 
 どの図形も持つ属性。効きようがないものは、その図形が持たない (書くと `NameError.UndefinedAttribute`)。既定のあるものは、書かなくてもその値で読める:
 

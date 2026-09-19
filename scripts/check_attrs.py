@@ -44,6 +44,7 @@ TRY = {
     "points": ("[Vector(0.5, 0.5), Vector(3.5, 1), Vector(2, 3.5)]", "[Vector(1, 1), Vector(3, 1), Vector(2, 3)]", {}),
     "segments": ("[(:line, Vector(3.5, 2)), (:line, Vector(1, 3.5))]", "[(:line, Vector(3.5, 3.5)), (:line, Vector(0.5, 3))]", {}),
     "closed": ("false", "true", {}),
+    "upto": ("0.3", "1", {}),
     "text": ('"Ag"', '"Xy"', {}),
     "font": ('"Helvetica"', '"Courier"', {}),
     "fontSize": ("0.6", "1.6", {}),

@@ -2421,7 +2421,7 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
         "Rect" => shape!(fill: true, join: true, req("position", "Pos"), req("w", "Number"), req("h", "Number"), opt("radius", "Number")),
         "Line" => shape!(fill: false, join: false, req("from", "Vector"), req("to", "Vector")),
         "Polygon" => shape!(fill: true, join: true, req("points", "List")),
-        "Path" => shape!(fill: true, join: true, req("from", "Vector"), req("segments", "List"), opt("closed", "Bool")),
+        "Path" => shape!(fill: true, join: true, req("from", "Vector"), req("segments", "List"), opt("closed", "Bool"), opt("upto", "Number")),
         "TextArea" => TEXT_AREA,
         "View" => VIEW,
         "Narration" => NARRATION,

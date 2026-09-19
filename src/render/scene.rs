@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use vello::Scene;
 use vello::kurbo::{Affine, BezPath, Circle, Ellipse, Line, Point, Rect, RoundedRect, Shape, Stroke};
-use vello::kurbo::{Cap, Join};
+use vello::kurbo::{Cap, Join, ParamCurve};
 use vello::peniko::{BlendMode, Brush, Color, ColorStops, Compose, Fill, Gradient, ImageBrush, Mix};
 
 use crate::lang::error::{Kind, Result, err};
@@ -207,7 +207,20 @@ pub fn outline(c: &crate::lang::value::Object) -> Result<(BezPath, Point)> {
             };
             let mut path = BezPath::new();
             path.move_to(vector(&c.attrs, "from", kind)?);
-            for seg in segments.borrow().iter() {
+            // upto は「先頭から何割の区間を描くか」。最後の 1 区間は途中で切る
+            let segs = segments.borrow();
+            let upto = match c.attrs.get("upto") {
+                Some(Value::Number(u, _)) => u.clamp(0.0, 1.0),
+                _ => 1.0,
+            };
+            let keep = upto * segs.len() as f64;
+            let (full, frac) = (keep.floor(), keep.fract());
+            for (i, seg) in segs.iter().enumerate() {
+                let part = match (i as f64) < full {
+                    true => 1.0,
+                    false if (i as f64) == full && frac > 0.0 => frac,
+                    false => break,
+                };
                 let Value::Tuple(items) = seg else {
                     return err(Kind::AttributeType, format!("Path.segments expects a Tuple like (:line, point), found {}", seg.type_name()));
                 };
@@ -215,15 +228,23 @@ pub fn outline(c: &crate::lang::value::Object) -> Result<(BezPath, Point)> {
                     return err(Kind::AttributeType, "the first item of a Path segment must be :move, :line, :quad or :curve");
                 };
                 let pts: Vec<Point> = items[1..].iter().map(|p| point_of(p, "Path.segments")).collect::<Result<_>>()?;
+                let p0 = path.current_position().unwrap_or(Point::ZERO);
                 match (op.as_str(), pts.as_slice()) {
                     ("move", [p]) => path.move_to(*p),
-                    ("line", [p]) => path.line_to(*p),
-                    ("quad", [c1, p]) => path.quad_to(*c1, *p),
-                    ("curve", [c1, c2, p]) => path.curve_to(*c1, *c2, *p),
+                    ("line", [p]) => path.line_to(p0.lerp(*p, part)),
+                    ("quad", [c1, p]) => {
+                        let q = vello::kurbo::QuadBez::new(p0, *c1, *p).subsegment(0.0..part);
+                        path.quad_to(q.p1, q.p2);
+                    }
+                    ("curve", [c1, c2, p]) => {
+                        let b = vello::kurbo::CubicBez::new(p0, *c1, *c2, *p).subsegment(0.0..part);
+                        path.curve_to(b.p1, b.p2, b.p3);
+                    }
                     (op, pts) => return err(Kind::ArityMismatch, format!(":{op} got {} points; :move and :line take 1, :quad takes 2, :curve takes 3", pts.len())),
                 }
             }
-            if matches!(c.attrs.get("closed"), Some(Value::Bool(true))) {
+            // 途中までしか描いていないものは閉じない
+            if upto >= 1.0 && matches!(c.attrs.get("closed"), Some(Value::Bool(true))) {
                 path.close_path();
             }
             let center = path.bounding_box().center();

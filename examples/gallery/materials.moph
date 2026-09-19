@@ -1,0 +1,53 @@
+# materials.moph — そのまま使える素材の見本。配色 6 つに、その色で作った模様と記号を載せる
+
+import math
+import { HOUSE, PAPER, EARTH, MONO, NIGHT, NEON } from palette
+import { grid, hatch, dots, checker, stripes, noise } from pattern
+import { mark, CHECK, HEART, PIN, PLAY, BOLT, SEARCH } from icon
+import { stagger, slide_in, fade_in } from animation
+
+let v = View(box = Vector(16, 9))
+v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #f2f0ea))
+
+let title = TextArea(position = Pos(8, 0.8), text = "palette / pattern / icon", fontSize = 0.55, fill = #1a1d23, align = :center, opacity = 0)
+v.place(title)
+
+# (配色, その配色で作った模様, 載せる記号, 名前)
+let sets = [
+  (HOUSE, grid(HOUSE.back, HOUSE.track, 0.4, 0.02), CHECK, "HOUSE"),
+  (PAPER, hatch(PAPER.back, PAPER.track, 0.3, 0.03), HEART, "PAPER"),
+  (EARTH, dots(EARTH.back, EARTH.track, 0.44, 0.09), PIN, "EARTH"),
+  (MONO, stripes(MONO.back, MONO.track, 0.3, 60), PLAY, "MONO"),
+  (NIGHT, checker(NIGHT.back, NIGHT.line, 0.38), BOLT, "NIGHT"),
+  (NEON, noise(NEON.back, NEON.line, 90), SEARCH, "NEON"),
+]
+
+let pw = 4.7
+let ph = 3.1
+let cards = []
+for (i, set) in sets.enumerate() {
+  let (p, back, sign, name) = set
+  let col = i - math.floor(i / 3) * 3
+  let row = math.floor(i / 3)
+
+  # 1 枚ぶんを View にすると、中は左上から始まる自分の座標で置ける
+  let card = View(box = Vector(pw, ph), opacity = 0)
+  card.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = pw, h = ph, fill = back))
+  card.place(TextArea(position = Pos(0.32, 0.5, anchor = :left), text = name, fontSize = 0.36, fill = p.ink))
+  card.place(mark(sign, Vector(1.05, 1.95), 1.1, p.accent))
+  # 系列色は、そのまま chart の colors に渡せる 5 色
+  for (j, c) in p.series.enumerate() {
+    card.place(Rect(position = Pos(2.15 + j * 0.48, 1.45, anchor = :topLeft), w = 0.4, h = 1.0, fill = c))
+  }
+  card.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = pw, h = ph, stroke = p.line, strokeWidth = 0.03))
+
+  v.place(card, at = Pos(0.6 + col * 5.1, 1.5 + row * 3.5, anchor = :topLeft), w = pw)
+  cards.push(card)
+}
+
+let track = Timeline(duration = 4s)
+v.addTrack(track)
+track.place(fade_in(title, 0.5s), at = 0.1s)
+stagger(track, cards, func (c) { slide_in(c, 0, 0.5, 0.5s) }, at = 0.5s, stagger = 0.22s)
+
+output v

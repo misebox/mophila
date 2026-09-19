@@ -1,0 +1,23 @@
+# index.moph — pattern の入口。`import pattern` で見えるのはここで export したものだけ。
+# 模様は 1 つ 1 ファイルで、ここは外に出す名前を並べるだけ。
+# import した名前をそのまま外に出す書き方が無いので、let で受け直している
+
+import { stripes, STRIPES } from .stripes
+import { hatch, HATCH } from .hatch
+import { checker, CHECKER } from .checker
+import { dots, DOTS } from .dots
+import { grid, GRID } from .grid
+import { noise, NOISE } from .noise
+
+export let stripes = stripes
+export let STRIPES = STRIPES
+export let hatch = hatch
+export let HATCH = HATCH
+export let checker = checker
+export let CHECKER = CHECKER
+export let dots = dots
+export let DOTS = DOTS
+export let grid = grid
+export let GRID = GRID
+export let noise = noise
+export let NOISE = NOISE

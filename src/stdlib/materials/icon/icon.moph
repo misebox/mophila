@@ -1,0 +1,58 @@
+# icon.moph — 記号の形と、それを置く道具。
+# 記号は 0..1 の箱に収めた輪郭の並び。輪郭が 2 つ以上あるものは、離れた部分か、逆回りに書いた穴
+
+import math
+
+## 記号の輪郭を、箱の座標の位置と大きさに移す。
+## 自分で図形を組むとき用。そのまま置くなら mark を使う
+## @category 置く
+## @param icon 記号の形
+## @param center 置く場所の中心 (箱の座標)
+## @param size 一辺の長さ (箱の座標)
+## @param rotation 時計回りの回転 (度)
+## @returns 箱の座標に移した輪郭の並び
+## @example
+## # 輪郭が 1 つの記号を Polygon で描く
+## Polygon(points = at(CHECK, Vector(8, 4.5), 1)[0], fill = #4aa863)
+export func at(icon: List<List<Vector>>, center: Vector, size: Number, rotation: Number = 0) -> List<List<Vector>> {
+  let rad = rotation * math.PI / 180
+  let cos = math.cos(rad)
+  let sin = math.sin(rad)
+  icon.map(func (part) {
+    part.map(func (p) {
+      let dx = (p.x - 0.5) * size
+      let dy = (p.y - 0.5) * size
+      Vector(center.x + dx * cos - dy * sin, center.y + dx * sin + dy * cos)
+    })
+  })
+}
+
+## 記号を、そのまま place できる図形にする
+## @category 置く
+## @param icon 記号の形
+## @param center 置く場所の中心 (箱の座標)
+## @param size 一辺の長さ (箱の座標)
+## @param fill 色
+## @param rotation 時計回りの回転 (度)
+## @example
+## v.place(mark(CHECK, Vector(8, 4.5), 1.2, #4aa863))
+##
+## # 返ってくるのは Path なので、後から線も付けられる
+## let m = mark(HEART, Vector(4, 4), 1, #e04040)
+## m.stroke = #ffffff
+## m.strokeWidth = 0.04
+export func mark(icon: List<List<Vector>>, center: Vector, size: Number, fill: Color, rotation: Number = 0) -> Path {
+  let parts = at(icon, center, size, rotation)
+  let segments = []
+  for (i, part) in parts.enumerate() {
+    for (j, p) in part.enumerate() {
+      if j == 0 {
+        # 輪郭の 1 つ目の点。先頭の輪郭は from に入るので、2 つ目からは筆を上げて移る
+        if i > 0 { segments.push((:move, p)) }
+      } else {
+        segments.push((:line, p))
+      }
+    }
+  }
+  Path(from = parts[0][0], segments = segments, closed = true, fill = fill)
+}

@@ -1,0 +1,8 @@
+# minus.moph — 横棒
+
+## 横棒。引くこと、減らすことに
+## @category 印
+## @type {List<List<Vector>>} 0..1 の箱に収めた輪郭の並び
+export let MINUS = [[
+  Vector(0.12, 0.42), Vector(0.88, 0.42), Vector(0.88, 0.58), Vector(0.12, 0.58),
+]]

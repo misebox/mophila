@@ -1,0 +1,10 @@
+# home.moph — 家
+
+## 家。始めの場所、戻る先に
+## @category しるし
+## @type {List<List<Vector>>} 0..1 の箱に収めた輪郭の並び
+export let HOME = [[
+  Vector(0.50, 0.06), Vector(0.96, 0.48), Vector(0.84, 0.48), Vector(0.84, 0.92),
+  Vector(0.60, 0.92), Vector(0.60, 0.62), Vector(0.40, 0.62), Vector(0.40, 0.92),
+  Vector(0.16, 0.92), Vector(0.16, 0.48), Vector(0.04, 0.48),
+]]

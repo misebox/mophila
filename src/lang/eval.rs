@@ -2744,10 +2744,14 @@ mod tests {
     }
 
     /// 標準ライブラリは実行ファイルに埋め込んであり、ディスクには無い。
-    /// 何ファイルかに分けたモジュールは、その中で相対 import を解けないと読めない
+    /// 何ファイルかに分けたモジュールは、その中で相対 import を解けないと読めない。
+    /// 素材は 3 つとも、名前を出すだけの index.moph が束ねている
     #[test]
     fn a_stdlib_module_can_be_split_across_files() {
-        let src = "import palette\nlog(palette.NIGHT.ink, palette.HOUSE.accent)\n";
+        let src = "import palette\nimport pattern\nimport icon\n\
+            log(palette.NIGHT.ink, palette.HOUSE.accent)\n\
+            log(pattern.STRIPES, pattern.dots(palette.NIGHT.back, palette.NIGHT.accent))\n\
+            log(icon.mark(icon.SEARCH, Vector(8, 4.5), 1, palette.HOUSE.ink))\n";
         let stmts = crate::lang::parser::parse(src).expect("parses");
         let mut interp = Interp::new();
         // 呼ぶ側の置き場は、標準ライブラリの中の import と関係が無い

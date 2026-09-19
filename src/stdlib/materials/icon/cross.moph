@@ -1,0 +1,10 @@
+# cross.moph — ばつ
+
+## ばつ。違うこと、閉じることに
+## @category 印
+## @type {List<List<Vector>>} 0..1 の箱に収めた輪郭の並び
+export let CROSS = [[
+  Vector(0.24, 0.13), Vector(0.50, 0.39), Vector(0.76, 0.13), Vector(0.87, 0.24),
+  Vector(0.61, 0.50), Vector(0.87, 0.76), Vector(0.76, 0.87), Vector(0.50, 0.61),
+  Vector(0.24, 0.87), Vector(0.13, 0.76), Vector(0.39, 0.50), Vector(0.13, 0.24),
+]]

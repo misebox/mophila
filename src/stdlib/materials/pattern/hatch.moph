@@ -1,0 +1,34 @@
+# hatch.moph — 細い平行線
+
+import math
+import { HOUSE } from ..palette.house
+
+## 地の上に細い平行線を引いた塗り。縞より線が細く、地の色が主になる
+## @category 線
+## @param back 地の色
+## @param line 線の色
+## @param pitch 線の間隔 (箱の座標)
+## @param width 線の太さ (箱の座標)
+## @param angle 線の走る向き (度)。0 で縦、90 で横。時計回り
+## @param samples 1 ピクセルあたりの評価点
+## @example
+## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,
+##              fill = hatch(#faf7f0, #c9c0b2, 0.4, 0.04, 45)))
+export func hatch(back: Color, line: Color, pitch: Number = 0.4, width: Number = 0.04, angle: Number = 45, samples: Number = 4) -> Shader {
+  let rad = (angle - 90) * math.PI / 180
+  let nx = 0 - math.sin(rad) / pitch
+  let ny = math.cos(rad) / pitch
+  let ratio = width / pitch
+  Shader(
+    color = func (x, y, t) {
+      let u = x * nx + y * ny
+      if u - math.floor(u) < ratio { line } else { back }
+    },
+    samples = samples,
+  )
+}
+
+## 既定の色の平行線
+## @category 線
+## @type {Shader} 塗り
+export let HATCH = hatch(HOUSE.back, HOUSE.track)

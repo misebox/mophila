@@ -1,0 +1,6 @@
+# play.moph — 再生
+
+## 右を向いた三角。再生に
+## @category 再生
+## @type {List<List<Vector>>} 0..1 の箱に収めた輪郭の並び
+export let PLAY = [[Vector(0.22, 0.08), Vector(0.88, 0.50), Vector(0.22, 0.92)]]

@@ -1,0 +1,9 @@
+# arrow.moph — 矢印
+
+## 上を向いた矢印。rotation で向きを変える (90 で右、180 で下)
+## @category 向き
+## @type {List<List<Vector>>} 0..1 の箱に収めた輪郭の並び
+export let ARROW = [[
+  Vector(0.50, 0.06), Vector(0.90, 0.46), Vector(0.66, 0.46), Vector(0.66, 0.94),
+  Vector(0.34, 0.94), Vector(0.34, 0.46), Vector(0.10, 0.46),
+]]

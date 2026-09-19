@@ -1,0 +1,28 @@
+# checker.moph — 市松
+
+import math
+import { HOUSE } from ..palette.house
+
+## 市松の塗り。size 角のマスに 2 色が交互に並ぶ
+## @category 面
+## @param a 1 色目
+## @param b 2 色目
+## @param size マス 1 つの辺 (箱の座標)
+## @param samples 1 ピクセルあたりの評価点
+## @example
+## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,
+##              fill = checker(#ffffff, #e6e2da, 0.5)))
+export func checker(a: Color, b: Color, size: Number = 0.5, samples: Number = 4) -> Shader {
+  Shader(
+    color = func (x, y, t) {
+      let k = (math.floor(x / size) + math.floor(y / size)) / 2
+      if k - math.floor(k) < 0.25 { a } else { b }
+    },
+    samples = samples,
+  )
+}
+
+## 既定の色の市松
+## @category 面
+## @type {Shader} 塗り
+export let CHECKER = checker(HOUSE.back, HOUSE.track)

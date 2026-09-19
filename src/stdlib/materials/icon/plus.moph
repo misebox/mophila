@@ -1,0 +1,10 @@
+# plus.moph — 十字
+
+## 十字。足すこと、増やすことに
+## @category 印
+## @type {List<List<Vector>>} 0..1 の箱に収めた輪郭の並び
+export let PLUS = [[
+  Vector(0.37, 0.12), Vector(0.63, 0.12), Vector(0.63, 0.37), Vector(0.88, 0.37),
+  Vector(0.88, 0.63), Vector(0.63, 0.63), Vector(0.63, 0.88), Vector(0.37, 0.88),
+  Vector(0.37, 0.63), Vector(0.12, 0.63), Vector(0.12, 0.37), Vector(0.37, 0.37),
+]]

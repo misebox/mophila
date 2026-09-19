@@ -1,0 +1,16 @@
+# search.moph — 虫眼鏡
+
+import { arc } from shape
+
+# 輪。外は時計回り、内は逆回りにすると内側が抜ける
+let outer = arc(0.40, 0.40, 0.34, 0, 360, 24)
+let inner = arc(0.40, 0.40, 0.22, 0, 360, 24).reverse()
+
+## 虫眼鏡。探すこと、詳しく見ることに。輪の内側が抜けている
+## @category しるし
+## @type {List<List<Vector>>} 0..1 の箱に収めた輪郭の並び
+export let SEARCH = [
+  outer,
+  inner,
+  [Vector(0.58, 0.66), Vector(0.66, 0.58), Vector(0.96, 0.88), Vector(0.88, 0.96)],
+]

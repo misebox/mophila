@@ -1,0 +1,32 @@
+# stripes.moph — 縞
+
+import math
+import { HOUSE } from ..palette.house
+
+## 縞の塗り。pitch ごとに 2 色が入れ替わる
+## @category 線
+## @param a 1 本目の色
+## @param b 2 本目の色
+## @param pitch 縞 1 本の幅 (箱の座標)
+## @param angle 縞の走る向き (度)。0 で縦、90 で横。時計回り
+## @param samples 1 ピクセルあたりの評価点。縁のギザギザが気になるなら増やす
+## @example
+## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,
+##              fill = stripes(#f6f4ee, #dedbd4, 0.5, 45)))
+export func stripes(a: Color, b: Color, pitch: Number = 0.5, angle: Number = 45, samples: Number = 4) -> Shader {
+  let rad = (angle - 90) * math.PI / 180
+  let nx = 0 - math.sin(rad) / pitch
+  let ny = math.cos(rad) / pitch
+  Shader(
+    color = func (x, y, t) {
+      let u = x * nx + y * ny
+      if u - math.floor(u) < 0.5 { a } else { b }
+    },
+    samples = samples,
+  )
+}
+
+## 既定の色の縞。45 度、0.5 幅
+## @category 線
+## @type {Shader} 塗り
+export let STRIPES = stripes(HOUSE.back, HOUSE.track)

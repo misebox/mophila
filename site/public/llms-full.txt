@@ -1412,6 +1412,8 @@ String / List / Dict / Range のメソッドは builtin で、`import` は要ら
 | layout | 並べる位置を計算する。格子、直線上の等間隔、比率を保って収めた大きさ |
 | animation | 図形や View を動かす Timeline を返す。現れる、消える、滑る、回る |
 | palette | そのまま使える配色。背景・文字・罫線・強調・系列色の組 (`Palette`) を名前で選ぶ |
+| pattern | そのまま `fill` に入れられる模様。縞、細線、市松、水玉、方眼、ざらつき |
+| icon | チェックや矢印などの記号の形。`mark` でそのまま置ける図形になる |
 | fractal | エスケープタイム系フラクタルの Shader。反復式と色付けを組み合わせる。倍率は `zoom` / `duration` / `camera` のどれかで決める |
 
 ### 7. プロジェクト設定
@@ -3219,6 +3221,81 @@ EspeakVoiceEngine(voice = "ja")
 - `MONO` -> Palette — 白と黒だけ。accent も黒なので、目立たせるときは大きさか太さで差を付ける。 印刷や、色を使えない場面に
 - `NIGHT` -> Palette — 暗い画面。明るい線と文字が浮き上がる
 - `NEON` -> Palette — 暗闇に光る色。彩度が高いので、面ではなく線と文字に使う
+
+### pattern
+
+- `stripes(
+  a: Color,
+  b: Color,
+  pitch: Number = 0.5,
+  angle: Number = 45,
+  samples: Number = 4,
+)` -> Shader — 縞の塗り。pitch ごとに 2 色が入れ替わる
+- `STRIPES` -> Shader — 既定の色の縞。45 度、0.5 幅
+- `hatch(
+  back: Color,
+  line: Color,
+  pitch: Number = 0.4,
+  width: Number = 0.04,
+  angle: Number = 45,
+  samples: Number = 4,
+)` -> Shader — 地の上に細い平行線を引いた塗り。縞より線が細く、地の色が主になる
+- `HATCH` -> Shader — 既定の色の平行線
+- `checker(
+  a: Color,
+  b: Color,
+  size: Number = 0.5,
+  samples: Number = 4,
+)` -> Shader — 市松の塗り。size 角のマスに 2 色が交互に並ぶ
+- `CHECKER` -> Shader — 既定の色の市松
+- `dots(
+  back: Color,
+  dot: Color,
+  pitch: Number = 0.6,
+  radius: Number = 0.12,
+  samples: Number = 4,
+)` -> Shader — 水玉の塗り。pitch ごとに円が並ぶ
+- `DOTS` -> Shader — 既定の色の水玉
+- `grid(
+  back: Color,
+  line: Color,
+  pitch: Number = 0.5,
+  width: Number = 0.02,
+  samples: Number = 4,
+)` -> Shader — 方眼の塗り。backdrop の graph_paper と違って線を 1 本ずつ置かないので、 どれだけ細かくしても図形は 1 つで済む
+- `GRID` -> Shader — 既定の色の方眼
+- `noise(a: Color, b: Color, scale: Number = 80)` -> Shader — ざらついた塗り。2 色の間をピクセルごとに散らす。 同じ場所は毎フレーム同じ色になるので、動画にしてもちらつかない
+- `NOISE` -> Shader — 既定の色のざらつき
+
+### icon
+
+- `at(
+  icon: List<List<Vector>>,
+  center: Vector,
+  size: Number,
+  rotation: Number = 0,
+)` -> List<List<Vector>> — 記号の輪郭を、箱の座標の位置と大きさに移す。 自分で図形を組むとき用。そのまま置くなら mark を使う
+- `mark(
+  icon: List<List<Vector>>,
+  center: Vector,
+  size: Number,
+  fill: Color,
+  rotation: Number = 0,
+)` -> Path — 記号を、そのまま place できる図形にする
+- `CHECK` -> List<List<Vector>> — チェック。済んだこと、正しいことに
+- `CROSS` -> List<List<Vector>> — ばつ。違うこと、閉じることに
+- `PLUS` -> List<List<Vector>> — 十字。足すこと、増やすことに
+- `MINUS` -> List<List<Vector>> — 横棒。引くこと、減らすことに
+- `ARROW` -> List<List<Vector>> — 上を向いた矢印。rotation で向きを変える (90 で右、180 で下)
+- `CHEVRON` -> List<List<Vector>> — 上を向いた山形。続きがあること、たためることに。rotation で向きを変える
+- `PLAY` -> List<List<Vector>> — 右を向いた三角。再生に
+- `PAUSE` -> List<List<Vector>> — 縦の 2 本。一時停止に。輪郭が 2 つある記号
+- `STOP` -> List<List<Vector>> — 四角。停止に
+- `HEART` -> List<List<Vector>> — ハート。好きなもの、気に入りに
+- `HOME` -> List<List<Vector>> — 家。始めの場所、戻る先に
+- `BOLT` -> List<List<Vector>> — 稲妻。速さ、電気、急なことに
+- `PIN` -> List<List<Vector>> — 地図のピン。場所を指すことに
+- `SEARCH` -> List<List<Vector>> — 虫眼鏡。探すこと、詳しく見ることに。輪の内側が抜けている
 
 
 # 構文の例

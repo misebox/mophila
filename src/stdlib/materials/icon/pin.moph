@@ -1,0 +1,12 @@
+# pin.moph — 地図のピン
+
+import { arc } from shape
+
+# 上の丸を描いてから、下の先を足す
+let drop = arc(0.5, 0.36, 0.28, 205, 515, 20)
+drop.push(Vector(0.5, 0.96))
+
+## 地図のピン。場所を指すことに
+## @category しるし
+## @type {List<List<Vector>>} 0..1 の箱に収めた輪郭の並び
+export let PIN = [drop]

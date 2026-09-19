@@ -1,0 +1,9 @@
+# pause.moph — 一時停止
+
+## 縦の 2 本。一時停止に。輪郭が 2 つある記号
+## @category 再生
+## @type {List<List<Vector>>} 0..1 の箱に収めた輪郭の並び
+export let PAUSE = [
+  [Vector(0.24, 0.12), Vector(0.42, 0.12), Vector(0.42, 0.88), Vector(0.24, 0.88)],
+  [Vector(0.58, 0.12), Vector(0.76, 0.12), Vector(0.76, 0.88), Vector(0.58, 0.88)],
+]

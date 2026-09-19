@@ -1,0 +1,33 @@
+# noise.moph — ざらつき
+
+import math
+import { HOUSE } from ..palette.house
+
+## ざらついた塗り。2 色の間をピクセルごとに散らす。
+## 同じ場所は毎フレーム同じ色になるので、動画にしてもちらつかない
+## @category 面
+## @param a 1 色目
+## @param b 2 色目
+## @param scale 箱の座標 1 単位あたりの粒の数。大きいほど細かい
+## @example
+## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,
+##              fill = noise(#1a1d23, #2b3242, 120)))
+export func noise(a: Color, b: Color, scale: Number = 80) -> Shader {
+  let ar = a.r
+  let ag = a.g
+  let ab = a.b
+  let dr = b.r - a.r
+  let dg = b.g - a.g
+  let db = b.b - a.b
+  Shader(color = func (x, y, t) {
+    # 位置から決まる、規則の見えない 0..1
+    let n = math.sin(math.floor(x * scale) * 127.1 + math.floor(y * scale) * 311.7) * 43758.5453
+    let k = n - math.floor(n)
+    Color(ar + dr * k, ag + dg * k, ab + db * k)
+  })
+}
+
+## 既定の色のざらつき
+## @category 面
+## @type {Shader} 塗り
+export let NOISE = noise(HOUSE.back, HOUSE.track)

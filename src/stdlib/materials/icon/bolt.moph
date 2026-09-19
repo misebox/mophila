@@ -1,0 +1,9 @@
+# bolt.moph — 稲妻
+
+## 稲妻。速さ、電気、急なことに
+## @category しるし
+## @type {List<List<Vector>>} 0..1 の箱に収めた輪郭の並び
+export let BOLT = [[
+  Vector(0.62, 0.04), Vector(0.26, 0.54), Vector(0.46, 0.54), Vector(0.38, 0.96),
+  Vector(0.76, 0.44), Vector(0.54, 0.44),
+]]

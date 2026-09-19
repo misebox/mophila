@@ -1,0 +1,9 @@
+# chevron.moph — 山形
+
+## 上を向いた山形。続きがあること、たためることに。rotation で向きを変える
+## @category 向き
+## @type {List<List<Vector>>} 0..1 の箱に収めた輪郭の並び
+export let CHEVRON = [[
+  Vector(0.50, 0.24), Vector(0.90, 0.64), Vector(0.78, 0.76), Vector(0.50, 0.48),
+  Vector(0.22, 0.76), Vector(0.10, 0.64),
+]]

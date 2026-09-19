@@ -1,0 +1,31 @@
+# grid.moph — 方眼
+
+import math
+import { HOUSE } from ..palette.house
+
+## 方眼の塗り。backdrop の graph_paper と違って線を 1 本ずつ置かないので、
+## どれだけ細かくしても図形は 1 つで済む
+## @category 面
+## @param back 地の色
+## @param line 線の色
+## @param pitch 線の間隔 (箱の座標)
+## @param width 線の太さ (箱の座標)
+## @param samples 1 ピクセルあたりの評価点
+## @example
+## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,
+##              fill = grid(#f6f4ee, #dedbd4, 0.5, 0.02)))
+export func grid(back: Color, line: Color, pitch: Number = 0.5, width: Number = 0.02, samples: Number = 4) -> Shader {
+  Shader(
+    color = func (x, y, t) {
+      let u = x - math.floor(x / pitch) * pitch
+      let v = y - math.floor(y / pitch) * pitch
+      if u < width or v < width { line } else { back }
+    },
+    samples = samples,
+  )
+}
+
+## 既定の色の方眼
+## @category 面
+## @type {Shader} 塗り
+export let GRID = grid(HOUSE.back, HOUSE.track)

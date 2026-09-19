@@ -1,0 +1,8 @@
+# stop.moph — 停止
+
+## 四角。停止に
+## @category 再生
+## @type {List<List<Vector>>} 0..1 の箱に収めた輪郭の並び
+export let STOP = [[
+  Vector(0.16, 0.16), Vector(0.84, 0.16), Vector(0.84, 0.84), Vector(0.16, 0.84),
+]]

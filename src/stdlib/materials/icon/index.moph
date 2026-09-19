@@ -1,0 +1,36 @@
+# index.moph — icon の入口。`import icon` で見えるのはここで export したものだけ。
+# 記号は 1 つ 1 ファイルで、ここは外に出す名前を並べるだけ。
+# import した名前をそのまま外に出す書き方が無いので、let で受け直している
+
+import { at, mark } from .icon
+import { CHECK } from .check
+import { CROSS } from .cross
+import { PLUS } from .plus
+import { MINUS } from .minus
+import { ARROW } from .arrow
+import { CHEVRON } from .chevron
+import { PLAY } from .play
+import { PAUSE } from .pause
+import { STOP } from .stop
+import { HEART } from .heart
+import { HOME } from .home
+import { BOLT } from .bolt
+import { PIN } from .pin
+import { SEARCH } from .search
+
+export let at = at
+export let mark = mark
+export let CHECK = CHECK
+export let CROSS = CROSS
+export let PLUS = PLUS
+export let MINUS = MINUS
+export let ARROW = ARROW
+export let CHEVRON = CHEVRON
+export let PLAY = PLAY
+export let PAUSE = PAUSE
+export let STOP = STOP
+export let HEART = HEART
+export let HOME = HOME
+export let BOLT = BOLT
+export let PIN = PIN
+export let SEARCH = SEARCH

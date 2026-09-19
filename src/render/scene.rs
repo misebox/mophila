@@ -271,7 +271,8 @@ fn draw_object(scene: &mut Scene, c: &crate::lang::value::Object, transform: Aff
         scene.fill(Fill::NonZero, placed, &fill.multiply_alpha(opacity), None, &path);
     }
     if let Some(stroke) = color(&c.attrs, "stroke", kind)? {
-        scene.stroke(&stroke_style(&c.attrs)?, placed, stroke.multiply_alpha(opacity), None, &path);
+        let length = c.attrs.contains_key("dash").then(|| vello::kurbo::Shape::perimeter(&path, 1e-4));
+        scene.stroke(&stroke_style(&c.attrs, length)?, placed, stroke.multiply_alpha(opacity), None, &path);
     }
     if blend.is_some() {
         scene.pop_layer();
@@ -334,7 +335,7 @@ fn draw_text(scene: &mut Scene, attrs: &Attrs, transform: Affine, spin: &dyn Fn(
     let placed = spin(Point::new(cx, cy))? * Affine::translate(top_left.to_vec2());
     let fill = color(attrs, "fill", kind)?.unwrap_or(Color::BLACK);
     let outline = color(attrs, "stroke", kind)?;
-    let style = stroke_style(attrs)?;
+    let style = stroke_style(attrs, None)?;
     let stroke = outline.map(|ink| (&style, ink.multiply_alpha(opacity)));
     // blend が付いていたら、文字の箱の中だけ重ね方を変える
     let blend = blend_mode(attrs)?;
@@ -440,8 +441,33 @@ fn gradient(attrs: &Attrs) -> Result<Gradient> {
     Ok(g.with_stops(stops))
 }
 
-/// 線の描き方。端の形、角の形、破線
-fn stroke_style(attrs: &Attrs) -> Result<Stroke> {
+/// 破線の「線」の部分が、輪郭を最初からひと続きで覆い切るか。
+/// 位相の進め方は kurbo に合わせてある
+fn dash_covers(pattern: &[f64], offset: f64, length: f64) -> bool {
+    let sum: f64 = pattern.iter().sum();
+    // 奇数個は 2 周で 1 周期 (SVG と同じ)
+    let period = if pattern.len() % 2 == 1 { sum * 2.0 } else { sum };
+    if !(period > 0.0) {
+        return false;
+    }
+    let mut i = 0;
+    let mut remaining = pattern[0] - offset.rem_euclid(period);
+    let mut on = true;
+    // 1 周期ぶん進めれば必ず正になる。何周もしないよう回数で止める
+    for _ in 0..pattern.len() * 2 {
+        if remaining >= 0.0 {
+            break;
+        }
+        i = (i + 1) % pattern.len();
+        remaining += pattern[i];
+        on = !on;
+    }
+    on && remaining >= length
+}
+
+/// 線の描き方。端の形、角の形、破線。
+/// length は輪郭の長さ。分かるときだけ渡す (文字の輪郭では分からない)
+fn stroke_style(attrs: &Attrs, length: Option<f64>) -> Result<Stroke> {
     let width = match attrs.get("strokeWidth") {
         Some(Value::Number(w, _)) => *w,
         _ => 0.01,
@@ -477,7 +503,12 @@ fn stroke_style(attrs: &Attrs) -> Result<Stroke> {
                 Some(Value::Number(o, _)) => *o,
                 _ => 0.0,
             };
-            stroke = stroke.with_dashes(offset, pattern);
+            // 線が輪郭を丸ごと覆うなら破線にしない。そのまま渡すと、
+            // kurbo 0.13.1 が閉じた輪郭で ClosePath を最後の曲線より前に出してしまい、
+            // 円の最後の 4 分の 1 が直線と小さな輪になる
+            if !length.is_some_and(|len| dash_covers(&pattern, offset, len)) {
+                stroke = stroke.with_dashes(offset, pattern);
+            }
         }
     }
     Ok(stroke)
@@ -642,4 +673,35 @@ fn draw_shader_fill(scene: &mut Scene, path: &BezPath, transform: Affine, opacit
 pub fn uses_shader(view: &ObjRef) -> bool {
     let v = view.borrow();
     shader_fill(&v).is_some() || v.children.iter().any(uses_shader)
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 線の部分が輪郭を覆い切るときは破線にしない。そのまま kurbo に渡すと
+    /// 閉じた輪郭で ClosePath が最後の曲線より前に出て、円の最後の 4 分の 1 が
+    /// 直線と小さな輪になる
+    #[test]
+    fn a_dash_longer_than_the_outline_is_not_a_dash() {
+        let len = 12.566;
+        assert!(dash_covers(&[len * 1.01, len], 0.0, len));
+        assert!(dash_covers(&[len, len], 0.0, len));
+        // 輪郭より短ければ破線のまま (終わりに隙間ができる)
+        assert!(!dash_covers(&[len * 0.999, len], 0.0, len));
+        assert!(!dash_covers(&[0.4, 0.3], 0.0, len));
+    }
+
+    /// dashOffset で位相をずらした分は、覆える長さから引かれる
+    #[test]
+    fn the_offset_eats_into_what_the_dash_covers() {
+        let len = 10.0;
+        assert!(dash_covers(&[20.0, 10.0], 5.0, len));
+        assert!(!dash_covers(&[20.0, 10.0], 11.0, len));
+        // 空白から始まる位相は、そもそも線ではない
+        assert!(!dash_covers(&[5.0, 5.0], 6.0, 1.0));
+        // 奇数個は 2 周で 1 周期 (SVG と同じ)
+        assert!(dash_covers(&[30.0], 0.0, len));
+    }
 }

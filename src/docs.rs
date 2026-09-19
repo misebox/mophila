@@ -268,7 +268,7 @@ pub const TYPES: &[Type] = &[
         values: &[],
         members: &[],
         doc: "中心へ寄っていくだけのズームの道筋。Shader.zoom に入れると、1 フレームずつ描かずに \
-              対数極座標の帯を伸ばしながら使い回す。fractal の zoom_video が組み立てる",
+              対数極座標の帯を伸ばしながら使い回す。fractal の escape_time が duration を書いたときに組み立てる",
     },
     Type {
         name: "Camera",

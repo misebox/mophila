@@ -960,12 +960,19 @@ type Mode = :fast | :slow
 | Rect | `w: Number` `h: Number` `radius: Number` (角の丸み。省略は 0) |
 | Line | `from: Vector` `to: Vector` |
 | Polygon | `points: List<Vector>` |
-| Path | `from: Vector` `segments: List<Tuple>` `closed: Bool` |
+| Path | `from: Vector` `segments: List<Tuple>` `closed: Bool` `upto: Number` |
 | TextArea | `text: String` (`\n` で改行) `w: Number` (折り返す幅) `font: String` `fontSize: Number` `align: Align`。`size()` で置いたときの幅と高さ (Vector) を返す |
 
 図形は `length()` で輪郭の長さを返す。`dash` と `dashOffset` で線を少しずつ描き出すときに使う。
 
-`Path` の `segments` は `(:move | :line | :quad | :curve, 点...)` の並び。`:quad` は制御点 1 つ、`:curve` は 2 つを、終点より前に書く。`closed = true` なら始点に戻って閉じる。
+`Path` の `segments` は `(:move | :line | :quad | :curve, 点...)` の並び。`:quad` は制御点 1 つ、`:curve` は 2 つを、終点より前に書く。`closed = true` なら始点に戻って閉じる。`Path.through(points, closed =)` は点の並びをつないだ Path を作る。
+
+`upto` は「`segments` の先頭から何割を描くか」(0..1、既定は 1)。点の列はそのままに、描く範囲だけ動かせる。最後の 1 区間は途中で切るので、線の先は滑らかに伸びる。`p.point_at(1)` がその先の点なので、ペン先を置くものを合わせられる。`upto` が 1 未満なら閉じない。
+
+```
+line.upto = t                    # 範囲の行で動かす
+pen.position = Pos(line.point_at(1))
+```
 
 どの図形も持つ属性。効きようがないものは、その図形が持たない (書くと `NameError.UndefinedAttribute`)。既定のあるものは、書かなくてもその値で読める:
 
@@ -1007,10 +1014,31 @@ View(box = Vector(16, 9))
 | `rotation` | Number | 置いたものを 1 枚として回す (度)。中身の座標は変わらない |
 | `scale` | Number | 置いたものを 1 枚として拡大する。既定は 1 |
 | `pivot` | Vector | `rotation` と `scale` の中心。子の箱の座標で書く。書かなければ箱の真ん中 |
+| `camera` | Camera | 箱の中身の寄り引き。枠は動かさず中身だけ動かす |
 
 `rotation` と `scale` は置いたあとの絵に掛かるので、中の図形の座標や `place` の書き方は変えなくてよい。150 枚のタイルをまとめて回すなら、タイルを入れた View を 1 つ作って、その `rotation` を動かす。
 
 #### 3.13 塗り
+
+**Camera** — `View.camera` に入れると、箱の**中身**の `from` が `to` の位置に来るように置いて `scale` 倍する。枠 (箱の外周) は動かない。
+
+```
+v.camera = Camera(from = Vector(3, 2.5), to = Vector(8, 4.5), scale = 10)
+```
+
+| 属性 | 型 | 意味 |
+|---|---|---|
+| `from` | Vector | 中身のどの点を映すか (箱の座標) |
+| `to` | Vector | それを画面のどこに置くか (箱の座標)。省略は `from` と同じ = 中身を動かさずに拡大だけする |
+| `scale` | Number | 倍率。省略は 1。0 以下は `ValueError.OutOfRange` |
+
+`position` `w` `h` `pivot` `rotation` `scale` は**置かれた View そのもの**を枠ごと動かすもので、`camera` とは別物。両方書けば掛かり合う。寄ると中身は箱からはみ出すので、`clip = true` と併せて使う。
+
+3 つを別々の属性にせず 1 つの型にしてあるのは、途中で食い違って画面が跳ねないようにするため。動かすときはフィールドを動かす (`Camera` 値そのものは補間しない)。
+
+```
+motion (t) { 0..1: { v.camera.scale = math.exp(math.ln(1e12) * t) } }
+```
 
 `fill` に入れられるのは `Color` `Gradient` `Shader` (`Paint`)。
 
@@ -1035,6 +1063,7 @@ Shader(color = func (x, y, t) { Color(x * 16, 0, 128) })
 | `color` | (Number, Number, Number) -> Color | 箱の座標 x, y と動画の時刻 t 秒から、そのピクセルの色を返す |
 | `args` | List | Number の並び。`color` の 4 つ目の引数として渡る |
 | `samples` | Number | 1 ピクセルあたりの評価点の数。平方数に切り上げ、4 なら 2x2 の平均。省略は 1 |
+| `zoom` | ZoomPath | ズーム動画の道筋。入れると `color` の引数の意味が変わる |
 
 `color` は描画のたびに GPU で全ピクセル分走るので、書けるものが限られる。
 
@@ -1049,6 +1078,21 @@ Shader(color = func (x, y, t) { Color(x * 16, 0, 128) })
 書けないもの: 文字列、Duration、図形、Dict、素の Tuple。
 
 `args` は毎フレーム読むので、motion の行で変えれば動く。`run` では走らず、`render` `preview` `sheet` で走る。GPU の実数は 32 bit。
+
+**ZoomPath** — 1 点へ寄っていくだけのズーム動画は、(中心からの距離の対数, 角度) で見るとどのフレームも同じ絵の平行移動になる。`Shader.zoom` に `ZoomPath` を入れると、1 フレームずつ描かずに、その座標系の帯を伸ばしながら使い回す。帯は 1 フレームあたり数列しか伸びないので、1 枚ずつ描くより桁違いに速い。
+
+```
+Shader(zoom = ZoomPath(center = Vector(8, 4.5), zoom = func (t) { t + 1 }, duration = 2m), color = func (u, th, t) { ... })
+```
+
+| 属性 | 型 | 意味 |
+|---|---|---|
+| `center` | Vector | 箱の座標での、寄っていく先 |
+| `zoom` | Func | 倍率の時間変化。`func (t) -> Number`。t は秒 |
+| `duration` | Duration | `zoom` を読む範囲 (動画の長さ) |
+| `unit` | Number | 倍率 1 のときの、箱の座標 1 あたりのシェーダの座標の長さ (省略は 1) |
+
+`zoom` を入れると `color` の引数は `(中心からの距離の対数, 角度, 時刻)` になる。倍率は増えていくこと (戻ると帯を作り直すので遅い)。手で組むものではなく、標準ライブラリ `fractal` の `escape_time` が `duration` を書いたときに組み立てる。
 
 #### 3.14 時間
 
@@ -1099,6 +1143,46 @@ motion (t) { start: c.opacity = 0
 どれも新しい Timeline (Motion なら Motion) を返し、元は変わらない。`scale` と `fit` は中に置いた Timeline も同じ倍率で伸縮する。音声と字幕は開始時刻だけ動き、長さは変わらない。
 
 Motion の行では、`t` はその行に書いた時刻、2 つ目以降の名前は同じ行の左の列の値。
+
+行が書けるのは、図形の属性 (`c.radius`) と**普通の変数** (`weight`、`p.x`) の両方。変数を動かせば、図形を持たない値 (重み、位相、進み具合) をそのまま動かせる。
+
+```
+let weight = 0
+let p = Vector(0, 0)
+motion (t) {
+  0s: weight = 0, p = Vector(2, 2)
+  2s: weight = 10, p = Vector(14, 7) :ease
+}
+```
+
+**範囲の行** — 時刻を `0..1:` のように範囲で書くと、その区間は補間せず、式を毎フレーム評価する。
+
+```
+motion (t) { 0..1: c.position = Pos(2 + t * 12, 4.5) }
+```
+
+範囲の行は値の代わりに文の列を書ける。`let` が書けるので、1 つの点から複数の属性を決めるときに 1 度だけ計算すれば済む。
+
+```
+motion (t) {
+  0..1: {
+    let p = tip(t)
+    pen.position = Pos(p)
+    rail.to = Vector(p.x, p.y)
+  }
+}
+```
+
+同じ属性を上の行と両方で書いたら、ブロックのほうが後に走る。`mophila timeline` は、ブロックを 1 度走らせて何を書いたかを出す。
+
+属性に代入する motion は、2 つ目の名前で**経過秒**を受け取れる。`0..1` の割合で書いた行から、秒で決まる動きをそのまま書ける (長さを 2 か所に書かなくて済む)。
+
+```
+let tl = motion (t, sec) {
+  0..1: c.position = Pos(8 + math.cos(sec / 2.5s * math.TAU) * 5, 4.5)
+}
+tl.duration = 5s      # 2.5 秒で 1 周する動きが 5 秒続く
+```
 
 行末に Easing を 1 つ書ける。効くのは、前の行からその行までの区間。
 
@@ -1327,7 +1411,7 @@ String / List / Dict / Range のメソッドは builtin で、`import` は要ら
 | shape | Polygon の `points` を作る。円周上の点、正多角形、星、矢印 |
 | layout | 並べる位置を計算する。格子、直線上の等間隔、比率を保って収めた大きさ |
 | animation | 図形や View を動かす Timeline を返す。現れる、消える、滑る、回る |
-| fractal | エスケープタイム系フラクタルの Shader。反復式、精度、色付けを組み合わせる |
+| fractal | エスケープタイム系フラクタルの Shader。反復式と色付けを組み合わせる。倍率は `zoom` / `duration` / `camera` のどれかで決める |
 
 ### 7. プロジェクト設定
 
@@ -1483,6 +1567,7 @@ Tuple(1, 1.5)
 - `xs.filter(f: (T) -> Bool)` -> List<T> — f が true を返した要素だけの List
 - `xs.reduce(初期値: U, f: (U, T) -> U)` -> U — 初期値から順に f を通して 1 つの値にする
 - `xs.sort()` -> List<T> — 昇順に並べた新しい List (要素は Number か Duration)
+- `xs.sort_by(f: (T) -> U)` -> List<T> — f が返す値の昇順に並べた新しい List。要素そのものが比べられなくてよい
 - `xs.zip(ys: List<U>)` -> List<(T, U)> — 同じ位置どうしを組にする。短い方に合わせる
 - `(0..n).to_list()` -> List<T> — 中身を並べた List
 
@@ -1512,6 +1597,7 @@ List()
 - `xs.filter(f: (T) -> Bool)` -> List<T> — f が true を返した要素だけの List
 - `xs.reduce(初期値: U, f: (U, T) -> U)` -> U — 初期値から順に f を通して 1 つの値にする
 - `xs.sort()` -> List<T> — 昇順に並べた新しい List (要素は Number か Duration)
+- `xs.sort_by(f: (T) -> U)` -> List<T> — f が返す値の昇順に並べた新しい List。要素そのものが比べられなくてよい
 - `xs.zip(ys: List<U>)` -> List<(T, U)> — 同じ位置どうしを組にする。短い方に合わせる
 
 ### Dict
@@ -1559,6 +1645,7 @@ Range(0, 5)
 - `xs.filter(f: (T) -> Bool)` -> List<T> — f が true を返した要素だけの List
 - `xs.reduce(初期値: U, f: (U, T) -> U)` -> U — 初期値から順に f を通して 1 つの値にする
 - `xs.sort()` -> List<T> — 昇順に並べた新しい List (要素は Number か Duration)
+- `xs.sort_by(f: (T) -> U)` -> List<T> — f が返す値の昇順に並べた新しい List。要素そのものが比べられなくてよい
 - `xs.zip(ys: List<U>)` -> List<(T, U)> — 同じ位置どうしを組にする。短い方に合わせる
 - `(0..n).to_list()` -> List<T> — 中身を並べた List
 - `(0..=1).steps(n: Number)` -> List<Number> — 両端を含めて n 等分した値の List (要素は n + 1 個)
@@ -1645,6 +1732,7 @@ Circle(position = Pos(8, 4.5), radius = 1, fill = #4080e0)
 メソッド:
 
 - `p.length()` -> Number — 輪郭の長さ (箱の座標)。dash と dashOffset で線を少しずつ描き出すときに使う
+- `p.point_at(u: Number)` -> Vector — 輪郭を長さの割合でたどった点 (u は 0..1)。線の先にペン先を合わせるときに使う
 
 ### Ellipse
 
@@ -1676,6 +1764,7 @@ Ellipse(position = Pos(8, 4.5), rx = 3, ry = 1.4, fill = #4080e0)
 メソッド:
 
 - `p.length()` -> Number — 輪郭の長さ (箱の座標)。dash と dashOffset で線を少しずつ描き出すときに使う
+- `p.point_at(u: Number)` -> Vector — 輪郭を長さの割合でたどった点 (u は 0..1)。線の先にペン先を合わせるときに使う
 
 ### Rect
 
@@ -1709,6 +1798,7 @@ Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #f5f4f0)
 メソッド:
 
 - `p.length()` -> Number — 輪郭の長さ (箱の座標)。dash と dashOffset で線を少しずつ描き出すときに使う
+- `p.point_at(u: Number)` -> Vector — 輪郭を長さの割合でたどった点 (u は 0..1)。線の先にペン先を合わせるときに使う
 
 ### Line
 
@@ -1738,6 +1828,7 @@ Line(from = Vector(0, 0), to = Vector(4, 3), stroke = #303030, strokeWidth = 0.1
 メソッド:
 
 - `p.length()` -> Number — 輪郭の長さ (箱の座標)。dash と dashOffset で線を少しずつ描き出すときに使う
+- `p.point_at(u: Number)` -> Vector — 輪郭を長さの割合でたどった点 (u は 0..1)。線の先にペン先を合わせるときに使う
 
 ### Polygon
 
@@ -1768,6 +1859,7 @@ Polygon(points = [Vector(0, 0), Vector(2, 0), Vector(1, 2)], fill = #3f9b6d)
 メソッド:
 
 - `p.length()` -> Number — 輪郭の長さ (箱の座標)。dash と dashOffset で線を少しずつ描き出すときに使う
+- `p.point_at(u: Number)` -> Vector — 輪郭を長さの割合でたどった点 (u は 0..1)。線の先にペン先を合わせるときに使う
 
 ### Path
 
@@ -1784,6 +1876,7 @@ Path(from = Vector(0, 0), segments = [(:line, Vector(2, 0)), (:curve, Vector(3, 
 - `from`: Vector (必須) — 始点
 - `segments`: List (必須) — (:move | :line | :quad | :curve, 点...) の List。:quad は制御点 1 つ、:curve は 2 つを先に書く
 - `closed`: Bool — true なら始点に戻って閉じる (既定は false)
+- `upto`: Number — segments の先頭から何割を描くか (0..1、既定は 1)。点の列はそのままに、描く範囲だけ動かせる
 - `fill`: Paint — 塗り。Color か Shader
 - `stroke`: Color — 線の色
 - `strokeWidth`: Number — 線の太さ (箱の座標の単位)
@@ -1800,6 +1893,7 @@ Path(from = Vector(0, 0), segments = [(:line, Vector(2, 0)), (:curve, Vector(3, 
 メソッド:
 
 - `p.length()` -> Number — 輪郭の長さ (箱の座標)。dash と dashOffset で線を少しずつ描き出すときに使う
+- `p.point_at(u: Number)` -> Vector — 輪郭を長さの割合でたどった点 (u は 0..1)。線の先にペン先を合わせるときに使う
 
 ### TextArea
 
@@ -1888,6 +1982,42 @@ Shader(color = func (x, y, t) { Color(x * 16, 0, 128) })
 - `color`: Func (必須) — func (x, y, t [, args]) -> Color。x y は箱の座標、t は秒
 - `args`: List — Number の List。color の 4 つ目の引数。毎フレーム読む
 - `samples`: Number — 1 ピクセルあたりの評価点の数 (4 なら 2x2 の平均。省略は 1)
+- `zoom`: ZoomPath — ズーム動画の道筋。入れると color の引数が (中心からの距離の対数, 角度, 時刻) になる
+- `camera`: Camera — 
+
+### ZoomPath
+
+中心へ寄っていくだけのズームの道筋。Shader.zoom に入れると、1 フレームずつ描かずに 対数極座標の帯を伸ばしながら使い回す。fractal の escape_time が duration を書いたときに組み立てる
+
+作り方:
+
+```
+ZoomPath(center = Vector(8, 4.5), zoom = func (t) { t + 1 }, duration = 2m)
+```
+
+属性:
+
+- `center`: Vector (必須) — 箱の座標での、寄っていく先
+- `zoom`: Func (必須) — 倍率の時間変化。func (t) -> Number。t は秒。増えていくこと (戻ると帯を作り直すので遅い)
+- `duration`: Duration (必須) — zoom を読む範囲。動画の長さ
+- `unit`: Number — 倍率 1 のときの、箱の座標 1 あたりのシェーダの座標の長さ (省略は 1)
+- `scale`: List — zoom と duration と unit から作った表。書くものではない
+
+### Camera
+
+箱の中身の寄り引き。View.camera に入れると、中身の from が to の位置に来るように置いて scale 倍する。枠 (箱の外周) は動かない。位置と大きさを 3 つまとめて持つので、途中で食い違って画面が跳ねない
+
+作り方:
+
+```
+Camera(from = Vector(3, 2.5), to = Vector(8, 4.5), scale = 10)
+```
+
+属性:
+
+- `from`: Vector (必須) — 中身のどの点を映すか (箱の座標)
+- `to`: Vector — それを画面のどこに置くか (箱の座標。省略は from と同じ = 中身を動かさずに拡大だけする)
+- `scale`: Number — 倍率 (省略は 1)
 
 ### View
 
@@ -1912,6 +2042,7 @@ View(box = Vector(16, 9))
 - `rotation`: Number — 時計回りの回転 (度)
 - `scale`: Number — 
 - `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
+- `camera`: Camera — 箱の中身の寄り引き。枠は動かさず中身だけ動かす。position や scale は枠ごと動かすもので、別物
 
 メソッド:
 
@@ -2141,6 +2272,10 @@ Circle
 alias P = Pos
 ```
 
+メソッド:
+
+- `Path.through(points: List<Vector>, closed: Bool = false)` -> Path — 点の並びをつないだ Path。segments の組を手で書かずに済む
+
 ### Nothing
 
 値を返さなかった関数の戻り値。書き方は無く、log や place のように結果を持たない呼び出しがこれを返す
@@ -2217,8 +2352,8 @@ EspeakVoiceEngine(voice = "ja")
 - `math.ln(x: Number)` -> Number — 自然対数
 - `math.exp(x: Number)` -> Number — e の x 乗
 - `math.atan2(y: Number, x: Number)` -> Number — (x, y) の角度 (ラジアン)
-- `math.max(a: Number, b: Number, ...)` -> Number — 最大
-- `math.min(a: Number, b: Number, ...)` -> Number — 最小
+- `math.max(a: Number, b: Number, ...)` -> Number — 最大。全部 Duration なら Duration のまま返す
+- `math.min(a: Number, b: Number, ...)` -> Number — 最小。全部 Duration なら Duration のまま返す
 - `math.tan(x: Number)` -> Number — 正接 (ラジアン)
 - `math.asin(x: Number)` -> Number — 逆正弦。戻りはラジアン
 - `math.acos(x: Number)` -> Number — 逆余弦。戻りはラジアン
@@ -2229,7 +2364,7 @@ EspeakVoiceEngine(voice = "ja")
 - `math.log10(x: Number)` -> Number — 常用対数。組み込みの log (表示) と紛れるので、この名前にしてある
 - `math.log2(x: Number)` -> Number — 2 を底とする対数
 - `math.hypot(x: Number, y: Number)` -> Number — 原点からの距離
-- `math.clamp(x: Number, lo: Number, hi: Number)` -> Number — lo と hi の間に収める
+- `math.clamp(x: Number, lo: Number, hi: Number)` -> Number — lo と hi の間に収める。全部 Duration なら Duration のまま返す
 - `math.lerp(a: Number, b: Number, k: Number)` -> Number — a と b の間。k は 0..1
 - `math.unlerp(a: Number, b: Number, x: Number)` -> Number — x が a..b のどこか。lerp の逆
 - `math.map_range(x: Number, a0: Number, a1: Number, b0: Number, b1: Number)` -> Number — a0..a1 の x を b0..b1 に写す。グラフの軸に使う
@@ -2244,7 +2379,7 @@ EspeakVoiceEngine(voice = "ja")
 - `hsl(h: Number, s: Number, l: Number)` -> Color — 色相・彩度・明度から作る
 - `gray(v: Number)` -> Color — 灰色。0 が黒、255 が白
 - `to_hsl(c: Color)` -> Tuple — 色相・彩度・明度を取り出す
-- `scale(colors: List<Color>, k: Number)` -> Color — 色の並びから、途中の色を引く。k が 0 なら先頭、1 なら末尾
+- `ramp(colors: List<Color>, k: Number)` -> Color — 色の並びから、途中の色を引く。k が 0 なら先頭、1 なら末尾
 - `contrast(
   bg: Color,
   dark: Color = #ffffff,
@@ -2272,7 +2407,7 @@ EspeakVoiceEngine(voice = "ja")
   n: Number = 5,
   rotation: Number = 0,
 )` -> List<Vector> — 星の頂点。外側と内側の半径を交互に
-- `arrow(
+- `arrow_points(
   from: Vector,
   to: Vector,
   width: Number,
@@ -2323,10 +2458,15 @@ EspeakVoiceEngine(voice = "ja")
   h: Number,
   unit: Number = 1,
 )` -> List<Tuple> — 直方体の、見える 3 面。奥から手前の順に並ぶ
+- `resample(
+  points: List<Vector>,
+  n: Number,
+  closed: Bool = false,
+)` -> List<Vector> — 点の並びを、長さが等間隔になるように取り直す。 角の点しか返さない star や regular_polygon の輪郭を、フーリエ変換のように 等間隔の点として扱いたいときに使う
 
 ### layout
 
-- `grid(
+- `grid_centers(
   x: Number,
   y: Number,
   w: Number,
@@ -2375,7 +2515,7 @@ EspeakVoiceEngine(voice = "ja")
 - `elastic(k: Number, cycles: Number = 3, decay: Number = 6)` -> Number — バネのように揺れながら止まる
 - `steps(k: Number, n: Number)` -> Number — 段階的に飛ぶ。カウンタやコマ送りの表現に使う
 - `mirror(f: (Number) -> Number, k: Number)` -> Number, k: Number) -> Number — 前半で行って後半で戻る。往復する動きを 1 本で書ける
-- `flip(f: (Number) -> Number, k: Number)` -> Number, k: Number) -> Number — 曲線を逆にする。加速が減速になる
+- `reverse_curve(f: (Number) -> Number, k: Number)` -> Number, k: Number) -> Number — 曲線を逆にする。加速が減速になる
 
 ### animation
 
@@ -2410,7 +2550,7 @@ EspeakVoiceEngine(voice = "ja")
   turns: Number,
   duration: Duration = 1s,
 )` -> Timeline — target が時計回りに turns 周まわる Timeline を返す。速さは一定
-- `show(
+- `show_between(
   track: Timeline,
   targets: List<Placeable>,
   at: Duration,
@@ -2482,7 +2622,7 @@ EspeakVoiceEngine(voice = "ja")
   start: Duration = 0s,
   stagger: Duration = 0s,
 )` -> View — 棒グラフ。0 から values の値まで伸びる
-- `line(
+- `line_chart(
   points: List<Vector>,
   w: Number,
   h: Number,
@@ -2630,7 +2770,7 @@ EspeakVoiceEngine(voice = "ja")
   right: Bool = false,
 )` -> String — 幅を揃える。足りない分を fill で埋める
 - `typewriter(s: String, revealed: Number)` -> String — 先頭から revealed 文字だけを返す。1 文字ずつ出す字幕に使う
-- `number(value: Number, digits: Number = 0)` -> String — 小数の桁を揃える。足りない桁は 0 で埋める
+- `decimals(value: Number, digits: Number = 0)` -> String — 小数の桁を揃える。足りない桁は 0 で埋める
 - `thousands(
   value: Number,
   digits: Number = 0,
@@ -2638,7 +2778,7 @@ EspeakVoiceEngine(voice = "ja")
   ",
 )` -> String — 3 桁ごとに区切る
 - `percent(value: Number, digits: Number = 0)` -> String — 割合を百分率にする
-- `duration(d: Duration, format: String = "mm:ss")` -> String — Duration を時計の表示にする
+- `clock_text(d: Duration, format: String = "mm:ss")` -> String — Duration を時計の表示にする
 - `highlight(
   s: String,
   from: Number,
@@ -2914,7 +3054,7 @@ EspeakVoiceEngine(voice = "ja")
   size: Number = 0.12,
   opacity: Number = 0.6,
 )` -> View — 隅に置くロゴ
-- `project(lat: Number, lon: Number)` -> Vector — 緯度経度を 0..1 の平面座標にする (Web メルカトル)
+- `to_mercator(lat: Number, lon: Number)` -> Vector — 緯度経度を 0..1 の平面座標にする (Web メルカトル)
 - `map_route(
   points: List<Vector>,
   progress: Number,
@@ -3046,29 +3186,28 @@ EspeakVoiceEngine(voice = "ja")
   coloring: (Number, Vector) -> Color,
   center: Vector,
   span: Number,
-  precision: Symbol = :perturbation,
   zoom: (Number) -> Number = func (t) { 1 },
-  max_iter: (Number) -> Number = func (zoom) { 200 },
+  duration: Duration = 0s,
+  camera: MaybeCamera = :none,
+  max_steps: (Number) -> Number = func (zoom) { 200 },
   samples: Number = 1,
-  at: Vector = Vector(0, 0),
-  box: Vector = Vector(16, 9),
-  flip: Bool = false,
-  bailout: Number = 256,
-  ref_iter: Number = 8000,
-)` -> Color, center: Vector, span: Number, precision: Symbol = :perturbation, zoom: (Number) -> Number = func (t) — エスケープタイム系フラクタルの Shader を作る。図形の fill に入れる
-- `mandelbrot` -> Dict — Mandelbrot 集合の反復式 z' = z² + p。z は 0 から始まり、p がピクセルの複素座標。 escape_time の formula に渡す。摂動法にも対応している
+  top_left: Vector = Vector(0, 0),
+  size: Vector = Vector(16, 9),
+  y_up: Bool = false,
+  escape_at: Number = 256,
+  reference_steps: Number = 8000,
+)` -> Color, center: Vector, span: Number, zoom: (Number) -> Number = func (t) — エスケープタイム系フラクタルの Shader を作る。図形の fill に入れる。  倍率の決め方は 3 通り。`zoom` を書く / `zoom` と `duration` を書く / `camera` を渡す。 `duration` を書くと、動画ぜんぶを対数極座標の帯 1 本にして使い回す (中心が動かず、 倍率が増えるだけのときに使える。1 フレームあたりの計算が桁違いに減る)。 `camera` を渡すと倍率はカメラから毎フレーム読む (寄る先も動かせる代わりに帯は使えない)。 精度は深さで決まるので選ばない。中の点の軌道をここで 64 bit で計算し、GPU は差分を反復する
+- `MANDELBROT` -> Dict — Mandelbrot 集合の反復式 z' = z² + p。z は 0 から始まり、p がピクセルの複素座標。 escape_time の formula に渡す。摂動法にも対応している
 - `julia(c: JuliaConstant)` -> Dict — Julia 集合の反復式 z' = z² + c を作る。z はピクセルの複素座標から始まり、c は全ピクセルで共通。 escape_time の formula に渡す
-- `burning_ship` -> Dict — Burning Ship の反復式 z' = (|Re z| + i|Im z|)² + p。実部と虚部の絶対値を取ってから 2 乗する。 escape_time の formula に渡す。escape_time に flip: true を付けると、慣習どおり船が上を向く
+- `BURNING_SHIP` -> Dict — Burning Ship の反復式 z' = (|Re z| + i|Im z|)² + p。実部と虚部の絶対値を取ってから 2 乗する。 escape_time の formula に渡す。escape_time に y_up: true を付けると、慣習どおり船が上を向く
 - `multibrot(n: Number)` -> Dict — Multibrot の反復式 z' = z^n + p を作る。n が 2 なら Mandelbrot と同じで、大きいほど腕の数が増える。 escape_time の formula に渡す
-- `plain` -> Symbol — GPU の 32 bit のまま反復する。escape_time の precision に渡す。 数万倍あたりまでなら、これで足りる
-- `perturbation` -> Symbol — 中心の点の軌道をスクリプト側の 64 bit で計算し、GPU はそこからの差分だけ反復する (摂動法)。 escape_time の precision に渡す。10 兆倍あたりまで寄れる
-- `smooth(
+- `smooth_bands(
   stops: List<Color>,
   period: Number,
   inside: Color = #000000,
 )` -> (Number, Vector) -> Color — 脱出の速さから色を決める関数を作る。stops を period 回の反復ごとに 1 周する。 escape_time の coloring に渡す
-- `cmul(a: Vector, b: Vector)` -> Vector — 複素数の積。複素数は Vector (x が実部、y が虚部)
-- `cabs2(z: Vector)` -> Number — 複素数の絶対値の 2 乗
+- `complex_mul(a: Vector, b: Vector)` -> Vector — 複素数の積。複素数は Vector (x が実部、y が虚部)
+- `abs_squared(z: Vector)` -> Number — 複素数の絶対値の 2 乗
 
 
 # 構文の例

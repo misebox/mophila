@@ -1855,9 +1855,14 @@ fn index_value(target: &Value, index: &Value) -> Result<Value> {
         }
         return Ok(Value::Str(chars[at as usize].to_string()));
     }
-    let items: Vec<Value> = match target {
-        Value::List(items) => items.borrow().clone(),
-        Value::Tuple(items) => items.clone(),
+    // 借りたまま読む。ここで並び全体を複製すると、xs[i] を n 回で O(n²) になる
+    let borrowed;
+    let items: &[Value] = match target {
+        Value::List(items) => {
+            borrowed = items.borrow();
+            &borrowed
+        }
+        Value::Tuple(items) => items,
         v => return err(Kind::OperandType, format!("cannot index {}", v.type_name())),
     };
     if let Value::Range(a, b) = index {
@@ -2477,4 +2482,27 @@ fn seq_cmp(a: &[Value], b: &[Value]) -> Option<std::cmp::Ordering> {
         }
     }
     Some(a.len().cmp(&b.len()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// xs[i] が並び全体を複製していて、n 回引くと O(n²) になっていた。
+    /// 直す前は 5 万要素で 15 秒ほど掛かっていたので、余裕を見て 2 秒で切る
+    #[test]
+    fn indexing_a_list_does_not_copy_it() {
+        let n = 50_000;
+        let list = Value::List(Rc::new(RefCell::new((0..n).map(|i| Value::num(f64::from(i))).collect())));
+        let started = std::time::Instant::now();
+        let mut sum = 0.0;
+        for i in 0..n {
+            let Ok(Value::Number(v, _)) = index_value(&list, &Value::num(f64::from(i))) else {
+                panic!("index {i} failed");
+            };
+            sum += v;
+        }
+        assert_eq!(sum, f64::from(n) * f64::from(n - 1) / 2.0);
+        assert!(started.elapsed() < std::time::Duration::from_secs(2), "indexing took {:?}", started.elapsed());
+    }
 }

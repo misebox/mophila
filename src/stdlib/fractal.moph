@@ -1,10 +1,10 @@
 # fractal.moph — エスケープタイム系フラクタルの部品。反復式・精度・色付けを関数で差し替える。
 # escape_time(...) が Shader を返すので、図形の fill に入れて使う。
-#   formula:   反復式 (mandelbrot / burning_ship / multibrot(n) / julia(c))
+#   formula:   反復式 (MANDELBROT / BURNING_SHIP / multibrot(n) / julia(c))
 #   coloring:  func (mu, z) -> Color。mu は滑らかな脱出回数 (集合の中は -1)、z は脱出時の値
-#   center / span: 複素平面の中心と、最初に見える横幅。zoom: func (t) -> 倍率。max_iter: func (zoom) -> 反復の上限
+#   center / span: 複素平面の中心と、最初に見える横幅。zoom: func (t) -> 倍率。max_steps: func (zoom) -> 反復の上限
 #   duration: 書くと対数極座標の帯を使う。camera: 倍率をカメラから読む
-#   at / box:  塗る図形が占める箱の座標 (既定は (0, 0) から 16 x 9)。flip: true で虚軸を下向きにする (Burning Ship の慣習)
+#   top_left / size:  塗る図形が占める箱の座標 (既定は (0, 0) から 16 x 9)。y_up: true で虚軸を下向きにする (Burning Ship の慣習)
 
 import math
 
@@ -22,40 +22,40 @@ type MaybeCamera = Camera | Symbol
 ## `camera` を渡すと倍率はカメラから毎フレーム読む (寄る先も動かせる代わりに帯は使えない)。
 ## 精度は深さで決まるので選ばない。中の点の軌道をここで 64 bit で計算し、GPU は差分を反復する
 ## @category 描く
-## @param formula 反復式 (mandelbrot / julia(c) / burning_ship / multibrot(n))
-## @param coloring 色付け。func (mu, z) -> Color (smooth など)
+## @param formula 反復式 (MANDELBROT / julia(c) / BURNING_SHIP / multibrot(n))
+## @param coloring 色付け。func (mu, z) -> Color (smooth_bands など)
 ## @param center 複素平面の中心 (Vector)
 ## @param span 最初に見える横幅 (複素平面の単位)
 ## @param zoom 倍率の時間変化。func (t) -> Number
 ## @param duration 動画の長さ。書くと帯を使う (倍率は増えるだけであること)
 ## @param camera 倍率と寄る先をここから読む。zoom と duration は書かない
-## @param max_iter 反復の上限。func (zoom) -> Number
+## @param max_steps 反復の上限。func (zoom) -> Number
 ## @param samples 1 ピクセルあたりの評価点の数 (4 で 2x2 のアンチエイリアス)
-## @param at 塗る図形の左上 (箱の座標)
-## @param box 塗る図形の大きさ (箱の座標)
-## @param flip true で虚軸を下向きにする
-## @param bailout 脱出とみなす |z|² の閾値
-## @param ref_iter 基準軌道の長さの上限
+## @param top_left 塗る図形の左上 (箱の座標)
+## @param size 塗る図形の大きさ (箱の座標)
+## @param y_up true で虚軸を下向きにする
+## @param escape_at 脱出とみなす |z|² の閾値
+## @param reference_steps 基準軌道の長さの上限
 ## @returns 図形の fill に入れる
 ## @example
-## import { escape_time, mandelbrot, smooth } from fractal
+## import { escape_time, MANDELBROT, smooth_bands } from fractal
 ##
 ## let set = escape_time(
-##   formula = mandelbrot,
-##   coloring = smooth([#061a3f, #5c9be6, #ffffff, #061a3f], 48),
+##   formula = MANDELBROT,
+##   coloring = smooth_bands([#061a3f, #5c9be6, #ffffff, #061a3f], 48),
 ##   center = Vector(-0.743, 0.126),
 ##   span = 0.02,
 ## )
 ## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = set))
-export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, center: Vector, span: Number, zoom: (Number) -> Number = func (t) { 1 }, duration: Duration = 0s, camera: MaybeCamera = :none, max_iter: (Number) -> Number = func (zoom) { 200 }, samples: Number = 1, at: Vector = Vector(0, 0), box: Vector = Vector(16, 9), flip: Bool = false, bailout: Number = 256, ref_iter: Number = 8000) -> Shader {
+export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, center: Vector, span: Number, zoom: (Number) -> Number = func (t) { 1 }, duration: Duration = 0s, camera: MaybeCamera = :none, max_steps: (Number) -> Number = func (zoom) { 200 }, samples: Number = 1, top_left: Vector = Vector(0, 0), size: Vector = Vector(16, 9), y_up: Bool = false, escape_at: Number = 256, reference_steps: Number = 8000) -> Shader {
   let seed = formula["seed"]
   let step = formula["step"]
   let start = formula["start"]
   let ln_degree = math.ln(formula["degree"])
   let param = if formula.has("param") { formula["param"] } else { func (t) { Vector(0, 0) } }
-  let limit_of = max_iter
+  let limit_of = max_steps
   let zoom_of = zoom
-  let up = if flip { 1 } else { -1 }
+  let up = if y_up { 1 } else { -1 }
   let has_camera = type_of(camera) == "Camera"
   if has_camera and duration > 0s {
     log("escape_time: camera と duration は一緒に書けない (カメラは帯を使えない)")
@@ -66,10 +66,10 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
   let delta = formula["delta"]
 
   # 箱の座標 1 あたりの複素平面の長さ (倍率 1 のとき)
-  let unit = span / box.x
+  let unit = span / size.x
   # 基準軌道を作る点。カメラがあれば、その寄る先の下にある複素点
-  let focus = if has_camera { camera.from } else { Vector(at.x + box.x / 2, at.y + box.y / 2) }
-  let origin = center + Vector((focus.x - at.x - box.x / 2) * unit, (focus.y - at.y - box.y / 2) * unit * up)
+  let focus = if has_camera { camera.from } else { Vector(top_left.x + size.x / 2, top_left.y + size.y / 2) }
+  let origin = center + Vector((focus.x - top_left.x - size.x / 2) * unit, (focus.y - top_left.y - size.y / 2) * unit * up)
   # 滑らかな脱出回数
   func escaped(n: Number, r2: Number) -> Number { n + 1 - math.ln(math.ln(r2) / 2) / ln_degree }
 
@@ -78,10 +78,10 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
   func reference() -> List<Number> {
     let orbit = []
     let Z = seed(origin, k0)
-    for n in 0..ref_iter {
+    for n in 0..reference_steps {
       orbit.push(Z.x)
       orbit.push(Z.y)
-      if cabs2(Z) > bailout { return orbit }
+      if abs_squared(Z) > escape_at { return orbit }
       Z = step(Z, origin, k0)
     }
     orbit
@@ -91,11 +91,11 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
 
   # 帯を使う版。x は中心からの距離の対数、y は画面の上での角度
   if duration > 0s {
-    let corner = math.sqrt(box.x * box.x + box.y * box.y) / 2
+    let corner = math.sqrt(size.x * size.x + size.y * size.y) / 2
     func zoom_at(u: Number) -> Number { corner * unit / math.exp(u) }
     return Shader(samples = samples,
       args = orbit,
-      zoom = ZoomMap(center = focus, zoom = zoom_of, duration = duration, unit = unit),
+      zoom = ZoomPath(center = focus, zoom = zoom_of, duration = duration, unit = unit),
       color = func (u, th, t, ref) {
         let r = math.exp(u)
         let dp = Vector(r * math.cos(th), r * math.sin(th) * up)
@@ -106,9 +106,9 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
         for n in 0..limit {
           let Z = Vector(ref[2 * m], ref[2 * m + 1])
           let z = Z + d
-          let r2 = cabs2(z)
-          if r2 > bailout { return coloring(escaped(n, r2), z) }
-          if r2 < cabs2(d) or m + 1 >= ref_len {
+          let r2 = abs_squared(z)
+          if r2 > escape_at { return coloring(escaped(n, r2), z) }
+          if r2 < abs_squared(d) or m + 1 >= ref_len {
             d = z
             m = 0
             Z = Vector(ref[0], ref[1])
@@ -134,9 +134,9 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
         for n in 0..limit {
           let Z = Vector(ref[2 * m], ref[2 * m + 1])
           let z = Z + d
-          let r2 = cabs2(z)
-          if r2 > bailout { return coloring(escaped(n, r2), z) }
-          if r2 < cabs2(d) or m + 1 >= ref_len {
+          let r2 = abs_squared(z)
+          if r2 > escape_at { return coloring(escaped(n, r2), z) }
+          if r2 < abs_squared(d) or m + 1 >= ref_len {
             d = z
             m = 0
             Z = Vector(ref[0], ref[1])
@@ -153,7 +153,7 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
     args = orbit,
     color = func (x, y, t, ref) {
       let zm = zoom_of(t)
-      let dp = Vector((x - at.x - box.x / 2) * unit / zm, (y - at.y - box.y / 2) * unit / zm * up)
+      let dp = Vector((x - top_left.x - size.x / 2) * unit / zm, (y - top_left.y - size.y / 2) * unit / zm * up)
       let limit = limit_of(zm)
       let k = param(t)
       let d = start(dp)
@@ -161,10 +161,10 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
       for n in 0..limit {
         let Z = Vector(ref[2 * m], ref[2 * m + 1])
         let z = Z + d
-        let r2 = cabs2(z)
-        if r2 > bailout { return coloring(escaped(n, r2), z) }
+        let r2 = abs_squared(z)
+        if r2 > escape_at { return coloring(escaped(n, r2), z) }
         # z が差分より小さくなったら、基準を先頭に戻して差分 = z から数え直す (基準が尽きたときも)
-        if r2 < cabs2(d) or m + 1 >= ref_len {
+        if r2 < abs_squared(d) or m + 1 >= ref_len {
           d = z
           m = 0
           Z = Vector(ref[0], ref[1])
@@ -182,12 +182,12 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
 ## @category 反復式
 ## @type {Dict} 反復式
 ## @example
-## escape_time(formula = mandelbrot, coloring = coloring, center = Vector(-0.5, 0), span = 3)
-export let mandelbrot = {
+## escape_time(formula = MANDELBROT, coloring = coloring, center = Vector(-0.5, 0), span = 3)
+export let MANDELBROT = {
   "seed": func (p, k) { Vector(0, 0) },
-  "step": func (z, p, k) { cmul(z, z) + p },
+  "step": func (z, p, k) { complex_mul(z, z) + p },
   "start": func (dp) { Vector(0, 0) },
-  "delta": func (Z, d, dp, k) { cmul(Z, d) * 2 + cmul(d, d) + dp },
+  "delta": func (Z, d, dp, k) { complex_mul(Z, d) * 2 + complex_mul(d, d) + dp },
   "degree": 2,
 }
 
@@ -206,31 +206,31 @@ export func julia(c: JuliaConstant) -> Dict {
   let param = if type_of(c) == "Func" { c } else { func (t) { c } }
   {
     "seed": func (p, k) { p },
-    "step": func (z, p, k) { cmul(z, z) + k },
+    "step": func (z, p, k) { complex_mul(z, z) + k },
     "start": func (dp) { dp },
-    "delta": func (Z, d, dp, k) { cmul(Z, d) * 2 + cmul(d, d) },
+    "delta": func (Z, d, dp, k) { complex_mul(Z, d) * 2 + complex_mul(d, d) },
     "degree": 2,
     "param": param,
   }
 }
 
 ## Burning Ship の反復式 z' = (|Re z| + i|Im z|)² + p。実部と虚部の絶対値を取ってから 2 乗する。
-## escape_time の formula に渡す。escape_time に flip: true を付けると、慣習どおり船が上を向く
+## escape_time の formula に渡す。escape_time に y_up: true を付けると、慣習どおり船が上を向く
 ## @category 反復式
 ## @type {Dict} 反復式
 ## @example
-## escape_time(formula = burning_ship, coloring = coloring, center = Vector(-1.75, -0.03), span = 0.2, flip = true)
-export let burning_ship = {
+## escape_time(formula = BURNING_SHIP, coloring = coloring, center = Vector(-1.75, -0.03), span = 0.2, y_up = true)
+export let BURNING_SHIP = {
   "seed": func (p, k) { Vector(0, 0) },
   "step": func (z, p, k) {
     let a = Vector(math.abs(z.x), math.abs(z.y))
-    cmul(a, a) + p
+    complex_mul(a, a) + p
   },
   "start": func (dp) { Vector(0, 0) },
   "delta": func (Z, d, dp, k) {
     let a = Vector(math.abs(Z.x), math.abs(Z.y))
     let e = Vector(diffabs(Z.x, d.x), diffabs(Z.y, d.y))
-    cmul(a, e) * 2 + cmul(e, e) + dp
+    complex_mul(a, e) * 2 + complex_mul(e, e) + dp
   },
   "degree": 2,
 }
@@ -251,7 +251,7 @@ export func multibrot(n: Number) -> Dict {
     "delta": func (Z, d, dp, k) {
       # (Z + d)^n - Z^n = Σ C(n, j) Z^(n-j) d^j  (j = 1..n)
       let sum = Vector(0, 0)
-      for j in 1..=n { sum = sum + cmul(cpow(Z, n - j), cpow(d, j)) * binom(n, j) }
+      for j in 1..=n { sum = sum + complex_mul(cpow(Z, n - j), cpow(d, j)) * binom(n, j) }
       sum + dp
     },
     "degree": n,
@@ -267,8 +267,8 @@ export func multibrot(n: Number) -> Dict {
 ## @returns 色付け
 ## @example
 ## # 48 回の反復で 1 周する色。最初と最後が同じ色なので継ぎ目が出ない
-## let coloring = smooth([#061a3f, #5c9be6, #ffffff, #061a3f], 48, inside = #061a3f)
-export func smooth(stops: List<Color>, period: Number, inside: Color = #000000) -> (Number, Vector) -> Color {
+## let coloring = smooth_bands([#061a3f, #5c9be6, #ffffff, #061a3f], 48, inside = #061a3f)
+export func smooth_bands(stops: List<Color>, period: Number, inside: Color = #000000) -> (Number, Vector) -> Color {
   let last = stops.len() - 1
   func (mu, z) {
     if mu < 0 { return inside }
@@ -285,18 +285,18 @@ export func smooth(stops: List<Color>, period: Number, inside: Color = #000000) 
 ## @param b 複素数
 ## @returns 積
 ## @example
-## cmul(Vector(0, 1), Vector(0, 1))   # Vector(-1, 0) — i × i = -1
-export func cmul(a: Vector, b: Vector) -> Vector { Vector(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x) }
+## complex_mul(Vector(0, 1), Vector(0, 1))   # Vector(-1, 0) — i × i = -1
+export func complex_mul(a: Vector, b: Vector) -> Vector { Vector(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x) }
 ## 複素数の絶対値の 2 乗
 ## @category 複素数
 ## @param z 複素数
 ## @returns |z|²
 ## @example
-## cabs2(Vector(3, 4))   # 25
-export func cabs2(z: Vector) -> Number { z.x * z.x + z.y * z.y }
+## abs_squared(Vector(3, 4))   # 25
+export func abs_squared(z: Vector) -> Number { z.x * z.x + z.y * z.y }
 func cpow(z: Vector, n: Number) -> Vector {
   let r = Vector(1, 0)
-  for i in 0..n { r = cmul(r, z) }
+  for i in 0..n { r = complex_mul(r, z) }
   r
 }
 # 二項係数 C(n, j)

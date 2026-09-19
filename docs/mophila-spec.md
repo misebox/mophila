@@ -344,7 +344,7 @@ Shader(color = func (x, y, t) { Color(x * 16, 0, 128) })
 | `color` | (Number, Number, Number) -> Color | 箱の座標 x, y と動画の時刻 t 秒から、そのピクセルの色を返す |
 | `args` | List | Number の並び。`color` の 4 つ目の引数として渡る |
 | `samples` | Number | 1 ピクセルあたりの評価点の数。平方数に切り上げ、4 なら 2x2 の平均。省略は 1 |
-| `zoom` | ZoomMap | ズーム動画の道筋。入れると `color` の引数の意味が変わる |
+| `zoom` | ZoomPath | ズーム動画の道筋。入れると `color` の引数の意味が変わる |
 
 `color` は描画のたびに GPU で全ピクセル分走るので、書けるものが限られる。
 
@@ -360,10 +360,10 @@ Shader(color = func (x, y, t) { Color(x * 16, 0, 128) })
 
 `args` は毎フレーム読むので、motion の行で変えれば動く。`run` では走らず、`render` `preview` `sheet` で走る。GPU の実数は 32 bit。
 
-**ZoomMap** — 1 点へ寄っていくだけのズーム動画は、(中心からの距離の対数, 角度) で見るとどのフレームも同じ絵の平行移動になる。`Shader.zoom` に `ZoomMap` を入れると、1 フレームずつ描かずに、その座標系の帯を伸ばしながら使い回す。帯は 1 フレームあたり数列しか伸びないので、1 枚ずつ描くより桁違いに速い。
+**ZoomPath** — 1 点へ寄っていくだけのズーム動画は、(中心からの距離の対数, 角度) で見るとどのフレームも同じ絵の平行移動になる。`Shader.zoom` に `ZoomPath` を入れると、1 フレームずつ描かずに、その座標系の帯を伸ばしながら使い回す。帯は 1 フレームあたり数列しか伸びないので、1 枚ずつ描くより桁違いに速い。
 
 ```
-Shader(zoom = ZoomMap(center = Vector(8, 4.5), zoom = func (t) { t + 1 }, duration = 2m), color = func (u, th, t) { ... })
+Shader(zoom = ZoomPath(center = Vector(8, 4.5), zoom = func (t) { t + 1 }, duration = 2m), color = func (u, th, t) { ... })
 ```
 
 | 属性 | 型 | 意味 |

@@ -725,7 +725,7 @@ pub struct Request<'a> {
     /// 1 ピクセルあたりのサンプル数。平方数に切り上げる (4 → 2x2)
     pub samples: u32,
     /// ズーム動画のとき。1 枚ずつ描かず、対数極座標の帯を伸ばしながら使い回す
-    pub zoom: Option<ZoomMap<'a>>,
+    pub zoom: Option<ZoomPath<'a>>,
     /// カメラの倍率。camera を入れた Shader のとき。x y は既に camera.from からの差になっている
     pub camera: Option<f64>,
 }
@@ -733,7 +733,7 @@ pub struct Request<'a> {
 /// 中心へ寄っていくだけのズームは、(中心からの距離の対数, 角度) で見ると
 /// どのフレームも同じ絵の平行移動になる。だから全フレーム分を 1 本の帯として持ち、
 /// 各フレームはその窓を読むだけで済む。帯は 1 フレームあたり数列しか伸びない
-pub struct ZoomMap<'a> {
+pub struct ZoomPath<'a> {
     /// 箱の座標での、寄っていく先
     pub center: (f64, f64),
     /// ln(箱の座標 1 あたりの複素平面の長さ) を、0..duration に等間隔で並べたもの
@@ -742,7 +742,7 @@ pub struct ZoomMap<'a> {
     pub duration: f64,
 }
 
-impl ZoomMap<'_> {
+impl ZoomPath<'_> {
     /// その時刻の ln(スケール)。表の間は直線で結ぶ
     fn ln_scale(&self, t: f64) -> f64 {
         let last = self.scale.len() - 1;
@@ -926,7 +926,7 @@ impl ShaderRunner {
     }
 
     /// ズーム動画。足りない列だけ帯に足してから、帯を読んで 1 フレームを組む
-    fn run_zoom(&mut self, req: &Request, map: &ZoomMap, key: usize, grid: u32, args_len: u32) -> Result<ImageData> {
+    fn run_zoom(&mut self, req: &Request, map: &ZoomPath, key: usize, grid: u32, args_len: u32) -> Result<ImageData> {
         // 図形の中心が画面のどこかと、いちばん遠い隅までの距離 (ピクセル)
         let center_px =
             ((map.center.0 - req.origin.0) / req.step.0, (map.center.1 - req.origin.1) / req.step.1);

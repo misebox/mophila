@@ -17,7 +17,7 @@ export func run(now) {
   add(sc, [heading("ファイルも、部品")], now)
   add(sc, card([
     "import { make } from .walker",
-    "import { escape_time, mandelbrot } from fractal",
+    "import { escape_time, MANDELBROT } from fractal",
     "import ..orbit",
     "",
     "v.place(orbit.output, at = Pos(1, 1, anchor = :topLeft), w = 6)",

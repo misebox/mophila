@@ -653,31 +653,31 @@ fn draw_shader_fill(scene: &mut Scene, path: &BezPath, transform: Affine, opacit
     };
     // ズーム動画。中心と、時刻から倍率への表をもらう
     let zoom = match sh.attrs.get("zoom") {
-        Some(Value::Object(o)) if o.borrow().kind == "ZoomMap" => {
+        Some(Value::Object(o)) if o.borrow().kind == "ZoomPath" => {
             let m = o.borrow();
             let Some(Value::Vector(cx, cy)) = m.attrs.get("center") else {
-                return err(Kind::AttributeType, "ZoomMap.center must be a Vector");
+                return err(Kind::AttributeType, "ZoomPath.center must be a Vector");
             };
             let Some(Value::Duration(duration)) = m.attrs.get("duration") else {
-                return err(Kind::AttributeType, "ZoomMap.duration must be a Duration");
+                return err(Kind::AttributeType, "ZoomPath.duration must be a Duration");
             };
             let Some(Value::List(items)) = m.attrs.get("scale") else {
-                return err(Kind::AttributeType, "ZoomMap.scale must be a List of Numbers");
+                return err(Kind::AttributeType, "ZoomPath.scale must be a List of Numbers");
             };
             let scale: Vec<f64> = items
                 .borrow()
                 .iter()
                 .map(|v| match v {
                     Value::Number(n, _) => Ok(*n),
-                    other => err(Kind::AttributeType, format!("ZoomMap.scale must hold Numbers, found {}", other.type_name())),
+                    other => err(Kind::AttributeType, format!("ZoomPath.scale must hold Numbers, found {}", other.type_name())),
                 })
                 .collect::<Result<_>>()?;
             if scale.len() < 2 || *duration <= 0.0 {
-                return err(Kind::AttributeType, "ZoomMap.scale needs 2 or more Numbers and a duration above 0");
+                return err(Kind::AttributeType, "ZoomPath.scale needs 2 or more Numbers and a duration above 0");
             }
             Some((*cx, *cy, *duration, scale))
         }
-        Some(other) => return err(Kind::AttributeType, format!("Shader.zoom expects ZoomMap, found {}", other.type_name())),
+        Some(other) => return err(Kind::AttributeType, format!("Shader.zoom expects ZoomPath, found {}", other.type_name())),
         None => None,
     };
     // カメラを入れた Shader は、箱の座標そのものではなく camera.from からの差を受け取る。
@@ -723,7 +723,7 @@ fn draw_shader_fill(scene: &mut Scene, path: &BezPath, transform: Affine, opacit
         },
         samples,
         camera: camera.map(|(_, _, scale)| scale),
-        zoom: zoom.as_ref().map(|(cx, cy, duration, scale)| crate::render::shader::ZoomMap {
+        zoom: zoom.as_ref().map(|(cx, cy, duration, scale)| crate::render::shader::ZoomPath {
             center: (*cx, *cy),
             scale,
             duration: *duration,

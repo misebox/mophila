@@ -21,12 +21,12 @@ let colors = [#7a4f33, #8a5c3a, #97693f, #8c7a42, #7c8c45, #62984c, #4aa25a, #46
 
 let seconds = total / 1s      # t は 0..1 なので、秒に直すときに掛ける
 
-func smooth(k) { k * k * (3 - 2 * k) }
+func smooth_bands(k) { k * k * (3 - 2 * k) }
 
 # level 段目の枝が t (0..1) の時点でどこまで伸びているか (0..1)
 func growth(t, level) {
   let k = (t * seconds - level * grow_gap) / grow_time
-  smooth(math.min(1, math.max(0, k)))
+  smooth_bands(math.min(1, math.max(0, k)))
 }
 
 # 揺れ。段が深いほど大きく、phase で枝ごとにずらす

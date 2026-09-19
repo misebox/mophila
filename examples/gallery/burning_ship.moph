@@ -1,8 +1,8 @@
-# burning_ship.moph — Burning Ship (z の実部と虚部の絶対値を取ってから 2 乗する)。
-# 船全体から、左の水平線に浮かぶ小さな船に 50 倍まで寄る。虚軸は慣習どおり下向き (flip)
+# BURNING_SHIP.moph — Burning Ship (z の実部と虚部の絶対値を取ってから 2 乗する)。
+# 船全体から、左の水平線に浮かぶ小さな船に 50 倍まで寄る。虚軸は慣習どおり下向き (y_up)
 
 import math
-import { escape_time, burning_ship, smooth } from fractal
+import { escape_time, BURNING_SHIP, smooth_bands } from fractal
 
 let v = View(box = Vector(16, 9))
 let total = 40s
@@ -12,13 +12,13 @@ let end_zoom = 50
 let stops = [#061a3f, #1c4f9c, #5c9be6, #cfe6ff, #ffffff, #cfe6ff, #5c9be6, #1c4f9c, #061a3f]
 
 let set = escape_time(
-  formula = burning_ship,
-  coloring = smooth(stops, 64, inside = #061a3f),
+  formula = BURNING_SHIP,
+  coloring = smooth_bands(stops, 64, inside = #061a3f),
   center = Vector(-1.755, -0.02),
   span = 4.0,
-  flip = true,
+  y_up = true,
   zoom = func (t) { math.exp(math.ln(end_zoom) * math.min(1, math.max(0, (t - 1) / (seconds - 4)))) },
-  max_iter = func (zoom) { 150 + 100 * math.ln(zoom) },
+  max_steps = func (zoom) { 150 + 100 * math.ln(zoom) },
   samples = 4,
 )
 v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = set))

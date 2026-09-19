@@ -58,9 +58,11 @@ pub const METHODS: &[Method] = &[
     Method { receivers: SEQ, name: "filter", signature: "xs.filter(f: (T) -> Bool)", returns: "List<T>", doc: "f が true を返した要素だけの List", call: seq_filter },
     Method { receivers: SEQ, name: "reduce", signature: "xs.reduce(初期値: U, f: (U, T) -> U)", returns: "U", doc: "初期値から順に f を通して 1 つの値にする", call: seq_reduce },
     Method { receivers: SEQ, name: "sort", signature: "xs.sort()", returns: "List<T>", doc: "昇順に並べた新しい List (要素は Number か Duration)", call: seq_sort },
+    Method { receivers: SEQ, name: "sort_by", signature: "xs.sort_by(f: (T) -> U)", returns: "List<T>", doc: "f が返す値の昇順に並べた新しい List。要素そのものが比べられなくてよい", call: seq_sort_by },
     Method { receivers: SEQ, name: "zip", signature: "xs.zip(ys: List<U>)", returns: "List<(T, U)>", doc: "同じ位置どうしを組にする。短い方に合わせる", call: seq_zip },
     Method { receivers: &["Tuple", "Range"], name: "to_list", signature: "(0..n).to_list()", returns: "List<T>", doc: "中身を並べた List", call: seq_to_list },
     Method { receivers: &["Range"], name: "steps", signature: "(0..=1).steps(n: Number)", returns: "List<Number>", doc: "両端を含めて n 等分した値の List (要素は n + 1 個)", call: range_steps },
+    Method { receivers: &["Type"], name: "through", signature: "Path.through(points: List<Vector>, closed: Bool = false)", returns: "Path", doc: "点の並びをつないだ Path。segments の組を手で書かずに済む", call: type_through },
     Method { receivers: &["Dict"], name: "keys", signature: "d.keys()", returns: "List<String>", doc: "キーの List", call: dict_keys },
     Method { receivers: &["Dict"], name: "values", signature: "d.values()", returns: "List<T>", doc: "値の List", call: dict_values },
     Method { receivers: &["Dict"], name: "has", signature: "d.has(key: String)", returns: "Bool", doc: "そのキーがあるか", call: dict_has },
@@ -129,6 +131,14 @@ pub const METHODS: &[Method] = &[
         returns: "Number",
         doc: "輪郭の長さ (箱の座標)。dash と dashOffset で線を少しずつ描き出すときに使う",
         call: shape_length,
+    },
+    Method {
+        receivers: &["Path", "Polygon", "Line", "Circle", "Ellipse", "Rect"],
+        name: "point_at",
+        signature: "p.point_at(u: Number)",
+        returns: "Vector",
+        doc: "輪郭を長さの割合でたどった点 (u は 0..1)。線の先にペン先を合わせるときに使う",
+        call: shape_point_at,
     },
     Method {
         receivers: &["TextArea"],
@@ -391,6 +401,46 @@ fn seq_sort(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
     }
 }
 
+fn type_through(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    let Value::BuiltinType(name) = &r else { return err(Kind::ArgumentType, "through is a method of Path") };
+    if name != "Path" {
+        return err(Kind::UndefinedAttribute, format!("{name} has no method \"through\""));
+    }
+    let mut points = None;
+    let mut closed = false;
+    for (at, (label, value)) in args.iter().enumerate() {
+        match (label.as_deref(), value) {
+            (None, v) if at == 0 => points = Some(items_of(v)),
+            (Some("closed") | None, Value::Bool(b)) => closed = *b,
+            (Some(other), v) => return err(Kind::ArgumentType, format!("Path.through has no argument \"{other}\" ({})", v.type_name())),
+            (None, v) => return err(Kind::ArgumentType, format!("Path.through expects a List of Vectors, found {}", v.type_name())),
+        }
+    }
+    let Some(points) = points else { return err(Kind::ArityMismatch, "Path.through needs a List of Vectors") };
+    it.path_through(&points, closed)
+}
+
+fn seq_sort_by(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    let f = func_arg(&args, "sort_by", 0)?.clone();
+    // 比べるのは f が返した値。並べ替えの途中で呼ぶと順番が読めないので、先に全部求める
+    let mut keyed = Vec::new();
+    for v in items_of(&r) {
+        let key = it.call_func(&f, vec![v.clone()])?;
+        keyed.push((key, v));
+    }
+    let mut failed = None;
+    keyed.sort_by(|(a, _), (b, _)| {
+        cmp(a, b).unwrap_or_else(|| {
+            failed = Some(format!("sort_by cannot compare {} and {}", a.type_name(), b.type_name()));
+            std::cmp::Ordering::Equal
+        })
+    });
+    match failed {
+        Some(msg) => err(Kind::OperandType, msg),
+        None => Ok(list(keyed.into_iter().map(|(_, v)| v).collect())),
+    }
+}
+
 fn seq_zip(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
     let Some(other) = one(&args) else { return err(Kind::ArgumentType, "zip takes one List") };
     if !matches!(other, Value::List(_) | Value::Tuple(_) | Value::Range(..)) {
@@ -538,6 +588,10 @@ fn view_add_track(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
 
 fn shape_length(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
     on_object(it, r, "length", args)
+}
+
+fn shape_point_at(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    on_object(it, r, "point_at", args)
 }
 
 fn text_size(it: &mut Interp, r: Value, args: Args) -> Result<Value> {

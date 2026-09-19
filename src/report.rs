@@ -158,6 +158,17 @@ fn timeline_events(interp: &mut Interp, tl: &Rc<Timeline>, start: f64, out: &mut
     // (対象, 属性パス) ごとに、時刻順の (時刻, 終わり, 値, ease)
     let mut series: Vec<(ObjRef, String, Vec<(f64, Option<f64>, Value, Option<String>)>)> = Vec::new();
     for kf in &tl.keyframes {
+        // ブロックの行は走らせてみないと何を書くか分からない。始まりと終わりで 1 度ずつ試す
+        if let (Some(block), Some(end)) = (&kf.block, kf.end) {
+            for (obj, attr, value) in interp.probe_tl_block(tl, &block.clone(), kf.time) {
+                let entry = (start + kf.time * scale, Some(start + end * scale), value, kf.ease.clone());
+                match series.iter_mut().find(|(o, p, _)| Rc::ptr_eq(o, &obj) && *p == attr) {
+                    Some((_, _, list)) => list.push(entry),
+                    None => series.push((obj, attr, vec![entry])),
+                }
+            }
+            continue;
+        }
         for a in &kf.assigns {
             let path = a.path.join(".");
             let value = interp.eval_assign_pub(tl, a, kf.time).unwrap_or(Value::Nothing);

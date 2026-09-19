@@ -223,6 +223,10 @@ impl Gen {
                 Ok(None)
             }
             StmtKind::For(..) => err(KIND, "for in a shader must bind one name: for i in 0..n"),
+            StmtKind::Break => {
+                out.line("break;");
+                Ok(None)
+            }
             StmtKind::Return(e) => {
                 let (v, ty) = self.expr(e, out, env, closure, ret)?;
                 unify(ret, ty)?;
@@ -241,7 +245,7 @@ impl Gen {
                     Ok(None)
                 }
             }
-            _ => err(KIND, "this statement is not allowed in a shader (only let, assignment, for over a range, return, and expressions)"),
+            _ => err(KIND, "this statement is not allowed in a shader (only let, assignment, for over a range, break, return, and expressions)"),
         }
     }
 

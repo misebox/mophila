@@ -100,6 +100,9 @@ pub enum RowItem {
     /// 対象, 属性パス, 値
     Assign(Expr, Vec<String>, Expr),
     Value(Expr),
+    /// `0..1: { ... }`。区間の間、毎フレームこの文の列を走らせる。
+    /// let が書けるので、1 つの点から複数の属性を決めるときに 1 度だけ計算できる
+    Block(Vec<Stmt>),
 }
 
 /// import の元。標準ライブラリ名か、ファイル (import する側からの相対パス)
@@ -188,6 +191,8 @@ pub enum StmtKind {
     AssignAttr(Expr, String, Expr),
     Output(Expr),
     For(Pattern, Expr, Vec<Stmt>),
+    /// for を抜ける
+    Break,
     Return(Expr),
     Expr(Expr),
 }

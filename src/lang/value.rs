@@ -327,6 +327,8 @@ fn flip_name(name: &str) -> String {
 /// Motion を対象に結び付けたもの。各割り当ては評価時の環境を持つ
 pub struct Timeline {
     pub param: String,
+    /// 経過秒を受け取る 2 つ目の名前。motion (t, sec) と書いたときだけ
+    pub secs: Option<String>,
     pub keyframes: Vec<TlKeyframe>,
     /// キーフレームの時刻が 0..1 の割合か
     pub relative: bool,
@@ -343,7 +345,7 @@ pub type Groups = Vec<(ObjRef, Vec<String>, Vec<(usize, usize)>)>;
 impl Timeline {
     /// 中身のない入れ物
     pub fn empty(duration: Option<f64>) -> Timeline {
-        Timeline { param: "t".into(), keyframes: Vec::new(), relative: false, duration: Cell::new(duration), tracks: RefCell::new(Vec::new()), groups: RefCell::new(None) }
+        Timeline { param: "t".into(), secs: None, keyframes: Vec::new(), relative: false, duration: Cell::new(duration), tracks: RefCell::new(Vec::new()), groups: RefCell::new(None) }
     }
 }
 
@@ -366,7 +368,15 @@ pub struct TlKeyframe {
     /// 範囲の行の終わり。この区間は式を毎フレーム評価する
     pub end: Option<f64>,
     pub assigns: Vec<TlAssign>,
+    /// `0..1: { ... }` と書いた行の中身。区間の間、毎フレーム走らせる
+    pub block: Option<Rc<TlBlock>>,
     pub ease: Option<String>,
+}
+
+/// 範囲の行に書いたブロック
+pub struct TlBlock {
+    pub body: Vec<crate::lang::ast::Stmt>,
+    pub scopes: Scopes,
 }
 
 pub struct TlAssign {
@@ -429,6 +439,7 @@ impl Timeline {
                     .iter()
                     .map(|a| TlAssign { target: a.target.clone(), path: a.path.clone(), expr: a.expr.clone(), scopes: a.scopes.clone() })
                     .collect(),
+                block: k.block.clone(),
                 ease: k.ease.clone(),
             })
             .collect()
@@ -453,6 +464,7 @@ impl Timeline {
             .collect();
         Timeline {
             param: self.param.clone(),
+            secs: self.secs.clone(),
             keyframes: self.mapped(|_| true, |t| t * k),
             relative: self.relative,
             duration: Cell::new(self.duration.get().map(|d| d * k)),
@@ -482,6 +494,7 @@ impl Timeline {
             .collect();
         Timeline {
             param: self.param.clone(),
+            secs: self.secs.clone(),
             keyframes: self.mapped(|k| inside(k.time) && inside(k.end.unwrap_or(k.time)), |t| t - from),
             relative: self.relative,
             duration: Cell::new(Some(to - from)),
@@ -521,10 +534,10 @@ impl Timeline {
                     Some(e) => (d - e, Some(d - src.time)),
                     None => (d - src.time, None),
                 };
-                TlKeyframe { time, end, assigns, ease }
+                TlKeyframe { time, end, assigns, block: src.block.clone(), ease }
             })
             .collect();
-        Timeline { param: self.param.clone(), keyframes, relative: self.relative, duration: Cell::new(self.duration.get()), tracks: RefCell::new(self.tracks.borrow().clone()), groups: RefCell::new(None) }
+        Timeline { param: self.param.clone(), secs: self.secs.clone(), keyframes, relative: self.relative, duration: Cell::new(self.duration.get()), tracks: RefCell::new(self.tracks.borrow().clone()), groups: RefCell::new(None) }
     }
 }
 

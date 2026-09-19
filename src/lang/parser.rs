@@ -5,7 +5,7 @@ use crate::lang::error::{Kind, Result, err};
 use crate::lang::lexer::{Tok, Token, lex};
 
 pub fn parse(src: &str) -> Result<Vec<Stmt>> {
-    let mut p = Parser { tokens: lex(src)?, pos: 0 };
+    let mut p = Parser { tokens: lex(src)?, pos: 0, loops: 0 };
     let stmts = p.stmts_until(&Tok::Eof)?;
     Ok(stmts)
 }
@@ -25,6 +25,8 @@ fn split_path(e: Expr) -> Option<(Expr, Vec<String>)> {
 struct Parser {
     tokens: Vec<Token>,
     pos: usize,
+    /// いま何重の for の中か。break はこの中でしか書けない
+    loops: usize,
 }
 
 impl Parser {
@@ -218,6 +220,13 @@ impl Parser {
                 self.next();
                 Ok(StmtKind::Return(self.expr(0)?))
             }
+            Tok::Break => {
+                self.next();
+                if self.loops == 0 {
+                    return err(Kind::UnexpectedToken, format!("line {}:{}: break is only for inside a for", self.line(), self.col()));
+                }
+                Ok(StmtKind::Break)
+            }
             // func name(params) { } は let name = func (params) { } と同じ
             Tok::Func if matches!(self.peek_at(1), Tok::Ident(_)) => {
                 self.next();
@@ -230,8 +239,10 @@ impl Parser {
                 self.expect(Tok::In)?;
                 let iter = self.expr(0)?;
                 self.expect(Tok::LBrace)?;
-                let body = self.stmts_until(&Tok::RBrace)?;
-                Ok(StmtKind::For(pat, iter, body))
+                self.loops += 1;
+                let body = self.stmts_until(&Tok::RBrace);
+                self.loops -= 1;
+                Ok(StmtKind::For(pat, iter, body?))
             }
             _ => {
                 let e = self.expr(0)?;
@@ -751,8 +762,11 @@ impl Parser {
             None
         };
         self.expect(Tok::LBrace)?;
-        let body = self.stmts_until(&Tok::RBrace)?;
-        Ok(Expr::Func(Rc::new(FuncDef { params, returns, body })))
+        // 関数の本体は別の場所。外側の for の break はここには効かない
+        let outer = std::mem::take(&mut self.loops);
+        let body = self.stmts_until(&Tok::RBrace);
+        self.loops = outer;
+        Ok(Expr::Func(Rc::new(FuncDef { params, returns, body: body? })))
     }
 
     fn context_expr(&mut self) -> Result<Expr> {
@@ -889,6 +903,14 @@ impl Parser {
             false => None,
         };
         self.expect(Tok::Colon)?;
+        // 範囲の行だけ、値の代わりに文の列を書ける。let が書けるので
+        // 1 つの点から複数の属性を決めるときに 1 度しか計算しなくて済む。
+        // 範囲でない行の "{" は Dict なので、ここでしか見ない
+        if end.is_some() && *self.peek() == Tok::LBrace {
+            self.next();
+            let body = self.stmts_until(&Tok::RBrace)?;
+            return Ok(MotionRow { time, end, items: vec![RowItem::Block(body)], ease: None });
+        }
         let mut items = Vec::new();
         loop {
             if matches!(self.peek(), Tok::Symbol(_) | Tok::Newline | Tok::RBrace) {

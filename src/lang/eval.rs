@@ -14,12 +14,15 @@ use crate::stdlib;
 enum Flow {
     Next(Value),
     Return(Value),
+    /// for を抜ける。for が受け止めるので、関数の外には出ない
+    Break,
 }
 
 impl Flow {
     fn value(self) -> Value {
         match self {
             Flow::Next(v) | Flow::Return(v) => v,
+            Flow::Break => Value::Nothing,
         }
     }
 }
@@ -51,6 +54,8 @@ pub struct Interp {
     loading: Vec<String>,
     /// 式の中 (if のブロックなど) で return した値。外側の文の列がこれを見て関数を抜ける
     returning: Option<Value>,
+    /// if の枝の中で break したことを、外側の文の列に伝える
+    breaking: bool,
     /// いま func new を実行中の型。中で型名を呼んだらフィールドから作る
     constructing: Vec<String>,
     /// @deprecated の警告を出した型。1 つにつき 1 度だけ出す
@@ -60,7 +65,8 @@ pub struct Interp {
     /// 次の apply がどの型のメンバーか。apply がこれを inside に積む
     calling: Option<String>,
     /// Motion.apply の実行中だけ Some。属性への代入を書かれた順に記録する
-    assigned: RefCell<Option<Vec<(ObjRef, String)>>>,
+    /// 代入を記録する枠。(対象, 属性, 書く前の値)。Motion.apply と report の試し走らせで使う
+    assigned: RefCell<Option<Vec<(ObjRef, String, Option<Value>)>>>,
     /// mophila.yaml。@ で始まる import と `import config` に使う
     project: Option<Rc<crate::project::Project>>,
 }
@@ -76,7 +82,7 @@ impl Interp {
                 types.insert(t.name.to_string(), t.values.iter().map(|(v, _)| v.to_string()).collect());
             }
         }
-        Self { scopes: vec![root_scope()], output: None, types, cache: None, finished: HashMap::new(), last_t: f64::NEG_INFINITY, base_dir: PathBuf::from("."), exports: Vec::new(), sources: HashMap::new(), assets: HashMap::new(), initial: Vec::new(), modules: HashMap::new(), loading: Vec::new(), returning: None, constructing: Vec::new(), warned: std::collections::HashSet::new(), inside: Vec::new(), calling: None, assigned: RefCell::new(None), project: None }
+        Self { scopes: vec![root_scope()], output: None, types, cache: None, finished: HashMap::new(), last_t: f64::NEG_INFINITY, base_dir: PathBuf::from("."), exports: Vec::new(), sources: HashMap::new(), assets: HashMap::new(), initial: Vec::new(), modules: HashMap::new(), loading: Vec::new(), returning: None, breaking: false, constructing: Vec::new(), warned: std::collections::HashSet::new(), inside: Vec::new(), calling: None, assigned: RefCell::new(None), project: None }
     }
 
     /// mophila.yaml を渡す。@ の解決と `import config` がこれを見る
@@ -98,6 +104,7 @@ impl Interp {
         match self.run_block(stmts)? {
             Flow::Next(v) => Ok(v),
             Flow::Return(_) => err(Kind::UnexpectedToken, "return outside of a function"),
+            Flow::Break => err(Kind::UnexpectedToken, "break outside of a for"),
         }
     }
 
@@ -107,6 +114,9 @@ impl Interp {
             let flow = self.exec(stmt)?;
             if let Some(v) = self.returning.take() {
                 return Ok(Flow::Return(v));
+            }
+            if self.breaking {
+                return Ok(Flow::Break);
             }
             match flow {
                 Flow::Next(v) => last = v,
@@ -243,12 +253,18 @@ impl Interp {
                     self.scopes.push(new_scope());
                     let result = self.bind(pat, item).and_then(|()| self.run_block(body));
                     self.scopes.pop();
-                    if let Flow::Return(v) = result? {
-                        return Ok(Flow::Return(v));
+                    match result? {
+                        Flow::Return(v) => return Ok(Flow::Return(v)),
+                        Flow::Break => {
+                            self.breaking = false;
+                            break;
+                        }
+                        Flow::Next(_) => {}
                     }
                 }
                 Ok(Flow::Next(Value::Nothing))
             }
+            StmtKind::Break => Ok(Flow::Break),
             StmtKind::Return(e) => Ok(Flow::Return(self.eval(e)?)),
             StmtKind::Expr(e) => Ok(Flow::Next(self.eval(e)?)),
         }
@@ -345,17 +361,18 @@ impl Interp {
             return Err(self.wrong_type(Kind::AttributeType, &format!("{kind}.{attr}"), &expected, &value));
         }
         // 既にある属性は入れ替えるだけ。名前を作り直さない
-        match o.attrs.get_mut(attr) {
-            Some(slot) => *slot = value,
+        let before = match o.attrs.get_mut(attr) {
+            Some(slot) => Some(std::mem::replace(slot, value)),
             None => {
                 o.attrs.insert(attr.to_string(), value);
+                None
             }
-        }
+        };
         drop(o);
         // Motion.apply は「代入が書かれたか」で拾うので、値が変わらない代入も記録する
         if self.assigned.borrow().is_some() {
             if let Some(log) = self.assigned.borrow_mut().as_mut() {
-                log.push((obj.clone(), attr.to_string()));
+                log.push((obj.clone(), attr.to_string(), before));
             }
         }
         Ok(())
@@ -969,9 +986,13 @@ impl Interp {
                         if !self.matches_type(&v, expected) {
                             return Err(self.wrong_type(Kind::ArgumentType, &format!("{kind}.{name}"), expected, &v));
                         }
-                        // シェーダは関数の中身を GPU 向けに変換するので、書いた func しか受け取れない
-                        if kind == "Shader" && name == "color" && !matches!(v, Value::Func(_)) {
-                            return err(Kind::ArgumentType, "Shader.color expects a func written in the script, like func (x, y, t) { ... }");
+                        // シェーダは関数の中身を GPU 向けに変換するので、書いた func しか受け取れない。
+                        // 変換できるかはここで見る。描くまで待たずに run で分かる
+                        if kind == "Shader" && name == "color" {
+                            let Value::Func(closure) = &v else {
+                                return err(Kind::ArgumentType, "Shader.color expects a func written in the script, like func (x, y, t) { ... }");
+                            };
+                            crate::render::shader::compile(closure)?;
                         }
                         if kind == "TextArea" && name == "font" {
                             if let Value::Str(family) = &v {
@@ -1271,7 +1292,7 @@ impl Interp {
     }
 
     fn eval_motion(&mut self, def: &MotionDef) -> Result<Value> {
-        let is_assign = def.rows.iter().flat_map(|r| &r.items).any(|i| matches!(i, RowItem::Assign(..)));
+        let is_assign = def.rows.iter().flat_map(|r| &r.items).any(|i| matches!(i, RowItem::Assign(..) | RowItem::Block(_)));
         let is_value = def.rows.iter().flat_map(|r| &r.items).any(|i| matches!(i, RowItem::Value(_)));
         if is_assign && is_value {
             return err(Kind::UnexpectedToken, "a motion cannot mix assignments and values");
@@ -1322,15 +1343,29 @@ impl Interp {
                         TlAssign { target: target.clone(), path: path.clone(), expr: e.clone(), scopes: self.scopes.clone() }
                     })
                     .collect();
-                keyframes.push(TlKeyframe { time, end, assigns, ease: row.ease.clone() });
+                keyframes.push(TlKeyframe { time, end, assigns, block: None, ease: row.ease.clone() });
             }
-            return Ok(Value::Timeline(Rc::new(Timeline { param: "t".into(), keyframes, relative, duration: Cell::new(None), tracks: RefCell::new(Vec::new()), groups: RefCell::new(None) }.normalize())));
+            return Ok(Value::Timeline(Rc::new(Timeline { param: "t".into(), secs: None, keyframes, relative, duration: Cell::new(None), tracks: RefCell::new(Vec::new()), groups: RefCell::new(None) }.normalize())));
         }
         // 属性への割り当て → Timeline
         if is_assign {
+            if def.params.len() > 2 {
+                return err(Kind::ArityMismatch, "a motion that assigns takes (書かれた時刻) か (書かれた時刻, 経過秒)");
+            }
             let param = def.params.first().cloned().unwrap_or_else(|| "t".into());
+            // 2 つ目は経過秒。0..1 の割合で書いた行から、秒で決まる動きを書ける
+            let secs = def.params.get(1).cloned();
             let mut keyframes = Vec::new();
             for (row, &(time, end)) in def.rows.iter().zip(&times) {
+                // ブロックの行は、区間の間まるごと毎フレーム走らせる
+                if let [RowItem::Block(body)] = row.items.as_slice() {
+                    if end.is_none() {
+                        return err(Kind::UnexpectedToken, "a block keyframe needs a range, like 0..1: { ... }");
+                    }
+                    let block = Some(Rc::new(crate::lang::value::TlBlock { body: body.clone(), scopes: self.scopes.clone() }));
+                    keyframes.push(TlKeyframe { time, end, assigns: Vec::new(), block, ease: row.ease.clone() });
+                    continue;
+                }
                 let mut assigns = Vec::new();
                 for item in &row.items {
                     let RowItem::Assign(obj, path, e) = item else { unreachable!() };
@@ -1340,9 +1375,9 @@ impl Interp {
                     let target = self.eval_object(obj)?;
                     assigns.push(TlAssign { target, path: path.clone(), expr: e.clone(), scopes: self.scopes.clone() });
                 }
-                keyframes.push(TlKeyframe { time, end, assigns, ease: row.ease.clone() });
+                keyframes.push(TlKeyframe { time, end, assigns, block: None, ease: row.ease.clone() });
             }
-            return Ok(Value::Timeline(Rc::new(Timeline { param, keyframes, relative, duration: Cell::new(None), tracks: RefCell::new(Vec::new()), groups: RefCell::new(None) }.normalize())));
+            return Ok(Value::Timeline(Rc::new(Timeline { param, secs, keyframes, relative, duration: Cell::new(None), tracks: RefCell::new(Vec::new()), groups: RefCell::new(None) }.normalize())));
         }
         // 値の表 → Motion。params[0] は行の時刻、以降は左の列
         if times.iter().any(|(_, end)| end.is_some()) {
@@ -1397,7 +1432,7 @@ impl Interp {
             let written = self.assigned.borrow_mut().take().unwrap_or_default();
             result?;
             let mut attrs: Vec<String> = Vec::new();
-            for (obj, attr) in written {
+            for (obj, attr, _) in written {
                 if Rc::ptr_eq(&obj, target) && !attrs.contains(&attr) {
                     attrs.push(attr);
                 }
@@ -1407,9 +1442,34 @@ impl Interp {
                 .filter_map(|attr| target.borrow().attrs.get(&attr).map(|v| TlAssign { target: target.clone(), path: vec![attr.clone()], expr: Expr::from_value(v), scopes: vec![] }))
                 .collect();
             target.borrow_mut().attrs = before;
-            keyframes.push(TlKeyframe { time: row.time, end: None, assigns, ease: row.ease.clone() });
+            keyframes.push(TlKeyframe { time: row.time, end: None, assigns, block: None, ease: row.ease.clone() });
         }
-        Ok(Value::Timeline(Rc::new(Timeline { param: "t".into(), keyframes, relative: motion.relative, duration: Cell::new(motion.duration.get()), tracks: RefCell::new(Vec::new()), groups: RefCell::new(None) }.normalize())))
+        Ok(Value::Timeline(Rc::new(Timeline { param: "t".into(), secs: None, keyframes, relative: motion.relative, duration: Cell::new(motion.duration.get()), tracks: RefCell::new(Vec::new()), groups: RefCell::new(None) }.normalize())))
+    }
+
+    /// 点の並びをつないだ Path。segments の組を手で書かずに済む
+    pub(crate) fn path_through(&mut self, points: &[Value], closed: bool) -> Result<Value> {
+        let [from, rest @ ..] = points else {
+            return err(Kind::OutOfRange, "Path.through needs at least one point");
+        };
+        if !matches!(from, Value::Vector(..)) {
+            return err(Kind::ArgumentType, format!("Path.through expects Vectors, found {}", from.type_name()));
+        }
+        let mut segments = Vec::new();
+        for p in rest {
+            if !matches!(p, Value::Vector(..)) {
+                return err(Kind::ArgumentType, format!("Path.through expects Vectors, found {}", p.type_name()));
+            }
+            segments.push(Value::Tuple(vec![Value::Symbol("line".into()), p.clone()]));
+        }
+        let mut attrs: HashMap<String, Value> = HashMap::new();
+        attrs.insert("from".into(), from.clone());
+        attrs.insert("segments".into(), Value::List(Rc::new(RefCell::new(segments))));
+        attrs.insert("closed".into(), Value::Bool(closed));
+        for (name, value) in defaults("Path") {
+            attrs.entry((*name).to_string()).or_insert_with(|| value.clone());
+        }
+        Ok(Value::Object(Rc::new(RefCell::new(Object { kind: "Path".into(), decl: None, attrs, children: vec![], placed: false, tracks: vec![] }))))
     }
 
     pub(crate) fn method(&mut self, obj: &ObjRef, method: &str, args: Vec<(Option<String>, Value)>) -> Result<Value> {
@@ -1424,6 +1484,14 @@ impl Interp {
                 }
                 let (path, _) = crate::render::scene::outline(&obj.borrow())?;
                 Ok(Value::num(vello::kurbo::Shape::perimeter(&path, 1e-4)))
+            }
+            // 輪郭の途中の点。u は長さの割合。ペン先を線の先に合わせるときに使う
+            ("Path" | "Polygon" | "Line" | "Circle" | "Ellipse" | "Rect", "point_at") => {
+                let [(None, Value::Number(u, _))] = args.as_slice() else {
+                    return err(Kind::ArgumentType, format!("{kind}.point_at takes one Number (0..1)"));
+                };
+                let (path, _) = crate::render::scene::outline(&obj.borrow())?;
+                Ok(point_at(&path, *u))
             }
             ("TextArea", "size") => {
                 if !args.is_empty() {
@@ -1539,6 +1607,10 @@ impl Interp {
             Flow::Next(v) => Ok(v),
             Flow::Return(v) => {
                 self.returning = Some(v);
+                Ok(Value::Nothing)
+            }
+            Flow::Break => {
+                self.breaking = true;
                 Ok(Value::Nothing)
             }
         }
@@ -1728,7 +1800,60 @@ impl Interp {
             };
             self.set_path(target, path, value)?;
         }
+        // ブロックの行。属性ごとに分けられないので、区間の間まるごと走らせる。
+        // 同じ属性を書いていたら、上の行より後に書いたこちらが残る
+        for kf in &tl.keyframes {
+            let (Some(block), Some(end)) = (&kf.block, kf.end) else { continue };
+            if kf.time <= t && t <= end {
+                self.run_tl_block(tl, block, t)?;
+            }
+        }
         Ok(())
+    }
+
+    /// 範囲の行に書いたブロックを、その時刻で走らせる
+    pub(crate) fn run_tl_block(&mut self, tl: &Timeline, block: &Rc<crate::lang::value::TlBlock>, time: f64) -> Result<()> {
+        let saved = std::mem::replace(&mut self.scopes, block.scopes.clone());
+        let scope = new_scope();
+        scope.borrow_mut().insert(tl.param.clone(), Value::num(time));
+        if let Some(name) = &tl.secs {
+            scope.borrow_mut().insert(name.clone(), Value::Duration(time * tl.time_scale()));
+        }
+        self.scopes.push(scope);
+        let result = self.run_block(&block.body);
+        self.scopes = saved;
+        result.map(|_| ())
+    }
+
+    /// report 用。ブロックの行を走らせて、何の属性を書いたかと、そのときの値を返す。
+    /// 何を書くかは走らせてみないと分からないので、対象の属性は元に戻す
+    pub fn probe_tl_block(&mut self, tl: &Timeline, block: &Rc<crate::lang::value::TlBlock>, time: f64) -> Vec<(ObjRef, String, Value)> {
+        *self.assigned.borrow_mut() = Some(Vec::new());
+        let ran = self.run_tl_block(tl, block, time);
+        let written = self.assigned.borrow_mut().take().unwrap_or_default();
+        if ran.is_err() {
+            return Vec::new();
+        }
+        let mut out: Vec<(ObjRef, String, Value)> = Vec::new();
+        for (obj, attr, before) in written.iter().rev() {
+            if !out.iter().any(|(o, a, _)| Rc::ptr_eq(o, obj) && a == attr) {
+                if let Some(value) = obj.borrow().attrs.get(attr).cloned() {
+                    out.push((obj.clone(), attr.clone(), value));
+                }
+            }
+            // 何を書くか見るためだけに走らせたので、書いた分は戻す
+            let mut o = obj.borrow_mut();
+            match before {
+                Some(v) => {
+                    o.attrs.insert(attr.clone(), v.clone());
+                }
+                None => {
+                    o.attrs.remove(attr);
+                }
+            }
+        }
+        out.reverse();
+        out
     }
 
     /// report 用。キーフレームの式をその行の時刻で評価する
@@ -1740,6 +1865,10 @@ impl Interp {
         let saved = std::mem::replace(&mut self.scopes, a.scopes.clone());
         let scope = new_scope();
         scope.borrow_mut().insert(tl.param.clone(), Value::num(time));
+        if let Some(name) = &tl.secs {
+            // 書かれた時刻の軸から実際の秒へ。割合で書いた Timeline なら長さを掛ける
+            scope.borrow_mut().insert(name.clone(), Value::Duration(time * tl.time_scale()));
+        }
         self.scopes.push(scope);
         let result = self.eval(&a.expr);
         self.scopes = saved;
@@ -2133,6 +2262,29 @@ fn check_free_name(name: &str) -> Result<()> {
 
 /// 書かなくてもその値で描かれる属性。ここが既定の唯一の定義で、構築時に入れておく。
 /// 既定が「何もしない」もの (fill / stroke / pivot / w / h / font) は入れない
+/// 輪郭を長さの割合でたどった点。u は 0..1 に丸める
+fn point_at(path: &vello::kurbo::BezPath, u: f64) -> Value {
+    use vello::kurbo::{ParamCurve, ParamCurveArclen};
+    let segs: Vec<_> = path.segments().collect();
+    let lengths: Vec<f64> = segs.iter().map(|s| s.arclen(1e-6)).collect();
+    let total: f64 = lengths.iter().sum();
+    let Some(first) = segs.first() else { return Value::Vector(0.0, 0.0) };
+    if !(total > 0.0) {
+        let p = first.eval(0.0);
+        return Value::Vector(p.x, p.y);
+    }
+    let mut want = u.clamp(0.0, 1.0) * total;
+    for (seg, len) in segs.iter().zip(&lengths) {
+        if want <= *len || *len <= 0.0 {
+            let p = seg.eval(seg.inv_arclen(want.max(0.0), 1e-6));
+            return Value::Vector(p.x, p.y);
+        }
+        want -= len;
+    }
+    let p = segs.last().expect("not empty").eval(1.0);
+    Value::Vector(p.x, p.y)
+}
+
 pub fn defaults(kind: &str) -> Vec<(&'static str, Value)> {
     let num = |n: f64| Value::num(n);
     let sym = |s: &str| Value::Symbol(s.to_string());

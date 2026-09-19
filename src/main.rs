@@ -45,7 +45,7 @@ enum Command {
         /// Script (.moph). Falls back to the entry in mophila.yaml
         script: Option<String>,
         /// Window size
-        #[arg(long, default_value = "800x600", value_parser = parse_size)]
+        #[arg(long, default_value = "960x540", value_parser = parse_size)]
         size: (u32, u32),
         /// Start over when it reaches the end
         #[arg(long)]
@@ -128,7 +128,7 @@ struct OutputArgs {
     #[arg(long, default_value_t = 10)]
     fps: u32,
     /// Frame size as WIDTHxHEIGHT, or a name: 360p 480p 720p|hd 1080p|fhd 1440p|wqhd 2160p|4k|uhd (16:9), vga svga xga (4:3)
-    #[arg(long, default_value = "800x600", value_parser = parse_size)]
+    #[arg(long, default_value = "960x540", value_parser = parse_size)]
     size: (u32, u32),
     /// ffmpeg video codec (-c:v). Taken from the extension if omitted
     #[arg(long)]

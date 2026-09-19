@@ -19,8 +19,8 @@ pub const DOCS: &[Entry] = &[
     Entry { name: "ln", signature: "math.ln(x: Number)", returns: "Number", doc: "自然対数" },
     Entry { name: "exp", signature: "math.exp(x: Number)", returns: "Number", doc: "e の x 乗" },
     Entry { name: "atan2", signature: "math.atan2(y: Number, x: Number)", returns: "Number", doc: "(x, y) の角度 (ラジアン)" },
-    Entry { name: "max", signature: "math.max(a: Number, b: Number, ...)", returns: "Number", doc: "最大" },
-    Entry { name: "min", signature: "math.min(a: Number, b: Number, ...)", returns: "Number", doc: "最小" },
+    Entry { name: "max", signature: "math.max(a: Number, b: Number, ...)", returns: "Number", doc: "最大。全部 Duration なら Duration のまま返す" },
+    Entry { name: "min", signature: "math.min(a: Number, b: Number, ...)", returns: "Number", doc: "最小。全部 Duration なら Duration のまま返す" },
     Entry { name: "tan", signature: "math.tan(x: Number)", returns: "Number", doc: "正接 (ラジアン)" },
     Entry { name: "asin", signature: "math.asin(x: Number)", returns: "Number", doc: "逆正弦。戻りはラジアン" },
     Entry { name: "acos", signature: "math.acos(x: Number)", returns: "Number", doc: "逆余弦。戻りはラジアン" },
@@ -31,7 +31,7 @@ pub const DOCS: &[Entry] = &[
     Entry { name: "log10", signature: "math.log10(x: Number)", returns: "Number", doc: "常用対数。組み込みの log (表示) と紛れるので、この名前にしてある" },
     Entry { name: "log2", signature: "math.log2(x: Number)", returns: "Number", doc: "2 を底とする対数" },
     Entry { name: "hypot", signature: "math.hypot(x: Number, y: Number)", returns: "Number", doc: "原点からの距離" },
-    Entry { name: "clamp", signature: "math.clamp(x: Number, lo: Number, hi: Number)", returns: "Number", doc: "lo と hi の間に収める" },
+    Entry { name: "clamp", signature: "math.clamp(x: Number, lo: Number, hi: Number)", returns: "Number", doc: "lo と hi の間に収める。全部 Duration なら Duration のまま返す" },
     Entry { name: "lerp", signature: "math.lerp(a: Number, b: Number, k: Number)", returns: "Number", doc: "a と b の間。k は 0..1" },
     Entry { name: "unlerp", signature: "math.unlerp(a: Number, b: Number, x: Number)", returns: "Number", doc: "x が a..b のどこか。lerp の逆" },
     Entry { name: "map_range", signature: "math.map_range(x: Number, a0: Number, a1: Number, b0: Number, b1: Number)", returns: "Number", doc: "a0..a1 の x を b0..b1 に写す。グラフの軸に使う" },
@@ -53,6 +53,10 @@ pub fn module() -> Module {
 }
 
 pub fn call(name: &str, values: &[Value]) -> Result<Value> {
+    // 長さを比べるだけなら、秒に直して掛け直さなくて済む。単位が混ざるものは通さない
+    if matches!(name, "max" | "min" | "clamp") && !values.is_empty() && values.iter().all(|v| matches!(v, Value::Duration(_))) {
+        return duration_pick(name, values);
+    }
     let nums = values
         .iter()
         .map(|v| match v {
@@ -134,4 +138,19 @@ pub fn call(name: &str, values: &[Value]) -> Result<Value> {
         "min" => Ok(Value::num(nums.iter().cloned().fold(f64::INFINITY, f64::min))),
         _ => err(Kind::UndefinedAttribute, format!("no builtin \"{name}\"")),
     }
+}
+
+/// Duration だけを受け取る max / min / clamp
+fn duration_pick(name: &str, values: &[Value]) -> Result<Value> {
+    let secs: Vec<f64> = values.iter().map(|v| match v { Value::Duration(d) => *d, _ => 0.0 }).collect();
+    let out = match name {
+        "max" => secs.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+        "min" => secs.iter().cloned().fold(f64::INFINITY, f64::min),
+        _ => match secs.as_slice() {
+            [x, lo, hi] if lo <= hi => x.clamp(*lo, *hi),
+            [_, lo, hi] => return err(Kind::OutOfRange, format!("clamp needs lo <= hi, found {lo}s and {hi}s")),
+            _ => return err(Kind::ArityMismatch, format!("clamp takes 3 arguments (x, lo, hi), {} given", secs.len())),
+        },
+    };
+    Ok(Value::Duration(out))
 }

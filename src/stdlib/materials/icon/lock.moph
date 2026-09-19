@@ -1,0 +1,17 @@
+# lock.moph — 錠
+
+import { arc } from shape
+
+# つる。外側の弧を回ってから、内側の弧を逆に戻ると帯になる
+let shackle = arc(0.5, 0.44, 0.27, -90, 90, 16)
+for p in arc(0.5, 0.44, 0.16, 90, -90, 16) {
+  shackle.push(p)
+}
+
+## 錠。鍵が掛かっていること、守られていることに
+## @category もの
+## @type {List<List<Vector>>} 0..1 の箱に収めた輪郭の並び
+export let LOCK = [
+  shackle,
+  [Vector(0.12, 0.44), Vector(0.88, 0.44), Vector(0.88, 0.96), Vector(0.12, 0.96)],
+]

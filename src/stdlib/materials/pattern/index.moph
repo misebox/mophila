@@ -4,20 +4,38 @@
 
 import { stripes, STRIPES } from .stripes
 import { hatch, HATCH } from .hatch
+import { cross_hatch, CROSS_HATCH } from .cross_hatch
+import { waves, WAVES } from .waves
+import { zigzag, ZIGZAG } from .zigzag
 import { checker, CHECKER } from .checker
+import { diamonds, DIAMONDS } from .diamonds
+import { triangles, TRIANGLES } from .triangles
 import { dots, DOTS } from .dots
 import { grid, GRID } from .grid
+import { bricks, BRICKS } from .bricks
 import { noise, NOISE } from .noise
 
 export let stripes = stripes
 export let STRIPES = STRIPES
 export let hatch = hatch
 export let HATCH = HATCH
+export let cross_hatch = cross_hatch
+export let CROSS_HATCH = CROSS_HATCH
+export let waves = waves
+export let WAVES = WAVES
+export let zigzag = zigzag
+export let ZIGZAG = ZIGZAG
 export let checker = checker
 export let CHECKER = CHECKER
+export let diamonds = diamonds
+export let DIAMONDS = DIAMONDS
+export let triangles = triangles
+export let TRIANGLES = TRIANGLES
 export let dots = dots
 export let DOTS = DOTS
 export let grid = grid
 export let GRID = GRID
+export let bricks = bricks
+export let BRICKS = BRICKS
 export let noise = noise
 export let NOISE = NOISE

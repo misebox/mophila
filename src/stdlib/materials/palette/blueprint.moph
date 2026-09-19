@@ -1,0 +1,16 @@
+# blueprint.moph — 青焼き
+
+import { Palette } from .palette
+
+## 図面の青焼き。線と文字で説明する話に
+## @category 暗い
+## @type {Palette} 1 つの配色
+export let BLUEPRINT = Palette(
+  back = #0f2b4a,
+  ink = #e8f1ff,
+  sub = #7ea3c9,
+  line = #1d4570,
+  accent = #ffd166,
+  track = #163a5f,
+  series = [#ffd166, #8ecae6, #90e0a0, #ff9f85, #c2a8f0],
+)

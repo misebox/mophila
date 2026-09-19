@@ -1,0 +1,36 @@
+# cross_hatch.moph — 交差した細線
+
+import math
+import { HOUSE } from ..palette.house
+
+## 向きの違う細線を 2 方向に重ねたもの。hatch を交差させた網目
+## @category 線
+## @param back 地の色
+## @param line 線の色
+## @param pitch 線の間隔 (箱の座標)
+## @param width 線の太さ (箱の座標)
+## @param angle 1 方向目の線の向き (度)。もう 1 方向はこれと直角
+## @param samples 1 ピクセルあたりの評価点
+## @example
+## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,
+##              fill = cross_hatch(#faf7f0, #c9c0b2, 0.35, 0.03, 45)))
+export func cross_hatch(back: Color, line: Color, pitch: Number = 0.35, width: Number = 0.03, angle: Number = 45, samples: Number = 4) -> Shader {
+  let rad = (angle - 90) * math.PI / 180
+  let nx = 0 - math.sin(rad) / pitch
+  let ny = math.cos(rad) / pitch
+  let ratio = width / pitch
+  Shader(
+    color = func (x, y, t) {
+      let u = x * nx + y * ny
+      # もう 1 方向は法線を 90 度回したもの
+      let v = x * (0 - ny) + y * nx
+      if u - math.floor(u) < ratio or v - math.floor(v) < ratio { line } else { back }
+    },
+    samples = samples,
+  )
+}
+
+## 既定の色の網目
+## @category 線
+## @type {Shader} 塗り
+export let CROSS_HATCH = cross_hatch(HOUSE.back, HOUSE.track)

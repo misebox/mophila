@@ -1,0 +1,16 @@
+# candy.moph — 淡い色
+
+import { Palette } from .palette
+
+## 淡くて柔らかい色。軽い話や、子ども向けに
+## @category 明るい
+## @type {Palette} 1 つの配色
+export let CANDY = Palette(
+  back = #fff7fa,
+  ink = #40303a,
+  sub = #a98d99,
+  line = #f0d7e2,
+  accent = #ef6f9c,
+  track = #fae3ec,
+  series = [#ef6f9c, #ffb36b, #7fd1c1, #8fb8f0, #c79bf0],
+)

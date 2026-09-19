@@ -1,0 +1,6 @@
+# triangle.moph — 三角
+
+## 上を向いた三角。注意や、向きの印に。rotation で向きを変える
+## @category 印
+## @type {List<List<Vector>>} 0..1 の箱に収めた輪郭の並び
+export let TRIANGLE = [[Vector(0.5, 0.06), Vector(0.97, 0.9), Vector(0.03, 0.9)]]

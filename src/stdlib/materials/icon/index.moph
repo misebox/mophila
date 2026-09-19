@@ -7,6 +7,9 @@ import { CHECK } from .check
 import { CROSS } from .cross
 import { PLUS } from .plus
 import { MINUS } from .minus
+import { CIRCLE } from .circle
+import { TRIANGLE } from .triangle
+import { STAR } from .star
 import { ARROW } from .arrow
 import { CHEVRON } from .chevron
 import { PLAY } from .play
@@ -17,6 +20,17 @@ import { HOME } from .home
 import { BOLT } from .bolt
 import { PIN } from .pin
 import { SEARCH } from .search
+import { FLAG } from .flag
+import { CLOUD } from .cloud
+import { USER } from .user
+import { MAIL } from .mail
+import { FOLDER } from .folder
+import { FILE } from .file
+import { CLOCK } from .clock
+import { GEAR } from .gear
+import { LOCK } from .lock
+import { BELL } from .bell
+import { CHAT } from .chat
 
 export let at = at
 export let mark = mark
@@ -24,6 +38,9 @@ export let CHECK = CHECK
 export let CROSS = CROSS
 export let PLUS = PLUS
 export let MINUS = MINUS
+export let CIRCLE = CIRCLE
+export let TRIANGLE = TRIANGLE
+export let STAR = STAR
 export let ARROW = ARROW
 export let CHEVRON = CHEVRON
 export let PLAY = PLAY
@@ -34,3 +51,14 @@ export let HOME = HOME
 export let BOLT = BOLT
 export let PIN = PIN
 export let SEARCH = SEARCH
+export let FLAG = FLAG
+export let CLOUD = CLOUD
+export let USER = USER
+export let MAIL = MAIL
+export let FOLDER = FOLDER
+export let FILE = FILE
+export let CLOCK = CLOCK
+export let GEAR = GEAR
+export let LOCK = LOCK
+export let BELL = BELL
+export let CHAT = CHAT

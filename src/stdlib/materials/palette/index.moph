@@ -7,13 +7,25 @@ import { HOUSE } from .house
 import { PAPER } from .paper
 import { EARTH } from .earth
 import { MONO } from .mono
+import { OCEAN } from .ocean
+import { SLATE } from .slate
+import { CANDY } from .candy
 import { NIGHT } from .night
 import { NEON } from .neon
+import { FOREST } from .forest
+import { SUNSET } from .sunset
+import { BLUEPRINT } from .blueprint
 
 export let Palette = Palette
 export let HOUSE = HOUSE
 export let PAPER = PAPER
 export let EARTH = EARTH
 export let MONO = MONO
+export let OCEAN = OCEAN
+export let SLATE = SLATE
+export let CANDY = CANDY
 export let NIGHT = NIGHT
 export let NEON = NEON
+export let FOREST = FOREST
+export let SUNSET = SUNSET
+export let BLUEPRINT = BLUEPRINT

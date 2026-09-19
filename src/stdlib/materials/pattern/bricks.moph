@@ -1,0 +1,36 @@
+# bricks.moph — 煉瓦
+
+import math
+import { HOUSE } from ..palette.house
+
+## 煉瓦積み。1 段ごとに半分ずれる
+## @category 面
+## @param back 煉瓦の色
+## @param line 目地の色
+## @param w 煉瓦 1 つの幅 (箱の座標)
+## @param h 煉瓦 1 つの高さ (箱の座標)
+## @param width 目地の太さ (箱の座標)
+## @param samples 1 ピクセルあたりの評価点
+## @example
+## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,
+##              fill = bricks(#efe7d8, #b8a68a, 0.8, 0.32, 0.04)))
+export func bricks(back: Color, line: Color, w: Number = 0.8, h: Number = 0.32, width: Number = 0.04, samples: Number = 4) -> Shader {
+  let across = width / w
+  let down = width / h
+  Shader(
+    color = func (x, y, t) {
+      let row = math.floor(y / h)
+      # 奇数段は半分ずらす
+      let shift = (row / 2 - math.floor(row / 2)) * w
+      let u = (x + shift) / w
+      let v = y / h
+      if v - math.floor(v) < down or u - math.floor(u) < across { line } else { back }
+    },
+    samples = samples,
+  )
+}
+
+## 既定の色の煉瓦
+## @category 面
+## @type {Shader} 塗り
+export let BRICKS = bricks(HOUSE.back, HOUSE.track)

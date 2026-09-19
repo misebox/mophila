@@ -1,0 +1,9 @@
+# folder.moph — フォルダ
+
+## フォルダ。まとめたもの、入れ物に
+## @category もの
+## @type {List<List<Vector>>} 0..1 の箱に収めた輪郭の並び
+export let FOLDER = [[
+  Vector(0.04, 0.88), Vector(0.04, 0.16), Vector(0.42, 0.16), Vector(0.5, 0.3),
+  Vector(0.96, 0.3), Vector(0.96, 0.88),
+]]

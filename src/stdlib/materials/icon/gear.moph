@@ -1,0 +1,16 @@
+# gear.moph — 歯車
+
+import math
+import { polar, arc } from shape
+
+# 4 点で 1 山。外と内を 2 点ずつにすると歯の上が平らになる
+let teeth = (0..32).to_list().map(func (i) {
+  let step = i / 4 - math.floor(i / 4)
+  let r = if step < 0.5 { 0.47 } else { 0.34 }
+  polar(0.5, 0.5, r, i * 360 / 32)
+})
+
+## 歯車。設定や仕組みに。中が抜けている
+## @category もの
+## @type {List<List<Vector>>} 0..1 の箱に収めた輪郭の並び
+export let GEAR = [teeth, arc(0.5, 0.5, 0.16, 0, 360, 20).reverse()]

@@ -1,0 +1,16 @@
+# forest.moph — 森
+
+import { Palette } from .palette
+
+## 暗い緑。落ち着いた暗い画面に
+## @category 暗い
+## @type {Palette} 1 つの配色
+export let FOREST = Palette(
+  back = #121a15,
+  ink = #eaf2e9,
+  sub = #8fa48f,
+  line = #27352a,
+  accent = #6fc36b,
+  track = #1c2820,
+  series = [#6fc36b, #d9b45b, #4fa8a0, #c1705b, #9b8ad4],
+)

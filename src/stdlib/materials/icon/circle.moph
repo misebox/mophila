@@ -1,0 +1,8 @@
+# circle.moph — 丸
+
+import { arc } from shape
+
+## 丸。点や印に。線を付ければ輪になる
+## @category 印
+## @type {List<List<Vector>>} 0..1 の箱に収めた輪郭の並び
+export let CIRCLE = [arc(0.5, 0.5, 0.46, 0, 360, 32)]

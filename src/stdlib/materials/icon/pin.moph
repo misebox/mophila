@@ -1,12 +1,21 @@
 # pin.moph — 地図のピン
 
+import math
 import { arc } from shape
 
-# 上の丸を描いてから、下の先を足す
-let drop = arc(0.5, 0.36, 0.28, 205, 515, 20)
-drop.push(Vector(0.5, 0.96))
+# 円と、先へ下りる直線。直線を円の接線にすると、つなぎ目で折れない
+let r = 0.32
+let cy = 0.34
+let tip = 0.97
+let dy = tip - cy
+let side = math.sqrt(dy * dy - r * r)
+# 先から円へ引いた接線が円に触れる角度 (真下から測って)
+let touch = math.atan2(r, side) * 180 / math.PI
+
+let outline = arc(0.5, cy, r, 90 + touch, 0 - 90 - touch, 22)
+outline.push(Vector(0.5, tip))
 
 ## 地図のピン。場所を指すことに
 ## @category しるし
 ## @type {List<List<Vector>>} 0..1 の箱に収めた輪郭の並び
-export let PIN = [drop]
+export let PIN = [outline]

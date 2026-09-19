@@ -1,0 +1,16 @@
+# slate.moph — 青灰
+
+import { Palette } from .palette
+
+## 落ち着いた青灰色。仕事の画面や、数字を並べる話に
+## @category 明るい
+## @type {Palette} 1 つの配色
+export let SLATE = Palette(
+  back = #f4f6f8,
+  ink = #1d2733,
+  sub = #77828f,
+  line = #c6ced7,
+  accent = #3f6fb0,
+  track = #e2e7ec,
+  series = [#3f6fb0, #5a8f7b, #b0663f, #6a5f9b, #8a8f98],
+)

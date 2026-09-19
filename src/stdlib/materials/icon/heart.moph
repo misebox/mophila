@@ -1,15 +1,23 @@
 # heart.moph — ハート
 
+import math
 import { arc } from shape
 
-# 中央のくぼみから、左の丸を回って左端へ。下の先を通って、右端から右の丸を回ってくぼみへ戻る
-let shape_points = arc(0.275, 0.30, 0.235, 90, -90, 10)
-shape_points.push(Vector(0.5, 0.95))
-for p in arc(0.725, 0.30, 0.235, 90, -90, 10) {
-  shape_points.push(p)
+# 2 つの円と、先へ下りる直線。直線を円の接線にすると、つなぎ目で折れない
+let r = 0.25
+let cy = 0.32
+let tip = 0.95
+let dy = tip - cy
+# 先から円へ引いた接線が円に触れる角度 (円の中央から時計回りの度)
+let touch = math.atan2(2 * dy * r, r * r - dy * dy) * 180 / math.PI
+
+let outline = arc(0.5 - r, cy, r, 90, touch - 270, 14)
+outline.push(Vector(0.5, tip))
+for p in arc(0.5 + r, cy, r, 270 - touch, -90, 14) {
+  outline.push(p)
 }
 
 ## ハート。好きなもの、気に入りに
 ## @category しるし
 ## @type {List<List<Vector>>} 0..1 の箱に収めた輪郭の並び
-export let HEART = [shape_points]
+export let HEART = [outline]

@@ -1,0 +1,16 @@
+# ocean.moph — 海
+
+import { Palette } from .palette
+
+## 水と空の色。涼しく、静かな話に
+## @category 明るい
+## @type {Palette} 1 つの配色
+export let OCEAN = Palette(
+  back = #f2f7fb,
+  ink = #10232f,
+  sub = #6d8598,
+  line = #b6cbd8,
+  accent = #1a7fa8,
+  track = #dbe7ef,
+  series = [#1a7fa8, #22b8a6, #3f6fb0, #6fc3df, #0e5c73],
+)

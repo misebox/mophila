@@ -1,0 +1,9 @@
+# chat.moph — 吹き出し
+
+## 吹き出し。話や、書き込みに
+## @category もの
+## @type {List<List<Vector>>} 0..1 の箱に収めた輪郭の並び
+export let CHAT = [
+  [Vector(0.06, 0.12), Vector(0.94, 0.12), Vector(0.94, 0.7), Vector(0.06, 0.7)],
+  [Vector(0.22, 0.7), Vector(0.5, 0.7), Vector(0.24, 0.95)],
+]

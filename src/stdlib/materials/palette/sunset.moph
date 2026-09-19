@@ -1,0 +1,16 @@
+# sunset.moph — 夕暮れ
+
+import { Palette } from .palette
+
+## 日が落ちた後の色。暖かい色が暗い地に映える
+## @category 暗い
+## @type {Palette} 1 つの配色
+export let SUNSET = Palette(
+  back = #1b1220,
+  ink = #ffeede,
+  sub = #a08ba0,
+  line = #33213a,
+  accent = #ff7a4d,
+  track = #2a1a30,
+  series = [#ff7a4d, #ffc857, #e8537f, #8a5fd4, #34b0c4],
+)

@@ -1,0 +1,10 @@
+# file.moph — 書類
+
+## 書類。角を折った紙。1 つの文書に
+## @category もの
+## @type {List<List<Vector>>} 0..1 の箱に収めた輪郭の並び
+export let FILE = [
+  [Vector(0.18, 0.04), Vector(0.62, 0.04), Vector(0.82, 0.26), Vector(0.82, 0.96), Vector(0.18, 0.96)],
+  # 折り返した角。逆回りなので抜ける
+  [Vector(0.62, 0.04), Vector(0.62, 0.26), Vector(0.82, 0.26)],
+]

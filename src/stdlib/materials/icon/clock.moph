@@ -1,0 +1,13 @@
+# clock.moph — 時計
+
+import { arc } from shape
+
+## 時計。時刻や待ち時間に。輪の内側が抜けていて、針が 2 本
+## @category もの
+## @type {List<List<Vector>>} 0..1 の箱に収めた輪郭の並び
+export let CLOCK = [
+  arc(0.5, 0.5, 0.47, 0, 360, 28),
+  arc(0.5, 0.5, 0.37, 0, 360, 28).reverse(),
+  [Vector(0.46, 0.52), Vector(0.46, 0.2), Vector(0.54, 0.2), Vector(0.54, 0.52)],
+  [Vector(0.48, 0.46), Vector(0.74, 0.46), Vector(0.74, 0.54), Vector(0.48, 0.54)],
+]

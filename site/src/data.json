@@ -8565,6 +8565,90 @@
       "doc": "1 つの配色"
      },
      "example": ""
+    },
+    {
+     "name": "OCEAN",
+     "category": "明るい",
+     "isFunc": false,
+     "signature": "OCEAN",
+     "call": "OCEAN",
+     "summary": "水と空の色。涼しく、静かな話に",
+     "params": [],
+     "returns": {
+      "type": "Palette",
+      "doc": "1 つの配色"
+     },
+     "example": ""
+    },
+    {
+     "name": "SLATE",
+     "category": "明るい",
+     "isFunc": false,
+     "signature": "SLATE",
+     "call": "SLATE",
+     "summary": "落ち着いた青灰色。仕事の画面や、数字を並べる話に",
+     "params": [],
+     "returns": {
+      "type": "Palette",
+      "doc": "1 つの配色"
+     },
+     "example": ""
+    },
+    {
+     "name": "CANDY",
+     "category": "明るい",
+     "isFunc": false,
+     "signature": "CANDY",
+     "call": "CANDY",
+     "summary": "淡くて柔らかい色。軽い話や、子ども向けに",
+     "params": [],
+     "returns": {
+      "type": "Palette",
+      "doc": "1 つの配色"
+     },
+     "example": ""
+    },
+    {
+     "name": "FOREST",
+     "category": "暗い",
+     "isFunc": false,
+     "signature": "FOREST",
+     "call": "FOREST",
+     "summary": "暗い緑。落ち着いた暗い画面に",
+     "params": [],
+     "returns": {
+      "type": "Palette",
+      "doc": "1 つの配色"
+     },
+     "example": ""
+    },
+    {
+     "name": "SUNSET",
+     "category": "暗い",
+     "isFunc": false,
+     "signature": "SUNSET",
+     "call": "SUNSET",
+     "summary": "日が落ちた後の色。暖かい色が暗い地に映える",
+     "params": [],
+     "returns": {
+      "type": "Palette",
+      "doc": "1 つの配色"
+     },
+     "example": ""
+    },
+    {
+     "name": "BLUEPRINT",
+     "category": "暗い",
+     "isFunc": false,
+     "signature": "BLUEPRINT",
+     "call": "BLUEPRINT",
+     "summary": "図面の青焼き。線と文字で説明する話に",
+     "params": [],
+     "returns": {
+      "type": "Palette",
+      "doc": "1 つの配色"
+     },
+     "example": ""
     }
    ]
   },
@@ -8869,6 +8953,372 @@
      "example": ""
     },
     {
+     "name": "cross_hatch",
+     "category": "線",
+     "isFunc": true,
+     "signature": "cross_hatch(back: Color, line: Color, pitch: Number = 0.35, width: Number = 0.03, angle: Number = 45, samples: Number = 4)",
+     "call": "cross_hatch(\n  back: Color,\n  line: Color,\n  pitch: Number = 0.35,\n  width: Number = 0.03,\n  angle: Number = 45,\n  samples: Number = 4,\n)",
+     "summary": "向きの違う細線を 2 方向に重ねたもの。hatch を交差させた網目",
+     "params": [
+      {
+       "name": "back",
+       "type": "Color",
+       "doc": "地の色",
+       "default": ""
+      },
+      {
+       "name": "line",
+       "type": "Color",
+       "doc": "線の色",
+       "default": ""
+      },
+      {
+       "name": "pitch",
+       "type": "Number",
+       "doc": "線の間隔 (箱の座標)",
+       "default": "0.35"
+      },
+      {
+       "name": "width",
+       "type": "Number",
+       "doc": "線の太さ (箱の座標)",
+       "default": "0.03"
+      },
+      {
+       "name": "angle",
+       "type": "Number",
+       "doc": "1 方向目の線の向き (度)。もう 1 方向はこれと直角",
+       "default": "45"
+      },
+      {
+       "name": "samples",
+       "type": "Number",
+       "doc": "1 ピクセルあたりの評価点",
+       "default": "4"
+      }
+     ],
+     "returns": {
+      "type": "Shader",
+      "doc": ""
+     },
+     "example": "v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,\n             fill = cross_hatch(#faf7f0, #c9c0b2, 0.35, 0.03, 45)))"
+    },
+    {
+     "name": "CROSS_HATCH",
+     "category": "線",
+     "isFunc": false,
+     "signature": "CROSS_HATCH",
+     "call": "CROSS_HATCH",
+     "summary": "既定の色の網目",
+     "params": [],
+     "returns": {
+      "type": "Shader",
+      "doc": "塗り"
+     },
+     "example": ""
+    },
+    {
+     "name": "waves",
+     "category": "線",
+     "isFunc": true,
+     "signature": "waves(a: Color, b: Color, pitch: Number = 0.5, amplitude: Number = 0.25, wavelength: Number = 2, samples: Number = 4)",
+     "call": "waves(\n  a: Color,\n  b: Color,\n  pitch: Number = 0.5,\n  amplitude: Number = 0.25,\n  wavelength: Number = 2,\n  samples: Number = 4,\n)",
+     "summary": "波打つ縞。stripes の線を横に揺らしたもの",
+     "params": [
+      {
+       "name": "a",
+       "type": "Color",
+       "doc": "1 本目の色",
+       "default": ""
+      },
+      {
+       "name": "b",
+       "type": "Color",
+       "doc": "2 本目の色",
+       "default": ""
+      },
+      {
+       "name": "pitch",
+       "type": "Number",
+       "doc": "縞 1 本の幅 (箱の座標)",
+       "default": "0.5"
+      },
+      {
+       "name": "amplitude",
+       "type": "Number",
+       "doc": "揺れの大きさ (箱の座標)",
+       "default": "0.25"
+      },
+      {
+       "name": "wavelength",
+       "type": "Number",
+       "doc": "揺れ 1 回ぶんの長さ (箱の座標)",
+       "default": "2"
+      },
+      {
+       "name": "samples",
+       "type": "Number",
+       "doc": "1 ピクセルあたりの評価点",
+       "default": "4"
+      }
+     ],
+     "returns": {
+      "type": "Shader",
+      "doc": ""
+     },
+     "example": "v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,\n             fill = waves(#f2f7fb, #dbe7ef, 0.5, 0.25, 2)))"
+    },
+    {
+     "name": "WAVES",
+     "category": "線",
+     "isFunc": false,
+     "signature": "WAVES",
+     "call": "WAVES",
+     "summary": "既定の色の波",
+     "params": [],
+     "returns": {
+      "type": "Shader",
+      "doc": "塗り"
+     },
+     "example": ""
+    },
+    {
+     "name": "zigzag",
+     "category": "線",
+     "isFunc": true,
+     "signature": "zigzag(a: Color, b: Color, pitch: Number = 0.5, amplitude: Number = 0.4, wavelength: Number = 1.4, samples: Number = 4)",
+     "call": "zigzag(\n  a: Color,\n  b: Color,\n  pitch: Number = 0.5,\n  amplitude: Number = 0.4,\n  wavelength: Number = 1.4,\n  samples: Number = 4,\n)",
+     "summary": "折れ曲がる縞。waves の曲線を折れ線にしたもの",
+     "params": [
+      {
+       "name": "a",
+       "type": "Color",
+       "doc": "1 本目の色",
+       "default": ""
+      },
+      {
+       "name": "b",
+       "type": "Color",
+       "doc": "2 本目の色",
+       "default": ""
+      },
+      {
+       "name": "pitch",
+       "type": "Number",
+       "doc": "縞 1 本の幅 (箱の座標)",
+       "default": "0.5"
+      },
+      {
+       "name": "amplitude",
+       "type": "Number",
+       "doc": "折れの大きさ (箱の座標)",
+       "default": "0.4"
+      },
+      {
+       "name": "wavelength",
+       "type": "Number",
+       "doc": "折れ 1 回ぶんの長さ (箱の座標)",
+       "default": "1.4"
+      },
+      {
+       "name": "samples",
+       "type": "Number",
+       "doc": "1 ピクセルあたりの評価点",
+       "default": "4"
+      }
+     ],
+     "returns": {
+      "type": "Shader",
+      "doc": ""
+     },
+     "example": "v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,\n             fill = zigzag(#1b1220, #33213a, 0.5, 0.4, 1.4)))"
+    },
+    {
+     "name": "ZIGZAG",
+     "category": "線",
+     "isFunc": false,
+     "signature": "ZIGZAG",
+     "call": "ZIGZAG",
+     "summary": "既定の色のぎざぎざ",
+     "params": [],
+     "returns": {
+      "type": "Shader",
+      "doc": "塗り"
+     },
+     "example": ""
+    },
+    {
+     "name": "diamonds",
+     "category": "面",
+     "isFunc": true,
+     "signature": "diamonds(a: Color, b: Color, size: Number = 0.6, samples: Number = 4)",
+     "call": "diamonds(\n  a: Color,\n  b: Color,\n  size: Number = 0.6,\n  samples: Number = 4,\n)",
+     "summary": "菱形を敷き詰めたもの。checker を 45 度ひねった並び",
+     "params": [
+      {
+       "name": "a",
+       "type": "Color",
+       "doc": "1 色目",
+       "default": ""
+      },
+      {
+       "name": "b",
+       "type": "Color",
+       "doc": "2 色目",
+       "default": ""
+      },
+      {
+       "name": "size",
+       "type": "Number",
+       "doc": "菱形の対角線の長さ (箱の座標)",
+       "default": "0.6"
+      },
+      {
+       "name": "samples",
+       "type": "Number",
+       "doc": "1 ピクセルあたりの評価点",
+       "default": "4"
+      }
+     ],
+     "returns": {
+      "type": "Shader",
+      "doc": ""
+     },
+     "example": "v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,\n             fill = diamonds(#fff7fa, #fae3ec, 0.6)))"
+    },
+    {
+     "name": "DIAMONDS",
+     "category": "面",
+     "isFunc": false,
+     "signature": "DIAMONDS",
+     "call": "DIAMONDS",
+     "summary": "既定の色の菱形",
+     "params": [],
+     "returns": {
+      "type": "Shader",
+      "doc": "塗り"
+     },
+     "example": ""
+    },
+    {
+     "name": "triangles",
+     "category": "面",
+     "isFunc": true,
+     "signature": "triangles(a: Color, b: Color, size: Number = 0.5, samples: Number = 4)",
+     "call": "triangles(\n  a: Color,\n  b: Color,\n  size: Number = 0.5,\n  samples: Number = 4,\n)",
+     "summary": "マスを対角線で分けた三角の並び",
+     "params": [
+      {
+       "name": "a",
+       "type": "Color",
+       "doc": "1 色目",
+       "default": ""
+      },
+      {
+       "name": "b",
+       "type": "Color",
+       "doc": "2 色目",
+       "default": ""
+      },
+      {
+       "name": "size",
+       "type": "Number",
+       "doc": "マス 1 つの辺 (箱の座標)",
+       "default": "0.5"
+      },
+      {
+       "name": "samples",
+       "type": "Number",
+       "doc": "1 ピクセルあたりの評価点",
+       "default": "4"
+      }
+     ],
+     "returns": {
+      "type": "Shader",
+      "doc": ""
+     },
+     "example": "v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,\n             fill = triangles(#0f2b4a, #1d4570, 0.5)))"
+    },
+    {
+     "name": "TRIANGLES",
+     "category": "面",
+     "isFunc": false,
+     "signature": "TRIANGLES",
+     "call": "TRIANGLES",
+     "summary": "既定の色の三角",
+     "params": [],
+     "returns": {
+      "type": "Shader",
+      "doc": "塗り"
+     },
+     "example": ""
+    },
+    {
+     "name": "bricks",
+     "category": "面",
+     "isFunc": true,
+     "signature": "bricks(back: Color, line: Color, w: Number = 0.8, h: Number = 0.32, width: Number = 0.04, samples: Number = 4)",
+     "call": "bricks(\n  back: Color,\n  line: Color,\n  w: Number = 0.8,\n  h: Number = 0.32,\n  width: Number = 0.04,\n  samples: Number = 4,\n)",
+     "summary": "煉瓦積み。1 段ごとに半分ずれる",
+     "params": [
+      {
+       "name": "back",
+       "type": "Color",
+       "doc": "煉瓦の色",
+       "default": ""
+      },
+      {
+       "name": "line",
+       "type": "Color",
+       "doc": "目地の色",
+       "default": ""
+      },
+      {
+       "name": "w",
+       "type": "Number",
+       "doc": "煉瓦 1 つの幅 (箱の座標)",
+       "default": "0.8"
+      },
+      {
+       "name": "h",
+       "type": "Number",
+       "doc": "煉瓦 1 つの高さ (箱の座標)",
+       "default": "0.32"
+      },
+      {
+       "name": "width",
+       "type": "Number",
+       "doc": "目地の太さ (箱の座標)",
+       "default": "0.04"
+      },
+      {
+       "name": "samples",
+       "type": "Number",
+       "doc": "1 ピクセルあたりの評価点",
+       "default": "4"
+      }
+     ],
+     "returns": {
+      "type": "Shader",
+      "doc": ""
+     },
+     "example": "v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,\n             fill = bricks(#efe7d8, #b8a68a, 0.8, 0.32, 0.04)))"
+    },
+    {
+     "name": "BRICKS",
+     "category": "面",
+     "isFunc": false,
+     "signature": "BRICKS",
+     "call": "BRICKS",
+     "summary": "既定の色の煉瓦",
+     "params": [],
+     "returns": {
+      "type": "Shader",
+      "doc": "塗り"
+     },
+     "example": ""
+    },
+    {
      "name": "noise",
      "category": "面",
      "isFunc": true,
@@ -9063,6 +9513,48 @@
      "example": ""
     },
     {
+     "name": "CIRCLE",
+     "category": "印",
+     "isFunc": false,
+     "signature": "CIRCLE",
+     "call": "CIRCLE",
+     "summary": "丸。点や印に。線を付ければ輪になる",
+     "params": [],
+     "returns": {
+      "type": "List<List<Vector>>",
+      "doc": "0..1 の箱に収めた輪郭の並び"
+     },
+     "example": ""
+    },
+    {
+     "name": "TRIANGLE",
+     "category": "印",
+     "isFunc": false,
+     "signature": "TRIANGLE",
+     "call": "TRIANGLE",
+     "summary": "上を向いた三角。注意や、向きの印に。rotation で向きを変える",
+     "params": [],
+     "returns": {
+      "type": "List<List<Vector>>",
+      "doc": "0..1 の箱に収めた輪郭の並び"
+     },
+     "example": ""
+    },
+    {
+     "name": "STAR",
+     "category": "印",
+     "isFunc": false,
+     "signature": "STAR",
+     "call": "STAR",
+     "summary": "五芒星。評価や、目立たせたいものに",
+     "params": [],
+     "returns": {
+      "type": "List<List<Vector>>",
+      "doc": "0..1 の箱に収めた輪郭の並び"
+     },
+     "example": ""
+    },
+    {
      "name": "ARROW",
      "category": "向き",
      "isFunc": false,
@@ -9201,6 +9693,160 @@
       "doc": "0..1 の箱に収めた輪郭の並び"
      },
      "example": ""
+    },
+    {
+     "name": "FLAG",
+     "category": "しるし",
+     "isFunc": false,
+     "signature": "FLAG",
+     "call": "FLAG",
+     "summary": "旗。目印や、区切りに",
+     "params": [],
+     "returns": {
+      "type": "List<List<Vector>>",
+      "doc": "0..1 の箱に収めた輪郭の並び"
+     },
+     "example": ""
+    },
+    {
+     "name": "CLOUD",
+     "category": "しるし",
+     "isFunc": false,
+     "signature": "CLOUD",
+     "call": "CLOUD",
+     "summary": "雲。天気や、手元にないものに。重なった丸と下の台",
+     "params": [],
+     "returns": {
+      "type": "List<List<Vector>>",
+      "doc": "0..1 の箱に収めた輪郭の並び"
+     },
+     "example": ""
+    },
+    {
+     "name": "USER",
+     "category": "もの",
+     "isFunc": false,
+     "signature": "USER",
+     "call": "USER",
+     "summary": "人。頭と肩。誰か、持ち主に",
+     "params": [],
+     "returns": {
+      "type": "List<List<Vector>>",
+      "doc": "0..1 の箱に収めた輪郭の並び"
+     },
+     "example": ""
+    },
+    {
+     "name": "MAIL",
+     "category": "もの",
+     "isFunc": false,
+     "signature": "MAIL",
+     "call": "MAIL",
+     "summary": "封筒。便りや、送ることに。上のふたは逆回りに書いた穴",
+     "params": [],
+     "returns": {
+      "type": "List<List<Vector>>",
+      "doc": "0..1 の箱に収めた輪郭の並び"
+     },
+     "example": ""
+    },
+    {
+     "name": "FOLDER",
+     "category": "もの",
+     "isFunc": false,
+     "signature": "FOLDER",
+     "call": "FOLDER",
+     "summary": "フォルダ。まとめたもの、入れ物に",
+     "params": [],
+     "returns": {
+      "type": "List<List<Vector>>",
+      "doc": "0..1 の箱に収めた輪郭の並び"
+     },
+     "example": ""
+    },
+    {
+     "name": "FILE",
+     "category": "もの",
+     "isFunc": false,
+     "signature": "FILE",
+     "call": "FILE",
+     "summary": "書類。角を折った紙。1 つの文書に",
+     "params": [],
+     "returns": {
+      "type": "List<List<Vector>>",
+      "doc": "0..1 の箱に収めた輪郭の並び"
+     },
+     "example": ""
+    },
+    {
+     "name": "CLOCK",
+     "category": "もの",
+     "isFunc": false,
+     "signature": "CLOCK",
+     "call": "CLOCK",
+     "summary": "時計。時刻や待ち時間に。輪の内側が抜けていて、針が 2 本",
+     "params": [],
+     "returns": {
+      "type": "List<List<Vector>>",
+      "doc": "0..1 の箱に収めた輪郭の並び"
+     },
+     "example": ""
+    },
+    {
+     "name": "GEAR",
+     "category": "もの",
+     "isFunc": false,
+     "signature": "GEAR",
+     "call": "GEAR",
+     "summary": "歯車。設定や仕組みに。中が抜けている",
+     "params": [],
+     "returns": {
+      "type": "List<List<Vector>>",
+      "doc": "0..1 の箱に収めた輪郭の並び"
+     },
+     "example": ""
+    },
+    {
+     "name": "LOCK",
+     "category": "もの",
+     "isFunc": false,
+     "signature": "LOCK",
+     "call": "LOCK",
+     "summary": "錠。鍵が掛かっていること、守られていることに",
+     "params": [],
+     "returns": {
+      "type": "List<List<Vector>>",
+      "doc": "0..1 の箱に収めた輪郭の並び"
+     },
+     "example": ""
+    },
+    {
+     "name": "BELL",
+     "category": "もの",
+     "isFunc": false,
+     "signature": "BELL",
+     "call": "BELL",
+     "summary": "ベル。知らせや、気付いてほしいことに",
+     "params": [],
+     "returns": {
+      "type": "List<List<Vector>>",
+      "doc": "0..1 の箱に収めた輪郭の並び"
+     },
+     "example": ""
+    },
+    {
+     "name": "CHAT",
+     "category": "もの",
+     "isFunc": false,
+     "signature": "CHAT",
+     "call": "CHAT",
+     "summary": "吹き出し。話や、書き込みに",
+     "params": [],
+     "returns": {
+      "type": "List<List<Vector>>",
+      "doc": "0..1 の箱に収めた輪郭の並び"
+     },
+     "example": ""
     }
    ]
   }
@@ -9250,14 +9896,14 @@
   },
   {
    "name": "materials",
-   "desc": "素材の見本。配色、模様、記号を 1 段ずつ並べる",
-   "code": "# materials.moph — 素材の見本。配色、模様、記号を 1 段ずつ並べる\n\nimport { HOUSE, PAPER, EARTH, MONO, NIGHT, NEON } from palette\nimport { stripes, hatch, checker, dots, grid, noise } from pattern\nimport { mark, CHECK, CROSS, PLUS, MINUS, ARROW, CHEVRON, PLAY, PAUSE, STOP, HEART, HOME, BOLT, PIN, SEARCH } from icon\nimport { stagger, fade_in, slide_in } from animation\n\n# 画面そのものの色も配色から取る\nlet base = HOUSE\nlet v = View(box = Vector(16, 9))\nv.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = base.back))\n\nlet track = Timeline(duration = 5s)\nv.addTrack(track)\n\n# 段の見出し\nfunc heading(text: String, y: Number) -> TextArea {\n  TextArea(position = Pos(0.6, y, anchor = :left), text = text, fontSize = 0.34, fill = base.sub, opacity = 0)\n}\nlet heads = [heading(\"palette — 配色\", 0.65), heading(\"pattern — 模様\", 3.5), heading(\"icon — 記号\", 6.3)]\nfor (i, head) in heads.enumerate() {\n  v.place(head)\n  track.place(fade_in(head, 0.4s), at = 0.1s + 1.2s * i)\n}\n\n# ---- palette。1 枚が 1 つの配色。上から 名前 (ink)、accent、series の 5 色 ----\nlet sets = [(HOUSE, \"HOUSE\"), (PAPER, \"PAPER\"), (EARTH, \"EARTH\"), (MONO, \"MONO\"), (NIGHT, \"NIGHT\"), (NEON, \"NEON\")]\nlet cards = []\nfor (i, set) in sets.enumerate() {\n  let (p, name) = set\n  let card = View(box = Vector(2.3, 2.1), opacity = 0)\n  card.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 2.3, h = 2.1, fill = p.back))\n  card.place(TextArea(position = Pos(1.15, 0.45), text = name, fontSize = 0.3, fill = p.ink))\n  card.place(Rect(position = Pos(0.2, 0.78, anchor = :topLeft), w = 1.9, h = 0.34, fill = p.accent))\n  for (j, c) in p.series.enumerate() {\n    card.place(Rect(position = Pos(0.2 + j * 0.39, 1.3, anchor = :topLeft), w = 0.33, h = 0.55, fill = c))\n  }\n  card.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 2.3, h = 2.1, stroke = p.line, strokeWidth = 0.03))\n  v.place(card, at = Pos(0.6 + i * 2.5, 1.0, anchor = :topLeft), w = 2.3)\n  cards.push(card)\n}\nstagger(track, cards, func (c) { slide_in(c, 0, 0.4, 0.45s) }, at = 0.25s, stagger = 0.12s)\n\n# ---- pattern。色はどれも同じにして、模様だけを変える ----\nlet fills = [\n  (stripes(base.back, base.sub, 0.3, 60), \"stripes\"),\n  (hatch(base.back, base.sub, 0.3, 0.035), \"hatch\"),\n  (checker(base.back, base.sub, 0.28), \"checker\"),\n  (dots(base.back, base.sub, 0.36, 0.09), \"dots\"),\n  (grid(base.back, base.sub, 0.3, 0.025), \"grid\"),\n  (noise(base.back, base.sub, 70), \"noise\"),\n]\nlet tiles = []\nfor (i, item) in fills.enumerate() {\n  let (fill, name) = item\n  let tile = View(box = Vector(2.3, 2.05), opacity = 0)\n  tile.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 2.3, h = 1.7, fill = fill))\n  tile.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 2.3, h = 1.7, stroke = base.line, strokeWidth = 0.03))\n  tile.place(TextArea(position = Pos(1.15, 1.9), text = name, fontSize = 0.26, fill = base.sub))\n  v.place(tile, at = Pos(0.6 + i * 2.5, 3.85, anchor = :topLeft), w = 2.3)\n  tiles.push(tile)\n}\nstagger(track, tiles, func (c) { slide_in(c, 0, 0.4, 0.45s) }, at = 1.45s, stagger = 0.12s)\n\n# ---- icon。色も大きさも同じにして、形だけを変える ----\nlet signs = [\n  (CHECK, \"CHECK\"), (CROSS, \"CROSS\"), (PLUS, \"PLUS\"), (MINUS, \"MINUS\"), (ARROW, \"ARROW\"),\n  (CHEVRON, \"CHEVRON\"), (PLAY, \"PLAY\"), (PAUSE, \"PAUSE\"), (STOP, \"STOP\"), (HEART, \"HEART\"),\n  (HOME, \"HOME\"), (BOLT, \"BOLT\"), (PIN, \"PIN\"), (SEARCH, \"SEARCH\"),\n]\nlet step = 14.8 / signs.len()\nlet marks = []\nfor (i, item) in signs.enumerate() {\n  let (sign, name) = item\n  let cell = View(box = Vector(step, 1.5), opacity = 0)\n  cell.place(mark(sign, Vector(step / 2, 0.55), 0.8, base.ink))\n  cell.place(TextArea(position = Pos(step / 2, 1.24), text = name, fontSize = 0.19, fill = base.sub))\n  v.place(cell, at = Pos(0.6 + i * step, 6.6, anchor = :topLeft), w = step)\n  marks.push(cell)\n}\nstagger(track, marks, func (c) { fade_in(c, 0.35s) }, at = 2.65s, stagger = 0.07s)\n\noutput v\n",
-   "length": 5.0,
+   "desc": "素材の見本。配色、模様、記号を 1 つずつ、画面を入れ替えて見せる",
+   "code": "# materials.moph — 素材の見本。配色、模様、記号を 1 つずつ、画面を入れ替えて見せる\n\nimport math\nimport palette\nimport pattern\nimport { mark } from icon\nimport icon\nimport { stagger, fade_in, fade_to } from animation\n\n# 画面そのものの色も配色から取る\nlet base = palette.HOUSE\nlet v = View(box = Vector(16, 9))\nv.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = base.back))\n\nlet track = Timeline(duration = 9s)\nv.addTrack(track)\nlet hold = 2.9s\n\n# 1 場面ぶんの入れ物。見出しを付けて、終わりに消える\nfunc scene(title: String, no: Number) -> View {\n  let stage = View(box = Vector(16, 9), opacity = 0)\n  stage.place(TextArea(position = Pos(0.6, 0.65, anchor = :left), text = title, fontSize = 0.34, fill = base.sub))\n  v.place(stage, at = Pos(0, 0, anchor = :topLeft), w = 16)\n  # 順番に出て、次の場面に入れ替わる。最後の場面は消さない\n  track.place(fade_in(stage, 0.3s), at = hold * no)\n  if no < 2 { track.place(fade_to(stage, 1, 0, 0.35s), at = hold * no + 2.5s) }\n  stage\n}\n\n# ---- palette。1 枚が 1 つの配色。名前 (ink)、accent の帯、series の 5 色 ----\nlet sets = [\n  (palette.HOUSE, \"HOUSE\"), (palette.PAPER, \"PAPER\"), (palette.EARTH, \"EARTH\"),\n  (palette.MONO, \"MONO\"), (palette.OCEAN, \"OCEAN\"), (palette.SLATE, \"SLATE\"),\n  (palette.CANDY, \"CANDY\"), (palette.NIGHT, \"NIGHT\"), (palette.NEON, \"NEON\"),\n  (palette.FOREST, \"FOREST\"), (palette.SUNSET, \"SUNSET\"), (palette.BLUEPRINT, \"BLUEPRINT\"),\n]\nlet colors = scene(\"palette — 配色\", 0)\nlet cards = []\nfor (i, set) in sets.enumerate() {\n  let (p, name) = set\n  let card = View(box = Vector(2.3, 3.5), opacity = 0)\n  card.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 2.3, h = 3.5, fill = p.back))\n  card.place(TextArea(position = Pos(1.15, 0.5), text = name, fontSize = 0.28, fill = p.ink))\n  card.place(Rect(position = Pos(0.2, 0.9, anchor = :topLeft), w = 1.9, h = 0.5, fill = p.accent))\n  for (j, c) in p.series.enumerate() {\n    card.place(Rect(position = Pos(0.2 + j * 0.39, 1.85, anchor = :topLeft), w = 0.33, h = 1.45, fill = c))\n  }\n  card.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 2.3, h = 3.5, stroke = p.line, strokeWidth = 0.03))\n  colors.place(card, at = Pos(0.6 + (i - math.floor(i / 6) * 6) * 2.5, 1.0 + math.floor(i / 6) * 3.7, anchor = :topLeft), w = 2.3)\n  cards.push(card)\n}\nstagger(track, cards, func (c) { fade_in(c, 0.4s) }, at = 0.15s, stagger = 0.08s)\n\n# ---- pattern。色はどれも同じにして、模様だけを変える ----\nlet fills = [\n  (pattern.stripes(base.back, base.sub, 0.3, 60), \"stripes\"),\n  (pattern.hatch(base.back, base.sub, 0.3, 0.035), \"hatch\"),\n  (pattern.cross_hatch(base.back, base.sub, 0.3, 0.025), \"cross_hatch\"),\n  (pattern.waves(base.back, base.sub, 0.3, 0.2, 1.4), \"waves\"),\n  (pattern.zigzag(base.back, base.sub, 0.3, 0.3, 1.0), \"zigzag\"),\n  (pattern.checker(base.back, base.sub, 0.28), \"checker\"),\n  (pattern.diamonds(base.back, base.sub, 0.5), \"diamonds\"),\n  (pattern.triangles(base.back, base.sub, 0.4), \"triangles\"),\n  (pattern.dots(base.back, base.sub, 0.36, 0.09), \"dots\"),\n  (pattern.grid(base.back, base.sub, 0.3, 0.025), \"grid\"),\n  (pattern.bricks(base.back, base.sub, 0.7, 0.28, 0.035), \"bricks\"),\n  (pattern.noise(base.back, base.sub, 70), \"noise\"),\n]\nlet faces = scene(\"pattern — 模様\", 1)\nlet tiles = []\nfor (i, item) in fills.enumerate() {\n  let (fill, name) = item\n  let tile = View(box = Vector(2.3, 3.3), opacity = 0)\n  tile.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 2.3, h = 2.8, fill = fill))\n  tile.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 2.3, h = 2.8, stroke = base.line, strokeWidth = 0.03))\n  tile.place(TextArea(position = Pos(1.15, 3.08), text = name, fontSize = 0.24, fill = base.sub))\n  faces.place(tile, at = Pos(0.6 + (i - math.floor(i / 6) * 6) * 2.5, 1.0 + math.floor(i / 6) * 3.6, anchor = :topLeft), w = 2.3)\n  tiles.push(tile)\n}\nstagger(track, tiles, func (c) { fade_in(c, 0.4s) }, at = hold + 0.15s, stagger = 0.08s)\n\n# ---- icon。色も大きさも同じにして、形だけを変える ----\nlet signs = [\n  (icon.CHECK, \"CHECK\"), (icon.CROSS, \"CROSS\"), (icon.PLUS, \"PLUS\"), (icon.MINUS, \"MINUS\"),\n  (icon.CIRCLE, \"CIRCLE\"), (icon.TRIANGLE, \"TRIANGLE\"), (icon.STAR, \"STAR\"),\n  (icon.ARROW, \"ARROW\"), (icon.CHEVRON, \"CHEVRON\"), (icon.PLAY, \"PLAY\"), (icon.PAUSE, \"PAUSE\"),\n  (icon.STOP, \"STOP\"), (icon.HEART, \"HEART\"), (icon.HOME, \"HOME\"), (icon.BOLT, \"BOLT\"),\n  (icon.PIN, \"PIN\"), (icon.SEARCH, \"SEARCH\"), (icon.FLAG, \"FLAG\"), (icon.CLOUD, \"CLOUD\"),\n  (icon.USER, \"USER\"), (icon.MAIL, \"MAIL\"), (icon.FOLDER, \"FOLDER\"), (icon.FILE, \"FILE\"),\n  (icon.CLOCK, \"CLOCK\"), (icon.GEAR, \"GEAR\"), (icon.LOCK, \"LOCK\"), (icon.BELL, \"BELL\"), (icon.CHAT, \"CHAT\"),\n]\nlet marks_view = scene(\"icon — 記号\", 2)\nlet step = 14.8 / 7\nlet marks = []\nfor (i, item) in signs.enumerate() {\n  let (sign, name) = item\n  let cell = View(box = Vector(step, 1.85), opacity = 0)\n  cell.place(mark(sign, Vector(step / 2, 0.66), 1.05, base.ink))\n  cell.place(TextArea(position = Pos(step / 2, 1.55), text = name, fontSize = 0.2, fill = base.sub))\n  marks_view.place(cell, at = Pos(0.6 + (i - math.floor(i / 7) * 7) * step, 1.05 + math.floor(i / 7) * 1.9, anchor = :topLeft), w = step)\n  marks.push(cell)\n}\nstagger(track, marks, func (c) { fade_in(c, 0.35s) }, at = hold * 2 + 0.15s, stagger = 0.06s)\n\noutput v\n",
+   "length": 9.0,
    "media": {
     "width": 1280,
     "height": 720,
     "fps": 30.0,
-    "seconds": 5.0
+    "seconds": 9.0
    },
    "trim": "",
    "listed": true

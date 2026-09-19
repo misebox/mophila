@@ -1,0 +1,35 @@
+# triangles.moph — 三角
+
+import math
+import { HOUSE } from ..palette.house
+
+## マスを対角線で分けた三角の並び
+## @category 面
+## @param a 1 色目
+## @param b 2 色目
+## @param size マス 1 つの辺 (箱の座標)
+## @param samples 1 ピクセルあたりの評価点
+## @example
+## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,
+##              fill = triangles(#0f2b4a, #1d4570, 0.5)))
+export func triangles(a: Color, b: Color, size: Number = 0.5, samples: Number = 4) -> Shader {
+  Shader(
+    color = func (x, y, t) {
+      let u = x / size
+      let v = y / size
+      let fu = u - math.floor(u)
+      let fv = v - math.floor(v)
+      # 1 段ごとに対角線の向きを変える
+      let row = math.floor(v) / 2
+      let flipped = row - math.floor(row) < 0.25
+      let half = if flipped { fu + fv < 1 } else { fu < fv }
+      if half { a } else { b }
+    },
+    samples = samples,
+  )
+}
+
+## 既定の色の三角
+## @category 面
+## @type {Shader} 塗り
+export let TRIANGLES = triangles(HOUSE.back, HOUSE.track)

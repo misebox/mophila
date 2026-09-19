@@ -1,0 +1,33 @@
+# zigzag.moph — ぎざぎざ
+
+import math
+import { HOUSE } from ..palette.house
+
+## 折れ曲がる縞。waves の曲線を折れ線にしたもの
+## @category 線
+## @param a 1 本目の色
+## @param b 2 本目の色
+## @param pitch 縞 1 本の幅 (箱の座標)
+## @param amplitude 折れの大きさ (箱の座標)
+## @param wavelength 折れ 1 回ぶんの長さ (箱の座標)
+## @param samples 1 ピクセルあたりの評価点
+## @example
+## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,
+##              fill = zigzag(#1b1220, #33213a, 0.5, 0.4, 1.4)))
+export func zigzag(a: Color, b: Color, pitch: Number = 0.5, amplitude: Number = 0.4, wavelength: Number = 1.4, samples: Number = 4) -> Shader {
+  Shader(
+    color = func (x, y, t) {
+      let v = y / wavelength
+      # 0..1 を往復する三角波
+      let tri = math.abs((v - math.floor(v)) * 2 - 1)
+      let u = (x + amplitude * tri) / pitch
+      if u - math.floor(u) < 0.5 { a } else { b }
+    },
+    samples = samples,
+  )
+}
+
+## 既定の色のぎざぎざ
+## @category 線
+## @type {Shader} 塗り
+export let ZIGZAG = zigzag(HOUSE.back, HOUSE.track)

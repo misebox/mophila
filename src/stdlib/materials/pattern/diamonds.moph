@@ -1,0 +1,28 @@
+# diamonds.moph — 菱形
+
+import math
+import { HOUSE } from ..palette.house
+
+## 菱形を敷き詰めたもの。checker を 45 度ひねった並び
+## @category 面
+## @param a 1 色目
+## @param b 2 色目
+## @param size 菱形の対角線の長さ (箱の座標)
+## @param samples 1 ピクセルあたりの評価点
+## @example
+## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,
+##              fill = diamonds(#fff7fa, #fae3ec, 0.6)))
+export func diamonds(a: Color, b: Color, size: Number = 0.6, samples: Number = 4) -> Shader {
+  Shader(
+    color = func (x, y, t) {
+      let k = (math.floor((x + y) / size) + math.floor((x - y) / size)) / 2
+      if k - math.floor(k) < 0.25 { a } else { b }
+    },
+    samples = samples,
+  )
+}
+
+## 既定の色の菱形
+## @category 面
+## @type {Shader} 塗り
+export let DIAMONDS = diamonds(HOUSE.back, HOUSE.track)

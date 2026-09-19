@@ -1,0 +1,31 @@
+# waves.moph — 波
+
+import math
+import { HOUSE } from ..palette.house
+
+## 波打つ縞。stripes の線を横に揺らしたもの
+## @category 線
+## @param a 1 本目の色
+## @param b 2 本目の色
+## @param pitch 縞 1 本の幅 (箱の座標)
+## @param amplitude 揺れの大きさ (箱の座標)
+## @param wavelength 揺れ 1 回ぶんの長さ (箱の座標)
+## @param samples 1 ピクセルあたりの評価点
+## @example
+## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,
+##              fill = waves(#f2f7fb, #dbe7ef, 0.5, 0.25, 2)))
+export func waves(a: Color, b: Color, pitch: Number = 0.5, amplitude: Number = 0.25, wavelength: Number = 2, samples: Number = 4) -> Shader {
+  let k = math.TAU / wavelength
+  Shader(
+    color = func (x, y, t) {
+      let u = (x + amplitude * math.sin(y * k)) / pitch
+      if u - math.floor(u) < 0.5 { a } else { b }
+    },
+    samples = samples,
+  )
+}
+
+## 既定の色の波
+## @category 線
+## @type {Shader} 塗り
+export let WAVES = waves(HOUSE.back, HOUSE.track)

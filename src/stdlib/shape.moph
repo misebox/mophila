@@ -220,3 +220,41 @@ export func iso_faces(at: Vector, x: Number, y: Number, z: Number, w: Number, d:
     (:top, [p(x, y, z1), p(x1, y, z1), p(x1, y1, z1), p(x, y1, z1)]),
   ]
 }
+
+## 点の並びを、長さが等間隔になるように取り直す。
+## 角の点しか返さない star や regular_polygon の輪郭を、フーリエ変換のように
+## 等間隔の点として扱いたいときに使う
+## @category 多角形
+## @param points 元の点の並び (2 点以上)
+## @param n 取り直したあとの点の数 (1 以上)
+## @param closed true なら最後の点から最初の点へ戻る辺も含める
+## @returns 長さが等間隔に並んだ点の List (n 個)
+## @example
+## # 星の輪郭を 256 個の等間隔の点にする
+## let pts = resample(star(8, 4.5, 3, 1.2), 256, closed = true)
+export func resample(points: List<Vector>, n: Number, closed: Bool = false) -> List<Vector> {
+  if points.len() < 2 or n < 1 { return points }
+  # 辺の長さと、そこまでの累計
+  let ends = if closed { points + [points[0]] } else { points }
+  let steps = ends.len() - 1
+  let acc = [0]
+  for i in 0..steps {
+    let d = ends[i + 1] - ends[i]
+    acc.push(acc[i] + math.hypot(d.x, d.y))
+  }
+  let total = acc[steps]
+  if total <= 0 { return points }
+  # 閉じているときは最後の点が最初の点と同じになるので、1 つ手前で止める
+  let span = if closed { total * (n - 1) / n } else { total }
+  let out = []
+  let at = 0
+  for k in 0..n {
+    let want = if n == 1 { 0 } else { span * k / (n - 1) }
+    # 目標の長さを含む辺まで進む (want は増えていくので、前の続きから探す)
+    for j in 0..steps { if at + 1 < steps and acc[at + 1] < want { at = at + 1 } }
+    let seg = acc[at + 1] - acc[at]
+    let u = if seg > 0 { (want - acc[at]) / seg } else { 0 }
+    out.push(ends[at] + (ends[at + 1] - ends[at]) * u)
+  }
+  out
+}

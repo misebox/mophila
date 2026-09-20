@@ -63,13 +63,16 @@ fn draw_view(scene: &mut Scene, view: &ObjRef, transform: Affine, frame: &Frame,
     let clip = matches!(v.attrs.get("clip"), Some(Value::Bool(true)));
     let grouped = clip || opacity < 1.0 || blend.mix != Mix::Normal || blend.compose != Compose::SrcOver;
     if grouped {
-        // clip なら箱の四角でレイヤーを切る。外へはみ出した中身は描かれない
+        // clip なら箱の四角でレイヤーを切る。外へはみ出した中身は描かれない。
+        // clip でなければ、中身が描く範囲でレイヤーを作る。画面全体で作ると、
+        // 半透明の View が増えたときに GPU の混色用の領域が尽きて、フレームが丸ごと消える
         let (bw, bh) = view_box(view)?;
-        let area: BezPath = match clip {
-            true => (transform * Rect::new(0.0, 0.0, bw, bh).to_path(0.01)).into_iter().collect(),
-            false => frame.viewport.to_path(0.01),
+        let area = match clip {
+            true => transform.transform_rect_bbox(Rect::new(0.0, 0.0, bw, bh)),
+            // 文字の縁など、囲む四角の計算がわずかに小さいことがあるので少し広げる
+            false => drawn_bounds(view, transform, cache)?.inflate(2.0, 2.0).intersect(frame.viewport),
         };
-        scene.push_layer(Fill::NonZero, blend, opacity as f32, Affine::IDENTITY, &area);
+        scene.push_layer(Fill::NonZero, blend, opacity as f32, Affine::IDENTITY, &area.to_path(0.01));
     }
     // カメラは枠を動かさず、中身だけ動かす。clip はカメラの前の枠で切る
     let transform = match camera_of(&v.attrs)? {
@@ -106,6 +109,55 @@ fn draw_view(scene: &mut Scene, view: &ObjRef, transform: Affine, frame: &Frame,
         scene.pop_layer();
     }
     Ok(())
+}
+
+/// View の中身が描く範囲 (出力座標)。draw_view と同じ順でたどるので、置き方も回転も線の太さも入る。
+/// 中身が無ければ大きさの無い四角
+fn drawn_bounds(view: &ObjRef, transform: Affine, cache: &mut RenderCache) -> Result<Rect> {
+    let v = view.borrow();
+    // clip した View は箱から出ない
+    let (bw, bh) = view_box(view)?;
+    if matches!(v.attrs.get("clip"), Some(Value::Bool(true))) {
+        return Ok(transform.transform_rect_bbox(Rect::new(0.0, 0.0, bw, bh)));
+    }
+    let transform = match camera_of(&v.attrs)? {
+        Some((affine, _, _)) => transform * affine,
+        None => transform,
+    };
+    let mut out: Option<Rect> = None;
+    for child in &v.children {
+        let bounds = match child.borrow().kind == "View" {
+            true => drawn_bounds(child, sub_transform(child, transform)?, cache)?,
+            false => object_bounds(&child.borrow(), transform, cache)?,
+        };
+        out = Some(match out {
+            Some(all) => all.union(bounds),
+            None => bounds,
+        });
+    }
+    Ok(out.unwrap_or_default())
+}
+
+/// 図形 1 つが描く範囲 (出力座標)。draw_object と同じ置き方で囲む四角を出す
+fn object_bounds(c: &crate::lang::value::Object, transform: Affine, cache: &mut RenderCache) -> Result<Rect> {
+    let scale = transform.as_coeffs()[0].hypot(transform.as_coeffs()[1]);
+    if c.kind == "TextArea" {
+        let (w, h, cx, cy) = text_box(&c.attrs, scale, cache)?;
+        let top_left = transform * Point::new(cx - w / 2.0, cy - h / 2.0);
+        let placed = spin_of(c, transform, Point::new(cx, cy))? * Affine::translate(top_left.to_vec2());
+        return Ok(placed.transform_rect_bbox(Rect::from_origin_size(Point::ZERO, (w * scale, h * scale))));
+    }
+    let (path, origin) = outline(c)?;
+    let placed = spin_of(c, transform, origin)? * transform;
+    let bounds = placed.transform_rect_bbox(path.bounding_box());
+    // 線は輪郭の外へ半分はみ出す
+    match color(&c.attrs, "stroke", &c.kind)? {
+        Some(_) => {
+            let half = stroke_style(&c.attrs, None)?.width * scale / 2.0;
+            Ok(bounds.inflate(half, half))
+        }
+        None => Ok(bounds),
+    }
 }
 
 /// 描く順。zIndex の小さいものから。同じ値なら place した順のまま。
@@ -293,18 +345,7 @@ fn draw_object(scene: &mut Scene, c: &crate::lang::value::Object, transform: Aff
         Some(Value::Number(o, _)) => o.clamp(0.0, 1.0) as f32,
         _ => 1.0,
     };
-    // 回転の中心は pivot、書いていなければ囲む四角形の中心。描く座標で回すので、後から掛ける
-    let spin = |bbox: Point| -> Result<Affine> {
-        let Some(Value::Number(deg, _)) = c.attrs.get("rotation") else { return Ok(Affine::IDENTITY) };
-        if *deg == 0.0 {
-            return Ok(Affine::IDENTITY);
-        }
-        let origin = match c.attrs.get("pivot") {
-            Some(v) => point_of(v, &format!("{kind}.pivot"))?,
-            None => bbox,
-        };
-        Ok(Affine::rotate_about(deg.to_radians(), transform * origin))
-    };
+    let spin = |bbox: Point| -> Result<Affine> { spin_of(c, transform, bbox) };
     if kind == "TextArea" {
         return draw_text(scene, &c.attrs, transform, &spin, scale, opacity, cache);
     }
@@ -329,6 +370,20 @@ fn draw_object(scene: &mut Scene, c: &crate::lang::value::Object, transform: Aff
         scene.pop_layer();
     }
     Ok(())
+}
+
+/// 回転の変換。中心は pivot、書いていなければ渡した点 (囲む四角形の中心)。
+/// 描く座標で回すので、置く変換の後から掛ける
+fn spin_of(c: &crate::lang::value::Object, transform: Affine, bbox: Point) -> Result<Affine> {
+    let Some(Value::Number(deg, _)) = c.attrs.get("rotation") else { return Ok(Affine::IDENTITY) };
+    if *deg == 0.0 {
+        return Ok(Affine::IDENTITY);
+    }
+    let origin = match c.attrs.get("pivot") {
+        Some(v) => point_of(v, &format!("{}.pivot", c.kind))?,
+        None => bbox,
+    };
+    Ok(Affine::rotate_about(deg.to_radians(), transform * origin))
 }
 
 /// 描画に関わる属性の指紋。変換と親の不透明度も含める
@@ -366,22 +421,9 @@ fn draw_text(scene: &mut Scene, attrs: &Attrs, transform: Affine, spin: &dyn Fn(
     let Some(Value::Str(content)) = attrs.get("text") else {
         return err(Kind::UndefinedAttribute, "TextArea.text is not set");
     };
-    let font_size = number(attrs, "fontSize", kind)?;
-    let family = match attrs.get("font") {
-        Some(Value::Str(f)) => Some(f.as_str()),
-        _ => None,
-    };
-    let max_width = match attrs.get("w") {
-        Some(Value::Number(w, _)) => Some((*w * scale) as f32),
-        _ => None,
-    };
-    let align = match attrs.get("align") {
-        Some(Value::Symbol(a)) => text::alignment(Some(a)),
-        _ => text::alignment(None),
-    };
-    let layout = cache.layout(content, family, (font_size * scale) as f32, max_width, align);
-    let (w, h) = (max_width.unwrap_or(layout.width()) as f64 / scale, f64::from(layout.height()) / scale);
-    let (cx, cy) = anchored_center(attrs, w, h, kind)?;
+    let (w, h, cx, cy) = text_box(attrs, scale, cache)?;
+    let (family, max_width, align) = text_style(attrs, scale, cache);
+    let layout = cache.layout(content, family.as_deref(), (number(attrs, "fontSize", kind)? * scale) as f32, max_width, align);
     let top_left = transform * Point::new(cx - w / 2.0, cy - h / 2.0);
     let placed = spin(Point::new(cx, cy))? * Affine::translate(top_left.to_vec2());
     let fill = color(attrs, "fill", kind)?.unwrap_or(Color::BLACK);
@@ -399,6 +441,35 @@ fn draw_text(scene: &mut Scene, attrs: &Attrs, transform: Affine, spin: &dyn Fn(
         scene.pop_layer();
     }
     Ok(())
+}
+
+/// TextArea が占める箱 (幅, 高さ, 中心の x, 中心の y)。幅と高さは箱の座標。
+/// w を書いていれば その幅で折り返し、書いていなければ 1 行の幅
+fn text_box(attrs: &Attrs, scale: f64, cache: &mut RenderCache) -> Result<(f64, f64, f64, f64)> {
+    let kind = "TextArea";
+    let Some(Value::Str(content)) = attrs.get("text") else {
+        return err(Kind::UndefinedAttribute, "TextArea.text is not set");
+    };
+    let (family, max_width, align) = text_style(attrs, scale, cache);
+    let layout = cache.layout(content, family.as_deref(), (number(attrs, "fontSize", kind)? * scale) as f32, max_width, align);
+    let (w, h) = (max_width.unwrap_or(layout.width()) as f64 / scale, f64::from(layout.height()) / scale);
+    let (cx, cy) = anchored_center(attrs, w, h, kind)?;
+    Ok((w, h, cx, cy))
+}
+
+/// 文字の組み方 (書体, 折り返す幅, 寄せ)。書体は候補のうち、この機械にある最初のもの
+fn text_style(attrs: &Attrs, scale: f64, cache: &mut RenderCache) -> (Option<String>, Option<f32>, text::Alignment) {
+    let names = attrs.get("font").map(crate::lang::eval::font_names).unwrap_or_default();
+    let family = cache.first_family(&names);
+    let max_width = match attrs.get("w") {
+        Some(Value::Number(w, _)) => Some((*w * scale) as f32),
+        _ => None,
+    };
+    let align = match attrs.get("align") {
+        Some(Value::Symbol(a)) => text::alignment(Some(a)),
+        _ => text::alignment(None),
+    };
+    (family, max_width, align)
 }
 
 fn number(attrs: &Attrs, name: &str, kind: &str) -> Result<f64> {

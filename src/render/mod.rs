@@ -1,5 +1,6 @@
 //! 絵と音の出力: GPU 描画、Shader、文字、動画のエンコード、音声と字幕、プレビュー
 pub mod audio;
+pub mod budget;
 pub mod encode;
 pub mod frames;
 pub mod gpu;

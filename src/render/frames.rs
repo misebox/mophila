@@ -25,8 +25,8 @@ pub struct Job {
     pub height: f64,
 }
 
-/// 組み立てた 1 フレーム
-pub type Frame = Result<(usize, Scene), String>;
+/// 組み立てた 1 フレーム (番号, 描画命令, 要った GPU のメモリ)
+pub type Frame = Result<(usize, Scene, crate::render::text::Bytes), String>;
 
 /// フレームを順に受け取る。裏で n 本のスレッドが先回りして組む
 pub struct Frames {
@@ -80,13 +80,14 @@ fn build(job: &Job, mine: &[(usize, f64)], tx: &SyncSender<Frame>) {
     };
     let tracks = crate::lang::eval::all_tracks(&view);
     for &(i, t) in mine {
-        let frame = (|| -> Result<Scene, Box<dyn Error>> {
+        let frame = (|| -> Result<(Scene, crate::render::text::Bytes), Box<dyn Error>> {
             interp.begin_frame(t);
             interp.apply_tracks(&tracks, t)?;
-            Ok(crate::render::scene::build(&view, job.width, job.height, t, interp.cache_mut())?)
+            let scene = crate::render::scene::build(&view, job.width, job.height, t, interp.cache_mut())?;
+            Ok((scene, interp.cache_mut().bytes()))
         })();
         let message = match frame {
-            Ok(scene) => Ok((i, scene)),
+            Ok((scene, bytes)) => Ok((i, scene, bytes)),
             Err(e) => Err(e.to_string()),
         };
         if tx.send(message).is_err() {

@@ -34,6 +34,12 @@ impl HeadlessRenderer {
             adapter.request_device(&wgpu::DeviceDescriptor { required_limits: limits, ..Default::default() }),
         )?;
 
+        // 足りないと言われたら、何をしていたかを出して止める (既定は種別だけで panic する)
+        device.on_uncaptured_error(std::sync::Arc::new(|e: wgpu::Error| {
+            crate::render::budget::on_gpu_error(&e);
+            panic!("wgpu error: {e}");
+        }));
+
         let renderer = Renderer::new(
             &device,
             RendererOptions {

@@ -752,6 +752,9 @@ let v = View(box = Vector(config.width, 9))
 | NameError | `UndefinedVariable` / `UndefinedAttribute` / `AssignWithoutLet` let を書かずに初めて代入した / `Reserved` builtin の型の名前を宣言し直した |
 | TypeError | `OperandType` 演算子の左右 / `AttributeType` 属性に入れる値 / `ArgumentType` 引数 / `ArityMismatch` 引数や列の数 / `NotPlaceable` place できない型 |
 | ValueError | `DurationRequired` 時刻の単位が混在、相対時刻なのに duration が無い / `OutOfRange` 型は合うが値が範囲外 / `AlreadyPlaced` 同じ View を 2 か所に置いた |
-| RuntimeError | `DivisionByZero` / `FontNotFound` / `AudioUnreadable` / `ImageUnreadable` / `ShaderCompile` / `ShaderUnavailable` / `EndlessLoop` |
+| RuntimeError | `DivisionByZero` / `FontNotFound` / `AudioUnreadable` / `ImageUnreadable` / `ShaderCompile` / `ShaderUnavailable` / `EndlessLoop` / `OutOfMemory` |
 
 `ShaderCompile` と `ShaderUnavailable` は描画のときに出る。`run` では Shader を走らせないので出ない。
+`OutOfMemory` も描画のときで、GPU のメモリが足りないときに、何を (Shader のテクスチャか、ズームの帯か)
+どれだけ確保できなかったかと、そのコマの合計を出す。`render --gpu-budget 2GB` を書いておくと、
+足りなくなる前に、超えたコマの時刻と内訳を警告で出す。

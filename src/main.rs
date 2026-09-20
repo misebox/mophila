@@ -149,6 +149,9 @@ struct OutputArgs {
     /// Only helps when building costs more than drawing. A Shader always uses one
     #[arg(long, default_value_t = 1)]
     jobs: usize,
+    /// Warn about frames that need more GPU memory than this (e.g. 512MB, 2GB)
+    #[arg(long, value_parser = parse_bytes)]
+    gpu_budget: Option<u64>,
 }
 
 /// --trim の区間。None は端まで
@@ -207,6 +210,24 @@ const SIZE_NAMES: &[(&str, (u32, u32))] = &[
     ("svga", (800, 600)),
     ("xga", (1024, 768)),
 ];
+
+/// "512MB" "2GB" "1500000" をバイト数にする
+fn parse_bytes(s: &str) -> Result<u64, String> {
+    let lower = s.trim().to_ascii_lowercase();
+    let (number, unit) = match lower.find(|c: char| c.is_alphabetic()) {
+        Some(i) => lower.split_at(i),
+        None => (lower.as_str(), ""),
+    };
+    let value: f64 = number.trim().parse().map_err(|_| format!("invalid size: {s}"))?;
+    let scale = match unit.trim() {
+        "" | "b" => 1.0,
+        "k" | "kb" => 1024.0,
+        "m" | "mb" => 1024.0 * 1024.0,
+        "g" | "gb" => 1024.0 * 1024.0 * 1024.0,
+        other => return Err(format!("unknown unit \"{other}\" (use MB or GB)")),
+    };
+    Ok((value * scale) as u64)
+}
 
 fn parse_size(s: &str) -> Result<(u32, u32), String> {
     let lower = s.to_ascii_lowercase();
@@ -468,13 +489,16 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
             workers,
         )
     });
+    // 読み戻しのバッファ 2 枚は、コマによらず要る
+    let readback = 2 * u64::from((width * 4).next_multiple_of(256)) * u64::from(height);
+    let mut budget = render::budget::Budget::new(args.gpu_budget, readback);
     for (i, t) in times.iter().copied().enumerate() {
-        let scene = match &mut frames {
+        let (scene, bytes) = match &mut frames {
             // 別スレッドが組んだもの。配った順に届く
-            Some(frames) => timing.measure("frame", || -> Result<vello::Scene, Box<dyn Error>> {
+            Some(frames) => timing.measure("frame", || -> Result<(vello::Scene, render::text::Bytes), Box<dyn Error>> {
                 match frames.recv() {
-                    Some(Ok((n, scene))) if n == i => Ok(scene),
-                    Some(Ok((n, _))) => Err(format!("frames came back out of order (got {n} where {i} was expected)").into()),
+                    Some(Ok((n, scene, bytes))) if n == i => Ok((scene, bytes)),
+                    Some(Ok((n, ..))) => Err(format!("frames came back out of order (got {n} where {i} was expected)").into()),
                     Some(Err(e)) => Err(e.into()),
                     None => Err("a frame worker died".into()),
                 }
@@ -485,9 +509,11 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
                     interp.apply_tracks(&tracks, t)?;
                     Ok(())
                 })?;
-                timing.measure("scene", || render::scene::build(&view, f64::from(width), f64::from(height), t, interp.cache_mut()))?
+                let scene = timing.measure("scene", || render::scene::build(&view, f64::from(width), f64::from(height), t, interp.cache_mut()))?;
+                (scene, interp.cache_mut().bytes())
             }
         };
+        budget.see(t, bytes);
         // 読み戻しは、次のフレームを組んだ後に行う (GPU が描いている間に CPU が組み立てる)
         if pending.len() >= depth {
             let prev = pending.pop_front().expect("a frame is waiting");
@@ -503,6 +529,7 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
     }
     timing.measure("finish", || ffmpeg.finish())?;
     progress.finish();
+    budget.report();
 
     timing.report();
     Ok(())

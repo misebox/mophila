@@ -37,6 +37,8 @@ pub enum Kind {
     ShaderUnavailable,
     /// while が止まらない
     EndlessLoop,
+    /// GPU のメモリが足りない
+    OutOfMemory,
 }
 
 pub const KINDS: &[Kind] = &[
@@ -61,6 +63,7 @@ pub const KINDS: &[Kind] = &[
     Kind::ShaderCompile,
     Kind::ShaderUnavailable,
     Kind::EndlessLoop,
+    Kind::OutOfMemory,
 ];
 
 impl Kind {
@@ -88,6 +91,7 @@ impl Kind {
             Kind::ShaderCompile => "Shader を WGSL に変換できない",
             Kind::ShaderUnavailable => "GPU が使えないので Shader を走らせられない",
             Kind::EndlessLoop => "while が決めた回数を超えても終わらない",
+            Kind::OutOfMemory => "GPU のメモリが足りない。何をどれだけ確保できなかったかを出す",
         }
     }
 
@@ -114,6 +118,7 @@ impl Kind {
             Kind::ShaderCompile => "RuntimeError.ShaderCompile",
             Kind::ShaderUnavailable => "RuntimeError.ShaderUnavailable",
             Kind::EndlessLoop => "RuntimeError.EndlessLoop",
+            Kind::OutOfMemory => "RuntimeError.OutOfMemory",
         }
     }
 }

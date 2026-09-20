@@ -3,7 +3,8 @@
 use std::collections::HashMap;
 
 use parley::fontique::Collection;
-use parley::layout::{Alignment, AlignmentOptions, Layout, PositionedLayoutItem};
+pub use parley::layout::Alignment;
+use parley::layout::{AlignmentOptions, Layout, PositionedLayoutItem};
 use parley::style::{FontFamily, FontFamilyName, GenericFamily, StyleProperty};
 use parley::{FontContext, LayoutContext};
 use vello::Scene;
@@ -56,6 +57,11 @@ impl RenderCache {
 
     /// 名前が見つからないときに出す、近いもの。
     /// 共有する語の数を第一に、頭からどれだけ一致するかを第二に見る
+    /// 候補のうち、この機械にある最初の名前
+    pub fn first_family(&mut self, names: &[String]) -> Option<String> {
+        names.iter().find(|n| self.family_exists(n)).cloned()
+    }
+
     pub fn nearest(&mut self, wanted: &str) -> Vec<String> {
         let wanted_lower = wanted.to_lowercase();
         let words: Vec<&str> = wanted_lower.split_whitespace().collect();

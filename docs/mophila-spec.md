@@ -120,7 +120,7 @@ builtin の型の名前は予約されていて、`struct` / `record` / `type` �
 
 既存の型を `|` で結んだ名前。`type Fill = Color | Gradient`。値は作れず、引数や属性の型として書く。
 
-言語が持つ union: `Shape` (図形すべて)、`Placeable` (`Shape | View`)、`Paint` (`Color | Gradient | Shader`)。
+言語が持つ union: `Shape` (図形すべて)、`Placeable` (`Shape | View`)、`Paint` (`Color | Gradient | Shader`)、`Font` (`String | List`。候補を並べられる)。
 
 ### 3.6 record と struct
 
@@ -553,7 +553,7 @@ for (i, c) in ["赤", "青"].enumerate() { }      # (0, "赤"), (1, "青")
 for (k, v) in { "赤": 1, "青": 2 } { }          # ("赤", 1), ("青", 2)
 ```
 
-`for` が回せるのは Range、List、Tuple、Dict。String は回せない。`break` と `continue` は無い。
+`for` が回せるのは Range、List、Tuple、Dict。String は回せない。`break` でその場で抜ける (`continue` は無い)。
 
 ### 4.3 関数
 

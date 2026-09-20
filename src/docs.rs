@@ -448,6 +448,16 @@ pub const TYPES: &[Type] = &[
         doc: "View の中に place できるものをまとめた名前。図形と View",
     },
     Type {
+        name: "Font",
+        category: "Union",
+        union: "",
+        make: "\"Hiragino Sans\"\n[\"Hiragino Sans\", \"Noto Sans JP\"]",
+        values: &[],
+        members: &["String", "List"],
+        doc: "書体の名前。1 つ書くか、候補を List で並べる。List ならこの機械にある最初のものを使い、\
+              どれも無いときだけエラーになる。決まった名前は読み返せる (t.font)",
+    },
+    Type {
         name: "Paint",
         category: "Union",
         union: "",
@@ -514,7 +524,7 @@ pub const ATTRS: &[(&str, &str, &str)] = &[
     ("Polygon", "points", "頂点。Vector の List"),
     ("TextArea", "text", "文字列"),
     ("TextArea", "w", "折り返す幅 (省略なら折り返さない)"),
-    ("TextArea", "font", "フォント名"),
+    ("TextArea", "font", "書体の名前。候補を List で並べると、この機械にある最初のものを使う"),
     ("TextArea", "fontSize", "文字の大きさ (箱の座標の単位)"),
     ("TextArea", "align", ":left :center :right"),
     ("View", "box", "座標系の幅と高さ。ピクセルは持たない"),

@@ -839,7 +839,7 @@ builtin の型の名前は予約されていて、`struct` / `record` / `type` �
 
 既存の型を `|` で結んだ名前。`type Fill = Color | Gradient`。値は作れず、引数や属性の型として書く。
 
-言語が持つ union: `Shape` (図形すべて)、`Placeable` (`Shape | View`)、`Paint` (`Color | Gradient | Shader`)。
+言語が持つ union: `Shape` (図形すべて)、`Placeable` (`Shape | View`)、`Paint` (`Color | Gradient | Shader`)、`Font` (`String | List`。候補を並べられる)。
 
 #### 3.6 record と struct
 
@@ -1272,7 +1272,7 @@ for (i, c) in ["赤", "青"].enumerate() { }      # (0, "赤"), (1, "青")
 for (k, v) in { "赤": 1, "青": 2 } { }          # ("赤", 1), ("青", 2)
 ```
 
-`for` が回せるのは Range、List、Tuple、Dict。String は回せない。`break` と `continue` は無い。
+`for` が回せるのは Range、List、Tuple、Dict。String は回せない。`break` でその場で抜ける (`continue` は無い)。
 
 #### 4.3 関数
 
@@ -1914,7 +1914,7 @@ TextArea(text = "hello", position = Pos(8, 4.5), fontSize = 1, fill = #303030)
 - `text`: String (必須) — 文字列
 - `fontSize`: Number (必須) — 文字の大きさ (箱の座標の単位)
 - `w`: Number — 折り返す幅 (省略なら折り返さない)
-- `font`: String — フォント名
+- `font`: Font — 書体の名前。候補を List で並べると、この機械にある最初のものを使う
 - `align`: Align — :left :center :right
 - `fill`: Paint — 塗り。Color か Shader
 - `stroke`: Color — 線の色
@@ -2245,6 +2245,19 @@ Gradient の kind。stops の色をどの向きに並べるか
 View の中に place できるものをまとめた名前。図形と View
 
 まとめている型: Shape | View
+
+### Font
+
+書体の名前。1 つ書くか、候補を List で並べる。List ならこの機械にある最初のものを使い、どれも無いときだけエラーになる。決まった名前は読み返せる (t.font)
+
+作り方:
+
+```
+"Hiragino Sans"
+["Hiragino Sans", "Noto Sans JP"]
+```
+
+まとめている型: String | List
 
 ### Paint
 

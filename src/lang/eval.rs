@@ -436,6 +436,29 @@ impl Interp {
         self.types.get(name).is_some_and(|members| members.iter().any(|m| self.matches_type(v, m)))
     }
 
+    /// font に書いた候補から、この機械にある最初の名前を選ぶ。1 つも無ければエラー。
+    /// 選んだ後は 1 つの名前になるので、読み返すとどれが使われたか分かる
+    fn pick_font(&mut self, v: &Value) -> Result<Value> {
+        let names = font_names(v);
+        if names.is_empty() {
+            return Ok(v.clone());
+        }
+        if let Some(found) = self.cache_mut().first_family(&names) {
+            return Ok(Value::Str(found));
+        }
+        // 何が使えるか分からないと直せないので、近い名前を並べる
+        let near = self.cache_mut().nearest(&names[0]);
+        let hint = match near.is_empty() {
+            true => "; \"mophila fonts\" lists the ones this machine has".to_string(),
+            false => format!("; did you mean {}? (\"mophila fonts\" lists them all)", near.iter().map(|n| format!("\"{n}\"")).collect::<Vec<_>>().join(", ")),
+        };
+        let wanted = names.iter().map(|n| format!("\"{n}\"")).collect::<Vec<_>>().join(", ");
+        match names.len() {
+            1 => err(Kind::FontNotFound, format!("font {wanted} not found{hint}")),
+            _ => err(Kind::FontNotFound, format!("none of the fonts {wanted} are on this machine{hint}")),
+        }
+    }
+
     /// その値が struct / record なら、その宣言
     fn declared(&self, v: &Value) -> Option<Rc<UserType>> {
         match v {
@@ -1044,19 +1067,11 @@ impl Interp {
                             let has_camera = args.iter().any(|a| a.name.as_deref() == Some("camera"));
                             crate::render::shader::compile(closure, has_camera)?;
                         }
-                        if kind == "TextArea" && name == "font" {
-                            if let Value::Str(family) = &v {
-                                if !self.cache_mut().family_exists(family) {
-                                    // 何が使えるか分からないと直せないので、近い名前を並べる
-                                    let near = self.cache_mut().nearest(&family);
-                                    let hint = match near.is_empty() {
-                                        true => "; \"mophila fonts\" lists the ones this machine has".to_string(),
-                                        false => format!("; did you mean {}? (\"mophila fonts\" lists them all)", near.iter().map(|n| format!("\"{n}\"")).collect::<Vec<_>>().join(", ")),
-                                    };
-                                    return err(Kind::FontNotFound, format!("font \"{family}\" not found{hint}"));
-                                }
-                            }
-                        }
+                        // 候補を並べて書けるので、この機械にある最初のものに決める
+                        let v = match kind == "TextArea" && name == "font" {
+                            true => self.pick_font(&v)?,
+                            false => v,
+                        };
                         attrs.insert(name, v);
                     }
                     // 書かなかった属性も、既定のある分は入れておく。描く側と読む側が同じ値を見る
@@ -1592,10 +1607,8 @@ impl Interp {
                     let Some(Value::Number(size, _)) = o.attrs.get("fontSize") else {
                         return err(Kind::UndefinedAttribute, "TextArea.fontSize is not set");
                     };
-                    let font = match o.attrs.get("font") {
-                        Some(Value::Str(f)) => Some(f.clone()),
-                        _ => None,
-                    };
+                    // 候補が並んでいることもあるので、描くときと同じ選び方をする
+                    let font = o.attrs.get("font").map(font_names).unwrap_or_default();
                     let wrap = match o.attrs.get("w") {
                         Some(Value::Number(w, _)) => Some(*w as f32),
                         _ => None,
@@ -1608,7 +1621,8 @@ impl Interp {
                 };
                 // 箱の単位のまま組む (1 ユニット = 1 ピクセルとして測り、そのまま返す)
                 let align = crate::render::text::alignment(align.as_deref());
-                let layout = self.cache_mut().layout(&text, font.as_deref(), size as f32, wrap, align);
+                let family = self.cache_mut().first_family(&font);
+                let layout = self.cache_mut().layout(&text, family.as_deref(), size as f32, wrap, align);
                 let (w, h) = (f64::from(layout.width()), f64::from(layout.height()));
                 Ok(Value::Vector(wrap.map_or(w, f64::from), h))
             }
@@ -2322,6 +2336,19 @@ fn same_place(before: &Value, after: &Value) -> bool {
 
 /// 属性の型に値が合うか。builtin の Union (Paint = Color | Shader) もここで見る
 /// builtin 型の名前 (補完用)
+/// font に書いた候補。String 1 つなら 1 つ、List なら中の String を順に。
+/// 書体は「あれば使う」ものなので、String でないものは黙って飛ばす
+pub fn font_names(v: &Value) -> Vec<String> {
+    match v {
+        Value::Str(name) => vec![name.clone()],
+        Value::List(items) => items.borrow().iter().filter_map(|i| match i {
+            Value::Str(name) => Some(name.clone()),
+            _ => None,
+        }).collect(),
+        _ => Vec::new(),
+    }
+}
+
 pub const KINDS: &[&str] =
     &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "View", "Timeline", "Narration", "SayVoiceEngine", "EspeakVoiceEngine", "Shader", "ZoomPath", "Camera", "Gradient", "Color"];
 
@@ -2455,7 +2482,7 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
         req("text", "String"),
         req("fontSize", "Number"),
         opt("w", "Number"),
-        opt("font", "String"),
+        opt("font", "Font"),
         opt("align", "Align"),
         PAINT,
         LINE[0],

@@ -44,7 +44,7 @@ let track = Timeline()
 track.place(move, at = 0s)
 track.place(widen, at = 0.5s)
 track.place(appear, at = 3s)
-# 文字が出そろう 4s から 3 秒見せて、最後の 1 秒で箱ごと消える
-track.place(fade_out(stage, 1s), at = 7s)
+# 文字が出そろう 4s から 1.5 秒見せて、最後の 1 秒で箱ごと消える
+track.place(fade_out(stage, 1s), at = 5.5s)
 v.addTrack(track)
 output v

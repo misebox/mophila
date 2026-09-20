@@ -1,4 +1,4 @@
-# bounce.moph — 色の違うボールが順に落ちて弾み、8 秒後に逆再生で戻る。落下は ease_in (加速)、上昇は ease_out (減速)
+# bounce.moph — 色の違うボールが順に落ちて弾み、弾み終えてすぐ逆再生で戻る。落下は ease_in (加速)、上昇は ease_out (減速)
 
 let v = View(box = Vector(16, 9))
 v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #1c1c24))
@@ -56,8 +56,8 @@ for (i, color) in colors.enumerate() {
   track.place(fall, at = i * 0.3s)
   track.place(pulse, at = i * 0.3s)
   # 逆再生。reverse は区間ごとの ease_in / ease_out を入れ替える
-  track.place(fall.reverse(), at = 8s + i * 0.3s)
-  track.place(pulse.reverse(), at = 8s + i * 0.3s)
+  track.place(fall.reverse(), at = 5.2s + i * 0.3s)
+  track.place(pulse.reverse(), at = 5.2s + i * 0.3s)
 }
 
 let title = TextArea(text = "bounce", position = Pos(0.5, 0.3, anchor = :topLeft), fontSize = 0.6, fill = #d0d0d8)

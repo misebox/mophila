@@ -15,6 +15,6 @@ let grow = context ball as c {
 }
 
 let track = Timeline()
-track.place(grow, at = 1s)
+track.place(grow, at = 0.3s)
 v.addTrack(track)
 output v

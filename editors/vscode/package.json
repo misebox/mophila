@@ -30,8 +30,8 @@
       "properties": {
         "mophila.serverPath": {
           "type": "string",
-          "default": "mophila",
-          "description": "Path to the mophila binary. The server is started as `<serverPath> lsp`."
+          "default": "",
+          "description": "Path to the mophila binary. The server is started as `<serverPath> lsp`. Empty means look in PATH, then ~/.cargo/bin and the usual places."
         }
       }
     }

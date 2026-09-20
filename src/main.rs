@@ -245,14 +245,20 @@ fn run() -> Result<(), Box<dyn Error>> {
     if let Some(p) = &project {
         p.announce();
     }
+    // 走らせているスクリプト。エラーにファイル名を付けるのに使う
+    let running = std::cell::RefCell::new(String::new());
     // スクリプトを書かなければ mophila.yaml の entry。どちらも無ければエラー
     let entry = |script: Option<String>| -> Result<String, Box<dyn Error>> {
-        match (script, project.as_ref().and_then(|p| p.entry.clone())) {
-            (Some(s), _) => Ok(s),
-            (None, Some(e)) => Ok(e.to_string_lossy().into_owned()),
-            (None, None) => Err(format!("name a script, or put an entry in {}", project::FILE_NAME).into()),
-        }
+        let path = match (script, project.as_ref().and_then(|p| p.entry.clone())) {
+            (Some(s), _) => s,
+            (None, Some(e)) => e.to_string_lossy().into_owned(),
+            (None, None) => return Err(format!("name a script, or put an entry in {}", project::FILE_NAME).into()),
+        };
+        *running.borrow_mut() = path.clone();
+        Ok(path)
     };
+    // 途中の ? でここを飛び越えないように、いったん閉じてから受ける
+    let result = (|| -> Result<(), Box<dyn Error>> {
     match cli.command {
         Command::Render { script, mut out } => {
             let script = entry(script)?;
@@ -260,11 +266,11 @@ fn run() -> Result<(), Box<dyn Error>> {
             if out.output.is_none() {
                 out.output = Some(if out.at.is_some() { "output.png" } else { "output.mp4" }.to_string());
             }
-            render(&std::fs::read_to_string(&script)?, base_dir(&script), None, &project, file_name(&script), out)
+            render(&read_script(&script)?, base_dir(&script), None, &project, file_name(&script), out)
         }
         Command::Run { script } => {
             let script = entry(script)?;
-            let stmts = lang::parser::parse(&std::fs::read_to_string(&script)?)?;
+            let stmts = lang::parser::parse(&read_script(&script)?)?;
             let mut interp = lang::eval::Interp::new();
             interp.base_dir = base_dir(&script);
             if let Some(p) = &project {
@@ -275,13 +281,13 @@ fn run() -> Result<(), Box<dyn Error>> {
         }
         Command::Preview { script, size, r#loop, at } => {
             let script = entry(script)?;
-            let (interp, view, duration) = load(&std::fs::read_to_string(&script)?, base_dir(&script), None, &project)?;
+            let (interp, view, duration) = load(&read_script(&script)?, base_dir(&script), None, &project)?;
             let media = render::media::prepare(&view, duration, 0.0, duration, true, &render::voice::cache_dir())?;
             render::preview::run(file_name(&script), interp, view, duration, size, r#loop, at, &media)
         }
         Command::Timeline { script, filter } => {
             let script = entry(script)?;
-            let (mut interp, view, duration) = load(&std::fs::read_to_string(&script)?, base_dir(&script), None, &project)?;
+            let (mut interp, view, duration) = load(&read_script(&script)?, base_dir(&script), None, &project)?;
             let filter = report::Filter::parse(&filter)?;
             let events = report::collect(&mut interp, &view);
             println!("duration: {duration:.2}s\n");
@@ -296,11 +302,11 @@ fn run() -> Result<(), Box<dyn Error>> {
         }
         Command::Sheet { script, output, every, times, cell, cols } => {
             let script = entry(script)?;
-            sheet(&std::fs::read_to_string(&script)?, base_dir(&script), &project, &output, every, times, cell, cols)
+            sheet(&read_script(&script)?, base_dir(&script), &project, &output, every, times, cell, cols)
         }
         Command::Subs { script, output, trim } => {
             let script = entry(script)?;
-            let (_, view, duration) = load(&std::fs::read_to_string(&script)?, base_dir(&script), None, &project)?;
+            let (_, view, duration) = load(&read_script(&script)?, base_dir(&script), None, &project)?;
             let trim = trim.unwrap_or(Trim { from: None, to: None });
             let from = trim.from.unwrap_or(0.0).min(duration);
             let to = trim.to.unwrap_or(duration).min(duration);
@@ -336,11 +342,30 @@ fn run() -> Result<(), Box<dyn Error>> {
         }
         Command::Bundle { script, output } => bundle::write(std::path::Path::new(&entry(script)?), &output),
     }
+    })();
+    // import 先で起きたエラーには "in ./x.moph:" が付くが、書いたファイル自身には付かない。ここで足す
+    in_script(&running.borrow(), result)
+}
+
+/// スクリプトの実行で起きたエラーに、そのファイル名を足す
+fn in_script<T>(script: &str, result: Result<T, Box<dyn Error>>) -> Result<T, Box<dyn Error>> {
+    if script.is_empty() {
+        return result;
+    }
+    result.map_err(|e| match e.downcast::<lang::error::MophError>() {
+        Ok(m) => Box::new(lang::error::MophError::new(m.kind, format!("in {script}: {}", m.message))) as Box<dyn Error>,
+        Err(other) => other,
+    })
 }
 
 /// タイトルバーに出す名前 (パスと拡張子を除いたファイル名)
 fn file_name(script: &str) -> String {
     std::path::Path::new(script).file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| script.to_string())
+}
+
+/// スクリプトを読む。読めなければ、どのファイルかを言う
+fn read_script(path: &str) -> Result<String, Box<dyn Error>> {
+    std::fs::read_to_string(path).map_err(|e| format!("cannot read \"{path}\": {e}").into())
 }
 
 /// スクリプトのあるディレクトリ。import "file" の基準

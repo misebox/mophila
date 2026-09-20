@@ -1,6 +1,6 @@
 [package]
 name = "mophila"
-version = "0.1.10"
+version = "0.1.11"
 edition = "2024"
 description = "A language for writing motion graphics videos as code"
 license = "MIT"

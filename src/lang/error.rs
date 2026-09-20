@@ -35,6 +35,8 @@ pub enum Kind {
     ImageUnreadable,
     ShaderCompile,
     ShaderUnavailable,
+    /// while が止まらない
+    EndlessLoop,
 }
 
 pub const KINDS: &[Kind] = &[
@@ -58,6 +60,7 @@ pub const KINDS: &[Kind] = &[
     Kind::ImageUnreadable,
     Kind::ShaderCompile,
     Kind::ShaderUnavailable,
+    Kind::EndlessLoop,
 ];
 
 impl Kind {
@@ -84,6 +87,7 @@ impl Kind {
             Kind::ImageUnreadable => "画像ファイルを読めない",
             Kind::ShaderCompile => "Shader を WGSL に変換できない",
             Kind::ShaderUnavailable => "GPU が使えないので Shader を走らせられない",
+            Kind::EndlessLoop => "while が決めた回数を超えても終わらない",
         }
     }
 
@@ -109,6 +113,7 @@ impl Kind {
             Kind::ImageUnreadable => "RuntimeError.ImageUnreadable",
             Kind::ShaderCompile => "RuntimeError.ShaderCompile",
             Kind::ShaderUnavailable => "RuntimeError.ShaderUnavailable",
+            Kind::EndlessLoop => "RuntimeError.EndlessLoop",
         }
     }
 }

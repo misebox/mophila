@@ -553,7 +553,21 @@ for (i, c) in ["赤", "青"].enumerate() { }      # (0, "赤"), (1, "青")
 for (k, v) in { "赤": 1, "青": 2 } { }          # ("赤", 1), ("青", 2)
 ```
 
-`for` が回せるのは Range、List、Tuple、Dict。String は回せない。`break` でその場で抜ける (`continue` は無い)。
+`for` が回せるのは Range、List、Tuple、Dict。String は回せない。
+
+回数が先に決まらない繰り返しは `while`。
+
+```
+while total < target {                         # 条件が偽になるまでくり返す
+  total = total + step
+}
+```
+
+`break` は `for` と `while` のどちらもその場で抜ける (`continue` は無い)。
+
+`while` が 100 万回回っても条件が偽にならなければ `RuntimeError.EndlessLoop`。1 フレームを組む間の回数なので、
+まともな探索がこの回数を要ることは無い。止まらない書き方をしたまま描き続けるより、そこで知らせる。
+Shader の中では `while` は使えない (回数の決まらない繰り返しは GPU ごと固まるため)。`for` と `break` で書く。
 
 ### 4.3 関数
 
@@ -738,6 +752,6 @@ let v = View(box = Vector(config.width, 9))
 | NameError | `UndefinedVariable` / `UndefinedAttribute` / `AssignWithoutLet` let を書かずに初めて代入した / `Reserved` builtin の型の名前を宣言し直した |
 | TypeError | `OperandType` 演算子の左右 / `AttributeType` 属性に入れる値 / `ArgumentType` 引数 / `ArityMismatch` 引数や列の数 / `NotPlaceable` place できない型 |
 | ValueError | `DurationRequired` 時刻の単位が混在、相対時刻なのに duration が無い / `OutOfRange` 型は合うが値が範囲外 / `AlreadyPlaced` 同じ View を 2 か所に置いた |
-| RuntimeError | `DivisionByZero` / `FontNotFound` / `AudioUnreadable` / `ImageUnreadable` / `ShaderCompile` / `ShaderUnavailable` |
+| RuntimeError | `DivisionByZero` / `FontNotFound` / `AudioUnreadable` / `ImageUnreadable` / `ShaderCompile` / `ShaderUnavailable` / `EndlessLoop` |
 
 `ShaderCompile` と `ShaderUnavailable` は描画のときに出る。`run` では Shader を走らせないので出ない。

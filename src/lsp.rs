@@ -22,7 +22,7 @@ use crate::lang::lexer::{Tok, Token, lex};
 use crate::lang::value::Value;
 
 const KEYWORDS: &[&str] = &[
-    "let", "func", "if", "else", "for", "in", "and", "or", "not", "true", "false", "return", "context", "as", "motion", "output",
+    "let", "func", "if", "else", "for", "while", "in", "and", "or", "not", "true", "false", "return", "context", "as", "motion", "output",
     "import", "export", "from", "type", "record", "struct", "method", "private", "alias",
 ];
 const SYMBOLS: &[&str] = &[

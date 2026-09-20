@@ -17,6 +17,7 @@ stmt        ::= let-stmt
               | output-stmt
               | return-stmt
               | for-stmt
+              | while-stmt
               | assign-stmt
               | expr
 
@@ -40,6 +41,7 @@ export-stmt ::= "export" sp (let-stmt | func-decl | type-decl)
 output-stmt ::= "output" sp expr
 return-stmt ::= "return" sp expr
 for-stmt    ::= "for" sp pattern sp "in" sp expr ws block
+while-stmt  ::= "while" sp expr ws block
 assign-stmt ::= target ws "=" ws expr
               | target (ws "," ws target)+ ws "=" ws expr (ws "," ws expr)+
 target      ::= ident | expr "." ident | expr "[" ws expr ws "]"

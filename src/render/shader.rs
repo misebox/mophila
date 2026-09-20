@@ -223,6 +223,8 @@ impl Gen {
                 Ok(None)
             }
             StmtKind::For(..) => err(KIND, "for in a shader must bind one name: for i in 0..n"),
+            // 回数の決まらない繰り返しは GPU を止めてしまう (画面ごと固まる) ので受け取らない
+            StmtKind::While(..) => err(KIND, "while is not available in a shader; use a for with a range and break out of it"),
             StmtKind::Break => {
                 out.line("break;");
                 Ok(None)

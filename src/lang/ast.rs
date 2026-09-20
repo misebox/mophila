@@ -191,7 +191,9 @@ pub enum StmtKind {
     AssignAttr(Expr, String, Expr),
     Output(Expr),
     For(Pattern, Expr, Vec<Stmt>),
-    /// for を抜ける
+    /// 条件が満たされている間くり返す
+    While(Expr, Vec<Stmt>),
+    /// for や while を抜ける
     Break,
     Return(Expr),
     Expr(Expr),

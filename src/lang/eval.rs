@@ -264,6 +264,26 @@ impl Interp {
                 }
                 Ok(Flow::Next(Value::Nothing))
             }
+            StmtKind::While(cond, body) => {
+                // 止まらない while を見つけるための上限。真面目な探索がこの回数を要ることは無い
+                for _ in 0..LOOP_LIMIT {
+                    if !self.eval_bool(cond)? {
+                        return Ok(Flow::Next(Value::Nothing));
+                    }
+                    self.scopes.push(new_scope());
+                    let result = self.run_block(body);
+                    self.scopes.pop();
+                    match result? {
+                        Flow::Return(v) => return Ok(Flow::Return(v)),
+                        Flow::Break => {
+                            self.breaking = false;
+                            return Ok(Flow::Next(Value::Nothing));
+                        }
+                        Flow::Next(_) => {}
+                    }
+                }
+                err(Kind::EndlessLoop, format!("this while ran {LOOP_LIMIT} times without its condition becoming false"))
+            }
             StmtKind::Break => Ok(Flow::Break),
             StmtKind::Return(e) => Ok(Flow::Return(self.eval(e)?)),
             StmtKind::Expr(e) => Ok(Flow::Next(self.eval(e)?)),
@@ -2349,6 +2369,9 @@ pub fn font_names(v: &Value) -> Vec<String> {
     }
 }
 
+/// while を 1 回の評価で回せる上限。超えたら止まらない繰り返しとみなす
+const LOOP_LIMIT: usize = 1_000_000;
+
 pub const KINDS: &[&str] =
     &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "View", "Timeline", "Narration", "SayVoiceEngine", "EspeakVoiceEngine", "Shader", "ZoomPath", "Camera", "Gradient", "Color"];
 
@@ -2768,6 +2791,15 @@ mod tests {
         }
         assert_eq!(sum, f64::from(n) * f64::from(n - 1) / 2.0);
         assert!(started.elapsed() < std::time::Duration::from_secs(2), "indexing took {:?}", started.elapsed());
+    }
+
+    /// while は止まらないことがあるので、回数に上限を置いて知らせる
+    #[test]
+    fn an_endless_while_stops_with_an_error() {
+        let src = "let n = 0\nwhile true { n = n + 1 }\n";
+        let stmts = crate::lang::parser::parse(src).expect("parses");
+        let err = Interp::new().run(&stmts).expect_err("the loop never ends");
+        assert_eq!(err.kind, Kind::EndlessLoop, "got {err}");
     }
 
     /// 標準ライブラリは実行ファイルに埋め込んであり、ディスクには無い。

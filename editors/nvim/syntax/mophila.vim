@@ -7,7 +7,7 @@ endif
 
 syn case match
 
-syn keyword mophKeyword let func return if else for in import export as type record struct method private alias context motion output
+syn keyword mophKeyword let func return break if else for while in import export as type record struct method private alias context motion output
 syn keyword mophOperatorWord and or not
 syn keyword mophBoolean true false
 syn keyword mophBuiltin log type_of

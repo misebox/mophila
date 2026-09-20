@@ -25,7 +25,8 @@
 #    ├─ FontNotFound
 #    ├─ AudioUnreadable      import した音声を ffprobe が読めない (音声ストリームが無い、ffprobe が無い)
 #    ├─ ShaderCompile        Shader の関数に GPU で計算できないものがある (描画時に出る)
-#    └─ ShaderUnavailable    GPU の無い場面で Shader を描こうとした
+#    ├─ ShaderUnavailable    GPU の無い場面で Shader を描こうとした
+#    └─ EndlessLoop          while が 100 万回回っても条件が偽にならない
 
 # ---- SyntaxError ----
 let d = #e0404                 # SyntaxError.InvalidLiteral: color literal must have 3, 4, 6 or 8 hex digits
@@ -69,3 +70,4 @@ let h = #e04040 * 2            # ValueError.OutOfRange: color channel exceeds 1.
 # ---- RuntimeError ----
 let g = 1 / (n - n)            # RuntimeError.DivisionByZero: division by zero
 let t2 = TextArea(text = "a", font = "NoSuchFont")   # RuntimeError.FontNotFound: font "NoSuchFont" not found   (未実装: フォント読み込みは M2)
+while true { }                 # RuntimeError.EndlessLoop: this while ran 1000000 times without its condition becoming false

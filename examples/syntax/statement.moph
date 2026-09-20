@@ -30,5 +30,19 @@ for (i, col) in colors.enumerate() {
   log("{i}: {col}".format(i, col))
 }
 
+# while: 回数が先に決まらないとき。100 万回で止まらなければエラーになる
+let total = 0
+let steps = 0
+while total < 5 {
+  total = total + 0.7
+  steps = steps + 1
+}
+log("{steps} 歩で {total}".format(steps, total))
+
+# break: for も while もその場で抜ける (continue は無い)
+for i in 0..100 {
+  if i * i > 30 { break }
+}
+
 # ブロックは値を返す (最後の式)
 let size = if n > 3 { 1/2 } else { 1/4 }

@@ -244,6 +244,15 @@ impl Parser {
                 self.loops -= 1;
                 Ok(StmtKind::For(pat, iter, body?))
             }
+            Tok::While => {
+                self.next();
+                let cond = self.expr(0)?;
+                self.expect(Tok::LBrace)?;
+                self.loops += 1;
+                let body = self.stmts_until(&Tok::RBrace);
+                self.loops -= 1;
+                Ok(StmtKind::While(cond, body?))
+            }
             _ => {
                 let e = self.expr(0)?;
                 if *self.peek() == Tok::Comma {

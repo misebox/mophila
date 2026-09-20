@@ -596,6 +596,7 @@ stmt        ::= let-stmt
               | output-stmt
               | return-stmt
               | for-stmt
+              | while-stmt
               | assign-stmt
               | expr
 
@@ -619,6 +620,7 @@ export-stmt ::= "export" sp (let-stmt | func-decl | type-decl)
 output-stmt ::= "output" sp expr
 return-stmt ::= "return" sp expr
 for-stmt    ::= "for" sp pattern sp "in" sp expr ws block
+while-stmt  ::= "while" sp expr ws block
 assign-stmt ::= target ws "=" ws expr
               | target (ws "," ws target)+ ws "=" ws expr (ws "," ws expr)+
 target      ::= ident | expr "." ident | expr "[" ws expr ws "]"
@@ -1272,7 +1274,21 @@ for (i, c) in ["赤", "青"].enumerate() { }      # (0, "赤"), (1, "青")
 for (k, v) in { "赤": 1, "青": 2 } { }          # ("赤", 1), ("青", 2)
 ```
 
-`for` が回せるのは Range、List、Tuple、Dict。String は回せない。`break` でその場で抜ける (`continue` は無い)。
+`for` が回せるのは Range、List、Tuple、Dict。String は回せない。
+
+回数が先に決まらない繰り返しは `while`。
+
+```
+while total < target {                         # 条件が偽になるまでくり返す
+  total = total + step
+}
+```
+
+`break` は `for` と `while` のどちらもその場で抜ける (`continue` は無い)。
+
+`while` が 100 万回回っても条件が偽にならなければ `RuntimeError.EndlessLoop`。1 フレームを組む間の回数なので、
+まともな探索がこの回数を要ることは無い。止まらない書き方をしたまま描き続けるより、そこで知らせる。
+Shader の中では `while` は使えない (回数の決まらない繰り返しは GPU ごと固まるため)。`for` と `break` で書く。
 
 #### 4.3 関数
 
@@ -1457,7 +1473,7 @@ let v = View(box = Vector(config.width, 9))
 | NameError | `UndefinedVariable` / `UndefinedAttribute` / `AssignWithoutLet` let を書かずに初めて代入した / `Reserved` builtin の型の名前を宣言し直した |
 | TypeError | `OperandType` 演算子の左右 / `AttributeType` 属性に入れる値 / `ArgumentType` 引数 / `ArityMismatch` 引数や列の数 / `NotPlaceable` place できない型 |
 | ValueError | `DurationRequired` 時刻の単位が混在、相対時刻なのに duration が無い / `OutOfRange` 型は合うが値が範囲外 / `AlreadyPlaced` 同じ View を 2 か所に置いた |
-| RuntimeError | `DivisionByZero` / `FontNotFound` / `AudioUnreadable` / `ImageUnreadable` / `ShaderCompile` / `ShaderUnavailable` |
+| RuntimeError | `DivisionByZero` / `FontNotFound` / `AudioUnreadable` / `ImageUnreadable` / `ShaderCompile` / `ShaderUnavailable` / `EndlessLoop` |
 
 `ShaderCompile` と `ShaderUnavailable` は描画のときに出る。`run` では Shader を走らせないので出ない。
 
@@ -2350,6 +2366,7 @@ EspeakVoiceEngine(voice = "ja")
 - `RuntimeError.ImageUnreadable` — 画像ファイルを読めない
 - `RuntimeError.ShaderCompile` — Shader を WGSL に変換できない
 - `RuntimeError.ShaderUnavailable` — GPU が使えないので Shader を走らせられない
+- `RuntimeError.EndlessLoop` — while が決めた回数を超えても終わらない
 
 
 # module
@@ -3626,7 +3643,8 @@ log(["banana", "apple"].sort(), [(2, "b"), (1, "a")].sort())   # [apple, banana]
 #    ├─ FontNotFound
 #    ├─ AudioUnreadable      import した音声を ffprobe が読めない (音声ストリームが無い、ffprobe が無い)
 #    ├─ ShaderCompile        Shader の関数に GPU で計算できないものがある (描画時に出る)
-#    └─ ShaderUnavailable    GPU の無い場面で Shader を描こうとした
+#    ├─ ShaderUnavailable    GPU の無い場面で Shader を描こうとした
+#    └─ EndlessLoop          while が 100 万回回っても条件が偽にならない
 
 # ---- SyntaxError ----
 let d = #e0404                 # SyntaxError.InvalidLiteral: color literal must have 3, 4, 6 or 8 hex digits
@@ -3670,6 +3688,7 @@ let h = #e04040 * 2            # ValueError.OutOfRange: color channel exceeds 1.
 # ---- RuntimeError ----
 let g = 1 / (n - n)            # RuntimeError.DivisionByZero: division by zero
 let t2 = TextArea(text = "a", font = "NoSuchFont")   # RuntimeError.FontNotFound: font "NoSuchFont" not found   (未実装: フォント読み込みは M2)
+while true { }                 # RuntimeError.EndlessLoop: this while ran 1000000 times without its condition becoming false
 ```
 
 ### function.moph
@@ -3931,6 +3950,20 @@ for col in colors {
 # for: インデックス付き
 for (i, col) in colors.enumerate() {
   log("{i}: {col}".format(i, col))
+}
+
+# while: 回数が先に決まらないとき。100 万回で止まらなければエラーになる
+let total = 0
+let steps = 0
+while total < 5 {
+  total = total + 0.7
+  steps = steps + 1
+}
+log("{steps} 歩で {total}".format(steps, total))
+
+# break: for も while もその場で抜ける (continue は無い)
+for i in 0..100 {
+  if i * i > 30 { break }
 }
 
 # ブロックは値を返す (最後の式)

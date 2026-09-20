@@ -1434,7 +1434,10 @@ String / List / Dict / Range のメソッドは builtin で、`import` は要ら
 
 ### 7. プロジェクト設定
 
-`mophila.yaml` を、コマンドを実行したディレクトリに置くと自動で読まれる。`-f` で別の場所を指せる。
+`mophila.yaml` を、コマンドを実行したディレクトリに置くと自動で読まれる。
+台本の代わりに**そのフォルダか `mophila.yaml` 自身を渡しても読む** (`mophila render project/`、`mophila run project/mophila.yaml`)。
+このときの台本は設定の `entry`。`-f` は、設定と台本が別の場所にあるときに使う (`-f ../shared.yaml scenes/main.moph`)。
+設定に書いたパスは設定ファイルのある場所からの相対なので、どこから実行しても同じものを指す。
 
 ```yaml
 entry: scenes/main.moph      # スクリプトを省略したときに使う

@@ -27,10 +27,10 @@ def check_scripts() -> list[str]:
         r = run(f)
         if r.returncode != 0:
             failed.append(f"{f.relative_to(ROOT)}: {r.stderr.strip().splitlines()[-1] if r.stderr.strip() else '(no output)'}")
-    # mophila.yaml のあるプロジェクトは、そのディレクトリで実行しないと設定が読まれない
+    # mophila.yaml のあるプロジェクトは、その mophila.yaml を渡して実行する
     for conf in sorted((ROOT / "examples").glob("*/mophila.yaml")):
         files.append(conf)
-        r = subprocess.run([BIN, "run"], cwd=conf.parent, capture_output=True, text=True)
+        r = subprocess.run([BIN, "run", str(conf)], capture_output=True, text=True)
         if r.returncode != 0:
             failed.append(f"{conf.relative_to(ROOT)}: {r.stderr.strip().splitlines()[-1] if r.stderr.strip() else '(no output)'}")
     print(f"scripts: {len(files) - len(failed)}/{len(files)} ok")

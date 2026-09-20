@@ -85,7 +85,7 @@ Shader の塗りは描画命令を組む時点で GPU を使うので、その�
 
 ## プロジェクト設定
 
-`mophila.yaml` を置くと、実行したディレクトリから自動で読む。`-f` で別の場所も指せる。
+`mophila.yaml` を置くと、実行したディレクトリから自動で読む。台本の代わりにそのフォルダか `mophila.yaml` を渡しても読む (`mophila render project/`)。`-f` は設定と台本が別の場所にあるとき。
 
 ```yaml
 entry: scenes/main.moph      # スクリプトを省略したときに使う

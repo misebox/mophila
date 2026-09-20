@@ -9,6 +9,7 @@ mod stdlib;
 mod timing;
 
 use std::error::Error;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use clap::{Parser, Subcommand};
@@ -16,7 +17,7 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(version)]
 struct Cli {
-    /// Config file (default: mophila.yaml in the current directory)
+    /// Config file. Without it, mophila.yaml in the current directory, or in the folder given instead of a script
     #[arg(short = 'f', long, global = true)]
     config: Option<String>,
     /// Override a config value as name=value (repeatable). MOPHILA_<NAME> does the same
@@ -262,15 +263,25 @@ fn run() -> Result<(), Box<dyn Error>> {
         return result;
     }
     let cli = Cli::parse();
-    let project = project::Project::load(cli.config.as_deref(), &cli.set)?.map(Rc::new);
+    // -f が無くても、台本の代わりにフォルダか .yaml を渡されたら、そこの設定を読む
+    let named = cli.config.clone().map(PathBuf::from).or_else(|| script_of(&cli.command).and_then(config_at));
+    let project = project::Project::load(named.as_deref().and_then(Path::to_str), &cli.set)?.map(Rc::new);
     if let Some(p) = &project {
         p.announce();
     }
     // 走らせているスクリプト。エラーにファイル名を付けるのに使う
     let running = std::cell::RefCell::new(String::new());
-    // スクリプトを書かなければ mophila.yaml の entry。どちらも無ければエラー
+    // スクリプトを書かなければ mophila.yaml の entry。どちらも無ければエラー。
+    // フォルダや .yaml は台本ではなく設定の指定なので、entry に回す
     let entry = |script: Option<String>| -> Result<String, Box<dyn Error>> {
-        let path = match (script, project.as_ref().and_then(|p| p.entry.clone())) {
+        let given = match script {
+            Some(s) if config_at(&s).is_some() => None,
+            Some(s) if Path::new(&s).is_dir() => {
+                return Err(format!("{s} has no {} (name a script, or put one there)", project::FILE_NAME).into());
+            }
+            other => other,
+        };
+        let path = match (given, project.as_ref().and_then(|p| p.entry.clone())) {
             (Some(s), _) => s,
             (None, Some(e)) => e.to_string_lossy().into_owned(),
             (None, None) => return Err(format!("name a script, or put an entry in {}", project::FILE_NAME).into()),
@@ -382,6 +393,32 @@ fn in_script<T>(script: &str, result: Result<T, Box<dyn Error>>) -> Result<T, Bo
 /// タイトルバーに出す名前 (パスと拡張子を除いたファイル名)
 fn file_name(script: &str) -> String {
     std::path::Path::new(script).file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| script.to_string())
+}
+
+/// そのコマンドが受け取った台本の位置 (無いコマンドもある)
+fn script_of(command: &Command) -> Option<&str> {
+    match command {
+        Command::Render { script, .. }
+        | Command::Run { script }
+        | Command::Preview { script, .. }
+        | Command::Timeline { script, .. }
+        | Command::Sheet { script, .. }
+        | Command::Subs { script, .. }
+        | Command::Bundle { script, .. } => script.as_deref(),
+        Command::Lsp { .. } | Command::Fonts | Command::Doc => None,
+    }
+}
+
+/// そこが設定を指しているなら、その mophila.yaml。
+/// フォルダならその中の 1 つ、.yaml / .yml ならそれ自身 (無ければ読むときに言う)
+fn config_at(path: &str) -> Option<PathBuf> {
+    let path = Path::new(path);
+    if path.is_dir() {
+        let file = path.join(project::FILE_NAME);
+        return file.exists().then_some(file);
+    }
+    let yaml = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("yaml") || e.eq_ignore_ascii_case("yml"));
+    yaml.then(|| path.to_path_buf())
 }
 
 /// スクリプトを読む。読めなければ、どのファイルかを言う

@@ -7,7 +7,7 @@ use std::cell::Cell;
 
 use crate::lang::ast::{Arg, BinOp, DictKey, Expr, ImportKind, ImportSource, MotionDef, Pattern, RowItem, Stmt, StmtKind};
 use crate::lang::error::{Kind, MophError, Result, err};
-use crate::lang::value::{Audio, Clip, Closure, Module, Motion, MotionRowVal, ObjRef, Object, Placed, Ratio, Record, Scopes, Timeline, TlAssign, TlKeyframe, TlTarget, Track, UserType, Value, new_scope};
+use crate::lang::value::{Audio, Clip, Closure, Module, Motion, MotionRowVal, ObjRef, Object, Placed, Ratio, Record, Scopes, Timeline, TlAssign, TlKeyframe, TlTarget, Track, UserType, Value, next_object_id, new_scope};
 use crate::stdlib;
 
 /// 文の実行結果。return で関数を抜けるときに伝える
@@ -1105,7 +1105,7 @@ impl Interp {
                     if kind == "ZoomPath" {
                         attrs.insert("scale".into(), self.zoom_table(&attrs)?);
                     }
-                    return Ok(Value::Object(Rc::new(RefCell::new(Object { kind: kind.to_string(), decl: None, attrs, children: vec![], placed: false, tracks: vec![] }))));
+                    return Ok(Value::Object(Rc::new(RefCell::new(Object { id: next_object_id(), kind: kind.to_string(), decl: None, attrs, children: vec![], placed: false, tracks: vec![] }))));
                 }
                 let Some(ty) = self.lookup_type(kind) else {
                     return self.cannot_construct(kind);
@@ -1207,6 +1207,7 @@ impl Interp {
                 let src = o.borrow();
                 let attrs = if name == "deepCopy" { src.attrs.iter().map(|(k, v)| (k.clone(), deep_copy(v))).collect() } else { src.attrs.clone() };
                 Ok(Some(Value::Object(Rc::new(RefCell::new(Object {
+                    id: next_object_id(),
                     kind: src.kind.clone(),
                     decl: src.decl.clone(),
                     attrs,
@@ -1273,6 +1274,7 @@ impl Interp {
             Value::Record(Rc::new(Record { name: decl.name.clone(), decl: Some(ty.clone()), fields }))
         } else {
             Value::Object(Rc::new(RefCell::new(Object {
+                id: next_object_id(),
                 kind: decl.name.clone(),
                 decl: Some(ty.clone()),
                 attrs: fields.into_iter().collect(),
@@ -1595,7 +1597,7 @@ impl Interp {
         for (name, value) in defaults("Path") {
             attrs.entry((*name).to_string()).or_insert_with(|| value.clone());
         }
-        Ok(Value::Object(Rc::new(RefCell::new(Object { kind: "Path".into(), decl: None, attrs, children: vec![], placed: false, tracks: vec![] }))))
+        Ok(Value::Object(Rc::new(RefCell::new(Object { id: next_object_id(), kind: "Path".into(), decl: None, attrs, children: vec![], placed: false, tracks: vec![] }))))
     }
 
     pub(crate) fn method(&mut self, obj: &ObjRef, method: &str, args: Vec<(Option<String>, Value)>) -> Result<Value> {
@@ -1698,6 +1700,7 @@ impl Interp {
                 }
                 let src = obj.borrow();
                 Ok(Value::Object(Rc::new(RefCell::new(Object {
+                    id: next_object_id(),
                     kind: src.kind.clone(),
                     decl: src.decl.clone(),
                     attrs: src.attrs.clone(),
@@ -2369,6 +2372,7 @@ fn deep_copy(v: &Value) -> Value {
         Value::Object(o) => {
             let src = o.borrow();
             Value::Object(Rc::new(RefCell::new(Object {
+                id: next_object_id(),
                 kind: src.kind.clone(),
                 decl: src.decl.clone(),
                 attrs: src.attrs.iter().map(|(k, v)| (k.clone(), deep_copy(v))).collect(),

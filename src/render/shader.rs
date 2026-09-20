@@ -714,8 +714,10 @@ const FRAME: &str = "@group(0) @binding(1) var strip: texture_2d<f32>;\n\
 
 /// 1 つの図形の塗りの依頼
 pub struct Request<'a> {
-    /// 図形の実体 (テクスチャの使い回しの鍵)
-    pub shape: usize,
+    /// 塗る図形の通し番号 (テクスチャの使い回しの鍵)
+    pub shape: u64,
+    /// いま組んでいるフレームの番号。使わなくなったものを手放すのに使う
+    pub frame: u64,
     pub closure: &'a Rc<Closure>,
     pub args: &'a [f32],
     pub t: f64,
@@ -809,6 +811,8 @@ struct Pipeline {
 
 /// 1 つの図形が持つ帯。列は環状に使い回す
 struct Strip {
+    /// 最後に使ったフレームの番号
+    used: u64,
     view: wgpu::TextureView,
     /// 列数 (環状バッファの幅)
     ring: u32,
@@ -823,6 +827,8 @@ struct Strip {
 }
 
 struct Target {
+    /// 最後に使ったフレームの番号
+    used: u64,
     texture: wgpu::Texture,
     view: wgpu::TextureView,
     width: u32,
@@ -838,14 +844,16 @@ pub struct ShaderRunner {
     queue: wgpu::Queue,
     /// 関数の実体 → pipeline
     pipelines: HashMap<usize, Pipeline>,
-    /// 図形 → テクスチャ
-    targets: HashMap<usize, Target>,
-    /// 図形 → 帯 (ズーム動画のときだけ)
-    strips: HashMap<usize, Strip>,
+    /// 図形の通し番号 → テクスチャ
+    targets: HashMap<u64, Target>,
+    /// 図形の通し番号 → 帯 (ズーム動画のときだけ)
+    strips: HashMap<u64, Strip>,
     /// 帯から 1 フレームを組む pipeline。どの Shader でも同じなので 1 つだけ
     frame: Option<(wgpu::ComputePipeline, wgpu::BindGroupLayout, wgpu::Sampler)>,
     /// 描画の前に Vello へ登録する (画像, テクスチャ)
     pub overrides: Vec<(ImageData, wgpu::Texture)>,
+    /// 手放したテクスチャ。Vello の登録も外さないと、あちらが持っているぶんが解放されない
+    pub released: Vec<ImageData>,
 }
 
 impl ShaderRunner {
@@ -858,7 +866,28 @@ impl ShaderRunner {
             strips: HashMap::new(),
             frame: None,
             overrides: Vec::new(),
+            released: Vec::new(),
         }
+    }
+
+    /// いま持っている GPU のメモリ (バイト)。テクスチャと帯の合計
+    pub fn bytes(&self) -> u64 {
+        let targets: u64 = self.targets.values().map(|t| u64::from(t.width) * u64::from(t.height) * 4).sum();
+        let strips: u64 = self.strips.values().map(|s| u64::from(s.ring) * u64::from(s.rows) * 4).sum();
+        targets + strips
+    }
+
+    /// しばらく使っていないテクスチャと帯を手放す。wgpu は参照が落ちた時点で解放する
+    pub fn drop_unused(&mut self, now: u64, keep: u64) {
+        let released = &mut self.released;
+        self.targets.retain(|_, t| {
+            let alive = now.saturating_sub(t.used) <= keep;
+            if !alive {
+                released.push(t.image.clone());
+            }
+            alive
+        });
+        self.strips.retain(|_, s| now.saturating_sub(s.used) <= keep);
     }
 
     /// compute shader を投入し、塗りに使う画像を返す。描画の前に overrides を Vello に登録すること
@@ -872,8 +901,14 @@ impl ShaderRunner {
         }
         let needs_new = self.targets.get(&req.shape).is_none_or(|t| t.width != req.width || t.height != req.height);
         if needs_new {
-            let target = self.make_target(req.width, req.height);
-            self.targets.insert(req.shape, target);
+            let target = self.make_target(req.width, req.height)?;
+            if let Some(old) = self.targets.insert(req.shape, target) {
+                self.released.push(old.image);
+            }
+        }
+        self.targets.get_mut(&req.shape).expect("inserted above").used = req.frame;
+        if let Some(strip) = self.strips.get_mut(&req.shape) {
+            strip.used = req.frame;
         }
         let args_len = req.args.len() as u32;
         {
@@ -954,7 +989,7 @@ impl ShaderRunner {
             s.size != (req.width, req.height) || s.ring != ring || s.rows != rows || (s.ustart - ustart).abs() > 1e-9
         });
         if fresh {
-            let strip = self.make_strip(ring, rows, ustart, (req.width, req.height));
+            let strip = self.make_strip(ring, rows, ustart, (req.width, req.height))?;
             self.strips.insert(req.shape, strip);
         }
         let lnk = ln_px + map.ln_scale(req.t);
@@ -1043,7 +1078,8 @@ impl ShaderRunner {
     }
 
     /// 帯を作る。列は環状に使い回すので、窓 1 つ分の幅があれば足りる
-    fn make_strip(&self, ring: u32, rows: u32, ustart: f64, size: (u32, u32)) -> Strip {
+    fn make_strip(&self, ring: u32, rows: u32, ustart: f64, size: (u32, u32)) -> Result<Strip> {
+        let scope = self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
         let texture = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("mophila zoom strip"),
             size: wgpu::Extent3d { width: ring, height: rows, depth_or_array_layers: 1 },
@@ -1055,7 +1091,10 @@ impl ShaderRunner {
             view_formats: &[],
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        Strip { view, ring, rows, ustart, have: None, size }
+        if let Some(e) = pollster::block_on(scope.pop()) {
+            return err(Kind::OutOfMemory, oom("a zoom strip", ring, rows, self.bytes(), &e));
+        }
+        Ok(Strip { used: 0, view, ring, rows, ustart, have: None, size })
     }
 
     /// 帯から 1 フレームを組む pipeline。1 度だけ作る
@@ -1126,7 +1165,8 @@ impl ShaderRunner {
         Ok(Pipeline { pipeline, strip, layout })
     }
 
-    fn make_target(&self, width: u32, height: u32) -> Target {
+    fn make_target(&self, width: u32, height: u32) -> Result<Target> {
+        let scope = self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
         let texture = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("mophila shader"),
             size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
@@ -1139,7 +1179,9 @@ impl ShaderRunner {
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let image = ImageData {
-            data: Blob::new(Arc::new(vec![0u8; (width * height * 4) as usize])),
+            // 中身は使わない。描く直前に override_image でテクスチャに差し替えるので、
+            // Vello が見るのは大きさと Blob の番号だけ。空にしておくと全画面 1 枚につき w×h×4 の RAM が浮く
+            data: Blob::new(Arc::new(Vec::new())),
             format: ImageFormat::Rgba8,
             alpha_type: ImageAlphaType::Alpha,
             width,
@@ -1147,13 +1189,32 @@ impl ShaderRunner {
         };
         let uniforms = self.device.create_buffer(&wgpu::BufferDescriptor { label: Some("mophila shader uniforms"), size: UNIFORM_BYTES as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
         let args = self.device.create_buffer(&wgpu::BufferDescriptor { label: Some("mophila shader args"), size: 16, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
-        Target { texture, view, width, height, image, uniforms, args }
+        if let Some(e) = pollster::block_on(scope.pop()) {
+            return err(Kind::OutOfMemory, oom("a Shader fill", width, height, self.bytes(), &e));
+        }
+        Ok(Target { used: 0, texture, view, width, height, image, uniforms, args })
     }
+}
+
+/// 足りなかったときの言い方。何を、どれだけ、いまいくら持っているか
+fn oom(what: &str, width: u32, height: u32, held: u64, e: &wgpu::Error) -> String {
+    let bytes = u64::from(width) * u64::from(height) * 4;
+    format!(
+        "could not get {width}x{height} ({:.1}MB) on the GPU for {what}; \
+         this shader runner already holds {:.1}MB. Make the shape smaller, lower --size, \
+         or split the scene. ({e})",
+        bytes as f64 / 1_048_576.0,
+        held as f64 / 1_048_576.0,
+    )
 }
 
 /// 描画の直前に呼ぶ。この フレームで計算した画像を、Vello の画像キャッシュにテクスチャごと登録する
 pub fn apply_overrides(renderer: &mut vello::Renderer, runner: Option<&mut ShaderRunner>) {
     let Some(runner) = runner else { return };
+    // 手放したものは、Vello 側の登録を外さないと、あちらが掴んだままになる
+    for image in runner.released.drain(..) {
+        renderer.unregister_texture(image);
+    }
     for (image, texture) in runner.overrides.drain(..) {
         renderer.override_image(&image, Some(wgpu::TexelCopyTextureInfoBase { texture, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All }));
     }

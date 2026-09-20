@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
-use std::rc::Rc;
 
 use vello::Scene;
 use vello::kurbo::{Affine, BezPath, Circle, Ellipse, Line, Point, Rect, RoundedRect, Shape, Stroke};
@@ -16,13 +15,27 @@ type Attrs = HashMap<String, Value>;
 /// View を描画命令に変換する。View の box を出力サイズに収め (比率維持)、中央に置く
 /// t は動画の時刻 (秒)。Shader の塗りに渡す
 pub fn build(view: &ObjRef, width: f64, height: f64, t: f64, cache: &mut RenderCache) -> Result<Scene> {
+    cache.frame += 1;
+    cache.layer_bytes = 0;
     let (bw, _) = view_box(view)?;
     let area = picture(view, width, height)?;
     let transform = Affine::translate((area.x0, area.y0)) * Affine::scale(area.width() / bw);
     let mut scene = Scene::new();
     let frame = Frame { viewport: Rect::new(0.0, 0.0, width, height), t };
     draw_view(&mut scene, view, transform, &frame, cache)?;
+    drop_unused(cache);
     Ok(scene)
+}
+
+/// このフレームで使わなかったものを手放す。数フレームは残しておく
+/// (出たり入ったりする図形で、毎フレーム作り直さないように)
+fn drop_unused(cache: &mut RenderCache) {
+    const KEEP: u64 = 2;
+    let now = cache.frame;
+    cache.fragments.retain(|_, f| now.saturating_sub(f.used) <= KEEP);
+    if let Some(runner) = cache.shaders.as_mut() {
+        runner.drop_unused(now, KEEP);
+    }
 }
 
 /// 箱を width x height に収めたとき、絵が実際に載る矩形。
@@ -72,6 +85,8 @@ fn draw_view(scene: &mut Scene, view: &ObjRef, transform: Affine, frame: &Frame,
             // 文字の縁など、囲む四角の計算がわずかに小さいことがあるので少し広げる
             false => drawn_bounds(view, transform, cache)?.inflate(2.0, 2.0).intersect(frame.viewport),
         };
+        // 混色用の領域は、レイヤーの面積ぶん GPU に要る
+        cache.layer_bytes += (area.width().max(0.0) * area.height().max(0.0) * 4.0) as u64;
         scene.push_layer(Fill::NonZero, blend, opacity as f32, Affine::IDENTITY, &area.to_path(0.01));
     }
     // カメラは枠を動かさず、中身だけ動かす。clip はカメラの前の枠で切る
@@ -86,7 +101,7 @@ fn draw_view(scene: &mut Scene, view: &ObjRef, transform: Affine, frame: &Frame,
             continue;
         }
         let c = child.borrow();
-        let key = Rc::as_ptr(child) as usize;
+        let key = child.borrow().id;
         // Shader の塗りは毎フレーム計算し直す
         if let Some(shader) = shader_fill(&c) {
             draw_object(scene, &c, transform, frame, key, Some(&shader), cache)?;
@@ -94,16 +109,18 @@ fn draw_view(scene: &mut Scene, view: &ObjRef, transform: Affine, frame: &Frame,
         }
         // 属性と変換が前回と同じなら、前回の描画命令をそのまま使う
         let fp = fingerprint(&c, transform);
-        if let Some((prev, fragment)) = cache.fragments.get(&key) {
-            if *prev == fp {
-                scene.append(fragment, None);
+        let now = cache.frame;
+        if let Some(prev) = cache.fragments.get_mut(&key) {
+            if prev.print == fp {
+                prev.used = now;
+                scene.append(&prev.scene, None);
                 continue;
             }
         }
         let mut fragment = Scene::new();
         draw_object(&mut fragment, &c, transform, frame, key, None, cache)?;
         scene.append(&fragment, None);
-        cache.fragments.insert(key, (fp, fragment));
+        cache.fragments.insert(key, crate::render::text::Fragment { print: fp, scene: fragment, used: now });
     }
     if grouped {
         scene.pop_layer();
@@ -338,7 +355,7 @@ pub fn outline(c: &crate::lang::value::Object) -> Result<(BezPath, Point)> {
 }
 
 /// 図形 1 つを描く。transform は箱の座標から出力座標への変換。shader は fill が Shader のときその実体
-fn draw_object(scene: &mut Scene, c: &crate::lang::value::Object, transform: Affine, frame: &Frame, key: usize, shader: Option<&ObjRef>, cache: &mut RenderCache) -> Result<()> {
+fn draw_object(scene: &mut Scene, c: &crate::lang::value::Object, transform: Affine, frame: &Frame, key: u64, shader: Option<&ObjRef>, cache: &mut RenderCache) -> Result<()> {
     let kind = c.kind.as_str();
     let scale = transform.as_coeffs()[0].hypot(transform.as_coeffs()[1]);
     let opacity = match c.attrs.get("opacity") {
@@ -705,7 +722,7 @@ pub fn overlay_subtitles(scene: &mut Scene, cache: &mut RenderCache, cues: &[cra
 
 /// Shader の塗り。図形の範囲 (画面内) のピクセルを compute shader で計算し、その画像で図形を塗る
 #[allow(clippy::too_many_arguments)]
-fn draw_shader_fill(scene: &mut Scene, path: &BezPath, transform: Affine, opacity: f32, shader: &ObjRef, frame: &Frame, key: usize, cache: &mut RenderCache) -> Result<()> {
+fn draw_shader_fill(scene: &mut Scene, path: &BezPath, transform: Affine, opacity: f32, shader: &ObjRef, frame: &Frame, key: u64, cache: &mut RenderCache) -> Result<()> {
     let sh = shader.borrow();
     let Some(Value::Func(closure)) = sh.attrs.get("color") else {
         return err(Kind::AttributeType, "Shader.color must be a func (x, y, t)");
@@ -776,6 +793,7 @@ fn draw_shader_fill(scene: &mut Scene, path: &BezPath, transform: Affine, opacit
     // 箱 → ピクセルは拡大と平行移動だけなので、逆は 1 次式
     let [s, _, _, _, tx, ty] = transform.as_coeffs();
     let request = crate::render::shader::Request {
+        frame: cache.frame,
         shape: key,
         closure,
         args: &args,

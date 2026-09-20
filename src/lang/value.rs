@@ -163,6 +163,9 @@ pub struct Closure {
 }
 
 pub struct Object {
+    /// 作った順の通し番号。キャッシュの鍵に使う。
+    /// アドレスは、消えた実体の番地に別の実体が載ると同じ値になるので鍵にできない
+    pub id: u64,
     pub kind: String,
     /// ユーザーが宣言した型なら、その宣言
     pub decl: Option<Rc<UserType>>,
@@ -172,6 +175,12 @@ pub struct Object {
     pub placed: bool,
     /// View / Timeline に置かれた Timeline
     pub tracks: Vec<Placed>,
+}
+
+/// Object に振る次の通し番号。フレームを組むスレッドをまたいでも重ならない
+pub fn next_object_id() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
 /// Timeline に置かれた 1 本。at は親の時間軸での開始時刻

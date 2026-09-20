@@ -18,12 +18,40 @@ pub struct RenderCache {
     layouts: LayoutContext<[u8; 4]>,
     /// (text, family, size_px, max_width, align) → レイアウト
     layout_cache: HashMap<LayoutKey, Layout<[u8; 4]>>,
-    /// 図形のポインタ → (属性の指紋, 描画命令)。指紋が同じならそのまま使う
-    pub fragments: HashMap<usize, (u64, Scene)>,
+    /// 図形の通し番号 → 描画命令。指紋が同じならそのまま使う
+    pub fragments: HashMap<u64, Fragment>,
+    /// いま組んでいるフレームの番号。使わなくなったものを手放すのに使う
+    pub frame: u64,
+    /// このフレームで作った、透ける View のレイヤーの合計 (バイト)
+    pub layer_bytes: u64,
     /// Shader を GPU で走らせるもの。描画する側 (render / preview) が装置を作ってから入れる
     pub shaders: Option<crate::render::shader::ShaderRunner>,
     /// 読み込んだ画像。ファイルごとに 1 度だけ開く
     images: HashMap<std::path::PathBuf, vello::peniko::ImageData>,
+}
+
+/// 1 フレームに要った GPU のメモリ (バイト)
+#[derive(Default, Clone, Copy)]
+pub struct Bytes {
+    /// Shader の塗りのテクスチャと、ズームの帯
+    pub shaders: u64,
+    /// 透ける View のレイヤー (混色用)
+    pub layers: u64,
+}
+
+impl Bytes {
+    pub fn total(self) -> u64 {
+        self.shaders + self.layers
+    }
+}
+
+/// 前に組んだ描画命令
+pub struct Fragment {
+    /// 描画に関わる属性の指紋。同じならそのまま使える
+    pub print: u64,
+    pub scene: Scene,
+    /// 最後に使ったフレームの番号
+    pub used: u64,
 }
 
 #[derive(Hash, PartialEq, Eq)]
@@ -37,7 +65,7 @@ struct LayoutKey {
 
 impl RenderCache {
     pub fn new() -> Self {
-        Self { fonts: FontContext::new(), layouts: LayoutContext::new(), layout_cache: HashMap::new(), fragments: HashMap::new(), shaders: None, images: HashMap::new() }
+        Self { fonts: FontContext::new(), layouts: LayoutContext::new(), layout_cache: HashMap::new(), fragments: HashMap::new(), frame: 0, layer_bytes: 0, shaders: None, images: HashMap::new() }
     }
 
     /// システムにそのファミリ名のフォントがあるか
@@ -98,6 +126,11 @@ impl RenderCache {
     }
 
     /// ピクセル単位でレイアウトする。max_width が None なら折り返さない。同じ入力なら前回の結果を返す
+    /// このフレームに要った GPU のメモリ
+    pub fn bytes(&self) -> Bytes {
+        Bytes { shaders: self.shaders.as_ref().map_or(0, |r| r.bytes()), layers: self.layer_bytes }
+    }
+
     pub fn layout(&mut self, text: &str, family: Option<&str>, size_px: f32, max_width: Option<f32>, align: Alignment) -> &Layout<[u8; 4]> {
         let key = LayoutKey {
             text: text.to_string(),

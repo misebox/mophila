@@ -60,6 +60,9 @@ pub struct Interp {
     constructing: Vec<String>,
     /// @deprecated の警告を出した型。1 つにつき 1 度だけ出す
     warned: std::collections::HashSet<String>,
+    /// 今の Timeline より後に place した Timeline が、この時刻で書く先。
+    /// 読む側が先に走ると、書かれる前の値を読んでしまうので、そのときだけ知らせる
+    later_writes: std::collections::HashSet<(usize, String)>,
     /// いま本体を実行している型。private が見えるのはこの中だけ
     inside: Vec<String>,
     /// 次の apply がどの型のメンバーか。apply がこれを inside に積む
@@ -82,7 +85,7 @@ impl Interp {
                 types.insert(t.name.to_string(), t.values.iter().map(|(v, _)| v.to_string()).collect());
             }
         }
-        Self { scopes: vec![root_scope()], output: None, types, cache: None, finished: HashMap::new(), last_t: f64::NEG_INFINITY, base_dir: PathBuf::from("."), exports: Vec::new(), sources: HashMap::new(), assets: HashMap::new(), initial: Vec::new(), modules: HashMap::new(), loading: Vec::new(), returning: None, breaking: false, constructing: Vec::new(), warned: std::collections::HashSet::new(), inside: Vec::new(), calling: None, assigned: RefCell::new(None), project: None }
+        Self { scopes: vec![root_scope()], output: None, types, cache: None, finished: HashMap::new(), last_t: f64::NEG_INFINITY, base_dir: PathBuf::from("."), exports: Vec::new(), sources: HashMap::new(), assets: HashMap::new(), initial: Vec::new(), modules: HashMap::new(), loading: Vec::new(), returning: None, breaking: false, constructing: Vec::new(), warned: std::collections::HashSet::new(), later_writes: std::collections::HashSet::new(), inside: Vec::new(), calling: None, assigned: RefCell::new(None), project: None }
     }
 
     /// mophila.yaml を渡す。@ の解決と `import config` がこれを見る
@@ -767,6 +770,7 @@ impl Interp {
             }
             Expr::Attr(target, attr) => {
                 let target = self.eval(target)?;
+                self.warn_if_written_later(&target, attr);
                 match self.attr(&target, attr) {
                     Some(found) => found.get(),
                     None => err(Kind::UndefinedAttribute, no_attr(&target, attr)),
@@ -1812,13 +1816,56 @@ impl Interp {
         self.last_t = t;
     }
 
+    /// 1 フレームぶん、置かれた Timeline を順に適用する。
+    /// 後に置いた Timeline が書く先を先に集めておき、先に走る側がそれを読んだら知らせる
+    pub fn apply_tracks(&mut self, tracks: &[Placed], t: f64) -> Result<()> {
+        self.later_writes.clear();
+        self.apply_siblings(tracks, t, 0.0)
+    }
+
+    /// 同じ場所に置かれた Timeline を順に。1 本走らせる間は、後ろの兄弟が書く先を控えておく
+    fn apply_siblings(&mut self, tracks: &[Placed], t: f64, origin: f64) -> Result<()> {
+        // 読む側がいなければ、控える意味も無い
+        if !tracks.iter().any(Self::reads_anything) {
+            for placed in tracks {
+                self.apply_track_from(placed, t, origin)?;
+            }
+            return Ok(());
+        }
+        for (i, placed) in tracks.iter().enumerate() {
+            let outer = self.later_writes.clone();
+            for later in &tracks[i + 1..] {
+                Self::writes_at(later, t, &mut self.later_writes);
+            }
+            let result = self.apply_track_from(placed, t, origin);
+            self.later_writes = outer;
+            result?;
+        }
+        Ok(())
+    }
+
+    /// 後に place した Timeline が書く属性を、先に走る側が読んだときに知らせる。
+    /// 読めるのは書かれる前の値なので、黙っていると気づかないまま間違う
+    fn warn_if_written_later(&mut self, target: &Value, attr: &str) {
+        if self.later_writes.is_empty() {
+            return;
+        }
+        let Value::Object(obj) = target else { return };
+        if !self.later_writes.contains(&(Rc::as_ptr(obj) as usize, attr.to_string())) {
+            return;
+        }
+        let kind = obj.borrow().kind.clone();
+        if self.warned.insert(format!("later-write {:p}.{attr}", Rc::as_ptr(obj))) {
+            eprintln!(
+                "warning: reading {kind}.{attr}, which a Timeline placed later writes at this time. \
+                 The value read is the one from before it wrote; place that Timeline first"
+            );
+        }
+    }
+
     /// 置かれた Timeline を、親の時間軸の時刻 t で対象に書き込む。
     /// 開始前は何もしない。終了後は最後の状態を保つ (duration で切る)。
     /// origin は親の絶対開始時刻で、終わった Timeline を区別する鍵に使う
-    pub fn apply_track(&mut self, placed: &Placed, t: f64) -> Result<()> {
-        self.apply_track_from(placed, t, 0.0)
-    }
-
     fn apply_track_from(&mut self, placed: &Placed, t: f64, origin: f64) -> Result<()> {
         let duration = placed.track.duration();
         let elapsed = t - placed.at;
@@ -1832,9 +1879,7 @@ impl Interp {
             Track::Audio(..) | Track::Narration(..) => {}
             Track::Container(obj) => {
                 let children = obj.borrow().tracks.clone();
-                for child in &children {
-                    self.apply_track_from(child, local, origin)?;
-                }
+                self.apply_siblings(&children, local, origin)?;
                 // View は中身をまとめて 1 枚にできるので、その opacity を動かす
                 if let Some(factor) = fade_factor(placed, elapsed, local, duration) {
                     let obj = obj.clone();
@@ -1842,9 +1887,8 @@ impl Interp {
                 }
             }
             Track::Timeline(tl) if tl.keyframes.is_empty() => {
-                for child in tl.tracks.borrow().clone().iter() {
-                    self.apply_track_from(child, local, origin)?;
-                }
+                let children = tl.tracks.borrow().clone();
+                self.apply_siblings(&children, local, origin)?;
             }
             Track::Timeline(tl) if local >= duration && placed.fade_out <= 0.0 => {
                 // 終わった Timeline。最後の値を 1 度だけ評価し、以後は書き込みだけにする (書き込み順は保つ)
@@ -1869,9 +1913,8 @@ impl Interp {
                 self.finished.insert(key, values);
             }
             Track::Timeline(tl) => {
-                for child in tl.tracks.borrow().clone().iter() {
-                    self.apply_track_from(child, local, origin)?;
-                }
+                let children = tl.tracks.borrow().clone();
+                self.apply_siblings(&children, local, origin)?;
                 self.apply_timeline(tl, local)?;
                 if let Some(factor) = fade_factor(placed, elapsed, local, duration) {
                     // フェードが掛かるのは図形だけ。変数には不透明度が無い
@@ -1886,7 +1929,44 @@ impl Interp {
         Ok(())
     }
 
-    /// 時刻 t における Timeline の値を対象に書き込む
+    /// 中に範囲の行 (毎フレーム走るブロック) があるか。無ければ順の食い違いは起きようがない
+fn reads_anything(placed: &Placed) -> bool {
+    match &placed.track {
+        Track::Container(obj) => obj.borrow().tracks.iter().any(Self::reads_anything),
+        Track::Timeline(tl) => {
+            tl.keyframes.iter().any(|k| k.block.is_some()) || tl.tracks.borrow().iter().any(Self::reads_anything)
+        }
+        Track::Audio(..) | Track::Narration(..) => false,
+    }
+}
+
+/// その Placed が時刻 t で書く先 (図形のアドレス, 属性)。まだ始まっていないものは何も書かない
+fn writes_at(placed: &Placed, t: f64, out: &mut std::collections::HashSet<(usize, String)>) {
+    if t < placed.at {
+        return;
+    }
+    let local = (t - placed.at).min(placed.track.duration());
+    match &placed.track {
+        Track::Container(obj) => {
+            for child in obj.borrow().tracks.iter() {
+                Self::writes_at(child, local, out);
+            }
+        }
+        Track::Timeline(tl) => {
+            for assign in tl.keyframes.iter().flat_map(|k| &k.assigns) {
+                if let (Some(obj), Some(name)) = (assign.target.object(), assign.path.first()) {
+                    out.insert((Rc::as_ptr(obj) as usize, name.clone()));
+                }
+            }
+            for child in tl.tracks.borrow().iter() {
+                Self::writes_at(child, local, out);
+            }
+        }
+        Track::Audio(..) | Track::Narration(..) => {}
+    }
+}
+
+/// 時刻 t における Timeline の値を対象に書き込む
     pub fn apply_timeline(&mut self, tl: &Timeline, t: f64) -> Result<()> {
         // (対象, 属性パス) ごとのキーフレームの並び。キーフレームから決まるので 1 度だけ作る
         let groups = tl.groups();

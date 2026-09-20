@@ -198,9 +198,7 @@ impl Player<'_> {
 
         self.interp.begin_frame(t);
         let tracks = crate::lang::eval::all_tracks(&self.view);
-        for placed in &tracks {
-            self.interp.apply_track(placed, t)?;
-        }
+        self.interp.apply_tracks(&tracks, t)?;
         let (width, height) = (state.surface.config.width, state.surface.config.height);
         let mut scene = scene::build(&self.view, f64::from(width), f64::from(height), t, self.interp.cache_mut())?;
         // 字幕は絵の中に出す。窓の縦横比が違うと、絵の上下左右に帯が空いている

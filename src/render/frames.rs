@@ -82,9 +82,7 @@ fn build(job: &Job, mine: &[(usize, f64)], tx: &SyncSender<Frame>) {
     for &(i, t) in mine {
         let frame = (|| -> Result<Scene, Box<dyn Error>> {
             interp.begin_frame(t);
-            for placed in &tracks {
-                interp.apply_track(placed, t)?;
-            }
+            interp.apply_tracks(&tracks, t)?;
             Ok(crate::render::scene::build(&view, job.width, job.height, t, interp.cache_mut())?)
         })();
         let message = match frame {

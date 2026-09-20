@@ -482,9 +482,7 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
             None => {
                 timing.measure("eval", || -> Result<(), Box<dyn Error>> {
                     interp.begin_frame(t);
-                    for placed in &tracks {
-                        interp.apply_track(placed, t)?;
-                    }
+                    interp.apply_tracks(&tracks, t)?;
                     Ok(())
                 })?;
                 timing.measure("scene", || render::scene::build(&view, f64::from(width), f64::from(height), t, interp.cache_mut()))?
@@ -534,9 +532,7 @@ fn sheet(src: &str, base_dir: std::path::PathBuf, project: &Option<Rc<project::P
     for (i, &t) in times.iter().enumerate() {
         interp.begin_frame(t);
         let tracks = lang::eval::all_tracks(&view);
-        for placed in &tracks {
-            interp.apply_track(placed, t)?;
-        }
+        interp.apply_tracks(&tracks, t)?;
         let mut scene = render::scene::build(&view, f64::from(cw), f64::from(ch), t, interp.cache_mut())?;
         let area = render::scene::picture(&view, f64::from(cw), f64::from(ch))?;
         render::scene::overlay_subtitles(&mut scene, interp.cache_mut(), &media.cues, t, area);

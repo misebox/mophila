@@ -1,5 +1,5 @@
 # 手で覚える順番を減らすための入口。中身は cargo / scripts / site に任せる
-.PHONY: all docs site check media dev install-skill bump bump-minor bump-major
+.PHONY: all docs site check media dev install-skill install-vscode bump bump-minor bump-major
 
 # 既定: 検査してからドキュメント一式を作る
 all: check docs
@@ -21,6 +21,10 @@ media:
 ## 書き方の skill を ~/.claude/skills に複製する (変えたら入れ直す)
 install-skill:
 	scripts/install-skill.sh
+
+## VS Code の拡張を組み立てて入れる (外すのは scripts/install-vscode.sh --uninstall)
+install-vscode:
+	scripts/install-vscode.sh
 
 ## バージョンを上げて、コミットして、タグを打つ (一番下の桁)
 bump:

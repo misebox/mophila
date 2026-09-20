@@ -9,13 +9,22 @@
 拡張は `mophila` を PATH から探し、見つからなければ `~/.cargo/bin/mophila` なども見る。それでも起動できなければエラーを出すので、設定 `mophila.serverPath` に絶対パスを書く。
 
 > Finder や Dock から起動した VS Code は、シェルの PATH を引き継がない。`which mophila` が通るのに補完が出ないときは、これが原因のことが多い。
-2. この拡張を入れる:
+2. この拡張を入れる。リポジトリの一番上で:
+
+```
+make install-vscode
+```
+
+組み立てから入れるところまでやる。入れ直すときも同じで、外すのは `scripts/install-vscode.sh --uninstall`。
+`code` コマンドが要るので、無ければ VS Code のコマンドパレットで "Shell Command: Install 'code' command in PATH" を実行する。
+
+手でやるなら:
 
 ```
 cd editors/vscode
 npm install
-npm run package            # mophila-0.1.0.vsix ができる
-code --install-extension mophila-0.1.0.vsix
+npm run package                        # mophila-<version>.vsix ができる
+code --install-extension mophila-<version>.vsix --force
 ```
 
 開発中は、このフォルダを VS Code で開いて F5 (Extension Development Host) でも動く。
@@ -32,4 +41,4 @@ code --install-extension mophila-0.1.0.vsix
 
 ## Neovim
 
-[../nvim/README.md](../nvim/README.md) を見る。構文ハイライトの syntax ファイルと LSP の設定がある。
+リポジトリの `editors/nvim/README.md` を見る。構文ハイライトの syntax ファイルと LSP の設定がある。

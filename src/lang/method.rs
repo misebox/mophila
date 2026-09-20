@@ -45,6 +45,7 @@ pub const METHODS: &[Method] = &[
     // Vector を複素数 (x + yi) として掛け割りする。回転と拡大が 1 度に書けるので、
     // 1 次分数変換 (az + b) / (cz + d) のような図がそのまま書ける
     Method { receivers: &["Vector"], name: "cmul", signature: "v.cmul(w: Vector)", returns: "Vector", doc: "複素数としての積。x + yi として掛ける (回転と拡大)", call: vec_cmul },
+    Method { receivers: &["Vector"], name: "flip_y", signature: "v.flip_y()", returns: "Vector", doc: "y の符号を反転した Vector。数学の向き (y は上) の点を画面の向き (y は下) に写す。逆向きも同じ", call: vec_flip_y },
     Method { receivers: &["Vector"], name: "cdiv", signature: "v.cdiv(w: Vector)", returns: "Vector", doc: "複素数としての商。w が 0 なら ValueError.DivisionByZero", call: vec_cdiv },
     Method { receivers: SEQ, name: "len", signature: "xs.len()", returns: "Number", doc: "要素数", call: seq_len },
     Method { receivers: &["List"], name: "push", signature: "xs.push(値: T)", returns: "Nothing", doc: "末尾に追加する。その List 自身が変わる", call: list_push },
@@ -207,6 +208,14 @@ fn two_vectors(m: &str, r: &Value, args: &Args) -> Result<(f64, f64, f64, f64)> 
 fn vec_cmul(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
     let (a, b, c, d) = two_vectors("cmul", &r, &args)?;
     Ok(Value::Vector(a * c - b * d, a * d + b * c))
+}
+
+fn vec_flip_y(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    if !args.is_empty() {
+        return err(Kind::ArityMismatch, "flip_y takes no arguments");
+    }
+    let Value::Vector(x, y) = r else { return err(Kind::ArgumentType, "flip_y is a Vector method") };
+    Ok(Value::Vector(x, -y))
 }
 
 fn vec_cdiv(_: &mut Interp, r: Value, args: Args) -> Result<Value> {

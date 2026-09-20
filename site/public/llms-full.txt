@@ -1422,7 +1422,7 @@ String / List / Dict / Range のメソッドは builtin で、`import` は要ら
 
 | モジュール | 内容 |
 |---|---|
-| math | 数学。`PI` `TAU` `E` などの定数と、三角関数・丸め・平方根・対数・最大最小・範囲の変換 |
+| math | 数学。`PI` `TAU` `E` などの定数と、三角関数・丸め・平方根・対数・最大最小・範囲の変換。`polar(r, a)` は数学の向き (弧度・反時計回り) で Vector を作る |
 | color | 色を作る、混ぜる。明るくする、暗くする、不透明度を変える、色相から作る |
 | shape | Polygon の `points` を作る。円周上の点、正多角形、星、矢印 |
 | layout | 並べる位置を計算する。格子、直線上の等間隔、比率を保って収めた大きさ |
@@ -1701,6 +1701,7 @@ Vector(8, 4.5)
 メソッド:
 
 - `v.cmul(w: Vector)` -> Vector — 複素数としての積。x + yi として掛ける (回転と拡大)
+- `v.flip_y()` -> Vector — y の符号を反転した Vector。数学の向き (y は上) の点を画面の向き (y は下) に写す。逆向きも同じ
 - `v.cdiv(w: Vector)` -> Vector — 複素数としての商。w が 0 なら ValueError.DivisionByZero
 
 ### Pos
@@ -2385,6 +2386,7 @@ EspeakVoiceEngine(voice = "ja")
 - `math.ln(x: Number)` -> Number — 自然対数
 - `math.exp(x: Number)` -> Number — e の x 乗
 - `math.atan2(y: Number, x: Number)` -> Number — (x, y) の角度 (ラジアン)
+- `math.polar(r: Number, a: Number)` -> Vector — 長さ r、角度 a (ラジアン、反時計回り、0 が右) の Vector。数学の向き (y は上) で考えて、画面の向き (y は下) で返す
 - `math.max(a: Number, b: Number, ...)` -> Number — 最大。全部 Duration なら Duration のまま返す
 - `math.min(a: Number, b: Number, ...)` -> Number — 最小。全部 Duration なら Duration のまま返す
 - `math.tan(x: Number)` -> Number — 正接 (ラジアン)

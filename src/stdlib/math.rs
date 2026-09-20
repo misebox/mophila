@@ -19,6 +19,7 @@ pub const DOCS: &[Entry] = &[
     Entry { name: "ln", signature: "math.ln(x: Number)", returns: "Number", doc: "自然対数" },
     Entry { name: "exp", signature: "math.exp(x: Number)", returns: "Number", doc: "e の x 乗" },
     Entry { name: "atan2", signature: "math.atan2(y: Number, x: Number)", returns: "Number", doc: "(x, y) の角度 (ラジアン)" },
+    Entry { name: "polar", signature: "math.polar(r: Number, a: Number)", returns: "Vector", doc: "長さ r、角度 a (ラジアン、反時計回り、0 が右) の Vector。数学の向き (y は上) で考えて、画面の向き (y は下) で返す" },
     Entry { name: "max", signature: "math.max(a: Number, b: Number, ...)", returns: "Number", doc: "最大。全部 Duration なら Duration のまま返す" },
     Entry { name: "min", signature: "math.min(a: Number, b: Number, ...)", returns: "Number", doc: "最小。全部 Duration なら Duration のまま返す" },
     Entry { name: "tan", signature: "math.tan(x: Number)", returns: "Number", doc: "正接 (ラジアン)" },
@@ -45,7 +46,7 @@ pub fn module() -> Module {
     items.insert("E".into(), Value::num(std::f64::consts::E));
     for f in [
         "sin", "cos", "tan", "asin", "acos", "atan", "floor", "ceil", "round", "abs", "sign", "sqrt", "pow", "ln", "log", "exp", "log10", "log2", "atan2", "hypot", "max", "min", "clamp", "lerp",
-        "unlerp", "map_range", "nice_step",
+        "unlerp", "map_range", "nice_step", "polar",
     ] {
         items.insert(f.into(), Value::Builtin(f));
     }
@@ -73,6 +74,12 @@ pub fn call(name: &str, values: &[Value]) -> Result<Value> {
         _ => err(Kind::ArityMismatch, format!("{name} takes 2 arguments, {} given", nums.len())),
     };
     match name {
+        // 数学の向き (反時計回り、y は上) で考えて、画面の向き (y は下) の Vector にして返す
+        "polar" => match nums.as_slice() {
+            // + 0.0 は -0 を 0 にするため (符号を反転した 0 が表示に出ないように)
+            [r, a] => Ok(Value::Vector(r * a.cos(), -(r * a.sin()) + 0.0)),
+            _ => err(Kind::ArityMismatch, format!("polar takes 2 arguments (r, a), {} given", nums.len())),
+        },
         "sin" => unary(f64::sin),
         "cos" => unary(f64::cos),
         "floor" => unary(f64::floor),

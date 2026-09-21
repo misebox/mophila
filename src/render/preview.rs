@@ -1,7 +1,8 @@
 //! ウィンドウを開いて再生する。コマは少し先まで描いておき、順に出す。
 //!
-//! 描くのが実時間に間に合わないときは、コマを飛ばさずに**出せる速さで**出す (絵はゆっくりになるが跳ねない)。
-//! 音があるときだけは音が親時計なので、遅れたぶんは飛ばして追いつく。
+//! 中身の時刻は実時間に貼り付ける (音とずれない)。重い場面では**出す間隔を広げて fps を落とす**。
+//! 間隔は 1 コマ描くのに掛かった時間から決め、余裕を持たせる。それでも間に合わなければ、
+//! 描く時刻のほうを飛ばす (描いてから捨てるのでは追いつけない)。
 //!
 //! 操作: Space で一時停止・再開。← → または h l で 10 秒移動 (一時停止中は 1 秒)。Shift を押しながらで全体の 10%。
 //! s でステータスバーの出し入れ、q で終了。
@@ -20,7 +21,7 @@ use vello::{AaConfig, AaSupport, RenderParams, Renderer, RendererOptions, wgpu};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, KeyEvent, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
@@ -35,8 +36,12 @@ use crate::lang::value::ObjRef;
 const LOOKAHEAD: usize = 4;
 /// 1 回の描画で作り足すコマの数。作りすぎると、いま出すコマがそのぶん遅れる
 const PER_TURN: usize = 2;
-/// 中身を進める刻みの目安。画面の更新がこれより速ければ、同じコマを何回か出して合わせる
+/// 中身を進める刻みの下限。画面の更新がこれより速ければ、同じコマを何回か出して合わせる
 const TARGET_STEP: f64 = 1.0 / 60.0;
+/// 1 コマを描くのにかかる時間の、何倍の間隔で出すか。余裕がないと重い場面で止まる
+const SLACK: f64 = 2.0;
+/// 間隔を広げる限度 (これ以上は遅くしない)
+const MAX_HOLDS: usize = 12;
 
 pub fn run(name: String, interp: Interp, view: ObjRef, duration: f64, shot: crate::render::scene::Shot, looping: bool, start: Option<f64>, media: &Media) -> Result<(), Box<dyn Error>> {
     let size = (shot.width as u32, shot.height as u32);
@@ -62,12 +67,12 @@ pub fn run(name: String, interp: Interp, view: ObjRef, duration: f64, shot: crat
         refresh: TARGET_STEP,
         step: TARGET_STEP,
         holds: 1,
-        waited: 0,
         last_tick: Instant::now(),
         last_content: Instant::now(),
         shift: false,
         error: None,
         audio,
+        cost: 0.0,
         anchor: Instant::now(),
         anchor_t: position,
         cues: media.cues.clone(),
@@ -125,8 +130,6 @@ struct Player<'a> {
     step: f64,
     /// 1 コマを何回の更新に渡って出すか。120Hz の画面なら 2
     holds: usize,
-    /// いまのコマを出してからの更新の回数
-    waited: usize,
     /// 前に描いた時刻。画面の更新間隔を測るのに使う
     last_tick: Instant,
     /// 前にコマを入れ替えた時刻。fps を出すのに使う
@@ -134,7 +137,9 @@ struct Player<'a> {
     shift: bool,
     error: Option<Box<dyn Error>>,
     audio: Option<audio::Output>,
-    /// 音に合わせるための基準。この時刻に anchor_t を出していた
+    /// 1 コマ描くのにかかる時間 (ならし)。出す間隔をこれから決める
+    cost: f64,
+    /// 実時間と中身の時刻の対応。この時刻に anchor_t のコマを出した
     anchor: Instant,
     anchor_t: f64,
     cues: Vec<Cue>,
@@ -192,7 +197,7 @@ impl Player<'_> {
             h *= room;
             // 更新間隔の初期値。実際の間隔は出しながら測り直す
             if let Some(mhz) = screen.refresh_rate_millihertz() {
-                self.tick_is(1000.0 / f64::from(mhz));
+                self.repace(1000.0 / f64::from(mhz));
             }
         }
         let attrs = Window::default_attributes()
@@ -223,11 +228,13 @@ impl Player<'_> {
         Ok(())
     }
 
-    /// 画面の更新間隔が分かったら、中身の刻みを決め直す。
-    /// 画面のほうが速ければ、同じコマを複数回出して実時間に合わせる (毎回進めると速く流れてしまう)
-    fn tick_is(&mut self, refresh: f64) {
+    /// 出す間隔を決め直す。画面の更新の整数倍にすると拍が揃うので、何回ぶん待つかで決める。
+    /// 1 コマ描くのに掛かる時間の SLACK 倍は空けて、重い場面でも詰まらないようにする
+    fn repace(&mut self, refresh: f64) {
         self.refresh = refresh;
-        self.holds = ((TARGET_STEP / refresh).round() as usize).max(1);
+        let by_rate = ((TARGET_STEP / refresh).round() as usize).max(1);
+        let by_cost = (SLACK * self.cost / refresh).ceil() as usize;
+        self.holds = by_rate.max(by_cost).clamp(1, MAX_HOLDS);
         self.step = refresh * self.holds as f64;
     }
 
@@ -238,7 +245,6 @@ impl Player<'_> {
             self.spare.push(shown);
         }
         self.next_t = self.position;
-        self.waited = 0;
         self.anchor = Instant::now();
         self.anchor_t = self.position;
         if let Some(state) = &self.state {
@@ -302,12 +308,6 @@ impl Player<'_> {
         self.fill()?;
         self.pick();
         self.show()?;
-        // 再生中は次を求め続ける。止まっていても、まだ何も出していなければ 1 枚出すまで続ける
-        if let Some(state) = &self.state {
-            if self.playing || self.shown.is_none() {
-                state.window.request_redraw();
-            }
-        }
         Ok(())
     }
 
@@ -324,6 +324,13 @@ impl Player<'_> {
                 }
                 self.next_t = 0.0;
             }
+            // 遅れているぶんは、描かずに飛ばす。描いてから捨てるのでは追いつけない
+            if self.playing {
+                let wall = self.wall_t(Instant::now());
+                if self.next_t + self.step < wall {
+                    self.next_t = wall;
+                }
+            }
             let t = self.next_t;
             self.draw(t)?;
             self.next_t = t + self.step;
@@ -333,6 +340,7 @@ impl Player<'_> {
 
     /// 1 コマ描いて作り置きに積む
     fn draw(&mut self, t: f64) -> Result<(), Box<dyn Error>> {
+        let began = Instant::now();
         self.timing.at(t);
         let step = Instant::now();
         self.interp.begin_frame(t);
@@ -366,70 +374,71 @@ impl Player<'_> {
         state.renderer.render_to_texture(&handle.device, &handle.queue, &scene, &target.view, &params)?;
         self.timing.add("render", step.elapsed());
         self.ready.push_back(target);
+        let spent = began.elapsed().as_secs_f64();
+        // 上がるときはすぐ、下がるときはゆっくり。重い場面に入った瞬間に間隔を広げたい
+        self.cost = match spent > self.cost {
+            true => spent,
+            false => self.cost * 0.95 + spent * 0.05,
+        };
+        self.repace(self.refresh);
         Ok(())
     }
 
-    /// 出すコマを決める。画面の更新に合わせて進め、holds 回に 1 度だけ入れ替える
+    /// いまの実時間に当たる中身の時刻
+    fn wall_t(&self, now: Instant) -> f64 {
+        self.anchor_t + now.duration_since(self.anchor).as_secs_f64()
+    }
+
+    /// 出すコマを決める。中身の時刻は実時間に貼り付いているので、音とずれない
     fn pick(&mut self) {
         let now = Instant::now();
         let gap = now.duration_since(self.last_tick).as_secs_f64();
         self.last_tick = now;
         // 画面の更新間隔。詰まって伸びた回は混ぜない
         if !self.ready.is_empty() && (1.0 / 300.0..=1.0 / 20.0).contains(&gap) {
-            self.tick_is(self.refresh * 0.9 + gap * 0.1);
+            self.repace(self.refresh * 0.9 + gap * 0.1);
         }
         // まだ 1 コマも出していないなら、できた先から出す (開いた直後と seek の後)
         if self.shown.is_none() {
             if let Some(next) = self.ready.pop_front() {
                 (self.position, self.anchor, self.anchor_t) = (next.t, now, next.t);
                 self.shown = Some(next);
-                self.waited = 0;
+                // mixer は止まった状態で作るので、最初の 1 コマを出すときに動かす
+                self.sync_audio();
             }
             return;
         }
         if !self.playing {
             return;
         }
-        self.waited += 1;
-        if self.waited < self.holds {
-            return;
-        }
-        if self.ready.is_empty() {
-            // 出す番が来たのに描けていない。飛ばさずに待つので、絵はそのぶんゆっくりになる
-            if !self.done() {
-                self.starved += 1;
-                if self.timing.on() && self.starved <= 20 {
-                    let last = if self.starved == 20 { "  (no more of these)" } else { "" };
-                    eprintln!("preview: {:.2}s was not ready in time{last}", self.next_t);
-                }
+        let wall = self.wall_t(now);
+        // 出す時刻が来たものを出す。来ていなければ、同じコマをもう一度出す
+        let mut shown_now = false;
+        while self.ready.front().is_some_and(|next| next.t <= wall) {
+            let next = self.ready.pop_front().expect("just checked");
+            self.position = next.t;
+            if let Some(old) = self.shown.replace(next) {
+                self.spare.push(old);
             }
-            return;
+            shown_now = true;
         }
-        self.waited = 0;
-        // 音があるときは実時間が親時計。遅れているぶんは捨てて追いつく (音には触らない)
-        let mut take = 1;
-        if self.audio.is_some() {
-            let want = self.anchor_t + now.duration_since(self.anchor).as_secs_f64();
-            while take < self.ready.len() && self.ready[take - 1].t + self.step < want {
-                take += 1;
+        if shown_now {
+            let content = now.duration_since(self.last_content).as_secs_f64();
+            self.last_content = now;
+            if content > 0.0 {
+                let rate = 1.0 / content;
+                self.fps = match self.fps {
+                    0.0 => rate,
+                    before => before * 0.9 + rate * 0.1,
+                };
             }
-        }
-        for _ in 0..take {
-            if let Some(next) = self.ready.pop_front() {
-                self.position = next.t;
-                if let Some(old) = self.shown.replace(next) {
-                    self.spare.push(old);
-                }
+        } else if self.ready.is_empty() && !self.done() && self.position + self.step < wall {
+            // 出す時刻が過ぎているのに描けていない。次に描く時刻を飛ばして追いつく
+            self.starved += 1;
+            if self.timing.on() && self.starved <= 20 {
+                let last = if self.starved == 20 { "  (no more of these)" } else { "" };
+                eprintln!("preview: {:.2}s was not ready in time{last}", self.next_t);
             }
-        }
-        let content = now.duration_since(self.last_content).as_secs_f64();
-        self.last_content = now;
-        if content > 0.0 {
-            let rate = take as f64 / content;
-            self.fps = match self.fps {
-                0.0 => rate,
-                before => before * 0.9 + rate * 0.1,
-            };
         }
         if self.done() {
             self.playing = false;
@@ -438,18 +447,20 @@ impl Player<'_> {
         // 進み具合を、ときどき 1 行だけ
         if self.timing.on() && now.duration_since(self.last_note).as_secs_f64() >= 2.0 {
             self.last_note = now;
-            eprintln!("preview: {:.2}s  {:.0}fps  {:.2}x real time", self.position, self.fps, self.fps * self.step);
+            eprintln!("preview: {:.2}s  {:.0}fps  step {:.0}ms  behind {:.0}ms", self.position, self.fps, self.step * 1000.0, (wall - self.position) * 1000.0);
         }
     }
 
-    /// ステータスバーの 1 行
+    /// ステータスバーの 1 行。実時間に追いついていないときは、何倍の速さで出ているかも書く
     fn status_line(&self, t: f64) -> String {
         let percent = if self.duration > 0.0 { t / self.duration * 100.0 } else { 0.0 };
+        let speed = self.fps * self.step;
         let state = match self.playing {
+            true if speed < 0.95 => format!("{:.0}fps   {speed:.2}x", self.fps),
             true => format!("{:.0}fps", self.fps),
             false => "paused".to_string(),
         };
-        format!("{t:.1}s / {:.1}s   {percent:.0}%   {state}", self.duration)
+        format!("{t:.1}s / {:.1}s      {percent:.0}%      {state}", self.duration)
     }
 
     /// 最後まで出し終わったか
@@ -494,7 +505,6 @@ impl Player<'_> {
         self.spare.clear();
         self.shown = None;
         self.next_t = self.position;
-        self.waited = 0;
     }
 
     fn fail(&mut self, event_loop: &ActiveEventLoop, e: Box<dyn Error>) {
@@ -504,6 +514,21 @@ impl Player<'_> {
 }
 
 impl ApplicationHandler for Player<'_> {
+    /// 再生中は寝かせない。RedrawRequested の中から次を求めると、まとめられて落ちることがあり、
+    /// 既定の Wait だと誰も起こさないまま止まる
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        let running = self.playing || self.shown.is_none();
+        event_loop.set_control_flow(match running {
+            true => ControlFlow::Poll,
+            false => ControlFlow::Wait,
+        });
+        if running {
+            if let Some(state) = &self.state {
+                state.window.request_redraw();
+            }
+        }
+    }
+
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.state.is_none() {
             if let Err(e) = self.open(event_loop) {

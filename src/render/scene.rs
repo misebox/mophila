@@ -781,12 +781,12 @@ pub fn overlay_subtitles(scene: &mut Scene, cache: &mut RenderCache, cues: &[cra
 
 /// preview の状態を絵の下端に重ねる
 pub fn overlay_status(scene: &mut Scene, cache: &mut RenderCache, text: &str, area: Rect) {
-    let size = (area.height() * 0.03).clamp(10.0, 20.0) as f32;
-    let pad = f64::from(size) * 0.6;
+    let size = (area.height() * 0.035).max(11.0) as f32;
+    let pad = f64::from(size) * 0.8;
     let layout = cache.layout(text, None, size, None, text::alignment(Some("left")));
     let top = area.y1 - f64::from(layout.height()) - pad;
     scene.fill(Fill::NonZero, Affine::IDENTITY, Color::from_rgba8(0, 0, 0, 150), None, &Rect::new(area.x0, top, area.x1, area.y1));
-    text::draw(scene, layout, Affine::translate((area.x0 + pad, top + pad / 2.0)), Color::from_rgba8(240, 240, 240, 255), None);
+    text::draw(scene, layout, Affine::translate((area.x0 + pad * 1.5, top + pad / 2.0)), Color::from_rgba8(240, 240, 240, 255), None);
 }
 
 /// Shader の塗り。図形の範囲 (画面内) のピクセルを compute shader で計算し、その画像で図形を塗る

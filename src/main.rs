@@ -623,6 +623,7 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
     let readback = 2 * u64::from((width * 4).next_multiple_of(256)) * u64::from(height);
     let mut budget = render::budget::Budget::new(args.gpu_budget, readback);
     for (i, t) in times.iter().copied().enumerate() {
+        timing.at(t);
         let (scene, bytes) = match &mut frames {
             // 別スレッドが組んだもの。配った順に届く
             Some(frames) => timing.measure("frame", || -> Result<(vello::Scene, render::text::Bytes), Box<dyn Error>> {

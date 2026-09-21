@@ -50,8 +50,16 @@ pub fn run(name: String, interp: Interp, view: ObjRef, duration: f64, shot: crat
         error: None,
         audio,
         cues: media.cues.clone(),
+        fps: 0.0,
+        title: String::new(),
+        timing: crate::timing::Timing::from_env(),
+        slow: 0,
     };
     EventLoop::new()?.run_app(&mut player)?;
+    player.timing.report();
+    if player.slow > 0 {
+        eprintln!("preview: {} frames took longer than 33ms (the picture waits for them; render is not affected)", player.slow);
+    }
     match player.error {
         Some(e) => Err(e),
         None => Ok(()),
@@ -78,6 +86,14 @@ struct Player<'a> {
     error: Option<Box<dyn Error>>,
     audio: Option<audio::Output>,
     cues: Vec<Cue>,
+    /// ならした fps。題に出す
+    fps: f64,
+    /// いま題に出している文字。同じなら書き直さない
+    title: String,
+    /// MOPHILA_TIMING で段階ごとの時間を測る
+    timing: crate::timing::Timing,
+    /// 30fps に間に合わなかったコマの数
+    slow: usize,
 }
 
 struct State<'a> {
@@ -118,6 +134,11 @@ impl Player<'_> {
         )?;
         let handle = &context.devices[surface.dev_id];
         self.interp.cache_mut().shaders = Some(ShaderRunner::new(handle.device.clone(), handle.queue.clone()));
+        if self.timing.on() {
+            let (w, h) = (inner.width, inner.height);
+            let ratio = f64::from(w) * f64::from(h) / (f64::from(self.size.0) * f64::from(self.size.1)).max(1.0);
+            eprintln!("preview: drawing {w}x{h} ({ratio:.2}x the pixels of --size {}x{})", self.size.0, self.size.1);
+        }
         self.state = Some(State { window, context, surface, renderer });
         self.last_tick = Instant::now();
         Ok(())
@@ -130,6 +151,14 @@ impl Player<'_> {
         self.last_tick = now;
         if !self.playing || self.duration <= 0.0 {
             return;
+        }
+        // 出ているコマ数。1 コマごとに跳ねると読めないので、ならして出す
+        if dt > 0.0 {
+            let now = 1.0 / dt;
+            self.fps = match self.fps {
+                0.0 => now,
+                before => before * 0.9 + now * 0.1,
+            };
         }
         self.position += dt;
         if self.position < self.duration {
@@ -200,29 +229,44 @@ impl Player<'_> {
         let t = self.position;
         let Some(state) = &mut self.state else { return Ok(()) };
         let percent = if self.duration > 0.0 { t / self.duration * 100.0 } else { 0.0 };
-        state.window.set_title(&format!(
-            "{}  {:.1}s / {:.1}s  {:.0}%{}",
-            self.name,
-            t,
-            self.duration,
-            percent,
-            if self.playing { "" } else { "  (paused)" }
-        ));
+        let rate = match self.playing {
+            true => format!("  {:.0}fps", self.fps),
+            false => "  (paused)".to_string(),
+        };
+        let title = format!("{}  {t:.1}s / {:.1}s  {percent:.0}%{rate}", self.name, self.duration);
+        if title != self.title {
+            state.window.set_title(&title);
+            self.title = title;
+        }
 
+        let began = Instant::now();
+        self.timing.at(t);
+        let step = Instant::now();
         self.interp.begin_frame(t);
         let tracks = crate::lang::eval::all_tracks(&self.view);
         self.interp.apply_tracks(&tracks, t)?;
+        let eval = step.elapsed();
+        self.timing.add("eval", eval);
+
+        let step = Instant::now();
         let (width, height) = (state.surface.config.width, state.surface.config.height);
         let shot = scene::Shot { width: f64::from(width), height: f64::from(height), ..self.shot };
         let mut scene = scene::build(&self.view, shot, t, self.interp.cache_mut())?;
         // 字幕は絵の中に出す。窓の縦横比が違うと、絵の上下左右に帯が空いている
         let area = scene::picture(&self.view, shot)?;
         scene::overlay_subtitles(&mut scene, self.interp.cache_mut(), &self.cues, t, area);
+        let built = step.elapsed();
+        self.timing.add("scene", built);
 
+        let step = Instant::now();
         let handle = &state.context.devices[state.surface.dev_id];
         shader::apply_overrides(&mut state.renderer, self.interp.cache_mut().shaders.as_mut());
         let params = RenderParams { base_color: self.shot.pad, width, height, antialiasing_method: AaConfig::Area };
         state.renderer.render_to_texture(&handle.device, &handle.queue, &scene, &state.surface.target_view, &params)?;
+        let drawn = step.elapsed();
+        self.timing.add("render", drawn);
+        let spent = (eval, built, drawn);
+        let step = Instant::now();
 
         let frame = match state.surface.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(f) | wgpu::CurrentSurfaceTexture::Suboptimal(f) => f,
@@ -243,9 +287,29 @@ impl Player<'_> {
         state.surface.blitter.copy(&handle.device, &mut encoder, &state.surface.target_view, &target);
         handle.queue.submit([encoder.finish()]);
         frame.present();
+        self.timing.add("present", step.elapsed());
         // 止まっているときは次の描画を求めない (seek や再開で求める)
         if self.playing {
             state.window.request_redraw();
+        }
+        let whole = began.elapsed();
+        self.timing.add("frame", whole);
+        // 30fps に間に合わなかったコマ。絵はその分だけ待たされる (書き出しには関わらない)
+        if whole.as_secs_f64() > 1.0 / 30.0 {
+            self.slow += 1;
+            // どの時刻の何が重いのかは、窓を閉じる前に知りたい。多すぎても読めないので頭だけ
+            if self.timing.on() && self.slow <= 20 {
+                let ms = |d: std::time::Duration| d.as_secs_f64() * 1000.0;
+                eprintln!(
+                    "preview: {t:.2}s took {:.0}ms (eval {:.0} / scene {:.0} / render {:.0} / present {:.0}){}",
+                    ms(whole),
+                    ms(spent.0),
+                    ms(spent.1),
+                    ms(spent.2),
+                    ms(step.elapsed()),
+                    if self.slow == 20 { "  (no more of these)" } else { "" }
+                );
+            }
         }
         Ok(())
     }

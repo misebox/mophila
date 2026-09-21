@@ -2592,6 +2592,12 @@
    "members": [],
    "methods": [
     {
+     "doc": "Tuple の並びを、その型の並びにする。Vector Vector3 Pos Color で使える。点を並べるときに、型の名前を毎回書かずに済む",
+     "name": "from",
+     "returns": "List<T>",
+     "signature": "Vector.from(rows: List<Tuple>)"
+    },
+    {
      "doc": "点の並びをつないだ Path。segments の組を手で書かずに済む",
      "name": "through",
      "returns": "Path",

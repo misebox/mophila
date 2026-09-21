@@ -48,10 +48,10 @@ pub const DOCS: &[Entry] = &[
 /// `import space3d` で束縛されるもの
 pub fn module() -> Module {
     let mut items = HashMap::new();
-    for f in ["Vector3", "box", "plane", "sphere", "path", "grid", "shade"] {
+    for f in ["box", "plane", "sphere", "path", "grid", "shade"] {
         items.insert(f.into(), Value::Builtin(name_of(f)));
     }
-    for t in ["Mesh", "Face", "Transform3", "PerspectiveCamera", "OrthographicCamera", "IsometricCamera"] {
+    for t in ["Vector3", "Mesh", "Face", "Transform3", "PerspectiveCamera", "OrthographicCamera", "IsometricCamera"] {
         items.insert(t.into(), Value::BuiltinType(t.into()));
     }
     Module { name: "space3d".into(), items }
@@ -60,7 +60,6 @@ pub fn module() -> Module {
 /// Value::Builtin に持たせる名前。呼ぶときにどのモジュールか分かるように前置きする
 fn name_of(f: &str) -> &'static str {
     match f {
-        "Vector3" => "space3d.Vector3",
         "box" => "space3d.box",
         "plane" => "space3d.plane",
         "sphere" => "space3d.sphere",
@@ -76,10 +75,6 @@ pub fn call(name: &str, values: &[Value]) -> Result<Value> {
     // エラーには呼んだ通りの名前を出す
     let name = &format!("space3d.{name}")[..];
     match name.trim_start_matches("space3d.") {
-        "Vector3" => match nums(name, values)?.as_slice() {
-            [x, y, z] => Ok(Value::Vector3(*x, *y, *z)),
-            other => err(Kind::ArityMismatch, format!("{name} takes 3 arguments (x, y, z), {} given", other.len())),
-        },
         "box" => match values {
             [Value::Vector3(x, y, z), Value::Vector3(w, h, d)] => Ok(make_box((*x, *y, *z), (*w, *h, *d))),
             _ => err(Kind::ArgumentType, "space3d.box takes (at: Vector3, size: Vector3)"),
@@ -138,15 +133,6 @@ pub fn call(name: &str, values: &[Value]) -> Result<Value> {
     }
 }
 
-fn nums(name: &str, values: &[Value]) -> Result<Vec<f64>> {
-    values
-        .iter()
-        .map(|v| match v {
-            Value::Number(n, _) => Ok(*n),
-            v => err(Kind::ArgumentType, format!("{name} expects Number, found {}", v.type_name())),
-        })
-        .collect()
-}
 
 /// 3D の点。中の計算だけで使う
 type P3 = (f64, f64, f64);

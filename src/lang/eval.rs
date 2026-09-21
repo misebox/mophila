@@ -666,8 +666,10 @@ impl Interp {
             .iter()
             .rev()
             .find_map(|s| s.borrow().get(name).cloned())
-            // builtin の型は名前だけで値として引ける (alias 用)
-            .or_else(|| Self::is_builtin_type(name).then(|| Value::BuiltinType(name.to_string())))
+            // builtin の型は名前だけで値として引ける (alias 用)。module の中にだけある型は、module から取る
+            .or_else(|| {
+                (Self::is_builtin_type(name) && !crate::docs::MODULE_ONLY.contains(&name)).then(|| Value::BuiltinType(name.to_string()))
+            })
             .ok_or_else(|| {
                 let hint = if stdlib::find(name).is_some() { format!("; add \"import {name}\"") } else { String::new() };
                 MophError::new(Kind::UndefinedVariable, format!("\"{name}\" is not defined{hint}"))
@@ -1017,6 +1019,13 @@ impl Interp {
                 match (map.get("x"), map.get("y")) {
                     (Some(Value::Number(x, _)), Some(Value::Number(y, _))) => Ok(Value::Vector(*x, *y)),
                     _ => err(Kind::ArgumentType, "Vector needs x and y (Number)"),
+                }
+            }
+            "Vector3" => {
+                let map = self.resolve_args(kind, &["x", "y", "z"], args)?;
+                match (map.get("x"), map.get("y"), map.get("z")) {
+                    (Some(Value::Number(x, _)), Some(Value::Number(y, _)), Some(Value::Number(z, _))) => Ok(Value::Vector3(*x, *y, *z)),
+                    _ => err(Kind::ArgumentType, "Vector3 needs x, y and z (Number)"),
                 }
             }
             "Pos" => {
@@ -1380,7 +1389,8 @@ impl Interp {
                 }
             }
             callee => match self.eval(callee)? {
-                Value::BuiltinType(name) => self.construct(&name, args),
+                // 値として持っている型は、module から取り出したものなので作れる (let V = space3d.Vector3)
+                Value::BuiltinType(name) => self.construct_kind(&name, args),
                 Value::Type(ty) => self.construct_user(&ty, args),
                 Value::Func(closure) => {
                     let values = self.eval_args(args)?;

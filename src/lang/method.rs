@@ -71,6 +71,14 @@ pub const METHODS: &[Method] = &[
     Method { receivers: SEQ, name: "zip", signature: "xs.zip(ys: List<U>)", returns: "List<(T, U)>", doc: "同じ位置どうしを組にする。短い方に合わせる", call: seq_zip },
     Method { receivers: &["Tuple", "Range"], name: "to_list", signature: "(0..n).to_list()", returns: "List<T>", doc: "中身を並べた List", call: seq_to_list },
     Method { receivers: &["Range"], name: "steps", signature: "(0..=1).steps(n: Number)", returns: "List<Number>", doc: "両端を含めて n 等分した値の List (要素は n + 1 個)", call: range_steps },
+    Method {
+        receivers: &["Type"],
+        name: "from",
+        signature: "Vector.from(rows: List<Tuple>)",
+        returns: "List<T>",
+        doc: "Tuple の並びを、その型の並びにする。Vector Vector3 Pos Color で使える。点を並べるときに、型の名前を毎回書かずに済む",
+        call: type_from,
+    },
     Method { receivers: &["Type"], name: "through", signature: "Path.through(points: List<Vector>, closed: Bool = false)", returns: "Path", doc: "点の並びをつないだ Path。segments の組を手で書かずに済む", call: type_through },
     Method { receivers: &["Dict"], name: "keys", signature: "d.keys()", returns: "List<String>", doc: "キーの List", call: dict_keys },
     Method { receivers: &["Dict"], name: "values", signature: "d.values()", returns: "List<T>", doc: "値の List", call: dict_values },
@@ -536,6 +544,50 @@ fn seq_sort(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
         Some(msg) => err(Kind::OperandType, msg),
         None => Ok(list(out)),
     }
+}
+
+/// Tuple 1 つを、その型の値にする
+fn value_from(kind: &str, row: &[Value]) -> Result<Value> {
+    let ns = row
+        .iter()
+        .map(|v| match v {
+            Value::Number(n, _) => Ok(*n),
+            v => err(Kind::ArgumentType, format!("{kind}.from takes Tuples of Number, found {}", v.type_name())),
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let wrong = |want: &str| err(Kind::ArityMismatch, format!("{kind}.from: each Tuple needs {want}, found {}", ns.len()));
+    match (kind, ns.as_slice()) {
+        ("Vector", [x, y]) => Ok(Value::Vector(*x, *y)),
+        ("Vector3", [x, y, z]) => Ok(Value::Vector3(*x, *y, *z)),
+        ("Pos", [x, y]) => Ok(Value::Apos("center".to_string(), *x, *y)),
+        ("Color", [r, g, b]) => Ok(Value::Color([(r / 255.0) as f32, (g / 255.0) as f32, (b / 255.0) as f32, 1.0])),
+        ("Color", [r, g, b, a]) => Ok(Value::Color([(r / 255.0) as f32, (g / 255.0) as f32, (b / 255.0) as f32, *a as f32])),
+        ("Color", _) => wrong("3 numbers (r, g, b) or 4 (r, g, b, a)"),
+        ("Vector3", _) => wrong("3 numbers"),
+        _ => wrong("2 numbers"),
+    }
+}
+
+fn type_from(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    let Value::BuiltinType(kind) = &r else { return err(Kind::ArgumentType, "from is a method of a builtin type") };
+    if !["Vector", "Vector3", "Pos", "Color"].contains(&kind.as_str()) {
+        return err(Kind::UndefinedAttribute, format!("{kind} has no method \"from\"; it is for Vector, Vector3, Pos and Color"));
+    }
+    let rows = match one(&args) {
+        Some(Value::List(xs)) => xs.borrow().clone(),
+        Some(Value::Tuple(xs)) => xs.clone(),
+        _ => return err(Kind::ArgumentType, format!("{kind}.from takes one List of Tuples")),
+    };
+    let out = rows
+        .iter()
+        .map(|row| match row {
+            Value::Tuple(cells) => value_from(kind, cells),
+            // もうその型のものは、そのまま通す
+            v if v.type_name() == *kind => Ok(v.clone()),
+            v => err(Kind::ArgumentType, format!("{kind}.from takes a List of Tuples, found {} in it", v.type_name())),
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(list(out))
 }
 
 fn type_through(it: &mut Interp, r: Value, args: Args) -> Result<Value> {

@@ -59,7 +59,7 @@ pub fn types() -> &'static [Type] {
 
 /// 分類の並び順
 /// モジュールの中にだけある型。素の名前では作れず、`space3d.Vector3(...)` のように書く
-pub const MODULE_ONLY: &[&str] = &["Vector3", "PerspectiveCamera", "OrthographicCamera", "IsometricCamera"];
+pub const MODULE_ONLY: &[&str] = &["Vector3", "Transform3", "PerspectiveCamera", "OrthographicCamera", "IsometricCamera"];
 
 pub const CATEGORIES: &[&str] =
     &["Primitive", "Collection", "Function", "Position", "Shape", "Paint", "Scene", "Time", "Media", "Enum", "Union", "Meta"];
@@ -244,6 +244,15 @@ pub const TYPES: &[Type] = &[
         values: &[],
         members: &[],
         doc: "3D の点。`import space3d` で使う。`+ - * /` と `.x .y .z`。箱の座標に落とすのは space3d のカメラ",
+    },
+    Type {
+        name: "Transform3",
+        category: "Position",
+        union: "",
+        make: "space3d.Transform3().rotate_y(30).translate(space3d.Vector3(0, 1, 0))",
+        values: &[],
+        members: &[],
+        doc: "3D の回転・移動・拡大をまとめたもの。メソッドを繋ぐと、書いた順に点へ効く変換になる。元は変わらず、繋ぐたびに新しいものが返る",
     },
     Type {
         name: "PerspectiveCamera",
@@ -600,6 +609,7 @@ pub const ATTRS: &[(&str, &str, &str)] = &[
     ("Camera", "to", "それを画面のどこに置くか (箱の座標。省略は from と同じ = 中身を動かさずに拡大だけする)"),
     ("Camera", "scale", "倍率 (省略は 1)"),
     ("View", "camera", "箱の中身の寄り引き。枠は動かさず中身だけ動かす。position や scale は枠ごと動かすもので、別物"),
+    ("Transform3", "m", "変換の中身 (12 個の Number)。メソッドが作るもので、手で書くものではない"),
     ("PerspectiveCamera", "from", "視点 (3D)"),
     ("PerspectiveCamera", "to", "見ている先 (3D)。画面の中心に来る"),
     ("PerspectiveCamera", "up", "どちらを上とするか (省略は space3d.Vector3(0, 1, 0))"),

@@ -11,6 +11,7 @@ use crate::lang::value::{Module, Object, Value};
 
 pub const DOCS: &[Entry] = &[
     Entry { name: "Vector3", signature: "space3d.Vector3(x: Number, y: Number, z: Number)", returns: "Vector3", doc: "3D の点。+ - * / と .x .y .z が使える" },
+    Entry { name: "Transform3", signature: "space3d.Transform3()", returns: "Transform3", doc: "何もしない変換。rotate_x などを繋いで組み立てる" },
     Entry { name: "PerspectiveCamera", signature: "space3d.PerspectiveCamera(from, to, up, fov, box)", returns: "PerspectiveCamera", doc: "透視投影。遠いものほど小さくなる" },
     Entry { name: "OrthographicCamera", signature: "space3d.OrthographicCamera(from, to, up, height, box)", returns: "OrthographicCamera", doc: "平行投影。遠くても大きさが変わらない" },
     Entry { name: "IsometricCamera", signature: "space3d.IsometricCamera(unit, box)", returns: "IsometricCamera", doc: "等角投影。x は右下、z は左下、y は上へ。視点は持たない" },
@@ -22,7 +23,7 @@ pub fn module() -> Module {
     for f in ["Vector3"] {
         items.insert(f.into(), Value::Builtin(name_of(f)));
     }
-    for t in ["PerspectiveCamera", "OrthographicCamera", "IsometricCamera"] {
+    for t in ["Transform3", "PerspectiveCamera", "OrthographicCamera", "IsometricCamera"] {
         items.insert(t.into(), Value::BuiltinType(t.into()));
     }
     Module { name: "space3d".into(), items }
@@ -211,5 +212,145 @@ pub fn camera_method(o: &Object, name: &str, args: &[(Option<String>, Value)]) -
         // 視点を持たないカメラには、手前も奥も無い
         "in_front" => Ok(Value::Bool(!cam.has_eye || cam.seen(one()?).2 > 1e-9)),
         _ => err(Kind::UndefinedAttribute, format!("{} has no method \"{name}\"", o.kind)),
+    }
+}
+
+/// 3x4 の行列。左の 3x3 が回転と拡大、右の 1 列が平行移動。行優先
+type M34 = [f64; 12];
+
+const IDENTITY: M34 = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0];
+
+/// 何もしない Transform3 の中身。構築のときの既定値
+pub fn identity() -> Value {
+    numbers(&IDENTITY)
+}
+
+/// 点に b が先に効き、その後 a が効く 1 つの行列
+fn compose(a: &M34, b: &M34) -> M34 {
+    let mut out = [0.0; 12];
+    for r in 0..3 {
+        for c in 0..3 {
+            out[r * 4 + c] = (0..3).map(|k| a[r * 4 + k] * b[k * 4 + c]).sum();
+        }
+        out[r * 4 + 3] = (0..3).map(|k| a[r * 4 + k] * b[k * 4 + 3]).sum::<f64>() + a[r * 4 + 3];
+    }
+    out
+}
+
+fn applied(m: &M34, p: P3) -> P3 {
+    let row = |r: usize| m[r * 4] * p.0 + m[r * 4 + 1] * p.1 + m[r * 4 + 2] * p.2 + m[r * 4 + 3];
+    (row(0), row(1), row(2))
+}
+
+/// 軸まわりの回転。axis は 0 が x、1 が y、2 が z。右ねじの向き (軸の先から見て反時計回り)
+fn rotation(axis: usize, degrees: f64) -> M34 {
+    let (s, c) = degrees.to_radians().sin_cos();
+    let mut m = IDENTITY;
+    // 回す平面の 2 軸。その 2 つだけが混ざる
+    let (u, v) = [(1, 2), (2, 0), (0, 1)][axis];
+    m[u * 4 + u] = c;
+    m[u * 4 + v] = -s;
+    m[v * 4 + u] = s;
+    m[v * 4 + v] = c;
+    m
+}
+
+fn numbers(m: &M34) -> Value {
+    Value::List(std::rc::Rc::new(std::cell::RefCell::new(m.iter().map(|n| Value::num(*n)).collect())))
+}
+
+/// Transform3 の中身。attrs の m は自分で作ったものなので、壊れていたら作り直せと言う
+fn matrix(o: &Object) -> Result<M34> {
+    let Some(Value::List(xs)) = o.attrs.get("m") else {
+        return err(Kind::UndefinedAttribute, "Transform3.m is not set; make it with space3d.Transform3()");
+    };
+    let xs = xs.borrow();
+    let mut m = [0.0; 12];
+    if xs.len() != m.len() {
+        return err(Kind::OutOfRange, format!("Transform3.m must have {} numbers, found {}", m.len(), xs.len()));
+    }
+    for (slot, v) in m.iter_mut().zip(xs.iter()) {
+        let Value::Number(n, _) = v else {
+            return err(Kind::AttributeType, format!("Transform3.m must be a List of Number, found {}", v.type_name()));
+        };
+        *slot = *n;
+    }
+    Ok(m)
+}
+
+/// 中身の違う新しい Transform3。元は変えない
+fn transform(m: &M34) -> Value {
+    let mut attrs = HashMap::new();
+    attrs.insert("m".to_string(), numbers(m));
+    Value::Object(std::rc::Rc::new(std::cell::RefCell::new(Object {
+        id: crate::lang::value::next_object_id(),
+        kind: "Transform3".to_string(),
+        decl: None,
+        attrs,
+        children: Vec::new(),
+        placed: false,
+        tracks: Vec::new(),
+    })))
+}
+
+/// Transform3 のメソッド。どれも新しい Transform3 か、効かせた点を返す
+pub fn transform_method(o: &Object, name: &str, args: &[(Option<String>, Value)]) -> Result<Value> {
+    let m = matrix(o)?;
+    let degrees = || -> Result<f64> {
+        match args {
+            [(None, Value::Number(n, _))] => Ok(*n),
+            _ => err(Kind::ArgumentType, format!("Transform3.{name} takes one Number (degrees)")),
+        }
+    };
+    let point = || -> Result<P3> {
+        match args {
+            [(None, Value::Vector3(x, y, z))] => Ok((*x, *y, *z)),
+            _ => err(Kind::ArgumentType, format!("Transform3.{name} takes one Vector3")),
+        }
+    };
+    // 後から足したものが、点には後に効く
+    let add = |next: M34| Ok(transform(&compose(&next, &m)));
+    match name {
+        "rotate_x" => add(rotation(0, degrees()?)),
+        "rotate_y" => add(rotation(1, degrees()?)),
+        "rotate_z" => add(rotation(2, degrees()?)),
+        "translate" => {
+            let (x, y, z) = point()?;
+            let mut next = IDENTITY;
+            (next[3], next[7], next[11]) = (x, y, z);
+            add(next)
+        }
+        "scale" => {
+            let k = degrees()?;
+            let mut next = IDENTITY;
+            (next[0], next[5], next[10]) = (k, k, k);
+            add(next)
+        }
+        "then" => match args {
+            [(None, Value::Object(other))] if other.borrow().kind == "Transform3" => add(matrix(&other.borrow())?),
+            _ => err(Kind::ArgumentType, "Transform3.then takes one Transform3"),
+        },
+        "apply" => {
+            let (x, y, z) = applied(&m, point()?);
+            Ok(Value::Vector3(x, y, z))
+        }
+        "apply_all" => match args {
+            [(None, Value::List(xs))] => {
+                let out = xs
+                    .borrow()
+                    .iter()
+                    .map(|v| match v {
+                        Value::Vector3(x, y, z) => {
+                            let (x, y, z) = applied(&m, (*x, *y, *z));
+                            Ok(Value::Vector3(x, y, z))
+                        }
+                        v => err(Kind::ArgumentType, format!("Transform3.apply_all takes a List of Vector3, found {} in it", v.type_name())),
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                Ok(Value::List(std::rc::Rc::new(std::cell::RefCell::new(out))))
+            }
+            _ => err(Kind::ArgumentType, "Transform3.apply_all takes one List<Vector3>"),
+        },
+        _ => err(Kind::UndefinedAttribute, format!("Transform3 has no method \"{name}\"")),
     }
 }

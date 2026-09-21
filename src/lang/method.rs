@@ -157,6 +157,21 @@ pub const METHODS: &[Method] = &[
         doc: "置いたときに占める幅と高さ (箱の座標)。w を書いていれば幅はその値。重なりを避けて並べたり、はみ出すなら fontSize を下げたりするのに使う",
         call: text_size,
     },
+    Method { receivers: &["Transform3"], name: "rotate_x", signature: "t.rotate_x(degrees: Number)", returns: "Transform3", doc: "x 軸まわりの回転を後ろに足す", call: t3_rotate_x },
+    Method { receivers: &["Transform3"], name: "rotate_y", signature: "t.rotate_y(degrees: Number)", returns: "Transform3", doc: "y 軸まわりの回転を後ろに足す", call: t3_rotate_y },
+    Method { receivers: &["Transform3"], name: "rotate_z", signature: "t.rotate_z(degrees: Number)", returns: "Transform3", doc: "z 軸まわりの回転を後ろに足す", call: t3_rotate_z },
+    Method { receivers: &["Transform3"], name: "translate", signature: "t.translate(v: Vector3)", returns: "Transform3", doc: "平行移動を後ろに足す", call: t3_translate },
+    Method { receivers: &["Transform3"], name: "scale", signature: "t.scale(k: Number)", returns: "Transform3", doc: "原点を中心にした k 倍を後ろに足す", call: t3_scale },
+    Method { receivers: &["Transform3"], name: "then", signature: "t.then(other: Transform3)", returns: "Transform3", doc: "別の変換を後ろに繋ぐ", call: t3_then },
+    Method { receivers: &["Transform3"], name: "apply", signature: "t.apply(p: Vector3)", returns: "Vector3", doc: "1 点に効かせる", call: t3_apply },
+    Method {
+        receivers: &["Transform3"],
+        name: "apply_all",
+        signature: "t.apply_all(points: List<Vector3>)",
+        returns: "List<Vector3>",
+        doc: "並びにまとめて効かせる。1 点ずつ呼ぶより速い",
+        call: t3_apply_all,
+    },
     Method { receivers: CAMERAS, name: "project", signature: "cam.project(p: Vector3)", returns: "Vector", doc: "箱の座標に落とす。視点より手前の点は ValueError.OutOfRange", call: cam_project },
     Method {
         receivers: CAMERAS,
@@ -701,6 +716,44 @@ fn shape_point_at(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
 
 fn text_size(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
     on_object(it, r, "size", args)
+}
+
+/// Transform3 のメソッドも計算だけ
+fn on_transform(r: Value, name: &'static str, args: Args) -> Result<Value> {
+    let Value::Object(o) = &r else { return err(Kind::ArgumentType, format!("{name} is a method of Transform3")) };
+    crate::stdlib::space3d::transform_method(&o.borrow(), name, &args)
+}
+
+fn t3_rotate_x(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    on_transform(r, "rotate_x", args)
+}
+
+fn t3_rotate_y(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    on_transform(r, "rotate_y", args)
+}
+
+fn t3_rotate_z(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    on_transform(r, "rotate_z", args)
+}
+
+fn t3_translate(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    on_transform(r, "translate", args)
+}
+
+fn t3_scale(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    on_transform(r, "scale", args)
+}
+
+fn t3_then(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    on_transform(r, "then", args)
+}
+
+fn t3_apply(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    on_transform(r, "apply", args)
+}
+
+fn t3_apply_all(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    on_transform(r, "apply_all", args)
 }
 
 /// カメラのメソッドは計算だけで、インタプリタの状態に触らない

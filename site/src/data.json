@@ -1451,6 +1451,73 @@
   {
    "attrs": [
     {
+     "doc": "変換の中身 (12 個の Number)。メソッドが作るもので、手で書くものではない",
+     "name": "m",
+     "required": false,
+     "type": "List"
+    }
+   ],
+   "category": "Position",
+   "doc": "3D の回転・移動・拡大をまとめたもの。メソッドを繋ぐと、書いた順に点へ効く変換になる。元は変わらず、繋ぐたびに新しいものが返る",
+   "make": "space3d.Transform3().rotate_y(30).translate(space3d.Vector3(0, 1, 0))",
+   "members": [],
+   "methods": [
+    {
+     "doc": "x 軸まわりの回転を後ろに足す",
+     "name": "rotate_x",
+     "returns": "Transform3",
+     "signature": "t.rotate_x(degrees: Number)"
+    },
+    {
+     "doc": "y 軸まわりの回転を後ろに足す",
+     "name": "rotate_y",
+     "returns": "Transform3",
+     "signature": "t.rotate_y(degrees: Number)"
+    },
+    {
+     "doc": "z 軸まわりの回転を後ろに足す",
+     "name": "rotate_z",
+     "returns": "Transform3",
+     "signature": "t.rotate_z(degrees: Number)"
+    },
+    {
+     "doc": "平行移動を後ろに足す",
+     "name": "translate",
+     "returns": "Transform3",
+     "signature": "t.translate(v: Vector3)"
+    },
+    {
+     "doc": "原点を中心にした k 倍を後ろに足す",
+     "name": "scale",
+     "returns": "Transform3",
+     "signature": "t.scale(k: Number)"
+    },
+    {
+     "doc": "別の変換を後ろに繋ぐ",
+     "name": "then",
+     "returns": "Transform3",
+     "signature": "t.then(other: Transform3)"
+    },
+    {
+     "doc": "1 点に効かせる",
+     "name": "apply",
+     "returns": "Vector3",
+     "signature": "t.apply(p: Vector3)"
+    },
+    {
+     "doc": "並びにまとめて効かせる。1 点ずつ呼ぶより速い",
+     "name": "apply_all",
+     "returns": "List<Vector3>",
+     "signature": "t.apply_all(points: List<Vector3>)"
+    }
+   ],
+   "name": "Transform3",
+   "union": "",
+   "values": []
+  },
+  {
+   "attrs": [
+    {
      "doc": "視点 (3D)",
      "name": "from",
      "required": true,
@@ -2724,6 +2791,12 @@
      "name": "Vector3",
      "returns": "Vector3",
      "signature": "space3d.Vector3(x: Number, y: Number, z: Number)"
+    },
+    {
+     "doc": "何もしない変換。rotate_x などを繋いで組み立てる",
+     "name": "Transform3",
+     "returns": "Transform3",
+     "signature": "space3d.Transform3()"
     },
     {
      "doc": "透視投影。遠いものほど小さくなる",

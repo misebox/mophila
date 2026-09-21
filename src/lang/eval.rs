@@ -1726,6 +1726,7 @@ impl Interp {
             }
             // カメラは投影の計算だけで、インタプリタの状態に触らない
             ("PerspectiveCamera" | "OrthographicCamera" | "IsometricCamera", _) => stdlib::space3d::camera_method(&obj.borrow(), method, &args),
+            ("Transform3", _) => stdlib::space3d::transform_method(&obj.borrow(), method, &args),
             _ => err(Kind::UndefinedAttribute, format!("{kind} has no method \"{method}\"")),
         }
     }
@@ -2477,7 +2478,7 @@ pub fn font_names(v: &Value) -> Vec<String> {
 const LOOP_LIMIT: usize = 1_000_000;
 
 pub const KINDS: &[&str] =
-    &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "View", "Timeline", "Narration", "SayVoiceEngine", "EspeakVoiceEngine", "Shader", "ZoomPath", "Camera", "Gradient", "Color", "PerspectiveCamera", "OrthographicCamera", "IsometricCamera"];
+    &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "View", "Timeline", "Narration", "SayVoiceEngine", "EspeakVoiceEngine", "Shader", "ZoomPath", "Camera", "Gradient", "Color", "PerspectiveCamera", "OrthographicCamera", "IsometricCamera", "Transform3"];
 
 /// builtin 型の属性と型
 /// 型の名前は大文字で始まり、builtin の型と union の名前は使えない
@@ -2523,6 +2524,7 @@ pub fn defaults(kind: &str) -> Vec<(&'static str, Value)> {
         "PerspectiveCamera" => return vec![("up", Value::Vector3(0.0, 1.0, 0.0)), ("fov", num(45.0))],
         "OrthographicCamera" => return vec![("up", Value::Vector3(0.0, 1.0, 0.0)), ("height", num(8.0))],
         "IsometricCamera" => return vec![("unit", num(1.0))],
+        "Transform3" => return vec![("m", stdlib::space3d::identity())],
         _ => {}
     }
     let sym = |s: &str| Value::Symbol(s.to_string());
@@ -2656,6 +2658,7 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
     const ORTHOGRAPHIC: &[Attr] =
         &[req("from", "Vector3"), req("to", "Vector3"), opt("up", "Vector3"), opt("height", "Number"), req("box", "Vector")];
     const ISOMETRIC: &[Attr] = &[opt("unit", "Number"), req("box", "Vector")];
+    const TRANSFORM3: &[Attr] = &[opt("m", "List")];
     // to は :linear、radius は :radial のときだけ要るので、必須にはしない
     const GRADIENT: &[Attr] = &[
         req("stops", "List"),
@@ -2682,6 +2685,7 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
         "PerspectiveCamera" => PERSPECTIVE,
         "OrthographicCamera" => ORTHOGRAPHIC,
         "IsometricCamera" => ISOMETRIC,
+        "Transform3" => TRANSFORM3,
         "Gradient" => GRADIENT,
         _ => return None,
     })

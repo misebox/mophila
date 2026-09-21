@@ -1436,13 +1436,14 @@ String / List / Dict / Range のメソッドは builtin で、`import` は要ら
 | palette | そのまま使える配色。背景・文字・罫線・強調・系列色の組 (`Palette`) を名前で選ぶ |
 | pattern | そのまま `fill` に入れられる模様。縞、細線、市松、水玉、方眼、ざらつき |
 | icon | チェックや矢印などの記号の形。`mark` でそのまま置ける図形になる |
+| space3d | 3D の点 (`Vector3`) と変換 (`Transform3`)、カメラ 3 種、`Mesh` の作り手。投影して 2D の `Vector` と奥行きの `Number` を返す。描くのは既存の図形 |
 | fractal | エスケープタイム系フラクタルの Shader。反復式と色付けを組み合わせる。倍率は `zoom` / `duration` / `camera` のどれかで決める |
 
 ### 7. プロジェクト設定
 
 `mophila.yaml` を、コマンドを実行したディレクトリに置くと自動で読まれる。
-台本の代わりに**そのフォルダか `mophila.yaml` 自身を渡しても読む** (`mophila render project/`、`mophila run project/mophila.yaml`)。
-このときの台本は設定の `entry`。`-f` は、設定と台本が別の場所にあるときに使う (`-f ../shared.yaml scenes/main.moph`)。
+スクリプトの代わりに**そのフォルダか `mophila.yaml` 自身を渡しても読む** (`mophila render project/`、`mophila run project/mophila.yaml`)。
+このときのスクリプトは設定の `entry`。`-f` は、設定とスクリプトが別の場所にあるときに使う (`-f ../shared.yaml scenes/main.moph`)。
 設定に書いたパスは設定ファイルのある場所からの相対なので、どこから実行しても同じものを指す。
 
 ```yaml
@@ -1983,6 +1984,69 @@ space3d.Vector3(1, 2, 3)
 - `v.cross(w: Vector3)` -> Vector3 — 外積。2 つの辺から面の向きを出す
 - `v.lerp(w: Vector3, k: Number)` -> Vector3 — 2 点の間。k が 0 で自分、1 で相手
 
+### Mesh
+
+3D の頂点と、それを繋ぐ線 (edges) と面 (faces)。edges と faces は points の番号で書く。box や sphere が作る
+
+作り方:
+
+```
+space3d.box(space3d.Vector3(0, 0, 0), space3d.Vector3(2, 2, 2))
+```
+
+属性:
+
+- `points`: List (必須) — 頂点 (Vector3 の List)
+- `edges`: List — 線。points の番号 2 つの組の List
+- `faces`: List — 面。points の番号の List の List。外から見て反時計回りに並べると表になる
+
+メソッド:
+
+- `mesh.transformed(t: Transform3)` -> Mesh — 変換を効かせた別の Mesh。元は変わらない
+- `mesh.edges(cam: Projection)` -> List<(Vector, Vector)> — 投影した線の並び。Line の from と to にそのまま渡せる。映せない線は落とす
+- `mesh.faces(cam: Projection)` -> List<Face> — 投影した面の並び。遠い順に返し、裏を向いた面は落とす
+
+### Face
+
+Mesh.faces が返す、投影済みの 1 面。points を Polygon に渡し、normal を space3d.shade に渡して塗る
+
+作り方:
+
+```
+mesh.faces(cam)
+```
+
+属性:
+
+- `points`: List (必須) — 投影済みの頂点 (箱の座標)。Polygon の points にそのまま渡せる
+- `normal`: Vector3 (必須) — 面の向き (3D、長さ 1)
+- `depth`: Number (必須) — 視点からの奥行き。faces は遠い順に返すので、並べ替えには要らない
+
+### Transform3
+
+3D の回転・移動・拡大をまとめたもの。メソッドを繋ぐと、書いた順に点へ効く変換になる。元は変わらず、繋ぐたびに新しいものが返る
+
+作り方:
+
+```
+space3d.Transform3().rotate_y(30).translate(space3d.Vector3(0, 1, 0))
+```
+
+属性:
+
+- `m`: List — 変換の中身 (12 個の Number)。メソッドが作るもので、手で書くものではない
+
+メソッド:
+
+- `t.rotate_x(degrees: Number)` -> Transform3 — x 軸まわりの回転を後ろに足す
+- `t.rotate_y(degrees: Number)` -> Transform3 — y 軸まわりの回転を後ろに足す
+- `t.rotate_z(degrees: Number)` -> Transform3 — z 軸まわりの回転を後ろに足す
+- `t.translate(v: Vector3)` -> Transform3 — 平行移動を後ろに足す
+- `t.scale(k: Number)` -> Transform3 — 原点を中心にした k 倍を後ろに足す
+- `t.then(other: Transform3)` -> Transform3 — 別の変換を後ろに繋ぐ
+- `t.apply(p: Vector3)` -> Vector3 — 1 点に効かせる
+- `t.apply_all(points: List<Vector3>)` -> List<Vector3> — 並びにまとめて効かせる。1 点ずつ呼ぶより速い
+
 ### PerspectiveCamera
 
 透視投影。遠いものほど小さくなる。project で箱の座標に落とす
@@ -1995,11 +2059,20 @@ space3d.PerspectiveCamera(from = space3d.Vector3(6, 4, 10), to = space3d.Vector3
 
 属性:
 
-- `from`: Vector3 (必須) — 
-- `to`: Vector3 (必須) — 
-- `up`: Vector3 — 
-- `fov`: Number — 
-- `box`: Vector (必須) — 
+- `from`: Vector3 (必須) — 視点 (3D)
+- `to`: Vector3 (必須) — 見ている先 (3D)。画面の中心に来る
+- `up`: Vector3 — どちらを上とするか (省略は space3d.Vector3(0, 1, 0))
+- `fov`: Number — 縦の画角 (度、0 より大きく 180 未満。省略は 45)。小さいほど望遠になる
+- `box`: Vector (必須) — 落とし先の箱の幅と高さ。View の box と同じものを渡す
+
+メソッド:
+
+- `cam.project(p: Vector3)` -> Vector — 箱の座標に落とす。視点より手前の点は ValueError.OutOfRange
+- `cam.project_all(points: List<Vector3>)` -> List<Vector> — 並びをまとめて落とす。1 点ずつ呼ぶより速い
+- `cam.depth(p: Vector3)` -> Number — 視線に沿った奥行き。遠いほど大きい。奥から描くには zIndex に -depth を入れる
+- `cam.depth_all(points: List<Vector3>)` -> List<Number> — 並びの奥行き
+- `cam.scale_at(p: Vector3)` -> Number — その位置の 1 単位が箱でいくつになるか。図形の大きさや線幅に掛ける
+- `cam.in_front(p: Vector3)` -> Bool — 視点より前にあるか。project する前にこれで選り分ける。IsometricCamera は視点を持たないので必ず true
 
 ### OrthographicCamera
 
@@ -2013,15 +2086,24 @@ space3d.OrthographicCamera(from = space3d.Vector3(6, 4, 10), to = space3d.Vector
 
 属性:
 
-- `from`: Vector3 (必須) — 
-- `to`: Vector3 (必須) — 
-- `up`: Vector3 — 
-- `height`: Number — 
-- `box`: Vector (必須) — 
+- `from`: Vector3 (必須) — 視点 (3D)
+- `to`: Vector3 (必須) — 見ている先 (3D)。画面の中心に来る
+- `up`: Vector3 — どちらを上とするか (省略は space3d.Vector3(0, 1, 0))
+- `height`: Number — 画面の高さに収める 3D の長さ (省略は 8)
+- `box`: Vector (必須) — 落とし先の箱の幅と高さ。View の box と同じものを渡す
+
+メソッド:
+
+- `cam.project(p: Vector3)` -> Vector — 箱の座標に落とす。視点より手前の点は ValueError.OutOfRange
+- `cam.project_all(points: List<Vector3>)` -> List<Vector> — 並びをまとめて落とす。1 点ずつ呼ぶより速い
+- `cam.depth(p: Vector3)` -> Number — 視線に沿った奥行き。遠いほど大きい。奥から描くには zIndex に -depth を入れる
+- `cam.depth_all(points: List<Vector3>)` -> List<Number> — 並びの奥行き
+- `cam.scale_at(p: Vector3)` -> Number — その位置の 1 単位が箱でいくつになるか。図形の大きさや線幅に掛ける
+- `cam.in_front(p: Vector3)` -> Bool — 視点より前にあるか。project する前にこれで選り分ける。IsometricCamera は視点を持たないので必ず true
 
 ### IsometricCamera
 
-等角投影。x が右下、y が左下、z が上へ伸びる。unit は 1 単位の長さ
+等角投影。x が右下、z が左下、y が上へ伸びる。unit は 1 単位が箱でいくつになるか。視点を持たないので、どこまでも同じ大きさ
 
 作り方:
 
@@ -2031,8 +2113,17 @@ space3d.IsometricCamera(unit = 1, box = Vector(16, 9))
 
 属性:
 
-- `unit`: Number — 
-- `box`: Vector (必須) — 
+- `unit`: Number — 3D の 1 単位が箱でいくつになるか (省略は 1)
+- `box`: Vector (必須) — 落とし先の箱の幅と高さ。View の box と同じものを渡す
+
+メソッド:
+
+- `cam.project(p: Vector3)` -> Vector — 箱の座標に落とす。視点より手前の点は ValueError.OutOfRange
+- `cam.project_all(points: List<Vector3>)` -> List<Vector> — 並びをまとめて落とす。1 点ずつ呼ぶより速い
+- `cam.depth(p: Vector3)` -> Number — 視線に沿った奥行き。遠いほど大きい。奥から描くには zIndex に -depth を入れる
+- `cam.depth_all(points: List<Vector3>)` -> List<Number> — 並びの奥行き
+- `cam.scale_at(p: Vector3)` -> Number — その位置の 1 単位が箱でいくつになるか。図形の大きさや線幅に掛ける
+- `cam.in_front(p: Vector3)` -> Bool — 視点より前にあるか。project する前にこれで選り分ける。IsometricCamera は視点を持たないので必ず true
 
 ### Color
 
@@ -2344,6 +2435,12 @@ Gradient の kind。stops の色をどの向きに並べるか
 
 まとめている型: Circle | Ellipse | Rect | Line | Polygon | Path | TextArea
 
+### Projection
+
+space3d のカメラ 3 種をまとめた名前。どれも同じメソッドを持ち、3D の点を箱の座標に落とす
+
+まとめている型: PerspectiveCamera | OrthographicCamera | IsometricCamera
+
 ### Placeable
 
 View の中に place できるものをまとめた名前。図形と View
@@ -2394,6 +2491,7 @@ alias P = Pos
 
 メソッド:
 
+- `Vector.from(rows: List<Tuple>)` -> List<T> — Tuple の並びを、その型の並びにする。Vector Vector3 Pos Color で使える。点を並べるときに、型の名前を毎回書かずに済む
 - `Path.through(points: List<Vector>, closed: Bool = false)` -> Path — 点の並びをつないだ Path。segments の組を手で書かずに済む
 
 ### Nothing
@@ -2496,9 +2594,18 @@ EspeakVoiceEngine(voice = "ja")
 ### space3d
 
 - `space3d.Vector3(x: Number, y: Number, z: Number)` -> Vector3 — 3D の点。+ - * / と .x .y .z が使える
+- `space3d.box(at: Vector3, size: Vector3)` -> Mesh — 直方体。at が中心
+- `space3d.plane(at: Vector3, w: Number, d: Number, cols: Number, rows: Number)` -> Mesh — xz 平面に寝かせた板。at が中心。cols は x 方向、rows は z 方向の分割数
+- `space3d.sphere(at: Vector3, r: Number, rings: Number, segments: Number)` -> Mesh — 球。rings は極から極への分割数、segments は横の分割数
+- `space3d.path(points: List<Vector3>)` -> Mesh — 3D の折れ線。線だけで面は持たない
+- `space3d.grid(at: Vector3, w: Number, d: Number, step: Number)` -> Mesh — 床の格子線。step に近い間隔で割る。面は持たない
+- `space3d.shade(color: Color, normal: Vector3, light: Vector3, ambient: Number = 0.25)` -> Color — 面の向きと光の向きから塗りの色を決める。光に正面から向いた面が元の色、背いた面が ambient 倍
+- `space3d.Mesh(points, edges, faces)` -> Mesh — 頂点と、それを繋ぐ線や面。作り手 (box など) が返すもの
+- `space3d.Face(points, normal, depth)` -> Face — Mesh.faces が返す、投影済みの 1 面
+- `space3d.Transform3()` -> Transform3 — 何もしない変換。rotate_x などを繋いで組み立てる
 - `space3d.PerspectiveCamera(from, to, up, fov, box)` -> PerspectiveCamera — 透視投影。遠いものほど小さくなる
 - `space3d.OrthographicCamera(from, to, up, height, box)` -> OrthographicCamera — 平行投影。遠くても大きさが変わらない
-- `space3d.IsometricCamera(unit, box)` -> IsometricCamera — 等角投影。x は右下、y は左下、z は上へ
+- `space3d.IsometricCamera(unit, box)` -> IsometricCamera — 等角投影。x は右下、z は左下、y は上へ。視点は持たない
 
 ### color
 

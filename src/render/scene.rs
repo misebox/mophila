@@ -69,7 +69,16 @@ pub fn build(view: &ObjRef, shot: Shot, t: f64, cache: &mut RenderCache) -> Resu
     let transform = Affine::translate((area.x0, area.y0)) * Affine::scale(scale) * Affine::translate((-source.x0, -source.y0));
     let mut scene = Scene::new();
     let frame = Frame { viewport: Rect::new(0.0, 0.0, shot.width, shot.height), t };
+    // 切り取ったときは、絵の載る矩形の外に中身がはみ出す。帯の中に描かないように切る
+    let bands = area.x0 > 0.0 || area.y0 > 0.0 || area.x1 < shot.width || area.y1 < shot.height;
+    if bands {
+        cache.layer_bytes += (area.width() * area.height() * 4.0) as u64;
+        scene.push_layer(Fill::NonZero, BlendMode::new(Mix::Normal, Compose::SrcOver), 1.0, Affine::IDENTITY, &area.to_path(0.01));
+    }
     draw_view(&mut scene, view, transform, &frame, cache)?;
+    if bands {
+        scene.pop_layer();
+    }
     drop_unused(cache);
     Ok(scene)
 }

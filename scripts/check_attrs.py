@@ -65,7 +65,8 @@ TRY = {
 }
 
 
-# View は図形と置き方が違うので別に書く。中身が枠からはみ出す形にして、clip が効くのを見る
+# View は図形と置き方が違うので別に書く。中身が枠からはみ出す形にして、clip が効くのを見る。
+# はみ出す先は外側の箱の中に収める (絵の外は描かれないので、そこへはみ出させても差が出ない)
 VIEW_BASE = {"box": "Vector(3, 3)"}
 VIEW_PLACE = {"at": "Pos(1, 0.5, anchor = :topLeft)", "w": "3"}
 # place が書く属性は、その引数を動かして見る (position は at が書く)
@@ -96,7 +97,7 @@ def draw_view(attrs: dict, place: dict, work: Path) -> str:
         "let outer = View(box = Vector(4, 4))\n"
         "outer.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 4, h = 4, fill = #303030))\n"
         f"let inner = View({body})\n"
-        "inner.place(Circle(position = Pos(3, 1.5), radius = 1, fill = #e04040))\n"
+        "inner.place(Circle(position = Pos(0, 1.5), radius = 1, fill = #e04040))\n"
         f"outer.place(inner, {placed})\n"
         "output outer\n"
     )

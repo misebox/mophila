@@ -54,6 +54,15 @@ enum Command {
         /// Open paused at this time (e.g. 1.5s, 01:23)
         #[arg(long, value_parser = parse_duration)]
         at: Option<f64>,
+        /// Show only a part of the box: height (fill the height), width, or a fraction like 0.25,1 / 25%,100%
+        #[arg(long, value_parser = parse_crop)]
+        crop: Option<render::scene::Crop>,
+        /// Where the cropped part sits in what is left over: 0%..100% per axis, or left / center / right / top / bottom / topLeft ...
+        #[arg(long, value_parser = parse_align)]
+        align: Option<(f64, f64)>,
+        /// Color of the bands when the picture does not fill the frame (default white)
+        #[arg(long, value_parser = parse_pad)]
+        pad: Option<String>,
     },
     /// List what changes when, in time order. --filter kind=TextArea attr=opacity text=... from=10s to=20s
     Timeline {
@@ -370,11 +379,18 @@ fn run() -> Result<(), Box<dyn Error>> {
             interp.run(&stmts)?;
             Ok(())
         }
-        Command::Preview { script, size, r#loop, at } => {
+        Command::Preview { script, size, r#loop, at, crop, align, pad } => {
             let script = entry(script)?;
             let (interp, view, duration) = load(&read_script(&script)?, base_dir(&script), None, &project)?;
             let media = render::media::prepare(&view, duration, 0.0, duration, true, &render::voice::cache_dir())?;
-            render::preview::run(file_name(&script), interp, view, duration, render::scene::Shot::whole(f64::from(size.0), f64::from(size.1)), r#loop, at, &media)
+            let shot = render::scene::Shot {
+                width: f64::from(size.0),
+                height: f64::from(size.1),
+                crop,
+                align: align.unwrap_or((0.5, 0.5)),
+                pad: pad_color(pad.as_deref()),
+            };
+            render::preview::run(file_name(&script), interp, view, duration, shot, r#loop, at, &media)
         }
         Command::Timeline { script, filter } => {
             let script = entry(script)?;
@@ -454,7 +470,18 @@ fn file_name(script: &str) -> String {
     std::path::Path::new(script).file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| script.to_string())
 }
 
-/// そのコマンドが受け取った台本の位置 (無いコマンドもある)
+/// 帯の色。書かなければ白
+fn pad_color(hex: Option<&str>) -> vello::peniko::Color {
+    match hex {
+        Some(hex) => {
+            let [r, g, b, a] = lang::lexer::parse_color(hex);
+            vello::peniko::Color::new([r, g, b, a])
+        }
+        None => vello::peniko::Color::WHITE,
+    }
+}
+
+/// そのコマンドが受け取ったスクリプトの位置 (無いコマンドもある)
 fn script_of(command: &Command) -> Option<&str> {
     match command {
         Command::Render { script, .. }
@@ -518,13 +545,7 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
         height: f64::from(height),
         crop: args.crop,
         align: args.align.unwrap_or((0.5, 0.5)),
-        pad: match &args.pad {
-            Some(hex) => {
-                let [r, g, b, a] = lang::lexer::parse_color(hex);
-                vello::peniko::Color::new([r, g, b, a])
-            }
-            None => vello::peniko::Color::WHITE,
-        },
+        pad: pad_color(args.pad.as_deref()),
     };
     let (mut interp, view, duration) = load(src, base_dir, sources, project)?;
     let cache = render::voice::cache_dir();

@@ -258,9 +258,22 @@ DOCS = [
 ]
 
 
+def paint_types(types: list[dict]) -> None:
+    """VSCode の色付けが知っている型名を、本体の表に合わせる (その 1 行だけ書き換える)"""
+    path = ROOT / "editors/vscode/syntaxes/mophila.tmLanguage.json"
+    names = "|".join(sorted(t["name"] for t in types))
+    line = f'    {{ "name": "support.class.mophila", "match": "\\\\b({names})\\\\b" }},'
+    lines = path.read_text().splitlines()
+    at = next(i for i, l in enumerate(lines) if "support.class.mophila" in l)
+    if lines[at] != line:
+        lines[at] = line
+        path.write_text("\n".join(lines) + "\n")
+
+
 def main() -> None:
     media = "--media" in sys.argv
     d = builtin_docs()
+    paint_types(d["types"])
     # 標準ライブラリ。math は本体の表から、.moph は src/stdlib から。基本的なものが先
     libs = [{"name": "math", "path": "src/stdlib/math.rs", "entries": d["math"], "items": []},
             {"name": "space3d", "path": "src/stdlib/space3d.rs", "entries": d["space3d"], "items": []}]

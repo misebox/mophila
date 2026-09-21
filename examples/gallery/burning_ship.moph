@@ -18,7 +18,7 @@ let set = escape_time(
   span = 4.0,
   y_up = true,
   zoom = func (t) { math.exp(math.ln(end_zoom) * math.min(1, math.max(0, (t - 1) / (seconds - 4)))) },
-  max_steps = func (zoom) { 150 + 100 * math.ln(zoom) },
+  max_steps = func (depth) { 150 + 230 * depth },   # depth は倍率の log10
   samples = 4,
 )
 v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = set))

@@ -1,0 +1,38 @@
+# minibrot.moph — Mandelbrot 集合のミニチュアを find_center で探して、そこまで 1e32 倍寄る
+# 中心を 10 進の文字列で渡すと、基準軌道を多倍長で計算し、GPU は指数を別に持つ数で差分を回す。
+# 反復は線形近似 (BLA) でまとめて飛ばすので、深くなっても 1 ピクセルあたりの計算は増えにくい。
+# 倍率そのものは 32 bit に収まらないので、max_steps には倍率の log10 (深さ) が渡る
+
+import math
+import { escape_time, find_center, MANDELBROT, smooth_bands } from fractal
+
+let v = View(box = Vector(16, 9))
+let total = 90s
+let seconds = total / 1s
+
+# タツノオトシゴの谷の奥。この点から半径 2e-30 の中にあるミニチュア (周期 8007) の中心を 60 桁で求める
+let (re, im, period, size) = find_center("-0.743643887037158704752191506114774", "0.131825904205311970493132056385139", radius = 2e-30)
+let end_zoom = 1 / size   # 最後は幅 4 × size。ミニチュアが枝まで収まる (1e32 倍ほど)
+
+# 金と黒。脱出回数の対数で色を回す。深いところは脱出回数が周期の何倍にもなるので、回数のままだと細かすぎる
+let stops = [#120800, #6b3d0a, #d99a2b, #fff1c4, #ffffff, #fff1c4, #d99a2b, #6b3d0a, #120800]
+let bands = smooth_bands(stops, 96, inside = #120800)
+let coloring = func (mu, z) { if mu < 0 { bands(mu, z) } else { bands(math.log2(mu + 8) * 512, z) } }
+
+let set = escape_time(
+  formula = MANDELBROT,
+  coloring = coloring,
+  center = (re, im),
+  span = 4.0,
+  duration = total,
+  # 1 秒止まってから一定の速さで寄る (倍率は指数で増える)。最後の 3 秒は止まる
+  zoom = func (t) { math.exp(math.ln(end_zoom) * math.min(1, math.max(0, (t - 1) / (seconds - 4)))) },
+  # depth は倍率の log10。ミニチュアのそばでは外の点も周期 (8007) ごとに 1 歩ずつしか離れないので、
+  # 最後の 3 桁は反復を桁違いに増やす (BLA でまとめて飛ぶので、1 フレームの時間はそれほど延びない)
+  max_steps = func (depth) { 2000 + 1200 * depth + 100000 * math.max(0, depth - 29) },
+)
+v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = set))
+
+let track = Timeline(duration = total)
+v.addTrack(track)
+output v

@@ -9,7 +9,7 @@ import { escape_time, MANDELBROT, smooth_bands } from fractal
 let v = View(box = Vector(16, 9))
 let total = 2m
 let seconds = total / 1s
-let end_zoom = 1000000000000    # 1e12。64 bit の基準軌道で 10 兆倍あたりまで持つ
+let end_zoom = 1000000000000    # 1e12。64 bit の基準軌道で 10 兆倍あたりまで持つ。それより深くは中心を文字列で渡す (minibrot.moph)
 
 # 白青系。脱出回数 96 で 1 周
 let stops = [#061a3f, #1c4f9c, #5c9be6, #cfe6ff, #ffffff, #cfe6ff, #5c9be6, #1c4f9c, #061a3f]
@@ -22,7 +22,7 @@ let set = escape_time(
   duration = total,
   # 1 秒止まってから一定の速さで寄る (倍率は指数で増える)。最後の 3 秒は止まる
   zoom = func (t) { math.exp(math.ln(end_zoom) * math.min(1, math.max(0, (t - 1) / (seconds - 4)))) },
-  max_steps = func (zoom) { 150 + 110 * math.ln(zoom) },
+  max_steps = func (depth) { 150 + 253 * depth },   # depth は倍率の log10
 )
 v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = set))
 

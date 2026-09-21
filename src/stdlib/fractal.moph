@@ -2,12 +2,26 @@
 # escape_time(...) が Shader を返すので、図形の fill に入れて使う。
 #   formula:   反復式 (MANDELBROT / BURNING_SHIP / multibrot(n) / julia(c))
 #   coloring:  func (mu, z) -> Color。mu は滑らかな脱出回数 (集合の中は -1)、z は脱出時の値
-#   center / span: 複素平面の中心と、最初に見える横幅。zoom: func (t) -> 倍率。max_steps: func (zoom) -> 反復の上限
+#   center / span: 複素平面の中心と、最初に見える横幅。zoom: func (t) -> 倍率。max_steps: func (depth) -> 反復の上限 (depth は log10 の倍率)
 #   duration: 書くと対数極座標の帯を使う。camera: 倍率をカメラから読む
 #   top_left / size:  塗る図形が占める箱の座標 (既定は (0, 0) から 16 x 9)。y_up: true で虚軸を下向きにする (Burning Ship の慣習)
 
 import math
-import { reference_orbit } from bignum
+import bignum
+
+let LN2 = 0.6931471805599453
+let LN10 = 2.302585092994046
+
+# log2 |v|。0 なら「どの半径より小さい」数。2 乗すると f32 で先に潰れるので、大きいほうの成分を基準に取る
+func log2_len(v: Vector) -> Number {
+  let a = math.max(math.abs(v.x), math.abs(v.y))
+  if a == 0 {
+    -1e30
+  } else {
+    let b = math.min(math.abs(v.x), math.abs(v.y)) / a
+    math.log2(a) + 0.5 * math.log2(1 + b * b)
+  }
+}
 
 # 中心の指定。浅いときは Vector、深いときは 10 進の文字列 2 つ ("-0.743643887…", "0.131825904…")
 type Center = Vector | Tuple
@@ -33,13 +47,13 @@ type MaybeCamera = Camera | Symbol
 ## @param zoom 倍率の時間変化。func (t) -> Number
 ## @param duration 動画の長さ。書くと帯を使う (倍率は増えるだけであること)
 ## @param camera 倍率と寄る先をここから読む。zoom と duration は書かない
-## @param max_steps 反復の上限。func (zoom) -> Number
+## @param max_steps 反復の上限。func (depth) -> Number。depth は倍率の log10 (1 倍で 0、1e30 倍で 30)。倍率そのものは f32 に収まらないので対数で渡す
 ## @param samples 1 ピクセルあたりの評価点の数 (4 で 2x2 のアンチエイリアス)
 ## @param top_left 塗る図形の左上 (箱の座標)
 ## @param size 塗る図形の大きさ (箱の座標)
 ## @param y_up true で虚軸を下向きにする
 ## @param escape_at 脱出とみなす |z|² の閾値
-## @param reference_steps 基準軌道の長さの上限
+## @param reference_steps 基準軌道の長さ。0 なら、いちばん深いところで max_steps が返す値 (duration が無ければ 8000)。反復はこれより先へは進まない (足りない点は集合の中の色になる)
 ## @param digits 中心を文字列で渡したときの 10 進の桁数。0 なら倍率から決める
 ## @returns 図形の fill に入れる
 ## @example
@@ -52,7 +66,7 @@ type MaybeCamera = Camera | Symbol
 ##   span = 0.02,
 ## )
 ## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = set))
-export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, center: Center, span: Number, zoom: (Number) -> Number = func (t) { 1 }, duration: Duration = 0s, camera: MaybeCamera = :none, max_steps: (Number) -> Number = func (zoom) { 200 }, samples: Number = 1, top_left: Vector = Vector(0, 0), size: Vector = Vector(16, 9), y_up: Bool = false, escape_at: Number = 256, reference_steps: Number = 8000, digits: Number = 0) -> Shader {
+export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, center: Center, span: Number, zoom: (Number) -> Number = func (t) { 1 }, duration: Duration = 0s, camera: MaybeCamera = :none, max_steps: (Number) -> Number = func (depth) { 200 }, samples: Number = 1, top_left: Vector = Vector(0, 0), size: Vector = Vector(16, 9), y_up: Bool = false, escape_at: Number = 256, reference_steps: Number = 0, digits: Number = 0) -> Shader {
   let seed = formula["seed"]
   let step = formula["step"]
   let start = formula["start"]
@@ -85,12 +99,17 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
   # 滑らかな脱出回数
   func escaped(n: Number, r2: Number) -> Number { n + 1 - math.ln(math.ln(r2) / 2) / ln_degree }
 
+  # いちばん深いところの倍率。帯を使うなら動画の終わり。決められないときは 1
+  let deepest = if duration > 0s { math.max(1, zoom_of(duration / 1s)) } else { 1 }
+  # 基準軌道の長さ。書いてなければ、いちばん深いところで max_steps が返す値。
+  # 軌道が尽きたところで差分を z で持ち直すと精度が f32 に落ちるので、反復はこの長さで頭打ちにする
+  let ref_steps = math.ceil(if reference_steps > 0 { reference_steps } else if duration > 0s { limit_of(math.log10(deepest)) } else { 8000 })
   # 基準軌道 (origin の点の軌道) を 64 bit で。[re, im, re, im, ...]。脱出したらそこまで
   let k0 = param(0)
   func reference() -> List<Number> {
     let orbit = []
     let Z = seed(origin, k0)
-    for n in 0..reference_steps {
+    for n in 0..ref_steps {
       orbit.push(Z.x)
       orbit.push(Z.y)
       if abs_squared(Z) > escape_at { return orbit }
@@ -99,22 +118,123 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
     orbit
   }
   # 桁数は、いちばん深いところの見える幅から決める (書いてあればそれを使う)
-  let finest = span / math.max(1, zoom_of(1))
+  let finest = span / deepest
   let deep_digits = if digits > 0 { digits } else { math.max(20, math.ceil(-math.log10(finest)) + 6) }
-  let orbit = if deep { reference_orbit(center[0], center[1], deep_digits, reference_steps) } else { reference() }
+  let orbit = if deep { bignum.reference_orbit(center[0], center[1], deep_digits, ref_steps) } else { reference() }
   let ref_len = orbit.len() / 2
+  # 深いときは、反復をまとめて飛ばす表 (BLA) を軌道に付けて渡す。f32 の精度 2^-24 まで許す
+  let table = if deep { bignum.bla_table(orbit, math.exp2(-24)) } else { orbit }
+  if deep and duration <= 0s {
+    log("escape_time: 文字列の中心は duration (帯) と一緒に使う。倍率は帯の側で対数のまま扱うので、f32 に収まらない深さまで行ける")
+  }
 
   # 帯を使う版。x は中心からの距離の対数、y は画面の上での角度
   if duration > 0s {
     let corner = math.sqrt(size.x * size.x + size.y * size.y) / 2
-    func zoom_at(u: Number) -> Number { corner * unit / math.exp(u) }
+    # 倍率の log10。u は中心からの距離の対数なので、倍率を作らずに深さが出る (倍率そのものは f32 に収まらない)
+    func depth_at(u: Number) -> Number { (math.ln(corner * unit) - u) / LN10 }
+    if deep {
+      return Shader(samples = samples,
+        args = table,
+        zoom = ZoomPath(center = focus, zoom = zoom_of, duration = duration, unit = unit),
+        color = func (u, th, t, ref) {
+          # 数は (仮数, 2 の指数) で持つ。f32 は 1e-38 で潰れるが、深いところの差はそれより小さい
+          let M = ref[0]
+          let L = ref[1]
+          let ob = 2 + L
+          let ce = math.floor(u / LN2)
+          let cm = math.exp(u - ce * LN2) * Vector(math.cos(th), math.sin(th) * up)
+          let lc = ce + log2_len(cm)
+          let limit = math.min(limit_of(depth_at(u)), M)
+          let dm = Vector(0, 0)
+          let de = 0
+          let m = 0
+          let n = 0
+          for iter in 0..limit {
+            if n >= limit { break }
+            let Z = Vector(ref[ob + 2 * m], ref[ob + 2 * m + 1])
+            let z = Z + dm * math.exp2(de)
+            let r2 = abs_squared(z)
+            if r2 > escape_at { return coloring(escaped(n, r2), z) }
+            let ld = de + log2_len(dm)
+            # 基準の点より差のほうが大きくなったら (基準が尽きたときも)、先頭に戻して差 = z から数え直す
+            if 0.5 * math.log2(r2) < ld or m + 1 >= M {
+              dm = z
+              de = 0
+              m = 0
+              Z = Vector(ref[ob], ref[ob + 1])
+              # z は小さいことがあるので、ここでも仮数をそろえておく
+              if dm.x != 0 or dm.y != 0 {
+                let shift = math.floor(log2_len(dm))
+                dm = dm * math.exp2(-shift)
+                de = shift
+              }
+              ld = de + log2_len(dm)
+            }
+            # まとめて飛べるだけ飛ぶ。半径は段が上がるほど狭く、m の倍数条件も厳しくなるので、
+            # 下の段から見て駄目になった所で止めれば、飛べない歩は 1 段見るだけで済む
+            let best = -1
+            let hop = 1
+            for k in 0..L {
+              if math.floor(m / hop) * hop != m or m + hop >= M { break }
+              let at = ref[2 + k] + 8 * math.floor(m / hop)
+              # 使える半径は 2^p - 2^s·|c| で、2^p より小さい
+              if ld >= ref[at + 6] { break }
+              let bias = ref[at + 7] + lc - ref[at + 6]
+              if bias >= 0 { break }
+              if ld >= ref[at + 6] + math.log2(1 - math.exp2(bias)) { break }
+              best = k
+              hop = hop * 2
+            }
+            let took = 0
+            if best >= 0 {
+              let hop = math.exp2(best)
+              let at = ref[2 + best] + 8 * math.floor(m / hop)
+              let e2 = ref[at + 5] + ce
+              let t2 = complex_mul(Vector(ref[at + 3], ref[at + 4]), cm)
+              if dm.x == 0 and dm.y == 0 {
+                dm = t2
+                de = e2
+              } else {
+                let e1 = ref[at + 2] + de
+                let big = math.max(e1, e2)
+                dm = complex_mul(Vector(ref[at], ref[at + 1]), dm) * math.exp2(e1 - big) + t2 * math.exp2(e2 - big)
+                de = big
+              }
+              m = m + hop
+              n = n + hop
+              took = 1
+            }
+            if took == 0 {
+              # 1 歩ぶん: d = 2 Z d + d² + c
+              if dm.x == 0 and dm.y == 0 {
+                dm = cm
+                de = ce
+              } else {
+                let big = math.max(math.max(de, 2 * de), ce)
+                dm = complex_mul(Z, dm) * (2 * math.exp2(de - big)) + complex_mul(dm, dm) * math.exp2(2 * de - big) + cm * math.exp2(ce - big)
+                de = big
+              }
+              m = m + 1
+              n = n + 1
+            }
+            # 仮数を毎回 [1, 2) にそろえる。窓の外だけそろえる形だと、2 乗が先に 0 に潰れて仮数ごと消える
+            if dm.x != 0 or dm.y != 0 {
+              let shift = math.floor(log2_len(dm))
+              dm = dm * math.exp2(-shift)
+              de = de + shift
+            }
+          }
+          coloring(-1, Vector(0, 0))
+        })
+    }
     return Shader(samples = samples,
       args = orbit,
       zoom = ZoomPath(center = focus, zoom = zoom_of, duration = duration, unit = unit),
       color = func (u, th, t, ref) {
         let r = math.exp(u)
         let dp = Vector(r * math.cos(th), r * math.sin(th) * up)
-        let limit = limit_of(zoom_at(u))
+        let limit = math.min(limit_of(depth_at(u)), ref_len)
         let k = param(0)
         let d = start(dp)
         let m = 0
@@ -142,7 +262,7 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
       camera = camera,
       color = func (x, y, t, cam, ref) {
         let dp = Vector(x * unit, y * unit * up)
-        let limit = limit_of(cam)
+        let limit = math.min(limit_of(math.log10(cam)), ref_len)
         let k = param(t)
         let d = start(dp)
         let m = 0
@@ -169,7 +289,7 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
     color = func (x, y, t, ref) {
       let zm = zoom_of(t)
       let dp = Vector((x - top_left.x - size.x / 2) * unit / zm, (y - top_left.y - size.y / 2) * unit / zm * up)
-      let limit = limit_of(zm)
+      let limit = math.min(limit_of(math.log10(zm)), ref_len)
       let k = param(t)
       let d = start(dp)
       let m = 0
@@ -190,6 +310,27 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
       coloring(-1, Vector(0, 0))
     })
 }
+
+## 寄る先を探す。その点から radius の中にある Mandelbrot 集合のミニチュアの中心を、
+## 周期を球で見つけてから多倍長のニュートン法で求める。escape_time の center にそのまま渡せる
+## @category 寄る先
+## @param re 探し始める点の実部。10 進の文字列 ("-0.7436438870371587")
+## @param im 探し始める点の虚部。10 進の文字列
+## @param radius この半径の中にあるミニチュアを探す (複素平面の単位)
+## @param digits 中心を何桁で求めるか
+## @param max_period この周期までを探す。見つからなければエラー
+## @returns (re, im, period, size)。re と im は digits 桁の文字列、period はミニチュアの周期、size はミニチュアの大きさ (心臓形の幅の目安。全体の集合なら 1。span を 4 × size にすると枝まで収まる)
+## @example
+## # タツノオトシゴの谷の奥、半径 2e-30 の中にあるミニチュア。周期 8007、大きさ 9e-33
+## let (re, im, period, size) = find_center("-0.743643887037158704752191506114774", "0.131825904205311970493132056385139", radius = 2e-30)
+## # 幅 4 から 4 × size まで 60 秒で寄る。ミニチュアのそばは周期の何倍もの反復が要る
+## let set = escape_time(formula = MANDELBROT, coloring = coloring, center = (re, im), span = 4,
+##   zoom = func (t) { math.exp(math.ln(1 / size) * t / 60) }, duration = 1m,
+##   max_steps = func (depth) { 2000 + 1200 * depth + 100000 * math.max(0, depth - 29) })
+export func find_center(re: String, im: String, radius: Number, digits: Number = 60, max_period: Number = 100000) -> Tuple {
+  bignum.find_center(re, im, radius, digits, max_period)
+}
+
 # Dict で表す。p はピクセルの複素座標、k は param(t) (Julia の c など)、Z は基準軌道、d は差分、dp は中心からの差
 #   seed(p, k): 最初の z / step(z, p, k): 次の z / start(dp): 差分の初期値 / delta(Z, d, dp, k): 差分の次の値 / degree: 次数
 ## Mandelbrot 集合の反復式 z' = z² + p。z は 0 から始まり、p がピクセルの複素座標。

@@ -14,7 +14,7 @@ let set = escape_time(
   coloring = smooth_bands(stops, 48, inside = #061a3f),
   center = Vector(0, 0),
   span = 3.6,
-  max_steps = func (zoom) { 300 },
+  max_steps = func (depth) { 300 },
   samples = 4,
 )
 v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = set))

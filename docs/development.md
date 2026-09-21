@@ -47,7 +47,7 @@ preview で詰まったものが出力の不具合かどうかは、両方に付
 
 ## 標準ライブラリ
 
-`src/stdlib/`。`import math` と `import space3d` は Rust、他は `.moph` を `include_str!` で実行ファイルに埋め込んでいる (`src/stdlib/mod.rs` の `FILES`)。別に配るファイルは無い。
+`src/stdlib/`。`import math` `import space3d` `import bignum` は Rust、他は `.moph` を `include_str!` で実行ファイルに埋め込んでいる (`src/stdlib/mod.rs` の `FILES`)。別に配るファイルは無い。
 
 ## ロゴとアイコン
 

@@ -24,7 +24,7 @@ ONLY_START = {"circle", "first"}
 # サンプルの表示順。intro は長いので動画は付けない
 # 並び順。あとのものが前のものを import するように並べる (grid は orbit / bars / clock / bounce を使う)
 # 簡単なものから順に。凝ったものほど下
-SAMPLES = ["circle", "first", "shapes", "bounce", "bars", "clock", "orbit", "fractal", "walker", "passerby", "crowd", "grid", "materials", "cube3d", "globe", "blocks", "julia", "burning_ship", "mandelbrot", "report", "showcase"]
+SAMPLES = ["circle", "first", "shapes", "bounce", "bars", "clock", "orbit", "fractal", "walker", "passerby", "crowd", "grid", "materials", "cube3d", "globe", "blocks", "julia", "burning_ship", "mandelbrot", "minibrot", "report", "showcase"]
 
 
 def builtin_docs() -> dict:
@@ -220,11 +220,11 @@ def sample_info(path: Path) -> dict:
 
 
 # ページに載せる区間 (--trim)。無ければ最初の 20 秒
-TRIM = {"mandelbrot": "00:48..00:53", "julia": "00:12..00:17", "burning_ship": "00:22..00:27"}
+TRIM = {"mandelbrot": "00:48..00:53", "minibrot": "01:21..01:26", "julia": "00:12..00:17", "burning_ship": "00:22..00:27"}
 MEDIA_SECONDS = 20
 MEDIA_SIZE = "1280x720"
 # フラクタルは画面全体が細かく動いてファイルが大きくなるので、画質ではなく大きさを落とす
-SMALL = {"mandelbrot": "640x360", "julia": "640x360", "burning_ship": "640x360"}
+SMALL = {"mandelbrot": "640x360", "minibrot": "640x360", "julia": "640x360", "burning_ship": "640x360"}
 MEDIA_FPS = 30
 MEDIA_CRF = 22         # 線や面の縁が崩れない程度
 

@@ -76,8 +76,13 @@ type Fill = Color | Gradient
 # Vector  Vector(1, 1.5)   .x .y で参照できる
 # Pos     Pos(1, 1.5)      x, y, anchor (既定 :center)。Pos(Vector(1, 1.5)) も同じ
 #
-# (1, 1.5) は Tuple であって Vector でも Pos でもない。
-# Vector や Pos が要る場所には、型名を書く
+# (1, 1.5) は Tuple。ただし型の決まっている場所 (型注釈、属性、フィールド、引数、戻り値) に
+# 書いた Tuple は、その型になる。Vector Vector3 Pos Color の 4 つだけ
+let here: Pos = (1, 1.5)
+let points: List<Vector> = [(0, 0), (1, 0), (1, 1)]
+log(here, points)
+# 型を書かない場所では Tuple のまま。まとめて作るなら from
+log(Vector.from([(0, 0), (1, 0)]), Color.from([(224, 64, 64)]))
 let pos = Pos(1, 1.5)
 pos.anchor                                 # :center
 pos.vector                                 # Vector(1, 1.5)

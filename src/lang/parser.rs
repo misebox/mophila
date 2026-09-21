@@ -10,6 +10,16 @@ pub fn parse(src: &str) -> Result<Vec<Stmt>> {
     Ok(stmts)
 }
 
+/// 型注釈 1 つだけを読む。schema に書いた型名 ("List<Vector>") を構造にするのに使う
+pub fn parse_type(src: &str) -> Result<TypeAnn> {
+    let mut p = Parser { tokens: lex(src)?, pos: 0, loops: 0 };
+    let ann = p.type_ann()?;
+    match p.peek() {
+        Tok::Eof | Tok::Newline => Ok(ann),
+        _ => p.unexpected("end of type"),
+    }
+}
+
 /// `o.position.x` を (o, [position, x]) に分ける
 fn split_path(e: Expr) -> Option<(Expr, Vec<String>)> {
     match e {

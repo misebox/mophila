@@ -547,7 +547,7 @@ fn seq_sort(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
 }
 
 /// Tuple 1 つを、その型の値にする
-fn value_from(kind: &str, row: &[Value]) -> Result<Value> {
+pub(crate) fn value_from(kind: &str, row: &[Value]) -> Result<Value> {
     let ns = row
         .iter()
         .map(|v| match v {

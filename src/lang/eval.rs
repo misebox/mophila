@@ -144,9 +144,14 @@ impl Interp {
         match stmt {
             StmtKind::Let(pat, ann, e) => {
                 let v = self.eval(e)?;
-                if let Some(ann) = ann {
-                    self.check_ann(&v, ann, "value")?;
-                }
+                let v = match ann {
+                    Some(ann) => {
+                        let v = self.coerced(v, ann);
+                        self.check_ann(&v, ann, "value")?;
+                        v
+                    }
+                    None => v,
+                };
                 self.bind(pat, v)?;
                 Ok(Flow::Next(Value::Nothing))
             }
@@ -342,6 +347,82 @@ impl Interp {
         Err(self.wrong_type(Kind::AttributeType, what, &ann.text, v))
     }
 
+    /// schema に書いた型に合わせて Tuple を作り直す。
+    /// `position = (8, 4.5)` や `points = [(0, 0), (1, 0)]` と書けるのはここ
+    fn fitted_attr(&self, ty: &'static str, v: Value) -> Value {
+        match schema_anns().get(ty) {
+            Some(ann) => self.coerced(v, ann),
+            // < > の無い型。毎フレーム通るので、Tuple のときだけ作り直しを試す
+            None => match &v {
+                Value::Tuple(cells) => crate::lang::method::value_from(&self.real_type_name(ty), cells).unwrap_or(v),
+                _ => v,
+            },
+        }
+    }
+
+    /// schema に書いた型に合うか
+    fn attr_ok(&self, ty: &'static str, v: &Value) -> bool {
+        match schema_anns().get(ty) {
+            Some(ann) => self.matches_ann(v, ann),
+            None => self.matches_type(v, &self.real_type_name(ty)),
+        }
+    }
+
+    /// 書いた型に合わせて、Tuple を名前付きの型にする。
+    /// 変換するのは Tuple からだけで、型どうしの変換は入れない (間違いが黙って通る)。
+    /// 変えるものが無ければ元の値をそのまま返す (List の実体を差し替えない)
+    fn coerced(&self, v: Value, ann: &TypeAnn) -> Value {
+        self.converted(&v, ann).unwrap_or(v)
+    }
+
+    /// 作り直したものだけを返す。変えるものが無ければ None (入れ物の実体を差し替えない)
+    fn converted(&self, v: &Value, ann: &TypeAnn) -> Option<Value> {
+        // 別名 (type Points = List<Vector3>) は、指している型で見る
+        if ann.args.is_empty() {
+            if let Some([only]) = self.types.get(&*self.real_type_name(&ann.name)).map(|m| &m[..]) {
+                return self.converted(v, &only.clone());
+            }
+        }
+        if let Value::Tuple(cells) = v {
+            if let Ok(made) = crate::lang::method::value_from(&self.real_type_name(&ann.name), cells) {
+                return Some(made);
+            }
+        }
+        if ann.args.is_empty() {
+            return None;
+        }
+        // 1 つだけ書いてあれば全部その型、並べて書いてあれば 1 つずつ
+        let made = |xs: &[Value]| -> Option<Vec<Value>> {
+            let at = |i: usize| match &ann.args[..] {
+                [inner] => Some(inner),
+                args => args.get(i),
+            };
+            let out: Vec<Option<Value>> = xs.iter().enumerate().map(|(i, x)| at(i).and_then(|a| self.converted(x, a))).collect();
+            out.iter()
+                .any(Option::is_some)
+                .then(|| out.into_iter().zip(xs).map(|(made, x)| made.unwrap_or_else(|| x.clone())).collect())
+        };
+        match v {
+            Value::List(xs) => made(&xs.borrow()).map(|xs| Value::List(Rc::new(RefCell::new(xs)))),
+            Value::Tuple(xs) => made(xs).map(Value::Tuple),
+            // Dict はキーを触らず値だけ。キーは必ず String
+            Value::Dict(items) => {
+                let want = match &ann.args[..] {
+                    [v] => v,
+                    [_, v] => v,
+                    _ => return None,
+                };
+                let items = items.borrow();
+                let out: Vec<Option<Value>> = items.iter().map(|(_, x)| self.converted(x, want)).collect();
+                out.iter().any(Option::is_some).then(|| {
+                    let pairs = out.into_iter().zip(items.iter()).map(|(made, (k, x))| (k.clone(), made.unwrap_or_else(|| x.clone()))).collect();
+                    Value::Dict(Rc::new(RefCell::new(pairs)))
+                })
+            }
+            _ => None,
+        }
+    }
+
     /// 並びの中で、最初に型が合わない要素
     fn first_mismatch(&self, v: &Value, ann: &TypeAnn) -> Option<Value> {
         let [want] = &ann.args[..] else { return None };
@@ -381,22 +462,37 @@ impl Interp {
     pub(crate) fn set_attr(&self, obj: &ObjRef, attr: &str, value: Value) -> Result<()> {
         let mut o = obj.borrow_mut();
         // 期待する型の名前。schema は 'static、宣言は借りたまま使う
-        // 合わなかったときだけ、期待した型の名前を作る (毎フレーム通るので確保しない)
-        let wrong: Option<String> = match &o.decl {
+        // 型に合わせて Tuple を作り直してから確かめる。合わなければ、どこが合わないかを出す
+        let fitted = match &o.decl {
             Some(ty) => match ty.decl.fields.iter().find(|f| f.name == attr) {
-                Some(f) => (!self.matches_ann(&value, &f.ann)).then(|| f.ann.text.clone()),
+                Some(f) => {
+                    let value = self.coerced(value, &f.ann);
+                    match self.matches_ann(&value, &f.ann) {
+                        true => Ok(value),
+                        false => Err((f.ann.text.clone(), value)),
+                    }
+                }
                 None => return err(Kind::UndefinedAttribute, format!("{} has no attribute \"{attr}\"", o.kind)),
             },
             None => match schema(&o.kind).and_then(|s| s.iter().find(|a| a.name == attr)) {
-                Some(a) => (!self.matches_type(&value, &self.real_type_name(a.ty))).then(|| a.ty.to_string()),
+                Some(a) => {
+                    let value = self.fitted_attr(a.ty, value);
+                    match self.attr_ok(a.ty, &value) {
+                        true => Ok(value),
+                        false => Err((a.ty.to_string(), value)),
+                    }
+                }
                 None => return err(Kind::UndefinedAttribute, format!("{} has no attribute \"{attr}\"", o.kind)),
             },
         };
-        if let Some(expected) = wrong {
-            let kind = o.kind.clone();
-            drop(o);
-            return Err(self.wrong_type(Kind::AttributeType, &format!("{kind}.{attr}"), &expected, &value));
-        }
+        let value = match fitted {
+            Ok(v) => v,
+            Err((expected, bad)) => {
+                let kind = o.kind.clone();
+                drop(o);
+                return Err(self.wrong_type(Kind::AttributeType, &format!("{kind}.{attr}"), &expected, &bad));
+            }
+        };
         // 既にある属性は入れ替えるだけ。名前を作り直さない
         let before = match o.attrs.get_mut(attr) {
             Some(slot) => Some(std::mem::replace(slot, value)),
@@ -1144,7 +1240,8 @@ impl Interp {
                     let mut attrs = HashMap::new();
                     for (name, v) in map {
                         let expected = sch.iter().find(|a| a.name == name).map(|a| a.ty).expect("field exists");
-                        if !self.matches_type(&v, expected) {
+                        let v = self.fitted_attr(expected, v);
+                        if !self.attr_ok(expected, &v) {
                             return Err(self.wrong_type(Kind::ArgumentType, &format!("{kind}.{name}"), expected, &v));
                         }
                         // シェーダは関数の中身を GPU 向けに変換するので、書いた func しか受け取れない。
@@ -1333,6 +1430,7 @@ impl Interp {
                     None => return err(Kind::ArityMismatch, format!("{}.{} is not given", decl.name, f.name)),
                 },
             };
+            let v = self.coerced(v, &f.ann);
             self.check_field(&decl.name, &f.name, &v, &f.ann)?;
             fields.push((f.name.clone(), v));
         }
@@ -1847,11 +1945,16 @@ impl Interp {
                     },
                 };
                 // 型を書いてあれば、渡された値を確かめる
-                if let Some(ann) = &param.ann {
-                    if !self.matches_ann(&value, ann) {
-                        return Err(self.wrong_type(Kind::ArgumentType, &crate::lang::ast::pattern_text(&param.pattern), &ann.text, &value));
+                let value = match &param.ann {
+                    Some(ann) => {
+                        let value = self.coerced(value, ann);
+                        if !self.matches_ann(&value, ann) {
+                            return Err(self.wrong_type(Kind::ArgumentType, &crate::lang::ast::pattern_text(&param.pattern), &ann.text, &value));
+                        }
+                        value
                     }
-                }
+                    None => value,
+                };
                 self.bind(&param.pattern, value)?;
             }
             if positional.next().is_some() {
@@ -1861,10 +1964,10 @@ impl Interp {
                 return err(Kind::ArgumentType, format!("unknown named argument \"{name}\""));
             }
             let out = self.run_block(&closure.def.body).map(Flow::value)?;
-            if let Some(ann) = &closure.def.returns {
-                if !self.matches_ann(&out, ann) {
-                    return Err(self.wrong_type(Kind::ArgumentType, "the return value", &ann.text, &out));
-                }
+            let Some(ann) = &closure.def.returns else { return Ok(out) };
+            let out = self.coerced(out, ann);
+            if !self.matches_ann(&out, ann) {
+                return Err(self.wrong_type(Kind::ArgumentType, "the return value", &ann.text, &out));
             }
             Ok(out)
         })();
@@ -2637,13 +2740,29 @@ pub const fn req(name: &'static str, ty: &'static str) -> Attr {
     Attr { name, ty, required: true }
 }
 
+/// schema に書いた `List<Vector>` のような型名を注釈にしたもの。
+/// 名前は 'static で数も限られるので、はじめに 1 度だけ作って引き回す
+fn schema_anns() -> &'static HashMap<&'static str, TypeAnn> {
+    static ALL: std::sync::OnceLock<HashMap<&'static str, TypeAnn>> = std::sync::OnceLock::new();
+    ALL.get_or_init(|| {
+        let mut out = HashMap::new();
+        for kind in KINDS {
+            for a in schema(kind).unwrap_or(&[]).iter().filter(|a| a.ty.contains('<')) {
+                let ann = crate::lang::parser::parse_type(a.ty).unwrap_or_else(|_| panic!("schema の型 \"{}\" が読めない", a.ty));
+                out.insert(a.ty, ann);
+            }
+        }
+        out
+    })
+}
+
 pub fn schema(kind: &str) -> Option<&'static [Attr]> {
     // 図形が共通で持つ属性。ただし、その図形で効きようがないものは持たせない
     //   strokeJoin — 角のある図形だけ (Circle / Ellipse / Line には角が無い)
     //   fill        — 面のある図形だけ (Line には面が無い)
     //   strokeCap / dash / dashOffset — 字の輪郭は破線にできないので TextArea は持たない
     const PAINT: Attr = opt("fill", "Paint");
-    const LINE: [Attr; 5] = [opt("stroke", "Color"), opt("strokeWidth", "Number"), opt("strokeCap", "StrokeCap"), opt("dash", "List"), opt("dashOffset", "Number")];
+    const LINE: [Attr; 5] = [opt("stroke", "Color"), opt("strokeWidth", "Number"), opt("strokeCap", "StrokeCap"), opt("dash", "List<Number>"), opt("dashOffset", "Number")];
     const JOIN: Attr = opt("strokeJoin", "StrokeJoin");
     const COMMON: [Attr; 5] = [opt("opacity", "Number"), opt("rotation", "Number"), opt("pivot", "Vector"), opt("blend", "Blend"), opt("zIndex", "Number")];
     macro_rules! shape {
@@ -2704,7 +2823,7 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
     ];
     // 読み上げ。voice は engine に渡す声の名前、volume は混ぜるときの音量
     const NARRATION: &[Attr] = &[req("text", "String"), req("duration", "Duration"), opt("volume", "Number")];
-    const SHADER: &[Attr] = &[req("color", "Func"), opt("args", "List"), opt("samples", "Number"), opt("zoom", "ZoomPath"), opt("camera", "Camera")];
+    const SHADER: &[Attr] = &[req("color", "Func"), opt("args", "List<Number>"), opt("samples", "Number"), opt("zoom", "ZoomPath"), opt("camera", "Camera")];
     // 倍率の表は zoom と duration と unit から作る (作るのは construct)。scale は作った結果
     const ZOOM_MAP: &[Attr] =
         &[req("center", "Vector"), req("zoom", "Func"), req("duration", "Duration"), opt("unit", "Number"), opt("scale", "List")];
@@ -2716,12 +2835,12 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
     const ORTHOGRAPHIC: &[Attr] =
         &[req("from", "Vector3"), req("to", "Vector3"), opt("up", "Vector3"), opt("height", "Number"), req("box", "Vector")];
     const ISOMETRIC: &[Attr] = &[opt("unit", "Number"), req("box", "Vector")];
-    const TRANSFORM3: &[Attr] = &[opt("m", "List")];
-    const MESH: &[Attr] = &[req("points", "List"), opt("edges", "List"), opt("faces", "List")];
-    const FACE: &[Attr] = &[req("points", "List"), req("normal", "Vector3"), req("depth", "Number")];
+    const TRANSFORM3: &[Attr] = &[opt("m", "List<Number>")];
+    const MESH: &[Attr] = &[req("points", "List<Vector3>"), opt("edges", "List<Tuple>"), opt("faces", "List<List<Number>>")];
+    const FACE: &[Attr] = &[req("points", "List<Vector>"), req("normal", "Vector3"), req("depth", "Number")];
     // to は :linear、radius は :radial のときだけ要るので、必須にはしない
     const GRADIENT: &[Attr] = &[
-        req("stops", "List"),
+        req("stops", "List<Color>"),
         req("from", "Vector"),
         opt("kind", "GradientKind"),
         opt("to", "Vector"),
@@ -2732,8 +2851,8 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
         "Ellipse" => shape!(fill: true, join: false, req("position", "Pos"), req("rx", "Number"), req("ry", "Number")),
         "Rect" => shape!(fill: true, join: true, req("position", "Pos"), req("w", "Number"), req("h", "Number"), opt("radius", "Number")),
         "Line" => shape!(fill: false, join: false, req("from", "Vector"), req("to", "Vector")),
-        "Polygon" => shape!(fill: true, join: true, req("points", "List")),
-        "Path" => shape!(fill: true, join: true, req("from", "Vector"), req("segments", "List"), opt("closed", "Bool"), opt("upto", "Number")),
+        "Polygon" => shape!(fill: true, join: true, req("points", "List<Vector>")),
+        "Path" => shape!(fill: true, join: true, req("from", "Vector"), req("segments", "List<Tuple>"), opt("closed", "Bool"), opt("upto", "Number")),
         "TextArea" => TEXT_AREA,
         "View" => VIEW,
         "Narration" => NARRATION,

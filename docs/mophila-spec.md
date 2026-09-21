@@ -233,7 +233,9 @@ type Mode = :fast | :slow
 
 - Vector: 実数 2 つ。`.x` `.y`。`Vector ± Vector`、`Vector × Number`、`Vector ÷ Number`、`-Vector`
 - Pos: `x`、`y`、`anchor` (既定 `:center`)。`.anchor` `.vector` `.x` `.y` (`.x` `.y` は読み書きできる)。`Pos(Vector(1, 1.5))` でも作れる
-- `(8, 4.5)` は Tuple であって Vector でも Pos でもない。`Vector` や `Pos` が要る場所には型名を書く
+- `(8, 4.5)` は Tuple。ただし**型の決まっている場所に書いた Tuple は、その型になる** (型注釈、属性、フィールド、引数、戻り値)。`Circle(position = (8, 4.5))`、`Polygon(points = [(0, 0), (1, 0)])`、`let ps: List<Vector3> = [(0, 0, 0)]` と書ける
+- 変換するのは Tuple から `Vector` `Vector3` `Pos` `Color` へだけ。型どうしの変換は無く、数が合わなければ型エラー
+- 型の決まっていない場所では Tuple のまま。まとめて作るなら `Vector.from([(0, 0), (1, 0)])` (`Vector3` `Pos` `Color` も同じ)
 - anchor の解決 (`:topLeft` が図形のどこかを出すこと) は描画のときに行われ、スクリプトからは触れない
 
 ### 3.11 図形

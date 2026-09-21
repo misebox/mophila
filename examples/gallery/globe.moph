@@ -1,0 +1,81 @@
+# globe.moph — 回る球の上の点を 2D の円で打つ。面は描かず、3D の座標計算だけを使う。
+# 奥行きで大きさ・明るさ・重なりの順を決めると、円だけで立体に見える (space3d の例)
+
+import space3d
+import color
+import math
+
+let v = View(box = (16, 9))
+# 奥行きで並べ替えるので、背景はいちばん後ろだと書いておく (zIndex を書かないものは 0)
+v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #0a0e18, zIndex = -100))
+
+let cam = space3d.PerspectiveCamera(from = (0, 1.6, 13), to = (0, 0, 0), fov = 34, box = (16, 9))
+# 点だけ使うので、面の細かさは要らない
+let ball = space3d.sphere((0, 0, 0), 3, 11, 22)
+# 衛星の軌道。xz 平面に円を作って、傾けた折れ線にする
+let round = []
+for i in 0..=36 {
+  let a = math.TAU * i / 36
+  round.push((4.2 * math.cos(a), 0, 4.2 * math.sin(a)))
+}
+let tilt = space3d.Transform3().rotate_z(24)
+let ring = space3d.path(round).transformed(tilt)
+
+# 球の点 1 つにつき円 1 つ。位置と大きさは毎コマ入れ替える
+let dots = []
+for p in ball.points {
+  let c = Circle(position = (8, 4.5), radius = 0.05, fill = #7fd4ff)
+  v.place(c)
+  dots.push(c)
+}
+# 軌道の線。折れ線の区間の数だけ
+let rails = []
+for e in ring.edges(cam) {
+  let l = Line(from = (8, 4.5), to = (8, 4.5), stroke = #35507a, strokeWidth = 0.03)
+  v.place(l)
+  rails.push(l)
+}
+
+# 軌道を回る衛星。1 点だけなので project と scale_at をそのまま使う
+let sat = Circle(position = (8, 4.5), radius = 0.1, fill = #ffd98a)
+v.place(sat)
+
+let near = #a8ecff
+let far = #1d3b6b
+
+let spin = motion (t) {
+  0..1: {
+    let turn = space3d.Transform3().rotate_y(t * 360).rotate_x(18)
+    let moved = turn.apply_all(ball.points)
+    # 投影と奥行きはまとめて出す (ループは Rust の中で回る)
+    let flat = cam.project_all(moved)
+    let deep = cam.depth_all(moved)
+    for (i, c) in dots.enumerate() {
+      # 手前が 1、奥が 0。球の直径ぶんで割る
+      let k = (16.1 - deep[i]) / 6
+      c.position = Pos(flat[i])
+      c.radius = 0.03 + 0.05 * k
+      c.fill = color.mix(far, near, k)
+      # 奥行きの逆が描く順。奥から描けば手前が上に乗る
+      c.zIndex = -deep[i]
+    }
+    # 軌道の線も同じ奥行きで並べる。折れ線なので、i 番目の線は i と i + 1 の間
+    let spun = ring.transformed(turn)
+    let rail_deep = cam.depth_all(spun.points)
+    for (i, e) in spun.edges(cam).enumerate() {
+      rails[i].from = e[0]
+      rails[i].to = e[1]
+      rails[i].zIndex = -(rail_deep[i] + rail_deep[i + 1]) / 2
+    }
+    # 衛星は軌道の上を 3 周する。遠いと小さく見えるので、大きさは scale_at から
+    let a = math.TAU * (t * 3 % 1)
+    let here = turn.apply(tilt.apply((4.2 * math.cos(a), 0, 4.2 * math.sin(a))))
+    sat.position = Pos(cam.project(here))
+    sat.radius = 0.09 * cam.scale_at(here)
+    sat.zIndex = -cam.depth(here)
+  }
+}
+spin.duration = 12s
+v.addTrack(spin)
+
+output v

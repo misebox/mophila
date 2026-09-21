@@ -10477,6 +10477,20 @@
    "listed": true
   },
   {
+   "name": "globe",
+   "desc": "回る球の上の点を 2D の円で打つ。面は描かず、3D の座標計算だけを使う。",
+   "code": "# globe.moph — 回る球の上の点を 2D の円で打つ。面は描かず、3D の座標計算だけを使う。\n# 奥行きで大きさ・明るさ・重なりの順を決めると、円だけで立体に見える (space3d の例)\n\nimport space3d\nimport color\nimport math\n\nlet v = View(box = (16, 9))\n# 奥行きで並べ替えるので、背景はいちばん後ろだと書いておく (zIndex を書かないものは 0)\nv.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #0a0e18, zIndex = -100))\n\nlet cam = space3d.PerspectiveCamera(from = (0, 1.6, 13), to = (0, 0, 0), fov = 34, box = (16, 9))\n# 点だけ使うので、面の細かさは要らない\nlet ball = space3d.sphere((0, 0, 0), 3, 11, 22)\n# 衛星の軌道。xz 平面に円を作って、傾けた折れ線にする\nlet round = []\nfor i in 0..=36 {\n  let a = math.TAU * i / 36\n  round.push((4.2 * math.cos(a), 0, 4.2 * math.sin(a)))\n}\nlet tilt = space3d.Transform3().rotate_z(24)\nlet ring = space3d.path(round).transformed(tilt)\n\n# 球の点 1 つにつき円 1 つ。位置と大きさは毎コマ入れ替える\nlet dots = []\nfor p in ball.points {\n  let c = Circle(position = (8, 4.5), radius = 0.05, fill = #7fd4ff)\n  v.place(c)\n  dots.push(c)\n}\n# 軌道の線。折れ線の区間の数だけ\nlet rails = []\nfor e in ring.edges(cam) {\n  let l = Line(from = (8, 4.5), to = (8, 4.5), stroke = #35507a, strokeWidth = 0.03)\n  v.place(l)\n  rails.push(l)\n}\n\n# 軌道を回る衛星。1 点だけなので project と scale_at をそのまま使う\nlet sat = Circle(position = (8, 4.5), radius = 0.1, fill = #ffd98a)\nv.place(sat)\n\nlet near = #a8ecff\nlet far = #1d3b6b\n\nlet spin = motion (t) {\n  0..1: {\n    let turn = space3d.Transform3().rotate_y(t * 360).rotate_x(18)\n    let moved = turn.apply_all(ball.points)\n    # 投影と奥行きはまとめて出す (ループは Rust の中で回る)\n    let flat = cam.project_all(moved)\n    let deep = cam.depth_all(moved)\n    for (i, c) in dots.enumerate() {\n      # 手前が 1、奥が 0。球の直径ぶんで割る\n      let k = (16.1 - deep[i]) / 6\n      c.position = Pos(flat[i])\n      c.radius = 0.03 + 0.05 * k\n      c.fill = color.mix(far, near, k)\n      # 奥行きの逆が描く順。奥から描けば手前が上に乗る\n      c.zIndex = -deep[i]\n    }\n    # 軌道の線も同じ奥行きで並べる。折れ線なので、i 番目の線は i と i + 1 の間\n    let spun = ring.transformed(turn)\n    let rail_deep = cam.depth_all(spun.points)\n    for (i, e) in spun.edges(cam).enumerate() {\n      rails[i].from = e[0]\n      rails[i].to = e[1]\n      rails[i].zIndex = -(rail_deep[i] + rail_deep[i + 1]) / 2\n    }\n    # 衛星は軌道の上を 3 周する。遠いと小さく見えるので、大きさは scale_at から\n    let a = math.TAU * (t * 3 % 1)\n    let here = turn.apply(tilt.apply((4.2 * math.cos(a), 0, 4.2 * math.sin(a))))\n    sat.position = Pos(cam.project(here))\n    sat.radius = 0.09 * cam.scale_at(here)\n    sat.zIndex = -cam.depth(here)\n  }\n}\nspin.duration = 12s\nv.addTrack(spin)\n\noutput v\n",
+   "length": 12.0,
+   "media": {
+    "width": 1280,
+    "height": 720,
+    "fps": 30.0,
+    "seconds": 12.0
+   },
+   "trim": "",
+   "listed": true
+  },
+  {
    "name": "julia",
    "desc": "Julia 集合。定数 c を円周上でゆっくり動かすと、形が移り変わる",
    "code": "# julia.moph — Julia 集合。定数 c を円周上でゆっくり動かすと、形が移り変わる\n\nimport math\nimport { escape_time, julia, smooth_bands } from fractal\n\nlet v = View(box = Vector(16, 9))\nlet total = 40s\n\nlet stops = [#061a3f, #1c4f9c, #5c9be6, #cfe6ff, #ffffff, #cfe6ff, #5c9be6, #1c4f9c, #061a3f]\n\nlet set = escape_time(\n  # c = 0.7885 e^(iθ)。θ は π から始めて 40 秒で 1 周 (最初はつながった形)\n  formula = julia(func (t) { Vector(0.7885 * math.cos(math.PI + t / 40 * math.TAU), 0.7885 * math.sin(math.PI + t / 40 * math.TAU)) }),\n  coloring = smooth_bands(stops, 48, inside = #061a3f),\n  center = Vector(0, 0),\n  span = 3.6,\n  max_steps = func (zoom) { 300 },\n  samples = 4,\n)\nv.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = set))\n\nlet track = Timeline(duration = total)\nv.addTrack(track)\noutput v\n",

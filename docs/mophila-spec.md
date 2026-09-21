@@ -528,6 +528,8 @@ track.place(Narration(text = "ここは速く", duration = 3s), at = 5s, voice =
 `left` `center` `right` `top` `bottom` `topLeft` などの名前か、軸ごとの割合 (`30%,50%`) を書く (既定は中央)。
 どちらも箱の大きさを知らずに書ける。絵が画面を埋めないときの帯の色は `--pad '#000000'` (既定は白)。
 
+書き出した動画には `comment=mophila <版>` が入る (`ffprobe -show_entries format_tags=comment` で見える)。入れ物が対応していない png や gif には入らない。
+
 `subs` は動画を描かずに字幕だけをファイルに出す (`-o subs.srt` / `-o subs.vtt`。省略すると標準出力)。中身は動画の字幕トラックと同じで、`--trim` も同じように効く。`preview` は音声を PCM にして鳴らし、字幕を画面の下に重ねる。`sheet` も重ねる。重ねる字幕は、箱を収めた絵の中に出す (ウィンドウの縦横比が箱と違えば、余った帯には出ない)。
 
 Motion は単独では place できない。動画の長さは、置いたものすべての終わりの最大 (音声と字幕も含む)。

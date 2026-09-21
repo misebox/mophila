@@ -90,7 +90,10 @@ impl Ffmpeg {
         if let Some(filter) = s.filter {
             cmd.args(["-vf", filter]);
         }
+        // 後から「これは mophila で作った」と分かるように残す (入れ物が対応していなければ無視される)
+        let stamp = format!("comment=mophila {}", env!("CARGO_PKG_VERSION"));
         let mut child = cmd
+            .args(["-metadata", &stamp])
             .args(["-c:v", s.codec, "-pix_fmt", s.pix_fmt, output])
             .stdin(Stdio::piped())
             .stdout(Stdio::null())

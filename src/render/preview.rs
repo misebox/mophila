@@ -1,4 +1,5 @@
-//! ウィンドウを開いて再生する。コマは少し先まで描いておき、順に出す。
+//! ウィンドウを開いて再生する。コマは少し先まで描いておき、**溜まってから**時計と音を動かす
+//! (立ち上がりは絵の準備で忙しいので、そこで鳴らし始めると音の出だしが乱れる)。
 //!
 //! 中身の時刻は実時間に貼り付ける (音とずれない)。重い場面では**出す間隔を広げて fps を落とす**。
 //! 間隔は 1 コマ描くのに掛かった時間から決め、余裕を持たせる。それでも間に合わなければ、
@@ -82,6 +83,7 @@ pub fn run(name: String, interp: Interp, view: ObjRef, duration: f64, shot: crat
         status: true,
         help: false,
         speed: 1.0,
+        started: false,
         fps: 0.0,
         last_note: Instant::now(),
         timing: crate::timing::Timing::from_env(),
@@ -157,6 +159,8 @@ struct Player<'a> {
     help: bool,
     /// 再生速度。1 倍のときだけ音を鳴らす
     speed: f64,
+    /// 作り置きが溜まって、時計と音を動かしたか
+    started: bool,
     /// ならした fps。ステータスバーに出す
     fps: f64,
     /// MOPHILA_TIMING のときに、進み具合を知らせた時刻
@@ -268,6 +272,9 @@ impl Player<'_> {
         self.next_t = self.position;
         self.anchor = Instant::now();
         self.anchor_t = self.position;
+        // 作り置きが空になるので、溜まるまでは止めておく
+        self.started = false;
+        self.audio_at(false);
         if let Some(state) = &self.state {
             state.window.request_redraw();
         }
@@ -275,7 +282,6 @@ impl Player<'_> {
 
     fn seek(&mut self, delta: f64) {
         self.position = (self.position + delta).clamp(0.0, self.duration.max(0.0));
-        self.sync_audio();
         self.restart();
     }
 
@@ -284,17 +290,18 @@ impl Player<'_> {
             self.position = 0.0;
         }
         self.playing = !self.playing;
-        self.sync_audio();
         self.restart();
     }
 
     /// 音は別スレッドで実時間のまま流す。位置を渡すのは seek と一時停止のときだけで、
     /// 再生中に渡すと、作り置きのぶん遅れている映像の位置へ音が引き戻される
-    fn sync_audio(&self) {
-        if let Some(a) = &self.audio {
-            // 速度を変えている間は鳴らさない。伸び縮みさせると音程が変わる
-            a.sync(self.position, self.playing && self.speed == 1.0, true);
-        }
+    /// 音を今の位置に合わせる。鳴らすのは 1 倍で再生中のときだけ
+    /// (伸び縮みさせると音程が変わる。準備できていないうちに鳴らすと出だしが乱れる)
+    fn audio_at(&self, playing: bool) {
+        let Some(a) = &self.audio else { return };
+        let on = playing && self.speed == 1.0;
+        a.sync(self.position, on, true);
+        a.running(on);
     }
 
     /// 再生速度を段階で上下する
@@ -311,7 +318,6 @@ impl Player<'_> {
     fn set_speed(&mut self, speed: f64) {
         self.speed = speed;
         self.repace(self.refresh);
-        self.sync_audio();
         self.restart();
     }
 
@@ -371,8 +377,9 @@ impl Player<'_> {
                 }
                 self.next_t = 0.0;
             }
-            // 遅れているぶんは、描かずに飛ばす。描いてから捨てるのでは追いつけない
-            if self.playing {
+            // 遅れているぶんは、描かずに飛ばす。描いてから捨てるのでは追いつけない。
+            // 走り出す前は実時間を見ない (溜めている間に中身が進んでしまう)
+            if self.playing && self.started {
                 let wall = self.wall_t(Instant::now());
                 if self.next_t + self.step < wall {
                     self.next_t = wall;
@@ -460,13 +467,19 @@ impl Player<'_> {
             if let Some(next) = self.ready.pop_front() {
                 (self.position, self.anchor, self.anchor_t) = (next.t, now, next.t);
                 self.shown = Some(next);
-                // mixer は止まった状態で作るので、最初の 1 コマを出すときに動かす
-                self.sync_audio();
             }
             return;
         }
         if !self.playing {
             return;
+        }
+        // 溜まるまでは静止画のまま待つ。一番重い立ち上がりで鳴らし始めると、音の出だしが乱れる
+        if !self.started {
+            if self.ready.len() < LOOKAHEAD && !self.done() {
+                return;
+            }
+            (self.started, self.anchor, self.anchor_t) = (true, now, self.position);
+            self.audio_at(true);
         }
         let wall = self.wall_t(now);
         // 出す時刻が来たものを出す。来ていなければ、同じコマをもう一度出す
@@ -499,7 +512,7 @@ impl Player<'_> {
         }
         if self.done() {
             self.playing = false;
-            self.sync_audio();
+            self.audio_at(false);
         }
         // 進み具合を、ときどき 1 行だけ
         if self.timing.on() && now.duration_since(self.last_note).as_secs_f64() >= 2.0 {

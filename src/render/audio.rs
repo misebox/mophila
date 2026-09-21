@@ -1,5 +1,6 @@
 //! preview の音。音声ファイルを ffmpeg で PCM にしてメモリに持ち、cpal で出力デバイスに流す。
-//! 再生位置と一時停止は映像側が決め、ここはそれに合わせる
+//! 再生位置と一時停止は映像側が決め、ここはそれに合わせる。
+//! 流し始めるのは映像の準備ができてから (running)
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -12,7 +13,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use crate::render::media::Media;
 
 pub struct Output {
-    _stream: cpal::Stream,
+    stream: cpal::Stream,
     state: Arc<Mutex<Mixer>>,
 }
 
@@ -91,8 +92,19 @@ impl Output {
             }
             other => return Err(format!("unsupported audio sample format {other}").into()),
         };
-        stream.play()?;
-        Ok(Self { _stream: stream, state })
+        // ここでは鳴らし始めない。立ち上がりは絵の準備で忙しく、出だしが乱れる
+        Ok(Self { stream, state })
+    }
+
+    /// デバイスへ流し始める / 止める
+    pub fn running(&self, on: bool) {
+        let done = match on {
+            true => self.stream.play(),
+            false => self.stream.pause(),
+        };
+        if let Err(e) = done {
+            eprintln!("audio: {e}");
+        }
     }
 
     /// 映像の位置に合わせる。force でなければ、ずれが小さいうちは音を途切れさせない

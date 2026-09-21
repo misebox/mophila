@@ -2494,18 +2494,6 @@ EspeakVoiceEngine(voice = "ja")
   step: Number,
 )` -> List<Tuple> — 方眼の線。Path を 1 本ずつ引くための、始点と終点の組
 - `to_segments(points: List<Vector>)` -> List<Tuple> — 点の並びを Path の segments にする
-- `iso(x: Number, y: Number, z: Number, unit: Number = 1)` -> Vector — 等角投影。3 次元の点を平面に落とす。x は右下、y は左下、z は上へ伸びる
-- `iso_depth(x: Number, y: Number, z: Number)` -> Number — 等角投影での手前らしさ。大きいほど手前。zIndex に入れれば重なり順が決まる
-- `iso_faces(
-  at: Vector,
-  x: Number,
-  y: Number,
-  z: Number,
-  w: Number,
-  d: Number,
-  h: Number,
-  unit: Number = 1,
-)` -> List<Tuple> — 直方体の、見える 3 面。奥から手前の順に並ぶ
 - `resample(
   points: List<Vector>,
   n: Number,

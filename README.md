@@ -1,4 +1,4 @@
-# mophila
+<img src="site/public/logo.png" alt="mophila" width="420">
 
 動画をコードで書く言語。`.moph` のスクリプトを解釈し、GPU (Vello) で描いて、ffmpeg で動画か画像にする。
 

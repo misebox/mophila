@@ -47,6 +47,11 @@ preview で詰まったものが出力の不具合かどうかは、両方に付
 
 `src/stdlib/`。`import math` と `import space3d` は Rust、他は `.moph` を `include_str!` で実行ファイルに埋め込んでいる (`src/stdlib/mod.rs` の `FILES`)。別に配るファイルは無い。
 
+## ロゴとアイコン
+
+`site/public/logo.png` (横長) と `site/public/icon.png` (正方形) が元。README とサイトの favicon はここを見る。
+VS Code の拡張は自分のフォルダに置く決まりなので、`editors/vscode/icon.png` に 128px に縮めた同じ絵を置いている。
+
 ## バージョン
 
 `Cargo.toml` の version が正。`Cargo.lock` と `editors/vscode/package.json` も同じ値に揃える。

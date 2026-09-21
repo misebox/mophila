@@ -1959,6 +1959,30 @@ TextArea(text = "hello", position = Pos(8, 4.5), fontSize = 1, fill = #303030)
 
 - `t.size()` -> Vector — 置いたときに占める幅と高さ (箱の座標)。w を書いていれば幅はその値。重なりを避けて並べたり、はみ出すなら fontSize を下げたりするのに使う
 
+### Vector3
+
+3D の点。`import space3d` で使う。`+ - * /` と `.x .y .z`。箱の座標に落とすのは space3d のカメラ
+
+作り方:
+
+```
+space3d.Vector3(1, 2, 3)
+```
+
+属性:
+
+- `x`: Number — 3D の x
+- `y`: Number — 3D の y
+- `z`: Number — 3D の z
+
+メソッド:
+
+- `v.length()` -> Number — 長さ
+- `v.normalized()` -> Vector3 — 長さ 1 にしたもの。長さ 0 なら ValueError.DivisionByZero
+- `v.dot(w: Vector3)` -> Number — 内積
+- `v.cross(w: Vector3)` -> Vector3 — 外積。2 つの辺から面の向きを出す
+- `v.lerp(w: Vector3, k: Number)` -> Vector3 — 2 点の間。k が 0 で自分、1 で相手
+
 ### Color
 
 1 つの色。# は 16 進で、3 桁と 4 桁は各桁を 2 回書いたものと同じ (#48e は #4488ee)。4 桁と 8 桁の最後は不透明度。Color の r g b は 0..255、a は 0..1
@@ -2417,6 +2441,10 @@ EspeakVoiceEngine(voice = "ja")
 - `math.unlerp(a: Number, b: Number, x: Number)` -> Number — x が a..b のどこか。lerp の逆
 - `math.map_range(x: Number, a0: Number, a1: Number, b0: Number, b1: Number)` -> Number — a0..a1 の x を b0..b1 に写す。グラフの軸に使う
 - `math.nice_step(span: Number, count: Number)` -> Number — span を count 個に分けるときの、切りの良い目盛りの間隔 (1, 2, 5 の倍数)
+
+### space3d
+
+- `space3d.Vector3(x: Number, y: Number, z: Number)` -> Vector3 — 3D の点。+ - * / と .x .y .z が使える
 
 ### color
 

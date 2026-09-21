@@ -1393,6 +1393,64 @@
   {
    "attrs": [
     {
+     "doc": "3D の x",
+     "name": "x",
+     "type": "Number"
+    },
+    {
+     "doc": "3D の y",
+     "name": "y",
+     "type": "Number"
+    },
+    {
+     "doc": "3D の z",
+     "name": "z",
+     "type": "Number"
+    }
+   ],
+   "category": "Position",
+   "doc": "3D の点。`import space3d` で使う。`+ - * /` と `.x .y .z`。箱の座標に落とすのは space3d のカメラ",
+   "make": "space3d.Vector3(1, 2, 3)",
+   "members": [],
+   "methods": [
+    {
+     "doc": "長さ",
+     "name": "length",
+     "returns": "Number",
+     "signature": "v.length()"
+    },
+    {
+     "doc": "長さ 1 にしたもの。長さ 0 なら ValueError.DivisionByZero",
+     "name": "normalized",
+     "returns": "Vector3",
+     "signature": "v.normalized()"
+    },
+    {
+     "doc": "内積",
+     "name": "dot",
+     "returns": "Number",
+     "signature": "v.dot(w: Vector3)"
+    },
+    {
+     "doc": "外積。2 つの辺から面の向きを出す",
+     "name": "cross",
+     "returns": "Vector3",
+     "signature": "v.cross(w: Vector3)"
+    },
+    {
+     "doc": "2 点の間。k が 0 で自分、1 で相手",
+     "name": "lerp",
+     "returns": "Vector3",
+     "signature": "v.lerp(w: Vector3, k: Number)"
+    }
+   ],
+   "name": "Vector3",
+   "union": "",
+   "values": []
+  },
+  {
+   "attrs": [
+    {
      "doc": "赤 0..255",
      "name": "r",
      "type": "Number"
@@ -2434,6 +2492,19 @@
      "name": "nice_step",
      "returns": "Number",
      "signature": "math.nice_step(span: Number, count: Number)"
+    }
+   ],
+   "items": []
+  },
+  {
+   "name": "space3d",
+   "path": "src/stdlib/space3d.rs",
+   "entries": [
+    {
+     "doc": "3D の点。+ - * / と .x .y .z が使える",
+     "name": "Vector3",
+     "returns": "Vector3",
+     "signature": "space3d.Vector3(x: Number, y: Number, z: Number)"
     }
    ],
    "items": []

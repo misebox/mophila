@@ -78,6 +78,9 @@ pub struct AttrDef {
 pub const ATTRS: &[AttrDef] = &[
     AttrDef { receivers: &["Vector", "Pos"], name: "x", ty: "Number", doc: "横の座標", get: get_x, set: Some(set_x) },
     AttrDef { receivers: &["Vector", "Pos"], name: "y", ty: "Number", doc: "縦の座標", get: get_y, set: Some(set_y) },
+    AttrDef { receivers: &["Vector3"], name: "x", ty: "Number", doc: "3D の x", get: get_x3, set: Some(set_x3) },
+    AttrDef { receivers: &["Vector3"], name: "y", ty: "Number", doc: "3D の y", get: get_y3, set: Some(set_y3) },
+    AttrDef { receivers: &["Vector3"], name: "z", ty: "Number", doc: "3D の z", get: get_z3, set: Some(set_z3) },
     AttrDef { receivers: &["Pos"], name: "anchor", ty: "Anchor", doc: "その座標が図形のどこを指すか", get: get_anchor, set: Some(set_anchor) },
     AttrDef { receivers: &["Pos"], name: "vector", ty: "Vector", doc: "基準点を外した座標", get: get_vector, set: Some(set_vector) },
     AttrDef { receivers: &["Color"], name: "r", ty: "Number", doc: "赤 0..255", get: get_r, set: None },
@@ -134,6 +137,40 @@ fn set_x(v: &Value, nv: Value) -> Result<Written> {
 fn set_y(v: &Value, nv: Value) -> Result<Written> {
     let (x, _) = nums(v);
     wrote(rebuilt(v, x, number("y", nv)?))
+}
+
+fn nums3(v: &Value) -> (f64, f64, f64) {
+    match v {
+        Value::Vector3(x, y, z) => (*x, *y, *z),
+        _ => (0.0, 0.0, 0.0),
+    }
+}
+
+fn get_x3(v: &Value) -> Result<Value> {
+    Ok(Value::num(nums3(v).0))
+}
+
+fn get_y3(v: &Value) -> Result<Value> {
+    Ok(Value::num(nums3(v).1))
+}
+
+fn get_z3(v: &Value) -> Result<Value> {
+    Ok(Value::num(nums3(v).2))
+}
+
+fn set_x3(v: &Value, nv: Value) -> Result<Written> {
+    let (_, y, z) = nums3(v);
+    wrote(Value::Vector3(number("x", nv)?, y, z))
+}
+
+fn set_y3(v: &Value, nv: Value) -> Result<Written> {
+    let (x, _, z) = nums3(v);
+    wrote(Value::Vector3(x, number("y", nv)?, z))
+}
+
+fn set_z3(v: &Value, nv: Value) -> Result<Written> {
+    let (x, y, _) = nums3(v);
+    wrote(Value::Vector3(x, y, number("z", nv)?))
 }
 
 fn get_anchor(v: &Value) -> Result<Value> {

@@ -717,6 +717,7 @@ impl Interp {
                 }),
                 Value::Duration(v) => Ok(Value::Duration(-v)),
                 Value::Vector(x, y) => Ok(Value::Vector(-x, -y)),
+                Value::Vector3(x, y, z) => Ok(Value::Vector3(-x, -y, -z)),
                 v => err(Kind::OperandType, format!("cannot negate {}", v.type_name())),
             },
             Expr::Not(inner) => match self.eval(inner)? {
@@ -820,7 +821,7 @@ impl Interp {
     pub(crate) fn call_func(&mut self, f: &Value, args: Vec<Value>) -> Result<Value> {
         match f {
             Value::Func(c) => self.apply(c, args.into_iter().map(|v| (None, v)).collect()),
-            Value::Builtin(name) => stdlib::math::call(name, &args),
+            Value::Builtin(name) => call_native(name, &args),
             v => err(Kind::ArgumentType, format!("{} is not a function", v.type_name())),
         }
     }
@@ -2415,7 +2416,15 @@ fn call_builtin(name: &'static str, values: Vec<Value>) -> Result<Value> {
             [v] => Ok(Value::Str(v.type_name())),
             _ => err(Kind::ArityMismatch, format!("type_of takes 1 argument, {} given", values.len())),
         },
-        name => stdlib::math::call(name, &values),
+        name => call_native(name, &values),
+    }
+}
+
+/// native モジュールの関数。前置きのある名前はそのモジュールへ回す
+fn call_native(name: &str, values: &[Value]) -> Result<Value> {
+    match name.split_once('.') {
+        Some(("space3d", f)) => stdlib::space3d::call(f, values),
+        _ => stdlib::math::call(name, values),
     }
 }
 
@@ -2679,10 +2688,11 @@ fn interpolate(a: &Value, b: &Value, k: f64) -> Value {
 fn binary(op: BinOp, l: Value, r: Value) -> Result<Value> {
     use Value::{Bool, Duration, Number};
     // Vector は実数 2 つの Tuple と同じに計算し、結果を Vector に戻す (Vector ± Vector / (x, y)、Vector × ÷ Number)
-    let is_vector = |v: &Value| matches!(v, Value::Vector(..));
+    let is_vector = |v: &Value| matches!(v, Value::Vector(..) | Value::Vector3(..));
     if (is_vector(&l) || is_vector(&r)) && matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div) {
         let as_tuple = |v: &Value| match v {
             Value::Vector(x, y) => Value::Tuple(vec![Value::num(*x), Value::num(*y)]),
+            Value::Vector3(x, y, z) => Value::Tuple(vec![Value::num(*x), Value::num(*y), Value::num(*z)]),
             other => other.clone(),
         };
         let result = binary(op, as_tuple(&l), as_tuple(&r)).map_err(|e| match e.kind {
@@ -2692,6 +2702,7 @@ fn binary(op: BinOp, l: Value, r: Value) -> Result<Value> {
         return Ok(match result {
             Value::Tuple(items) => match items.as_slice() {
                 [Number(x, _), Number(y, _)] => Value::Vector(*x, *y),
+                [Number(x, _), Number(y, _), Number(z, _)] if is_vector(&l) || is_vector(&r) => Value::Vector3(*x, *y, *z),
                 _ => Value::Tuple(items),
             },
             other => other,

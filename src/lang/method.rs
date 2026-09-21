@@ -45,6 +45,11 @@ pub const METHODS: &[Method] = &[
     // Vector を複素数 (x + yi) として掛け割りする。回転と拡大が 1 度に書けるので、
     // 1 次分数変換 (az + b) / (cz + d) のような図がそのまま書ける
     Method { receivers: &["Vector"], name: "cmul", signature: "v.cmul(w: Vector)", returns: "Vector", doc: "複素数としての積。x + yi として掛ける (回転と拡大)", call: vec_cmul },
+    Method { receivers: &["Vector3"], name: "length", signature: "v.length()", returns: "Number", doc: "長さ", call: v3_length },
+    Method { receivers: &["Vector3"], name: "normalized", signature: "v.normalized()", returns: "Vector3", doc: "長さ 1 にしたもの。長さ 0 なら ValueError.DivisionByZero", call: v3_normalized },
+    Method { receivers: &["Vector3"], name: "dot", signature: "v.dot(w: Vector3)", returns: "Number", doc: "内積", call: v3_dot },
+    Method { receivers: &["Vector3"], name: "cross", signature: "v.cross(w: Vector3)", returns: "Vector3", doc: "外積。2 つの辺から面の向きを出す", call: v3_cross },
+    Method { receivers: &["Vector3"], name: "lerp", signature: "v.lerp(w: Vector3, k: Number)", returns: "Vector3", doc: "2 点の間。k が 0 で自分、1 で相手", call: v3_lerp },
     Method { receivers: &["Vector"], name: "flip_y", signature: "v.flip_y()", returns: "Vector", doc: "y の符号を反転した Vector。数学の向き (y は上) の点を画面の向き (y は下) に写す。逆向きも同じ", call: vec_flip_y },
     Method { receivers: &["Vector"], name: "cdiv", signature: "v.cdiv(w: Vector)", returns: "Vector", doc: "複素数としての商。w が 0 なら ValueError.DivisionByZero", call: vec_cdiv },
     Method { receivers: SEQ, name: "len", signature: "xs.len()", returns: "Number", doc: "要素数", call: seq_len },
@@ -208,6 +213,60 @@ fn two_vectors(m: &str, r: &Value, args: &Args) -> Result<(f64, f64, f64, f64)> 
 fn vec_cmul(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
     let (a, b, c, d) = two_vectors("cmul", &r, &args)?;
     Ok(Value::Vector(a * c - b * d, a * d + b * c))
+}
+
+/// 受け手の Vector3
+fn v3(r: &Value) -> (f64, f64, f64) {
+    match r {
+        Value::Vector3(x, y, z) => (*x, *y, *z),
+        _ => (0.0, 0.0, 0.0),
+    }
+}
+
+/// 受け手と、引数 1 つの Vector3
+fn two_v3(name: &str, r: &Value, args: &Args) -> Result<((f64, f64, f64), (f64, f64, f64))> {
+    let [(None, Value::Vector3(x, y, z))] = args.as_slice() else {
+        return err(Kind::ArgumentType, format!("Vector3.{name} takes one Vector3"));
+    };
+    Ok((v3(r), (*x, *y, *z)))
+}
+
+fn v3_length(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    if !args.is_empty() {
+        return err(Kind::ArityMismatch, "length takes no arguments");
+    }
+    let (x, y, z) = v3(&r);
+    Ok(Value::num((x * x + y * y + z * z).sqrt()))
+}
+
+fn v3_normalized(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    if !args.is_empty() {
+        return err(Kind::ArityMismatch, "normalized takes no arguments");
+    }
+    let (x, y, z) = v3(&r);
+    let len = (x * x + y * y + z * z).sqrt();
+    if len == 0.0 {
+        return err(Kind::DivisionByZero, "Vector3(0, 0, 0) has no direction to normalize");
+    }
+    Ok(Value::Vector3(x / len, y / len, z / len))
+}
+
+fn v3_dot(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    let ((a, b, c), (d, e, f)) = two_v3("dot", &r, &args)?;
+    Ok(Value::num(a * d + b * e + c * f))
+}
+
+fn v3_cross(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    let ((a, b, c), (d, e, f)) = two_v3("cross", &r, &args)?;
+    Ok(Value::Vector3(b * f - c * e, c * d - a * f, a * e - b * d))
+}
+
+fn v3_lerp(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    let [(None, Value::Vector3(d, e, f)), (None, Value::Number(k, _))] = args.as_slice() else {
+        return err(Kind::ArgumentType, "Vector3.lerp takes a Vector3 and a Number");
+    };
+    let (a, b, c) = v3(&r);
+    Ok(Value::Vector3(a + (d - a) * k, b + (e - b) * k, c + (f - c) * k))
 }
 
 fn vec_flip_y(_: &mut Interp, r: Value, args: Args) -> Result<Value> {

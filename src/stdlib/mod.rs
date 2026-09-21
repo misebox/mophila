@@ -3,6 +3,7 @@
 //! .moph は include_str! で実行ファイルの中に入るので、別に配るファイルは無い
 
 pub mod math;
+pub mod space3d;
 
 use crate::lang::value::Module;
 
@@ -98,6 +99,9 @@ pub fn find(name: &str) -> Option<Lib> {
     if name == "math" {
         return Some(Lib::Native(math::module()));
     }
+    if name == "space3d" {
+        return Some(Lib::Native(space3d::module()));
+    }
     FILES.iter().find(|(n, ..)| *n == name && !n.is_empty()).map(|(_, path, src)| Lib::Script(path, src))
 }
 
@@ -109,5 +113,5 @@ pub fn embedded(key: &str) -> Option<&'static str> {
 
 /// import できる名前の一覧 (補完や文書に)
 pub fn names() -> Vec<&'static str> {
-    std::iter::once("math").chain(FILES.iter().map(|(n, ..)| *n).filter(|n| !n.is_empty())).collect()
+    ["math", "space3d"].into_iter().chain(FILES.iter().map(|(n, ..)| *n).filter(|n| !n.is_empty())).collect()
 }

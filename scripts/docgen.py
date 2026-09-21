@@ -262,7 +262,8 @@ def main() -> None:
     media = "--media" in sys.argv
     d = builtin_docs()
     # 標準ライブラリ。math は本体の表から、.moph は src/stdlib から。基本的なものが先
-    libs = [{"name": "math", "path": "src/stdlib/math.rs", "entries": d["math"], "items": []}]
+    libs = [{"name": "math", "path": "src/stdlib/math.rs", "entries": d["math"], "items": []},
+            {"name": "space3d", "path": "src/stdlib/space3d.rs", "entries": d["space3d"], "items": []}]
     # .moph の順と置き場は本体 (src/stdlib/mod.rs の FILES) と同じ
     files = embedded_files()
     for name, path in files:

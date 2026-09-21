@@ -234,6 +234,15 @@ pub const TYPES: &[Type] = &[
         doc: "text を描く。w を付けるとその幅で折り返し、align で行の寄せ方を決める",
     },
     Type {
+        name: "Vector3",
+        category: "Position",
+        union: "",
+        make: "space3d.Vector3(1, 2, 3)",
+        values: &[],
+        members: &[],
+        doc: "3D の点。`import space3d` で使う。`+ - * /` と `.x .y .z`。箱の座標に落とすのは space3d のカメラ",
+    },
+    Type {
         name: "Color",
         category: "Paint",
         union: "Paint",
@@ -591,7 +600,7 @@ pub fn json() -> Json {
         })
         .collect();
     let errors: Vec<Json> = crate::lang::error::KINDS.iter().map(|k| json!({ "name": k.name(), "doc": k.doc() })).collect();
-    json!({ "builtins": entries(BUILTINS), "math": entries(crate::stdlib::math::DOCS), "types": types, "categories": CATEGORIES, "errors": errors })
+    json!({ "builtins": entries(BUILTINS), "math": entries(crate::stdlib::math::DOCS), "space3d": entries(crate::stdlib::space3d::DOCS), "types": types, "categories": CATEGORIES, "errors": errors })
 }
 
 #[cfg(test)]

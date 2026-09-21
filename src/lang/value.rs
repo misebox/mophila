@@ -89,6 +89,8 @@ pub enum Value {
     Duration(f64),
     Color([f32; 4]),
     Vector(f64, f64),
+    /// 3D の点。space3d の中だけで使う
+    Vector3(f64, f64, f64),
     /// (anchor, x, y)
     Apos(String, f64, f64),
     Tuple(Vec<Value>),
@@ -625,6 +627,7 @@ impl Value {
             Value::Duration(_) => "Duration",
             Value::Color(_) => "Color",
             Value::Vector(..) => "Vector",
+            Value::Vector3(..) => "Vector3",
             Value::Apos(..) => "Pos",
             Value::Tuple(_) => "Tuple",
             Value::List(_) => "List",
@@ -650,6 +653,7 @@ impl Value {
             Value::Duration(_) => "Duration".into(),
             Value::Color(_) => "Color".into(),
             Value::Vector(..) => "Vector".into(),
+            Value::Vector3(..) => "Vector3".into(),
             Value::Apos(..) => "Pos".into(),
             Value::Tuple(_) => "Tuple".into(),
             Value::List(_) => "List".into(),
@@ -730,6 +734,7 @@ impl fmt::Display for Value {
                 if *a < 1.0 { write!(f, "{:02x}", ch(*a)) } else { Ok(()) }
             }
             Value::Vector(x, y) => write!(f, "Vector({x}, {y})"),
+            Value::Vector3(x, y, z) => write!(f, "Vector3({x}, {y}, {z})"),
             Value::Apos(a, x, y) => {
                 if a == "center" { write!(f, "Pos({x}, {y})") } else { write!(f, "Pos({x}, {y}, anchor = :{a})") }
             }

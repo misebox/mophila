@@ -74,7 +74,8 @@ const Caret: Component<{ open: boolean }> = (props) => (
   </span>
 );
 
-// 開いている group を題で覚える。既定は閉じていて、今いる項目を含む group だけ開く
+// 開閉を押した group を題で覚える。押していない group は、今いる項目を含むときだけ開く。
+// 押したら、今いる項目を含む group でも閉じられる
 const [opened, setOpened] = createSignal<Record<string, boolean>>({});
 
 // 題のある group は畳める。題がページでもある (ライブラリの module) ときは、
@@ -82,7 +83,7 @@ const [opened, setOpened] = createSignal<Record<string, boolean>>({});
 const SideGroup: Component<{ group: IndexGroup }> = (props) => {
   const key = (): string => props.group.title ?? "";
   const hasActive = (): boolean => props.group.active === true || props.group.items.some((it) => it.active === true);
-  const open = (): boolean => hasActive() || opened()[key()] === true;
+  const open = (): boolean => opened()[key()] ?? hasActive();
   const toggle = (): void => {
     setOpened({ ...opened(), [key()]: !open() });
   };

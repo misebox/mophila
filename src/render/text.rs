@@ -17,7 +17,8 @@ pub struct RenderCache {
     fonts: FontContext,
     layouts: LayoutContext<[u8; 4]>,
     /// (text, family, size_px, max_width, align) → レイアウト
-    layout_cache: HashMap<LayoutKey, Layout<[u8; 4]>>,
+    /// 組んだ文字の置き場と、最後に使ったフレーム。毎コマ変わる文字 (時刻など) を溜め込まないように捨てる
+    layout_cache: HashMap<LayoutKey, (u64, Layout<[u8; 4]>)>,
     /// 図形の通し番号 → 描画命令。指紋が同じならそのまま使う
     pub fragments: HashMap<u64, Fragment>,
     /// いま組んでいるフレームの番号。使わなくなったものを手放すのに使う
@@ -127,6 +128,12 @@ impl RenderCache {
 
     /// ピクセル単位でレイアウトする。max_width が None なら折り返さない。同じ入力なら前回の結果を返す
     /// このフレームに要った GPU のメモリ
+    /// しばらく使っていない組み置きを捨てる
+    pub fn drop_layouts(&mut self, keep: u64) {
+        let now = self.frame;
+        self.layout_cache.retain(|_, (used, _)| now.saturating_sub(*used) <= keep);
+    }
+
     pub fn bytes(&self) -> Bytes {
         Bytes { shaders: self.shaders.as_ref().map_or(0, |r| r.bytes()), layers: self.layer_bytes }
     }
@@ -152,10 +159,12 @@ impl RenderCache {
             layout.align(align, AlignmentOptions::default());
             self.layout_cache.insert(
                 LayoutKey { text: key.text.clone(), family: key.family.clone(), size_bits: key.size_bits, width_bits: key.width_bits, align: key.align },
-                layout,
+                (self.frame, layout),
             );
         }
-        self.layout_cache.get(&key).expect("inserted above")
+        let found = self.layout_cache.get_mut(&key).expect("inserted above");
+        found.0 = self.frame;
+        &found.1
     }
 }
 

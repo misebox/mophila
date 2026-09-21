@@ -400,13 +400,19 @@ impl Player<'_> {
         let Some(state) = &mut self.state else { return Ok(()) };
         let (width, height) = (state.surface.config.width, state.surface.config.height);
         let step = Instant::now();
-        let shot = scene::Shot { width: f64::from(width), height: f64::from(height), ..self.shot };
+        // ステータスバーのぶんは絵に使わない。被せると中身が隠れる
+        let bar = match status.is_some() {
+            true => scene::status_height(f64::from(height)),
+            false => 0.0,
+        };
+        let shot = scene::Shot { width: f64::from(width), height: f64::from(height) - bar, ..self.shot };
         let mut scene = scene::build(&self.view, shot, t, self.interp.cache_mut())?;
         // 字幕は絵の中に出す。ウィンドウの縦横比が違うと、絵の上下左右に帯が空いている
         let area = scene::picture(&self.view, shot)?;
         scene::overlay_subtitles(&mut scene, self.interp.cache_mut(), &self.cues, t, area);
         if let Some(line) = &status {
-            scene::overlay_status(&mut scene, self.interp.cache_mut(), line, area);
+            let strip = vello::kurbo::Rect::new(0.0, f64::from(height) - bar, f64::from(width), f64::from(height));
+            scene::status_bar(&mut scene, self.interp.cache_mut(), line, strip);
         }
         if let Some(text) = &help {
             scene::overlay_help(&mut scene, self.interp.cache_mut(), text, area);

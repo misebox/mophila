@@ -90,6 +90,8 @@ fn drop_unused(cache: &mut RenderCache) {
     const KEEP: u64 = 2;
     let now = cache.frame;
     cache.fragments.retain(|_, f| now.saturating_sub(f.used) <= KEEP);
+    // 文字は出たり消えたりするので、図形より長く持つ
+    cache.drop_layouts(KEEP * 60);
     if let Some(runner) = cache.shaders.as_mut() {
         runner.drop_unused(now, KEEP);
     }
@@ -779,14 +781,18 @@ pub fn overlay_subtitles(scene: &mut Scene, cache: &mut RenderCache, cues: &[cra
     }
 }
 
-/// preview の状態を絵の下端に重ねる
-pub fn overlay_status(scene: &mut Scene, cache: &mut RenderCache, text: &str, area: Rect) {
-    let size = (area.height() * 0.035).max(11.0) as f32;
-    let pad = f64::from(size) * 0.8;
+/// preview の状態を出す帯。絵の外に取った場所に描くので、中身には被らない
+pub fn status_bar(scene: &mut Scene, cache: &mut RenderCache, text: &str, bar: Rect) {
+    let size = (bar.height() * 0.45) as f32;
     let layout = cache.layout(text, None, size, None, text::alignment(Some("left")));
-    let top = area.y1 - f64::from(layout.height()) - pad;
-    scene.fill(Fill::NonZero, Affine::IDENTITY, Color::from_rgba8(0, 0, 0, 150), None, &Rect::new(area.x0, top, area.x1, area.y1));
-    text::draw(scene, layout, Affine::translate((area.x0 + pad * 1.5, top + pad / 2.0)), Color::from_rgba8(240, 240, 240, 255), None);
+    scene.fill(Fill::NonZero, Affine::IDENTITY, Color::from_rgba8(24, 24, 28, 255), None, &bar);
+    let y = bar.y0 + (bar.height() - f64::from(layout.height())) / 2.0;
+    text::draw(scene, layout, Affine::translate((bar.x0 + bar.height() * 0.6, y)), Color::from_rgba8(225, 225, 230, 255), None);
+}
+
+/// ステータスバーの高さ。出力の高さから決める
+pub fn status_height(height: f64) -> f64 {
+    (height * 0.05).clamp(26.0, 64.0)
 }
 
 /// preview の操作の一覧を、絵の真ん中に重ねる

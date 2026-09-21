@@ -685,7 +685,7 @@ pub fn json() -> Json {
         })
         .collect();
     let errors: Vec<Json> = crate::lang::error::KINDS.iter().map(|k| json!({ "name": k.name(), "doc": k.doc() })).collect();
-    json!({ "builtins": entries(BUILTINS), "math": entries(crate::stdlib::math::DOCS), "space3d": entries(crate::stdlib::space3d::DOCS), "types": types, "categories": CATEGORIES, "errors": errors })
+    json!({ "builtins": entries(BUILTINS), "math": entries(crate::stdlib::math::DOCS), "space3d": entries(crate::stdlib::space3d::DOCS), "bignum": entries(crate::stdlib::bignum::DOCS), "types": types, "categories": CATEGORIES, "errors": errors })
 }
 
 #[cfg(test)]

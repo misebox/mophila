@@ -7,6 +7,10 @@
 #   top_left / size:  塗る図形が占める箱の座標 (既定は (0, 0) から 16 x 9)。y_up: true で虚軸を下向きにする (Burning Ship の慣習)
 
 import math
+import { reference_orbit } from bignum
+
+# 中心の指定。浅いときは Vector、深いときは 10 進の文字列 2 つ ("-0.743643887…", "0.131825904…")
+type Center = Vector | Tuple
 
 # julia の定数。1 つの Vector か、時刻から Vector を返す関数
 type JuliaConstant = Vector | (Number) -> Vector
@@ -24,7 +28,7 @@ type MaybeCamera = Camera | Symbol
 ## @category 描く
 ## @param formula 反復式 (MANDELBROT / julia(c) / BURNING_SHIP / multibrot(n))
 ## @param coloring 色付け。func (mu, z) -> Color (smooth_bands など)
-## @param center 複素平面の中心 (Vector)
+## @param center 複素平面の中心。Vector か、深いときは 10 進の文字列 2 つ ("-0.7436438…", "0.1318259…")
 ## @param span 最初に見える横幅 (複素平面の単位)
 ## @param zoom 倍率の時間変化。func (t) -> Number
 ## @param duration 動画の長さ。書くと帯を使う (倍率は増えるだけであること)
@@ -36,6 +40,7 @@ type MaybeCamera = Camera | Symbol
 ## @param y_up true で虚軸を下向きにする
 ## @param escape_at 脱出とみなす |z|² の閾値
 ## @param reference_steps 基準軌道の長さの上限
+## @param digits 中心を文字列で渡したときの 10 進の桁数。0 なら倍率から決める
 ## @returns 図形の fill に入れる
 ## @example
 ## import { escape_time, MANDELBROT, smooth_bands } from fractal
@@ -47,7 +52,7 @@ type MaybeCamera = Camera | Symbol
 ##   span = 0.02,
 ## )
 ## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = set))
-export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, center: Vector, span: Number, zoom: (Number) -> Number = func (t) { 1 }, duration: Duration = 0s, camera: MaybeCamera = :none, max_steps: (Number) -> Number = func (zoom) { 200 }, samples: Number = 1, top_left: Vector = Vector(0, 0), size: Vector = Vector(16, 9), y_up: Bool = false, escape_at: Number = 256, reference_steps: Number = 8000) -> Shader {
+export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, center: Center, span: Number, zoom: (Number) -> Number = func (t) { 1 }, duration: Duration = 0s, camera: MaybeCamera = :none, max_steps: (Number) -> Number = func (zoom) { 200 }, samples: Number = 1, top_left: Vector = Vector(0, 0), size: Vector = Vector(16, 9), y_up: Bool = false, escape_at: Number = 256, reference_steps: Number = 8000, digits: Number = 0) -> Shader {
   let seed = formula["seed"]
   let step = formula["step"]
   let start = formula["start"]
@@ -65,11 +70,18 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
   }
   let delta = formula["delta"]
 
+  # 中心を文字列で渡したら、f64 に収まらない深さ。軌道は多倍長で作る
+  let deep = type_of(center) == "Tuple"
+  if deep and not formula.has("deep") {
+    log("escape_time: この反復式は文字列の中心に対応していない (いまは MANDELBROT だけ)")
+  }
+  let middle = if deep { Vector(0, 0) } else { center }
+
   # 箱の座標 1 あたりの複素平面の長さ (倍率 1 のとき)
   let unit = span / size.x
   # 基準軌道を作る点。カメラがあれば、その寄る先の下にある複素点
   let focus = if has_camera { camera.from } else { Vector(top_left.x + size.x / 2, top_left.y + size.y / 2) }
-  let origin = center + Vector((focus.x - top_left.x - size.x / 2) * unit, (focus.y - top_left.y - size.y / 2) * unit * up)
+  let origin = middle + Vector((focus.x - top_left.x - size.x / 2) * unit, (focus.y - top_left.y - size.y / 2) * unit * up)
   # 滑らかな脱出回数
   func escaped(n: Number, r2: Number) -> Number { n + 1 - math.ln(math.ln(r2) / 2) / ln_degree }
 
@@ -86,7 +98,10 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
     }
     orbit
   }
-  let orbit = reference()
+  # 桁数は、いちばん深いところの見える幅から決める (書いてあればそれを使う)
+  let finest = span / math.max(1, zoom_of(1))
+  let deep_digits = if digits > 0 { digits } else { math.max(20, math.ceil(-math.log10(finest)) + 6) }
+  let orbit = if deep { reference_orbit(center[0], center[1], deep_digits, reference_steps) } else { reference() }
   let ref_len = orbit.len() / 2
 
   # 帯を使う版。x は中心からの距離の対数、y は画面の上での角度
@@ -189,6 +204,8 @@ export let MANDELBROT = {
   "start": func (dp) { Vector(0, 0) },
   "delta": func (Z, d, dp, k) { complex_mul(Z, d) * 2 + complex_mul(d, d) + dp },
   "degree": 2,
+  # 多倍長の基準軌道 (bignum.reference_orbit) が z² + p を回すので、深い中心を渡せる
+  "deep": true,
 }
 
 ## Julia 集合の反復式 z' = z² + c を作る。z はピクセルの複素座標から始まり、c は全ピクセルで共通。

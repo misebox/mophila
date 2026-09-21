@@ -2968,6 +2968,19 @@
    "items": []
   },
   {
+   "name": "bignum",
+   "path": "src/stdlib/bignum.rs",
+   "entries": [
+    {
+     "doc": "中心の点の軌道を、指定した 10 進の桁数で回して [re, im, re, im, …] で返す。深いズームの基準軌道。脱出したらそこで止まる",
+     "name": "reference_orbit",
+     "returns": "List<Number>",
+     "signature": "bignum.reference_orbit(re: String, im: String, digits: Number, steps: Number)"
+    }
+   ],
+   "items": []
+  },
+  {
    "name": "color",
    "path": "src/stdlib/color.moph",
    "entries": [],
@@ -8600,8 +8613,8 @@
      "name": "escape_time",
      "category": "描く",
      "isFunc": true,
-     "signature": "escape_time(formula: Dict, coloring: (Number, Vector) -> Color, center: Vector, span: Number, zoom: (Number) -> Number = func (t) { 1 }, duration: Duration = 0s, camera: MaybeCamera = :none, max_steps: (Number) -> Number = func (zoom) { 200 }, samples: Number = 1, top_left: Vector = Vector(0, 0), size: Vector = Vector(16, 9), y_up: Bool = false, escape_at: Number = 256, reference_steps: Number = 8000)",
-     "call": "escape_time(\n  formula: Dict,\n  coloring: (Number, Vector) -> Color,\n  center: Vector,\n  span: Number,\n  zoom: (Number) -> Number = func (t) { 1 },\n  duration: Duration = 0s,\n  camera: MaybeCamera = :none,\n  max_steps: (Number) -> Number = func (zoom) { 200 },\n  samples: Number = 1,\n  top_left: Vector = Vector(0, 0),\n  size: Vector = Vector(16, 9),\n  y_up: Bool = false,\n  escape_at: Number = 256,\n  reference_steps: Number = 8000,\n)",
+     "signature": "escape_time(formula: Dict, coloring: (Number, Vector) -> Color, center: Center, span: Number, zoom: (Number) -> Number = func (t) { 1 }, duration: Duration = 0s, camera: MaybeCamera = :none, max_steps: (Number) -> Number = func (zoom) { 200 }, samples: Number = 1, top_left: Vector = Vector(0, 0), size: Vector = Vector(16, 9), y_up: Bool = false, escape_at: Number = 256, reference_steps: Number = 8000, digits: Number = 0)",
+     "call": "escape_time(\n  formula: Dict,\n  coloring: (Number, Vector) -> Color,\n  center: Center,\n  span: Number,\n  zoom: (Number) -> Number = func (t) { 1 },\n  duration: Duration = 0s,\n  camera: MaybeCamera = :none,\n  max_steps: (Number) -> Number = func (zoom) { 200 },\n  samples: Number = 1,\n  top_left: Vector = Vector(0, 0),\n  size: Vector = Vector(16, 9),\n  y_up: Bool = false,\n  escape_at: Number = 256,\n  reference_steps: Number = 8000,\n  digits: Number = 0,\n)",
      "summary": "エスケープタイム系フラクタルの Shader を作る。図形の fill に入れる。  倍率の決め方は 3 通り。`zoom` を書く / `zoom` と `duration` を書く / `camera` を渡す。 `duration` を書くと、動画ぜんぶを対数極座標の帯 1 本にして使い回す (中心が動かず、 倍率が増えるだけのときに使える。1 フレームあたりの計算が桁違いに減る)。 `camera` を渡すと倍率はカメラから毎フレーム読む (寄る先も動かせる代わりに帯は使えない)。 精度は深さで決まるので選ばない。中の点の軌道をここで 64 bit で計算し、GPU は差分を反復する",
      "params": [
       {
@@ -8618,8 +8631,8 @@
       },
       {
        "name": "center",
-       "type": "Vector",
-       "doc": "複素平面の中心 (Vector)",
+       "type": "Center",
+       "doc": "複素平面の中心。Vector か、深いときは 10 進の文字列 2 つ (\"-0.7436438…\", \"0.1318259…\")",
        "default": ""
       },
       {
@@ -8687,10 +8700,16 @@
        "type": "Number",
        "doc": "基準軌道の長さの上限",
        "default": "8000"
+      },
+      {
+       "name": "digits",
+       "type": "Number",
+       "doc": "中心を文字列で渡したときの 10 進の桁数。0 なら倍率から決める",
+       "default": "0"
       }
      ],
      "returns": {
-      "type": "Color, center: Vector, span: Number, zoom: (Number) -> Number = func (t)",
+      "type": "Color, center: Center, span: Number, zoom: (Number) -> Number = func (t)",
       "doc": "図形の fill に入れる"
      },
      "example": "import { escape_time, MANDELBROT, smooth_bands } from fractal\n\nlet set = escape_time(\n  formula = MANDELBROT,\n  coloring = smooth_bands([#061a3f, #5c9be6, #ffffff, #061a3f], 48),\n  center = Vector(-0.743, 0.126),\n  span = 0.02,\n)\nv.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = set))"

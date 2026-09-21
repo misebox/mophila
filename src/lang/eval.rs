@@ -2599,6 +2599,7 @@ fn call_builtin(name: &'static str, values: Vec<Value>) -> Result<Value> {
 fn call_native(name: &str, values: &[Value]) -> Result<Value> {
     match name.split_once('.') {
         Some(("space3d", f)) => stdlib::space3d::call(f, values),
+        Some(("bignum", f)) => stdlib::bignum::call(f, values),
         _ => stdlib::math::call(name, values),
     }
 }

@@ -789,6 +789,19 @@ pub fn overlay_status(scene: &mut Scene, cache: &mut RenderCache, text: &str, ar
     text::draw(scene, layout, Affine::translate((area.x0 + pad * 1.5, top + pad / 2.0)), Color::from_rgba8(240, 240, 240, 255), None);
 }
 
+/// preview の操作の一覧を、絵の真ん中に重ねる
+pub fn overlay_help(scene: &mut Scene, cache: &mut RenderCache, text: &str, area: Rect) {
+    let size = (area.height() * 0.035).max(11.0) as f32;
+    let pad = f64::from(size) * 1.4;
+    let layout = cache.layout(text, None, size, None, text::alignment(Some("left")));
+    let (w, h) = (f64::from(layout.width()), f64::from(layout.height()));
+    let x0 = area.x0 + (area.width() - w) / 2.0 - pad;
+    let y0 = area.y0 + (area.height() - h) / 2.0 - pad;
+    let panel = RoundedRect::new(x0, y0, x0 + w + pad * 2.0, y0 + h + pad * 2.0, pad / 2.0);
+    scene.fill(Fill::NonZero, Affine::IDENTITY, Color::from_rgba8(0, 0, 0, 190), None, &panel);
+    text::draw(scene, layout, Affine::translate((x0 + pad, y0 + pad)), Color::from_rgba8(240, 240, 240, 255), None);
+}
+
 /// Shader の塗り。図形の範囲 (画面内) のピクセルを compute shader で計算し、その画像で図形を塗る
 #[allow(clippy::too_many_arguments)]
 fn draw_shader_fill(scene: &mut Scene, path: &BezPath, transform: Affine, opacity: f32, shader: &ObjRef, frame: &Frame, key: u64, cache: &mut RenderCache) -> Result<()> {

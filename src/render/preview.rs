@@ -5,7 +5,7 @@
 //! 描く時刻のほうを飛ばす (描いてから捨てるのでは追いつけない)。
 //!
 //! 操作: Space で一時停止・再開。← → または h l で 10 秒移動 (一時停止中は 1 秒)。Shift を押しながらで全体の 10%。
-//! s でステータスバーの出し入れ、q で終了。
+//! [ ] で再生速度、0 で 1x に戻す。s でステータスバー、? で操作の一覧、q で終了。
 //! 最後まで再生したら最後の場面で止まる (--loop なら先頭に戻る)。
 //! --at で時刻を指定すると、その時刻の画面を一時停止で出す。
 //! 音声は audio が出力デバイスに流す。字幕とステータスバーは絵の中に重ねる
@@ -80,6 +80,8 @@ pub fn run(name: String, interp: Interp, view: ObjRef, duration: f64, shot: crat
         spare: Vec::new(),
         shown: None,
         status: true,
+        help: false,
+        speed: 1.0,
         fps: 0.0,
         last_note: Instant::now(),
         timing: crate::timing::Timing::from_env(),
@@ -151,6 +153,10 @@ struct Player<'a> {
     shown: Option<Ready>,
     /// ステータスバーを絵に重ねるか。s で切り替える
     status: bool,
+    /// 操作の一覧を絵に重ねるか。? で切り替える
+    help: bool,
+    /// 再生速度。1 倍のときだけ音を鳴らす
+    speed: f64,
     /// ならした fps。ステータスバーに出す
     fps: f64,
     /// MOPHILA_TIMING のときに、進み具合を知らせた時刻
@@ -166,6 +172,21 @@ struct State<'a> {
     context: RenderContext,
     surface: RenderSurface<'a>,
     renderer: Renderer,
+}
+
+/// 操作の一覧。? で出し入れする
+fn keys_text() -> String {
+    [
+        "space    一時停止 / 再開",
+        "← →      10 秒送る (停止中は 1 秒、Shift で全体の 10%)",
+        "h  l     同じ",
+        "[  ]     再生を遅く / 速く (0.125x 〜 8x)",
+        "0        速さを 1x に戻す",
+        "s        ステータスバー",
+        "?        この一覧",
+        "q        終了",
+    ]
+    .join("\n")
 }
 
 /// Vello が描き込むテクスチャ。ウィンドウへは blit で写す
@@ -235,7 +256,7 @@ impl Player<'_> {
         let by_rate = ((TARGET_STEP / refresh).round() as usize).max(1);
         let by_cost = (SLACK * self.cost / refresh).ceil() as usize;
         self.holds = by_rate.max(by_cost).clamp(1, MAX_HOLDS);
-        self.step = refresh * self.holds as f64;
+        self.step = refresh * self.holds as f64 * self.speed;
     }
 
     /// 作り置きを捨てて、いまの位置から描き直す (seek と一時停止の切り替え)
@@ -271,8 +292,27 @@ impl Player<'_> {
     /// 再生中に渡すと、作り置きのぶん遅れている映像の位置へ音が引き戻される
     fn sync_audio(&self) {
         if let Some(a) = &self.audio {
-            a.sync(self.position, self.playing, true);
+            // 速度を変えている間は鳴らさない。伸び縮みさせると音程が変わる
+            a.sync(self.position, self.playing && self.speed == 1.0, true);
         }
+    }
+
+    /// 再生速度を段階で上下する
+    fn faster(&mut self, up: bool) {
+        const STEPS: [f64; 7] = [0.125, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0];
+        let at = STEPS.iter().position(|v| (v - self.speed).abs() < 1e-9).unwrap_or(3);
+        let next = match up {
+            true => (at + 1).min(STEPS.len() - 1),
+            false => at.saturating_sub(1),
+        };
+        self.set_speed(STEPS[next]);
+    }
+
+    fn set_speed(&mut self, speed: f64) {
+        self.speed = speed;
+        self.repace(self.refresh);
+        self.sync_audio();
+        self.restart();
     }
 
     /// キー操作。処理したら true
@@ -297,6 +337,13 @@ impl Player<'_> {
                 self.status = !self.status;
                 self.restart();
             }
+            Key::Character(c) if c.as_str() == "?" || c.as_str() == "/" => {
+                self.help = !self.help;
+                self.restart();
+            }
+            Key::Character(c) if c.as_str() == "[" => self.faster(false),
+            Key::Character(c) if c.as_str() == "]" => self.faster(true),
+            Key::Character(c) if c.as_str() == "0" => self.set_speed(1.0),
             Key::Character(c) if c.eq_ignore_ascii_case("q") => event_loop.exit(),
             _ => return false,
         }
@@ -349,6 +396,7 @@ impl Player<'_> {
         self.timing.add("eval", step.elapsed());
 
         let status = self.status.then(|| self.status_line(t));
+        let help = self.help.then(keys_text);
         let Some(state) = &mut self.state else { return Ok(()) };
         let (width, height) = (state.surface.config.width, state.surface.config.height);
         let step = Instant::now();
@@ -359,6 +407,9 @@ impl Player<'_> {
         scene::overlay_subtitles(&mut scene, self.interp.cache_mut(), &self.cues, t, area);
         if let Some(line) = &status {
             scene::overlay_status(&mut scene, self.interp.cache_mut(), line, area);
+        }
+        if let Some(text) = &help {
+            scene::overlay_help(&mut scene, self.interp.cache_mut(), text, area);
         }
         self.timing.add("scene", step.elapsed());
 
@@ -386,7 +437,7 @@ impl Player<'_> {
 
     /// いまの実時間に当たる中身の時刻
     fn wall_t(&self, now: Instant) -> f64 {
-        self.anchor_t + now.duration_since(self.anchor).as_secs_f64()
+        self.anchor_t + now.duration_since(self.anchor).as_secs_f64() * self.speed
     }
 
     /// 出すコマを決める。中身の時刻は実時間に貼り付いているので、音とずれない
@@ -451,16 +502,22 @@ impl Player<'_> {
         }
     }
 
-    /// ステータスバーの 1 行。実時間に追いついていないときは、何倍の速さで出ているかも書く
+    /// ステータスバーの 1 行
     fn status_line(&self, t: f64) -> String {
         let percent = if self.duration > 0.0 { t / self.duration * 100.0 } else { 0.0 };
-        let speed = self.fps * self.step;
         let state = match self.playing {
-            true if speed < 0.95 => format!("{:.0}fps   {speed:.2}x", self.fps),
             true => format!("{:.0}fps", self.fps),
             false => "paused".to_string(),
         };
-        format!("{t:.1}s / {:.1}s      {percent:.0}%      {state}", self.duration)
+        let speed = match self.speed == 1.0 {
+            true => String::new(),
+            false => format!("      {}x", self.speed),
+        };
+        let help = match self.help {
+            true => String::new(),
+            false => "      ? keys".to_string(),
+        };
+        format!("{t:.1}s / {:.1}s      {percent:.0}%      {state}{speed}{help}", self.duration)
     }
 
     /// 最後まで出し終わったか

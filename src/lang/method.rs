@@ -300,12 +300,15 @@ fn v3(r: &Value) -> (f64, f64, f64) {
     }
 }
 
-/// 受け手と、引数 1 つの Vector3
+/// 受け手と、引数 1 つの Vector3 (3 つ並べた Tuple でもよい)
 fn two_v3(name: &str, r: &Value, args: &Args) -> Result<((f64, f64, f64), (f64, f64, f64))> {
-    let [(None, Value::Vector3(x, y, z))] = args.as_slice() else {
-        return err(Kind::ArgumentType, format!("Vector3.{name} takes one Vector3"));
+    let [(None, v)] = args.as_slice() else {
+        return err(Kind::ArityMismatch, format!("Vector3.{name} takes one Vector3"));
     };
-    Ok((v3(r), (*x, *y, *z)))
+    let Some(other) = crate::stdlib::space3d::point3(v) else {
+        return err(Kind::ArgumentType, format!("Vector3.{name} expects Vector3, found {}", v.type_name()));
+    };
+    Ok((v3(r), other))
 }
 
 fn v3_length(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
@@ -339,8 +342,11 @@ fn v3_cross(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
 }
 
 fn v3_lerp(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
-    let [(None, Value::Vector3(d, e, f)), (None, Value::Number(k, _))] = args.as_slice() else {
+    let [(None, to), (None, Value::Number(k, _))] = args.as_slice() else {
         return err(Kind::ArgumentType, "Vector3.lerp takes a Vector3 and a Number");
+    };
+    let Some((d, e, f)) = crate::stdlib::space3d::point3(to) else {
+        return err(Kind::ArgumentType, format!("Vector3.lerp expects Vector3, found {}", to.type_name()));
     };
     let (a, b, c) = v3(&r);
     Ok(Value::Vector3(a + (d - a) * k, b + (e - b) * k, c + (f - c) * k))

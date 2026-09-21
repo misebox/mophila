@@ -25,7 +25,7 @@ let noret:  (String) -> Nothing = func (s) { log(s) }
 # builtin の log と type_of は、どの型でも受け取るので型を書けない
 
 # ---- Module ----
-# import で束縛される。標準ライブラリは math のみ
+# import で束縛される。標準ライブラリは math と space3d が builtin、ほかは .moph (一覧は mophila doc)
 import math
 # math:       Module
 # math.PI / math.TAU / math.E:  Number
@@ -58,9 +58,13 @@ let c = Counter(10)
 log(c.next(), c.next(), type_of(c))          # 11 12 Counter
 
 # ---- Union 型 ----
-# Shape (図形すべて)、Placeable (Shape | View)、Paint (Color | Shader | Gradient) は言語が持っている。
+# Shape (図形すべて)、Placeable (Shape | View)、Paint (Color | Shader | Gradient)、
+# Projection (space3d のカメラ 3 種) は言語が持っている。
 # 自分で作るときは type 名 = A | B。builtin の型名では宣言できない
 type Fill = Color | Gradient
+# 形のある型にも名前を付けられる。< > の中は要素の型で、入れた値はそこまで見て確かめられる
+type Points = List<Vector>
+let corners: Points = [(0, 0), (1, 0), (1, 1)]
 
 # ---- 決まった値しか取らない型 ----
 # 値はすべて Symbol。呼んでは作れない
@@ -107,13 +111,14 @@ let l = Line(from = Vector(0, 0),     # Vector
   stroke = #000000,
   strokeWidth = 0.05)
 
-let p = Polygon(points = [Vector(0, 0), Vector(1, 0), Vector(0.5, 1)],   # List<Vector>
+let p = Polygon(points = [(0, 0), (1, 0), (0.5, 1)],   # List<Vector>。Tuple で書いても Vector になる
   fill = #4040e0)
 
 let t = TextArea(text = "hello",        # String
   position = Pos(0, 0, anchor = :topLeft),
   w = 2,                 # Number。幅に合わせて折り返す
-  font = "Noto Sans JP", # String。mophila fonts で使える名前が出る
+  font = ["Hiragino Sans", "Noto Sans JP"],   # Font (String | List)。List なら、この機械にある最初のもの
+                         #        名前は mophila fonts で出る。読み返すと、選ばれた 1 つが返る
   fontSize = 0.3,        # Number。箱の座標単位
   fill = #000000,
   align = :left,         # Align
@@ -137,6 +142,17 @@ let tl = m.apply(c, func (c, t, [x]) { c.radius = x })   # Timeline。対象 + �
 let tr = Timeline(duration = 10s)      # Timeline。入れ物にもなる
 #   tr.duration: Duration
 #   tr.place(t = Timeline, at = Duration, fadeIn = Duration, fadeOut = Duration) -> Nothing
+
+# ---- 3D (space3d の中にある型) ----
+# import space3d して space3d.Vector3(...) のように作る。素の名前では作れない。書き方は space3d.moph
+# Vector3             3D の点。.x .y .z、+ - * /
+# Transform3          回転・移動・拡大をまとめた変換
+# PerspectiveCamera   透視投影。遠いものほど小さい
+# OrthographicCamera  平行投影。遠くても大きさが変わらない
+# IsometricCamera     等角投影。視点を持たない
+# Projection          上のカメラ 3 種の union
+# Mesh                頂点と、それを繋ぐ線 (edges) と面 (faces)
+# Face                Mesh.faces が返す、投影済みの 1 面。points normal depth
 
 # ---- その他 ----
 # Nothing   値を返さなかった関数の戻り値。書き方は無い

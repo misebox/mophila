@@ -25,6 +25,14 @@ let k  = 3s / 1s         # 3 (数値)
 let p = (1, 2) + (0.5, 0.5)   # (1.5, 2.5)
 let q = (1, 2) * 2            # (2, 4)
 
+# Vector の演算。要素ごと。複素数 (x + yi) として掛け割りもできる
+let u = Vector(1, 2) + Vector(0.5, 0.5)     # Vector(1.5, 2.5)
+let w = Vector(1, 2) * 2                    # Vector(2, 4)
+let rot = Vector(1, 0).cmul(Vector(0, 1))   # Vector(0, 1)。1 回の掛け算で回転と拡大
+let div = Vector(2, 0).cdiv(Vector(0, 1))   # Vector(0, -2)
+let flip = Vector(1, 2).flip_y()            # Vector(1, -2)。数学の向き (y は上) ↔ 画面の向き (y は下)
+# 3D の点は space3d の中にある (space3d.moph)
+
 # Color の合成
 let mix = #ff0000 * 0.5 + #0000ff * 0.5
 
@@ -50,3 +58,4 @@ log(p, q, mix)              # (1.5, 2.5) (2, 4) #800080
 log(ok, ng, s, m, f)        # true true 0.00159... 3 2  (not ok が先に結合するので (not ok) or (c == 1))
 log(tiny, big)              # 1/1000000000 2500
 log(r, cl, lp, mr, ns)      # 1.23 1 2.5 50 2
+log(u, w, rot, div, flip)   # Vector(1.5, 2.5) Vector(2, 4) Vector(0, 1) Vector(0, -2) Vector(1, -2)

@@ -71,16 +71,22 @@ fn name_of(f: &str) -> &'static str {
 }
 
 /// Vector3 が要る場所。数 3 つの Tuple も受ける (型が決まっている場所なので Vector3 になる)
+pub fn point3(v: &Value) -> Option<(f64, f64, f64)> {
+    match v {
+        Value::Vector3(x, y, z) => Some((*x, *y, *z)),
+        Value::Tuple(cells) => match cells[..] {
+            [Value::Number(x, _), Value::Number(y, _), Value::Number(z, _)] => Some((x, y, z)),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 fn point(what: &str, v: &Value) -> Result<P3> {
-    if let Value::Vector3(x, y, z) = v {
-        return Ok((*x, *y, *z));
+    match point3(v) {
+        Some(p) => Ok(p),
+        None => err(Kind::ArgumentType, format!("{what} expects Vector3, found {}", v.type_name())),
     }
-    if let Value::Tuple(cells) = v {
-        if let [Value::Number(x, _), Value::Number(y, _), Value::Number(z, _)] = cells[..] {
-            return Ok((x, y, z));
-        }
-    }
-    err(Kind::ArgumentType, format!("{what} expects Vector3, found {}", v.type_name()))
 }
 
 fn number(what: &str, v: &Value) -> Result<f64> {

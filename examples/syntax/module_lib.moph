@@ -1,0 +1,16 @@
+# module_lib.moph — module.moph が import する側 (すべて仮)。export を書いたものだけが外から見える
+
+export let VERSION = "0.1"
+
+export func twice(x: Number) -> Number { x * 2 }
+
+# record と struct も export できる
+export record Point {
+  x: Number
+  y: Number
+  method swapped(self) -> Point { Point(self.y, self.x) }
+}
+
+# export を書かないものは、このファイルの中だけのもの
+let inside = "見えない"
+log(VERSION, twice(21), Point(1, 2).swapped(), inside)   # 0.1 42 Point(2, 1) 見えない

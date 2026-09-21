@@ -76,6 +76,7 @@ mophila --version                              # 版
 全部の引数は `mophila <コマンド> --help`。
 
 preview は Space で一時停止、← → / h l で 10 秒 (停止中は 1 秒)、Shift で 10% 移動。最後まで行くと最後の場面で止まる。
+コマは少し先まで描いておく。描くのが間に合わないときはコマを飛ばさず、出せる速さで出す (題に fps と倍率が出る)。音があるときは音に合わせる。
 
 書いたら必ず `run` を通す。動きを確かめるときは小さいサイズと短い尺で。
 
@@ -3630,6 +3631,14 @@ let k  = 3s / 1s         # 3 (数値)
 let p = (1, 2) + (0.5, 0.5)   # (1.5, 2.5)
 let q = (1, 2) * 2            # (2, 4)
 
+# Vector の演算。要素ごと。複素数 (x + yi) として掛け割りもできる
+let u = Vector(1, 2) + Vector(0.5, 0.5)     # Vector(1.5, 2.5)
+let w = Vector(1, 2) * 2                    # Vector(2, 4)
+let rot = Vector(1, 0).cmul(Vector(0, 1))   # Vector(0, 1)。1 回の掛け算で回転と拡大
+let div = Vector(2, 0).cdiv(Vector(0, 1))   # Vector(0, -2)
+let flip = Vector(1, 2).flip_y()            # Vector(1, -2)。数学の向き (y は上) ↔ 画面の向き (y は下)
+# 3D の点は space3d の中にある (space3d.moph)
+
 # Color の合成
 let mix = #ff0000 * 0.5 + #0000ff * 0.5
 
@@ -3655,6 +3664,7 @@ log(p, q, mix)              # (1.5, 2.5) (2, 4) #800080
 log(ok, ng, s, m, f)        # true true 0.00159... 3 2  (not ok が先に結合するので (not ok) or (c == 1))
 log(tiny, big)              # 1/1000000000 2500
 log(r, cl, lp, mr, ns)      # 1.23 1 2.5 50 2
+log(u, w, rot, div, flip)   # Vector(1.5, 2.5) Vector(2, 4) Vector(0, 1) Vector(0, -2) Vector(1, -2)
 ```
 
 ### basic.moph
@@ -4117,6 +4127,65 @@ v.addTrack(track)
 output v
 ```
 
+### space3d.moph
+
+```
+# space3d.moph — 3D (すべて仮)。点をカメラで箱の座標に落とすところまでが space3d の仕事。
+# 描くのは今まで通りの図形で、出てくるのは Vector (箱の座標) と Number (奥行き) だけ
+
+import space3d
+
+# ---- 点。Vector3 が要る場所には、3 つ並べた Tuple をそのまま書ける ----
+let p = space3d.Vector3(1, 2, 3)
+log(p, p.x, p.y, p.z)                       # Vector3(1, 2, 3) 1 2 3
+log(p + (1, 0, 0), p * 2, -p)               # + - * / と符号反転は 2D の Vector と同じ
+log(p.length(), p.normalized())             # 長さ、長さ 1 にしたもの
+log(p.dot((1, 0, 0)), p.cross((0, 1, 0)))   # 内積、外積 (面の向きを出す)
+log(p.lerp((0, 0, 0), 0.5))                 # Vector3(0.5, 1, 1.5)
+let ps = space3d.Vector3.from([(0, 0, 0), (1, 0, 0), (1, 1, 0)])   # 並びをまとめて作る
+
+# ---- 変換。書いた順に点へ効く。元は変わらず、繋ぐたびに新しいものが返る ----
+let turn = space3d.Transform3().rotate_y(90).translate((0, 1, 0))
+log(turn.apply((1, 0, 0)))                  # 回してから動かす
+log(turn.apply_all(ps))                     # 並びはまとめて (ループは Rust の中で回る)
+# ほかに rotate_x rotate_z scale(k) then(other)
+
+# ---- カメラ 3 種。box は落とし先の View の box と同じものを渡す ----
+let cam = space3d.PerspectiveCamera(from = (6, 4, 10), to = (0, 0, 0), fov = 45, box = (16, 9))
+let flat = space3d.OrthographicCamera(from = (6, 4, 10), to = (0, 0, 0), height = 8, box = (16, 9))
+let iso = space3d.IsometricCamera(unit = 1, box = (16, 9))   # 視点を持たない。x が右下、z が左下、y が上
+log(cam.project((0, 0, 0)))                 # Vector。箱の座標
+log(cam.depth((0, 0, 0)))                   # 視点からの奥行き。遠いほど大きい (zIndex には -depth)
+log(cam.scale_at((0, 0, 0)))                # その位置の 1 単位が箱でいくつになるか
+log(cam.in_front((0, 0, 20)))               # false。視点より後ろの点は project できない
+log(cam.project_all(ps), cam.depth_all(ps))
+log(flat.scale_at((0, 0, 0)), iso.project((1, 0, 0)))
+
+# ---- Mesh。頂点と、それを繋ぐ線 (edges) と面 (faces) ----
+let cube = space3d.box((0, 0, 0), (2, 2, 2))
+log(cube.points.len(), cube.edges.len(), cube.faces.len())   # 8 12 6
+# 作り手は box / plane / sphere / path / grid。transformed で変換を効かせた別の Mesh になる
+log(space3d.sphere((0, 0, 0), 1, 4, 6).points.len())         # 35 = (4 + 1) * (6 + 1)
+log(space3d.grid((0, 0, 0), 4, 4, 1).edges.len())            # 40。床の格子線 (面は無い)
+
+let lines = cube.edges(cam)                 # List<(Vector, Vector)>。Line の from と to へ
+let faces = cube.transformed(turn).faces(cam)   # List<Face>。遠い順、裏を向いた面は落ちる
+let face = faces[0]
+log(lines.len(), faces.len())               # 12 3
+log(face.points.len(), face.normal, face.depth)   # points は Polygon へ、depth は zIndex へ
+log(space3d.shade(#4080e0, face.normal, (0, 1, 0)))   # 面の向きと光から塗りの色を決める
+
+# ---- 落としたら、あとは 2D の図形 ----
+let v = View(box = (16, 9))
+for f in faces {
+  v.place(Polygon(points = f.points, fill = space3d.shade(#4080e0, f.normal, (0, 1, 0)), zIndex = -f.depth))
+}
+for (a, b) in lines {
+  v.place(Line(from = a, to = b, stroke = #ffffff, strokeWidth = 0.02, zIndex = 100))
+}
+output v
+```
+
 ### statement.moph
 
 ```
@@ -4200,7 +4269,7 @@ let noret:  (String) -> Nothing = func (s) { log(s) }
 # builtin の log と type_of は、どの型でも受け取るので型を書けない
 
 # ---- Module ----
-# import で束縛される。標準ライブラリは math のみ
+# import で束縛される。標準ライブラリは math と space3d が builtin、ほかは .moph (一覧は mophila doc)
 import math
 # math:       Module
 # math.PI / math.TAU / math.E:  Number
@@ -4233,9 +4302,13 @@ let c = Counter(10)
 log(c.next(), c.next(), type_of(c))          # 11 12 Counter
 
 # ---- Union 型 ----
-# Shape (図形すべて)、Placeable (Shape | View)、Paint (Color | Shader | Gradient) は言語が持っている。
+# Shape (図形すべて)、Placeable (Shape | View)、Paint (Color | Shader | Gradient)、
+# Projection (space3d のカメラ 3 種) は言語が持っている。
 # 自分で作るときは type 名 = A | B。builtin の型名では宣言できない
 type Fill = Color | Gradient
+# 形のある型にも名前を付けられる。< > の中は要素の型で、入れた値はそこまで見て確かめられる
+type Points = List<Vector>
+let corners: Points = [(0, 0), (1, 0), (1, 1)]
 
 # ---- 決まった値しか取らない型 ----
 # 値はすべて Symbol。呼んでは作れない
@@ -4282,13 +4355,14 @@ let l = Line(from = Vector(0, 0),     # Vector
   stroke = #000000,
   strokeWidth = 0.05)
 
-let p = Polygon(points = [Vector(0, 0), Vector(1, 0), Vector(0.5, 1)],   # List<Vector>
+let p = Polygon(points = [(0, 0), (1, 0), (0.5, 1)],   # List<Vector>。Tuple で書いても Vector になる
   fill = #4040e0)
 
 let t = TextArea(text = "hello",        # String
   position = Pos(0, 0, anchor = :topLeft),
   w = 2,                 # Number。幅に合わせて折り返す
-  font = "Noto Sans JP", # String。mophila fonts で使える名前が出る
+  font = ["Hiragino Sans", "Noto Sans JP"],   # Font (String | List)。List なら、この機械にある最初のもの
+                         #        名前は mophila fonts で出る。読み返すと、選ばれた 1 つが返る
   fontSize = 0.3,        # Number。箱の座標単位
   fill = #000000,
   align = :left,         # Align
@@ -4312,6 +4386,17 @@ let tl = m.apply(c, func (c, t, [x]) { c.radius = x })   # Timeline。対象 + �
 let tr = Timeline(duration = 10s)      # Timeline。入れ物にもなる
 #   tr.duration: Duration
 #   tr.place(t = Timeline, at = Duration, fadeIn = Duration, fadeOut = Duration) -> Nothing
+
+# ---- 3D (space3d の中にある型) ----
+# import space3d して space3d.Vector3(...) のように作る。素の名前では作れない。書き方は space3d.moph
+# Vector3             3D の点。.x .y .z、+ - * /
+# Transform3          回転・移動・拡大をまとめた変換
+# PerspectiveCamera   透視投影。遠いものほど小さい
+# OrthographicCamera  平行投影。遠くても大きさが変わらない
+# IsometricCamera     等角投影。視点を持たない
+# Projection          上のカメラ 3 種の union
+# Mesh                頂点と、それを繋ぐ線 (edges) と面 (faces)
+# Face                Mesh.faces が返す、投影済みの 1 面。points normal depth
 
 # ---- その他 ----
 # Nothing   値を返さなかった関数の戻り値。書き方は無い

@@ -240,7 +240,7 @@ fn take_ident(chars: &[char], start: usize) -> String {
 }
 
 /// #rgb / #rgba は各桁を 2 つ並べて #rrggbb / #rrggbbaa に広げる
-fn parse_color(hex: &str) -> [f32; 4] {
+pub fn parse_color(hex: &str) -> [f32; 4] {
     let expanded: String = if hex.len() <= 4 { hex.chars().flat_map(|c| [c, c]).collect() } else { hex.to_string() };
     let ch = |i: usize| u8::from_str_radix(&expanded[i..i + 2], 16).unwrap_or(0) as f32 / 255.0;
     let a = if expanded.len() == 8 { ch(6) } else { 1.0 };

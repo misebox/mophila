@@ -10,7 +10,6 @@ use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::Instant;
 
-use vello::peniko::Color;
 use vello::util::{RenderContext, RenderSurface};
 use vello::{AaConfig, AaSupport, RenderParams, Renderer, RendererOptions, wgpu};
 use winit::application::ApplicationHandler;
@@ -27,7 +26,8 @@ use crate::render::media::{Cue, Media};
 use crate::render::scene;
 use crate::lang::value::ObjRef;
 
-pub fn run(name: String, interp: Interp, view: ObjRef, duration: f64, size: (u32, u32), looping: bool, start: Option<f64>, media: &Media) -> Result<(), Box<dyn Error>> {
+pub fn run(name: String, interp: Interp, view: ObjRef, duration: f64, shot: crate::render::scene::Shot, looping: bool, start: Option<f64>, media: &Media) -> Result<(), Box<dyn Error>> {
+    let size = (shot.width as u32, shot.height as u32);
     // 音が出せなくても再生はする
     let audio = if media.clips.is_empty() {
         None
@@ -35,6 +35,7 @@ pub fn run(name: String, interp: Interp, view: ObjRef, duration: f64, size: (u32
         audio::Output::open(media).map_err(|e| eprintln!("audio disabled: {e}")).ok()
     };
     let mut player = Player {
+        shot,
         name,
         interp,
         view,
@@ -64,6 +65,8 @@ struct Player<'a> {
     view: ObjRef,
     duration: f64,
     size: (u32, u32),
+    /// 箱のどこを出すか (窓の大きさは毎フレーム入れ替える)
+    shot: crate::render::scene::Shot,
     looping: bool,
     state: Option<State<'a>>,
     /// 再生位置 (秒)
@@ -200,14 +203,15 @@ impl Player<'_> {
         let tracks = crate::lang::eval::all_tracks(&self.view);
         self.interp.apply_tracks(&tracks, t)?;
         let (width, height) = (state.surface.config.width, state.surface.config.height);
-        let mut scene = scene::build(&self.view, f64::from(width), f64::from(height), t, self.interp.cache_mut())?;
+        let shot = scene::Shot { width: f64::from(width), height: f64::from(height), ..self.shot };
+        let mut scene = scene::build(&self.view, shot, t, self.interp.cache_mut())?;
         // 字幕は絵の中に出す。窓の縦横比が違うと、絵の上下左右に帯が空いている
-        let area = scene::picture(&self.view, f64::from(width), f64::from(height))?;
+        let area = scene::picture(&self.view, shot)?;
         scene::overlay_subtitles(&mut scene, self.interp.cache_mut(), &self.cues, t, area);
 
         let handle = &state.context.devices[state.surface.dev_id];
         shader::apply_overrides(&mut state.renderer, self.interp.cache_mut().shaders.as_mut());
-        let params = RenderParams { base_color: Color::WHITE, width, height, antialiasing_method: AaConfig::Area };
+        let params = RenderParams { base_color: self.shot.pad, width, height, antialiasing_method: AaConfig::Area };
         state.renderer.render_to_texture(&handle.device, &handle.queue, &scene, &state.surface.target_view, &params)?;
 
         let frame = match state.surface.surface.get_current_texture() {

@@ -153,6 +153,15 @@ struct OutputArgs {
     /// Warn about frames that need more GPU memory than this (e.g. 512MB, 2GB)
     #[arg(long, value_parser = parse_bytes)]
     gpu_budget: Option<u64>,
+    /// Show only a part of the box: height (fill the height), width, or a fraction like 0.25,1 / 25%,100%
+    #[arg(long, value_parser = parse_crop)]
+    crop: Option<render::scene::Crop>,
+    /// Where the cropped part sits in what is left over: 0%..100% per axis, or left / center / right / top / bottom / topLeft ...
+    #[arg(long, value_parser = parse_align)]
+    align: Option<(f64, f64)>,
+    /// Color of the bands when the picture does not fill the frame (default white)
+    #[arg(long, value_parser = parse_pad)]
+    pad: Option<String>,
 }
 
 /// --trim の区間。None は端まで
@@ -228,6 +237,56 @@ fn parse_bytes(s: &str) -> Result<u64, String> {
         other => return Err(format!("unknown unit \"{other}\" (use MB or GB)")),
     };
     Ok((value * scale) as u64)
+}
+
+/// 切り取る大きさ。height / width か、箱に対する割合 (0.25,1 でも 25%,100% でも)
+fn parse_crop(s: &str) -> Result<render::scene::Crop, String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "height" => return Ok(render::scene::Crop::Height),
+        "width" => return Ok(render::scene::Crop::Width),
+        _ => {}
+    }
+    let (w, h) = s.split_once(',').ok_or_else(|| format!("crop must be height, width, or W,H (e.g. 0.25,1): {s}"))?;
+    Ok(render::scene::Crop::Size(parse_ratio(w, "crop")?, parse_ratio(h, "crop")?))
+}
+
+/// 余りのどこに寄せるか。名前か、軸ごとの割合
+fn parse_align(s: &str) -> Result<(f64, f64), String> {
+    let named = |x: f64, y: f64| Ok((x, y));
+    match s.trim() {
+        "center" => return named(0.5, 0.5),
+        "left" => return named(0.0, 0.5),
+        "right" => return named(1.0, 0.5),
+        "top" => return named(0.5, 0.0),
+        "bottom" => return named(0.5, 1.0),
+        "topLeft" => return named(0.0, 0.0),
+        "topRight" => return named(1.0, 0.0),
+        "bottomLeft" => return named(0.0, 1.0),
+        "bottomRight" => return named(1.0, 1.0),
+        _ => {}
+    }
+    let (x, y) = s.split_once(',').ok_or_else(|| format!("align must be a name (left, center, topRight ...) or X,Y: {s}"))?;
+    Ok((parse_ratio(x, "align")?, parse_ratio(y, "align")?))
+}
+
+/// 0..1 の割合。"0.25" でも "25%" でも
+fn parse_ratio(s: &str, whose: &str) -> Result<f64, String> {
+    let text = s.trim();
+    let (number, percent) = match text.strip_suffix('%') {
+        Some(rest) => (rest, true),
+        None => (text, false),
+    };
+    let value: f64 = number.trim().parse().map_err(|_| format!("{whose} takes numbers like 0.25 or 25%, found {s}"))?;
+    Ok(if percent { value / 100.0 } else { value })
+}
+
+/// 帯の色。#rgb #rgba #rrggbb #rrggbbaa
+fn parse_pad(s: &str) -> Result<String, String> {
+    let hex = s.trim().strip_prefix('#').ok_or_else(|| format!("pad takes a color like #000000, found {s}"))?;
+    match matches!(hex.len(), 3 | 4 | 6 | 8) && hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        true => Ok(hex.to_string()),
+        false => Err(format!("pad takes a color like #000000, found {s}")),
+    }
 }
 
 fn parse_size(s: &str) -> Result<(u32, u32), String> {
@@ -315,7 +374,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             let script = entry(script)?;
             let (interp, view, duration) = load(&read_script(&script)?, base_dir(&script), None, &project)?;
             let media = render::media::prepare(&view, duration, 0.0, duration, true, &render::voice::cache_dir())?;
-            render::preview::run(file_name(&script), interp, view, duration, size, r#loop, at, &media)
+            render::preview::run(file_name(&script), interp, view, duration, render::scene::Shot::whole(f64::from(size.0), f64::from(size.1)), r#loop, at, &media)
         }
         Command::Timeline { script, filter } => {
             let script = entry(script)?;
@@ -453,15 +512,29 @@ fn load(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Source
 /// 置かれた読み上げを音声にして混ぜる。voice: を書いていなければ、書いてくれと言う
 fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sources>, project: &Option<Rc<project::Project>>, name: String, args: OutputArgs) -> Result<(), Box<dyn Error>> {
     let (width, height) = args.size;
+    // 箱のどこを、どう寄せて出すか
+    let shot = render::scene::Shot {
+        width: f64::from(width),
+        height: f64::from(height),
+        crop: args.crop,
+        align: args.align.unwrap_or((0.5, 0.5)),
+        pad: match &args.pad {
+            Some(hex) => {
+                let [r, g, b, a] = lang::lexer::parse_color(hex);
+                vello::peniko::Color::new([r, g, b, a])
+            }
+            None => vello::peniko::Color::WHITE,
+        },
+    };
     let (mut interp, view, duration) = load(src, base_dir, sources, project)?;
     let cache = render::voice::cache_dir();
     let Some(output) = args.output else {
         let media = render::media::prepare(&view, duration, 0.0, duration, true, &cache)?;
-        return render::preview::run(name, interp, view, duration, args.size, args.r#loop, args.at, &media);
+        return render::preview::run(name, interp, view, duration, shot, args.r#loop, args.at, &media);
     };
 
     let mut timing = timing::Timing::from_env();
-    let mut renderer = timing.measure("startup", || render::gpu::HeadlessRenderer::new(width, height))?;
+    let mut renderer = timing.measure("startup", || render::gpu::HeadlessRenderer::new(width, height, shot.pad))?;
     interp.cache_mut().shaders = Some(renderer.shader_runner());
     // 拡張子で出力の形式を決める。--codec / --pix-fmt を書けばそれが勝つ
     let Some(format) = render::encode::format_of(&output) else {
@@ -519,8 +592,7 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
                 base_dir: interp.base_dir.clone(),
                 sources: sources.cloned(),
                 project: project.as_ref().map(|p| (**p).clone()),
-                width: f64::from(width),
-                height: f64::from(height),
+                shot,
             },
             &times,
             workers,
@@ -546,7 +618,7 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
                     interp.apply_tracks(&tracks, t)?;
                     Ok(())
                 })?;
-                let scene = timing.measure("scene", || render::scene::build(&view, f64::from(width), f64::from(height), t, interp.cache_mut()))?;
+                let scene = timing.measure("scene", || render::scene::build(&view, shot, t, interp.cache_mut()))?;
                 (scene, interp.cache_mut().bytes())
             }
         };
@@ -588,7 +660,7 @@ fn sheet(src: &str, base_dir: std::path::PathBuf, project: &Option<Rc<project::P
     let rows = (times.len() as u32).div_ceil(cols);
     let (width, height) = (cw * cols, ch * rows);
 
-    let mut renderer = render::gpu::HeadlessRenderer::new(cw, ch)?;
+    let mut renderer = render::gpu::HeadlessRenderer::new(cw, ch, vello::peniko::Color::WHITE)?;
     interp.cache_mut().shaders = Some(renderer.shader_runner());
     let mut pixels = Vec::new();
     let mut canvas = vec![0u8; (width * height * 4) as usize];
@@ -597,8 +669,9 @@ fn sheet(src: &str, base_dir: std::path::PathBuf, project: &Option<Rc<project::P
         interp.begin_frame(t);
         let tracks = lang::eval::all_tracks(&view);
         interp.apply_tracks(&tracks, t)?;
-        let mut scene = render::scene::build(&view, f64::from(cw), f64::from(ch), t, interp.cache_mut())?;
-        let area = render::scene::picture(&view, f64::from(cw), f64::from(ch))?;
+        let cell_shot = render::scene::Shot::whole(f64::from(cw), f64::from(ch));
+        let mut scene = render::scene::build(&view, cell_shot, t, interp.cache_mut())?;
+        let area = render::scene::picture(&view, cell_shot)?;
         render::scene::overlay_subtitles(&mut scene, interp.cache_mut(), &media.cues, t, area);
         // 時刻のラベル
         let label = format!("{t:.1}s");

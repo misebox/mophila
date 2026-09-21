@@ -21,8 +21,8 @@ pub struct Job {
     pub base_dir: PathBuf,
     pub sources: Option<crate::bundle::Sources>,
     pub project: Option<crate::project::Project>,
-    pub width: f64,
-    pub height: f64,
+    /// 箱のどこを、どれだけの大きさで出すか
+    pub shot: crate::render::scene::Shot,
 }
 
 /// 組み立てた 1 フレーム (番号, 描画命令, 要った GPU のメモリ)
@@ -83,7 +83,7 @@ fn build(job: &Job, mine: &[(usize, f64)], tx: &SyncSender<Frame>) {
         let frame = (|| -> Result<(Scene, crate::render::text::Bytes), Box<dyn Error>> {
             interp.begin_frame(t);
             interp.apply_tracks(&tracks, t)?;
-            let scene = crate::render::scene::build(&view, job.width, job.height, t, interp.cache_mut())?;
+            let scene = crate::render::scene::build(&view, job.shot, t, interp.cache_mut())?;
             Ok((scene, interp.cache_mut().bytes()))
         })();
         let message = match frame {

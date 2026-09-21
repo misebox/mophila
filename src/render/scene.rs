@@ -12,16 +12,63 @@ use crate::lang::value::{ObjRef, Value};
 
 type Attrs = HashMap<String, Value>;
 
-/// View を描画命令に変換する。View の box を出力サイズに収め (比率維持)、中央に置く
+/// 書き出す画の選び方。箱のどこを、どれだけの大きさで出すか
+#[derive(Clone, Copy)]
+pub struct Shot {
+    /// 出力のピクセル
+    pub width: f64,
+    pub height: f64,
+    /// 切り取る大きさ。書かなければ箱全体
+    pub crop: Option<Crop>,
+    /// 余ったところのどこに寄せるか。0 が左上、1 が右下
+    pub align: (f64, f64),
+    /// 絵の載らないところ (帯と、箱の外) の色
+    pub pad: Color,
+}
+
+/// 切り取る大きさ
+#[derive(Clone, Copy)]
+pub enum Crop {
+    /// 高さを箱いっぱいにして、幅は出力の比から決める
+    Height,
+    /// 幅を箱いっぱいにして、高さは出力の比から決める
+    Width,
+    /// 箱に対する割合で直に
+    Size(f64, f64),
+}
+
+impl Shot {
+    /// 箱をそのまま出す (切り取らない)
+    pub fn whole(width: f64, height: f64) -> Self {
+        Shot { width, height, crop: None, align: (0.5, 0.5), pad: Color::WHITE }
+    }
+
+    /// 箱のどこを出すか (箱の座標)。切り取らなければ箱全体
+    fn source(self, bw: f64, bh: f64) -> Rect {
+        let (w, h) = match self.crop {
+            None => (bw, bh),
+            Some(Crop::Height) => (bh * self.width / self.height, bh),
+            Some(Crop::Width) => (bw, bw * self.height / self.width),
+            Some(Crop::Size(cw, ch)) => (bw * cw, bh * ch),
+        };
+        // 余り (箱 − 切り取る大きさ) のどこに寄せるか。余りが負なら箱の外へ出る
+        let (x, y) = ((bw - w) * self.align.0, (bh - h) * self.align.1);
+        Rect::new(x, y, x + w, y + h)
+    }
+}
+
+/// View を描画命令に変換する。切り取った範囲を出力サイズに収め (比率維持)、中央に置く
 /// t は動画の時刻 (秒)。Shader の塗りに渡す
-pub fn build(view: &ObjRef, width: f64, height: f64, t: f64, cache: &mut RenderCache) -> Result<Scene> {
+pub fn build(view: &ObjRef, shot: Shot, t: f64, cache: &mut RenderCache) -> Result<Scene> {
     cache.frame += 1;
     cache.layer_bytes = 0;
-    let (bw, _) = view_box(view)?;
-    let area = picture(view, width, height)?;
-    let transform = Affine::translate((area.x0, area.y0)) * Affine::scale(area.width() / bw);
+    let (bw, bh) = view_box(view)?;
+    let source = shot.source(bw, bh);
+    let area = picture(view, shot)?;
+    let scale = area.width() / source.width();
+    let transform = Affine::translate((area.x0, area.y0)) * Affine::scale(scale) * Affine::translate((-source.x0, -source.y0));
     let mut scene = Scene::new();
-    let frame = Frame { viewport: Rect::new(0.0, 0.0, width, height), t };
+    let frame = Frame { viewport: Rect::new(0.0, 0.0, shot.width, shot.height), t };
     draw_view(&mut scene, view, transform, &frame, cache)?;
     drop_unused(cache);
     Ok(scene)
@@ -38,13 +85,14 @@ fn drop_unused(cache: &mut RenderCache) {
     }
 }
 
-/// 箱を width x height に収めたとき、絵が実際に載る矩形。
-/// 縦横比が合わなければ上下か左右が余る。字幕はこの中に出す
-pub fn picture(view: &ObjRef, width: f64, height: f64) -> Result<Rect> {
+/// 切り取った範囲を出力に収めたとき、絵が実際に載る矩形。
+/// 縦横比が合わなければ上下か左右が余る (そこは pad の色)。字幕はこの中に出す
+pub fn picture(view: &ObjRef, shot: Shot) -> Result<Rect> {
     let (bw, bh) = view_box(view)?;
-    let scale = (width / bw).min(height / bh);
-    let (w, h) = (bw * scale, bh * scale);
-    Ok(Rect::new((width - w) / 2.0, (height - h) / 2.0, (width + w) / 2.0, (height + h) / 2.0))
+    let source = shot.source(bw, bh);
+    let scale = (shot.width / source.width()).min(shot.height / source.height());
+    let (w, h) = (source.width() * scale, source.height() * scale);
+    Ok(Rect::new((shot.width - w) / 2.0, (shot.height - h) / 2.0, (shot.width + w) / 2.0, (shot.height + h) / 2.0))
 }
 
 /// 1 フレームの間、全図形に共通のもの

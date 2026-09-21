@@ -21,10 +21,12 @@ pub struct HeadlessRenderer {
     width: u32,
     height: u32,
     padded_bytes_per_row: u32,
+    /// 絵の載らないところの色
+    pad: Color,
 }
 
 impl HeadlessRenderer {
-    pub fn new(width: u32, height: u32) -> Result<Self, Box<dyn Error>> {
+    pub fn new(width: u32, height: u32, pad: Color) -> Result<Self, Box<dyn Error>> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         let adapter =
             pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))?;
@@ -72,7 +74,7 @@ impl HeadlessRenderer {
             })
         });
 
-        Ok(Self { device, queue, renderer, texture, view, readback, submitted: [None, None], next: 0, width, height, padded_bytes_per_row })
+        Ok(Self { device, queue, renderer, texture, view, readback, submitted: [None, None], next: 0, width, height, padded_bytes_per_row, pad })
     }
 
     /// Shader を走らせるもの。同じ装置を使う
@@ -91,7 +93,7 @@ impl HeadlessRenderer {
         self.next = (slot + 1) % 2;
         shader::apply_overrides(&mut self.renderer, shaders);
         let params = RenderParams {
-            base_color: Color::WHITE,
+            base_color: self.pad,
             width: self.width,
             height: self.height,
             antialiasing_method: AaConfig::Area,

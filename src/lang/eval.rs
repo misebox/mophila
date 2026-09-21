@@ -188,6 +188,8 @@ impl Interp {
                 match &inner.kind {
                     StmtKind::Let(pat, ..) => collect_names(pat, &mut self.exports),
                     StmtKind::TypeDecl(decl) => self.exports.push(decl.name.clone()),
+                    // export { a, b } from mod — 取り込んだ名前をそのまま外に出す
+                    StmtKind::Import(ImportKind::Names { names, .. }) => self.exports.extend(names.iter().cloned()),
                     _ => {}
                 }
                 Ok(result)

@@ -31,12 +31,12 @@ export func phone(content: View, w: Number, h: Number, body: Color = #1a1d23, sc
   v
 }
 
-## ブラウザの窓。上に url の帯が付く
+## ブラウザのウィンドウ。上に url の帯が付く
 ## @category 枠
-## @param content 窓に映すもの
+## @param content ウィンドウに映すもの
 ## @param url 帯に出す文字
-## @param w 窓の幅
-## @param h 窓の高さ
+## @param w ウィンドウの幅
+## @param h ウィンドウの高さ
 ## @param chrome 帯の色 (既定 薄い灰)
 ## @param page 中身の後ろの色 (既定 白)
 ## @returns 箱が w x h の View
@@ -85,7 +85,7 @@ export func terminal(lines: List<String>, revealed: Number, w: Number, h: Number
   let slot = if shown > 0 { duration / shown } else { duration }
   for (i, line) in lines.enumerate() {
     if i >= n { break }
-    # 1 行ずつ窓に入れて、窓の幅で打ち出す
+    # 1 行ずつウィンドウに入れて、その幅で打ち出す
     let t = TextArea(position = Pos(0, line_h / 2, anchor = :left), text = line, fontSize = size, fill = ink)
     if font != "" { t.font = font }
     let tw = math.max(t.size().x, 0.0001)

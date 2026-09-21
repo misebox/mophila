@@ -54,7 +54,7 @@ cargo install --path .
 | `mophila render a.moph -o a.mp4 --size fhd --fps 30` | 動画を書く。形式は拡張子で決まる (下の表)。`--trim 00:15..00:30` で区間だけ (`00:15` は 15 秒以降、`..01:30` は 1 分 30 秒まで) |
 | `mophila render a.moph -o tall.mp4 --size 1080x1920 --crop height --align left` | 横長の絵から縦長を切り出す。`--crop` は切り取る大きさ (`height` / `width` / `0.25,1`)、`--align` は余りのどこに寄せるか (`left` `center` …、`30%,50%` も可)、`--pad '#000000'` は帯の色 |
 | `mophila render a.moph -o a.mp4 --gpu-budget 2GB` | GPU のメモリが足りているか見ながら書く。書き終わりに一番要ったコマと内訳が出る。予算を超えたコマは警告 |
-| `mophila preview a.moph` | ウィンドウで再生。少し先まで描いておき、間に合わなければ飛ばさずゆっくり出す。Space で一時停止、← → で移動 |
+| `mophila preview a.moph` | ウィンドウで再生。少し先まで描いておき、間に合わなければ飛ばさずゆっくり出す。Space で一時停止、← → で移動、s で状態表示、q で終了 |
 | `mophila run a.moph` | 描画せずに実行する (`log` の確認) |
 | `mophila timeline a.moph` | 何が、いつ、どう変わるかをテキストで出す |
 | `mophila sheet a.moph -o sheet.png --times 1s,5s,10s` | 指定した時刻のコマを 1 枚に並べる |

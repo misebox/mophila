@@ -129,47 +129,27 @@ impl Parser {
                 Ok(StmtKind::Let(pat, ann, self.expr(0)?))
             }
             Tok::Export => {
+                let line = self.line();
                 self.next();
                 if *self.peek() == Tok::AliasKw {
-                    return err(Kind::UnexpectedToken, format!("line {}: alias is a short name for this file only; it cannot be exported", self.line()));
+                    return err(Kind::UnexpectedToken, format!("line {line}: alias is a short name for this file only; it cannot be exported"));
+                }
+                // export { a, b } from <source> — 取り込んで、そのまま外にも出す
+                if *self.peek() == Tok::LBrace {
+                    let inner = Stmt { line, kind: StmtKind::Import(self.named_import()?) };
+                    return Ok(StmtKind::Export(Box::new(inner)));
                 }
                 let inner = self.stmt()?;
                 match inner.kind {
                     StmtKind::Let(..) | StmtKind::TypeDecl(..) => Ok(StmtKind::Export(Box::new(inner))),
-                    _ => err(Kind::UnexpectedToken, format!("line {}: export must be followed by let, func, struct or record", inner.line)),
+                    _ => err(Kind::UnexpectedToken, format!("line {}: export must be followed by let, func, struct, record, or {{ names }} from", inner.line)),
                 }
             }
             Tok::Import => {
                 self.next();
                 // import { a, b } from <source>
                 if *self.peek() == Tok::LBrace {
-                    self.next();
-                    let mut names = Vec::new();
-                    loop {
-                        self.skip_newlines();
-                        if *self.peek() == Tok::RBrace {
-                            self.next();
-                            break;
-                        }
-                        names.push(self.ident()?);
-                        self.skip_newlines();
-                        match self.peek() {
-                            Tok::Comma => {
-                                self.next();
-                            }
-                            Tok::RBrace => {}
-                            _ => return self.unexpected("\",\" or \"}\""),
-                        }
-                    }
-                    match self.next() {
-                        Tok::Ident(kw) if kw == "from" => {}
-                        _ => {
-                            self.pos -= 1;
-                            return self.unexpected("\"from\"");
-                        }
-                    }
-                    let (source, _) = self.import_source()?;
-                    return Ok(StmtKind::Import(ImportKind::Names { source, names }));
+                    return Ok(StmtKind::Import(self.named_import()?));
                 }
                 let (source, default) = self.import_source()?;
                 let alias = self.import_alias(default)?;
@@ -521,6 +501,37 @@ impl Parser {
 
     /// import の元と既定の名前。math / .file / ..parent.file / "path/file.moph"
     /// 先頭の . が 1 つなら同じ場所、2 つなら 1 つ上 (使わないことを勧める)
+    /// `{ a, b } from <source>`。import と export のどちらからも使う
+    fn named_import(&mut self) -> Result<ImportKind> {
+        self.expect(Tok::LBrace)?;
+        let mut names = Vec::new();
+        loop {
+            self.skip_newlines();
+            if *self.peek() == Tok::RBrace {
+                self.next();
+                break;
+            }
+            names.push(self.ident()?);
+            self.skip_newlines();
+            match self.peek() {
+                Tok::Comma => {
+                    self.next();
+                }
+                Tok::RBrace => {}
+                _ => return self.unexpected("\",\" or \"}\""),
+            }
+        }
+        match self.next() {
+            Tok::Ident(kw) if kw == "from" => {}
+            _ => {
+                self.pos -= 1;
+                return self.unexpected("\"from\"");
+            }
+        }
+        let (source, _) = self.import_source()?;
+        Ok(ImportKind::Names { source, names })
+    }
+
     fn import_source(&mut self) -> Result<(ImportSource, String)> {
         match self.next() {
             Tok::Ident(name) => Ok((ImportSource::Std(name.clone()), name)),

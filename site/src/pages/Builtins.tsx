@@ -135,9 +135,10 @@ export const builtinGroups = (): IndexGroup[] => [
           { label: "Error", href: href("builtins", "errors"), active: current() === "errors" },
         ],
       },
-      ...data.categories.map((c) => ({ title: c, items: typeLinks(c) })),
     ],
   },
+  // 型は数が多いので、分類ごとに畳んで別の見出しにする
+  { title: "type", items: [], children: data.categories.map((c) => ({ title: c, items: typeLinks(c) })) },
 ];
 
 export const builtinLabel = currentLabel;

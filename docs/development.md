@@ -43,6 +43,8 @@ preview は実時間で出すので、描くのが間に合わなければその
 render は時間で進まないので、同じ場面が重くても出力のコマは変わらない。
 preview で詰まったものが出力の不具合かどうかは、両方に付けて worst の時刻を見比べる。
 
+`MOPHILA_WGSL=1` を付けると、Shader の `color` から組み立てた WGSL をそのまま stderr に出す (`.moph` からの変換を確かめる用)。
+
 ## 標準ライブラリ
 
 `src/stdlib/`。`import math` と `import space3d` は Rust、他は `.moph` を `include_str!` で実行ファイルに埋め込んでいる (`src/stdlib/mod.rs` の `FILES`)。別に配るファイルは無い。

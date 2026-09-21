@@ -571,8 +571,20 @@ fn math_call(name: &str, args: &[(String, Ty)]) -> Result<(String, Ty)> {
         }
     };
     match name {
-        "sin" | "cos" | "floor" | "ceil" | "abs" | "sqrt" | "exp" => unary(name),
+        "sin" | "cos" | "tan" | "floor" | "ceil" | "round" | "abs" | "sign" | "sqrt" | "exp" | "exp2" | "log2" => unary(name),
         "ln" => unary("log"),
+        "log10" => match list.as_slice() {
+            [x] => Ok((format!("(log2({x}) * 0.30102999566)"), Ty::Num)),
+            _ => err(Kind::ArityMismatch, format!("math.log10 takes 1 argument, {} given", list.len())),
+        },
+        "pow" => match list.as_slice() {
+            [x, y] => Ok((format!("pow({x}, {y})"), Ty::Num)),
+            _ => err(Kind::ArityMismatch, "math.pow takes 2 arguments (x, y)"),
+        },
+        "clamp" => match list.as_slice() {
+            [x, lo, hi] => Ok((format!("clamp({x}, {lo}, {hi})"), Ty::Num)),
+            _ => err(Kind::ArityMismatch, "math.clamp takes 3 arguments (x, lo, hi)"),
+        },
         "atan2" => match list.as_slice() {
             [y, x] => Ok((format!("atan2({y}, {x})"), Ty::Num)),
             _ => err(Kind::ArityMismatch, "math.atan2 takes 2 arguments (y, x)"),
@@ -1136,6 +1148,10 @@ impl ShaderRunner {
     }
 
     fn build_pipeline(&self, wgsl: &str) -> Result<Pipeline> {
+        // MOPHILA_WGSL を付けると、組み立てた WGSL をそのまま出す (.moph からの変換を確かめる用)
+        if std::env::var_os("MOPHILA_WGSL").is_some() {
+            eprintln!("{wgsl}");
+        }
         let scope = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
         let module = self.device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("mophila shader"), source: wgpu::ShaderSource::Wgsl(wgsl.into()) });
         let layout = self.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {

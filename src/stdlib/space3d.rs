@@ -70,69 +70,84 @@ fn name_of(f: &str) -> &'static str {
     }
 }
 
-/// `space3d.…` の呼び出し。`name` は前置きを外したもの
-pub fn call(name: &str, values: &[Value]) -> Result<Value> {
-    // エラーには呼んだ通りの名前を出す
-    let name = &format!("space3d.{name}")[..];
-    match name.trim_start_matches("space3d.") {
-        "box" => match values {
-            [Value::Vector3(x, y, z), Value::Vector3(w, h, d)] => Ok(make_box((*x, *y, *z), (*w, *h, *d))),
-            _ => err(Kind::ArgumentType, "space3d.box takes (at: Vector3, size: Vector3)"),
-        },
-        "plane" => match values {
-            [Value::Vector3(x, y, z), Value::Number(w, _), Value::Number(d, _), Value::Number(cols, _), Value::Number(rows, _)] => {
-                Ok(make_plane((*x, *y, *z), *w, *d, count(name, "cols", *cols)?, count(name, "rows", *rows)?, true))
-            }
-            _ => err(Kind::ArgumentType, "space3d.plane takes (at: Vector3, w: Number, d: Number, cols: Number, rows: Number)"),
-        },
-        "grid" => match values {
-            [Value::Vector3(x, y, z), Value::Number(w, _), Value::Number(d, _), Value::Number(step, _)] => {
-                if *step <= 0.0 {
-                    return err(Kind::OutOfRange, format!("{name}: step must be positive, found {step}"));
-                }
-                let lines = |len: f64| ((len / step).round() as usize).max(1);
-                Ok(make_plane((*x, *y, *z), *w, *d, lines(*w), lines(*d), false))
-            }
-            _ => err(Kind::ArgumentType, "space3d.grid takes (at: Vector3, w: Number, d: Number, step: Number)"),
-        },
-        "sphere" => match values {
-            [Value::Vector3(x, y, z), Value::Number(r, _), Value::Number(rings, _), Value::Number(segments, _)] => {
-                Ok(make_sphere((*x, *y, *z), *r, count(name, "rings", *rings)?.max(2), count(name, "segments", *segments)?.max(3)))
-            }
-            _ => err(Kind::ArgumentType, "space3d.sphere takes (at: Vector3, r: Number, rings: Number, segments: Number)"),
-        },
-        "path" => match values {
-            [Value::List(xs)] => {
-                let points = xs
-                    .borrow()
-                    .iter()
-                    .map(|v| match v {
-                        Value::Vector3(x, y, z) => Ok((*x, *y, *z)),
-                        v => err(Kind::ArgumentType, format!("space3d.path takes a List of Vector3, found {} in it", v.type_name())),
-                    })
-                    .collect::<Result<Vec<_>>>()?;
-                Ok(make_path(points))
-            }
-            _ => err(Kind::ArgumentType, "space3d.path takes one List<Vector3>"),
-        },
-        "shade" => match values {
-            [Value::Color(c), Value::Vector3(nx, ny, nz), Value::Vector3(lx, ly, lz), rest @ ..] => {
-                let ambient = match rest {
-                    [] => 0.25,
-                    [Value::Number(a, _)] if (0.0..=1.0).contains(a) => *a,
-                    _ => return err(Kind::ArgumentType, "space3d.shade takes ambient as a Number between 0 and 1"),
-                };
-                let n = normalized(name, "normal", (*nx, *ny, *nz))?;
-                let l = normalized(name, "light", (*lx, *ly, *lz))?;
-                let k = (ambient + (1.0 - ambient) * dot(n, l).max(0.0)) as f32;
-                Ok(Value::Color([c[0] * k, c[1] * k, c[2] * k, c[3]]))
-            }
-            _ => err(Kind::ArgumentType, "space3d.shade takes (color: Color, normal: Vector3, light: Vector3, ambient: Number = 0.25)"),
-        },
-        other => err(Kind::UndefinedVariable, format!("space3d has no \"{other}\"")),
+/// Vector3 が要る場所。数 3 つの Tuple も受ける (型が決まっている場所なので Vector3 になる)
+fn point(what: &str, v: &Value) -> Result<P3> {
+    if let Value::Vector3(x, y, z) = v {
+        return Ok((*x, *y, *z));
+    }
+    if let Value::Tuple(cells) = v {
+        if let [Value::Number(x, _), Value::Number(y, _), Value::Number(z, _)] = cells[..] {
+            return Ok((x, y, z));
+        }
+    }
+    err(Kind::ArgumentType, format!("{what} expects Vector3, found {}", v.type_name()))
+}
+
+fn number(what: &str, v: &Value) -> Result<f64> {
+    match v {
+        Value::Number(n, _) => Ok(*n),
+        v => err(Kind::ArgumentType, format!("{what} expects Number, found {}", v.type_name())),
     }
 }
 
+/// 点の並び。中身はそれぞれ Vector3 か数 3 つの Tuple
+fn points(what: &str, v: &Value) -> Result<Vec<P3>> {
+    let Value::List(xs) = v else {
+        return err(Kind::ArgumentType, format!("{what} expects List<Vector3>, found {}", v.type_name()));
+    };
+    xs.borrow().iter().map(|x| point(what, x)).collect()
+}
+
+/// `space3d.…` の呼び出し。`name` は前置きを外したもの
+pub fn call(f: &str, values: &[Value]) -> Result<Value> {
+    // エラーには呼んだ通りの名前を出す
+    let name = &format!("space3d.{f}")[..];
+    let takes = |form: &str| err(Kind::ArgumentType, format!("{name} takes {form}"));
+    match (f, values) {
+        ("box", [at, size]) => Ok(make_box(point(name, at)?, point(name, size)?)),
+        ("plane", [at, w, d, cols, rows]) => Ok(make_plane(
+            point(name, at)?,
+            number(name, w)?,
+            number(name, d)?,
+            count(name, "cols", number(name, cols)?)?,
+            count(name, "rows", number(name, rows)?)?,
+            true,
+        )),
+        ("grid", [at, w, d, step]) => {
+            let (at, w, d, step) = (point(name, at)?, number(name, w)?, number(name, d)?, number(name, step)?);
+            if step <= 0.0 {
+                return err(Kind::OutOfRange, format!("{name}: step must be positive, found {step}"));
+            }
+            let lines = |len: f64| ((len / step).round() as usize).max(1);
+            Ok(make_plane(at, w, d, lines(w), lines(d), false))
+        }
+        ("sphere", [at, r, rings, segments]) => Ok(make_sphere(
+            point(name, at)?,
+            number(name, r)?,
+            count(name, "rings", number(name, rings)?)?.max(2),
+            count(name, "segments", number(name, segments)?)?.max(3),
+        )),
+        ("path", [ps]) => Ok(make_path(points(name, ps)?)),
+        ("shade", [Value::Color(c), normal, light, rest @ ..]) => {
+            let ambient = match rest {
+                [] => 0.25,
+                [Value::Number(a, _)] if (0.0..=1.0).contains(a) => *a,
+                _ => return takes("ambient as a Number between 0 and 1"),
+            };
+            let n = normalized(name, "normal", point(name, normal)?)?;
+            let l = normalized(name, "light", point(name, light)?)?;
+            let k = (ambient + (1.0 - ambient) * dot(n, l).max(0.0)) as f32;
+            Ok(Value::Color([c[0] * k, c[1] * k, c[2] * k, c[3]]))
+        }
+        ("box", _) => takes("(at: Vector3, size: Vector3)"),
+        ("plane", _) => takes("(at: Vector3, w: Number, d: Number, cols: Number, rows: Number)"),
+        ("grid", _) => takes("(at: Vector3, w: Number, d: Number, step: Number)"),
+        ("sphere", _) => takes("(at: Vector3, r: Number, rings: Number, segments: Number)"),
+        ("path", _) => takes("one List<Vector3>"),
+        ("shade", _) => takes("(color: Color, normal: Vector3, light: Vector3, ambient: Number = 0.25)"),
+        (other, _) => err(Kind::UndefinedVariable, format!("space3d has no \"{other}\"")),
+    }
+}
 
 /// 3D の点。中の計算だけで使う
 type P3 = (f64, f64, f64);
@@ -279,23 +294,17 @@ impl Camera {
 /// カメラ 3 種のメソッド。名前は METHODS の表と揃える
 pub fn camera_method(o: &Object, name: &str, args: &[(Option<String>, Value)]) -> Result<Value> {
     let cam = Camera::of(o)?;
+    let what = format!("{}.{name}", o.kind);
     let one = || -> Result<P3> {
         match args {
-            [(None, Value::Vector3(x, y, z))] => Ok((*x, *y, *z)),
-            _ => err(Kind::ArgumentType, format!("{}.{name} takes one Vector3", o.kind)),
+            [(None, v)] => point(&what, v),
+            _ => err(Kind::ArityMismatch, format!("{what} takes one Vector3")),
         }
     };
     let many = || -> Result<Vec<P3>> {
         match args {
-            [(None, Value::List(xs))] => xs
-                .borrow()
-                .iter()
-                .map(|v| match v {
-                    Value::Vector3(x, y, z) => Ok((*x, *y, *z)),
-                    v => err(Kind::ArgumentType, format!("{}.{name} takes a List of Vector3, found {} in it", o.kind, v.type_name())),
-                })
-                .collect(),
-            _ => err(Kind::ArgumentType, format!("{}.{name} takes one List<Vector3>", o.kind)),
+            [(None, v)] => points(&what, v),
+            _ => err(Kind::ArityMismatch, format!("{what} takes one List<Vector3>")),
         }
     };
     let list = |xs: Vec<Value>| Value::List(std::rc::Rc::new(std::cell::RefCell::new(xs)));
@@ -398,10 +407,10 @@ pub fn transform_method(o: &Object, name: &str, args: &[(Option<String>, Value)]
             _ => err(Kind::ArgumentType, format!("Transform3.{name} takes one Number (degrees)")),
         }
     };
-    let point = || -> Result<P3> {
+    let here = || -> Result<P3> {
         match args {
-            [(None, Value::Vector3(x, y, z))] => Ok((*x, *y, *z)),
-            _ => err(Kind::ArgumentType, format!("Transform3.{name} takes one Vector3")),
+            [(None, v)] => point(&format!("Transform3.{name}"), v),
+            _ => err(Kind::ArityMismatch, format!("Transform3.{name} takes one Vector3")),
         }
     };
     // 後から足したものが、点には後に効く
@@ -411,7 +420,7 @@ pub fn transform_method(o: &Object, name: &str, args: &[(Option<String>, Value)]
         "rotate_y" => add(rotation(1, degrees()?)),
         "rotate_z" => add(rotation(2, degrees()?)),
         "translate" => {
-            let (x, y, z) = point()?;
+            let (x, y, z) = here()?;
             let mut next = IDENTITY;
             (next[3], next[7], next[11]) = (x, y, z);
             add(next)
@@ -427,25 +436,21 @@ pub fn transform_method(o: &Object, name: &str, args: &[(Option<String>, Value)]
             _ => err(Kind::ArgumentType, "Transform3.then takes one Transform3"),
         },
         "apply" => {
-            let (x, y, z) = applied(&m, point()?);
+            let (x, y, z) = applied(&m, here()?);
             Ok(Value::Vector3(x, y, z))
         }
         "apply_all" => match args {
-            [(None, Value::List(xs))] => {
-                let out = xs
-                    .borrow()
-                    .iter()
-                    .map(|v| match v {
-                        Value::Vector3(x, y, z) => {
-                            let (x, y, z) = applied(&m, (*x, *y, *z));
-                            Ok(Value::Vector3(x, y, z))
-                        }
-                        v => err(Kind::ArgumentType, format!("Transform3.apply_all takes a List of Vector3, found {} in it", v.type_name())),
+            [(None, v)] => {
+                let out = points("Transform3.apply_all", v)?
+                    .into_iter()
+                    .map(|p| {
+                        let (x, y, z) = applied(&m, p);
+                        Value::Vector3(x, y, z)
                     })
-                    .collect::<Result<Vec<_>>>()?;
+                    .collect();
                 Ok(Value::List(std::rc::Rc::new(std::cell::RefCell::new(out))))
             }
-            _ => err(Kind::ArgumentType, "Transform3.apply_all takes one List<Vector3>"),
+            _ => err(Kind::ArityMismatch, "Transform3.apply_all takes one List<Vector3>"),
         },
         _ => err(Kind::UndefinedAttribute, format!("Transform3 has no method \"{name}\"")),
     }

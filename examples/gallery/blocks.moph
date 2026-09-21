@@ -1,0 +1,63 @@
+# blocks.moph — 等角のカメラで積み木を並べ、中心から広がる波で上下させる。
+# 面の向きと光で陰を付け、面の奥行きを zIndex にして重なりを決める (space3d の例)
+
+import space3d
+import math
+import color
+
+let v = View(box = (16, 9))
+# 奥行きで並べ替えるので、背景と床はいちばん後ろだと書いておく
+v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #0f1420, zIndex = -100))
+
+# 等角投影は視点を持たない。unit が 3D の 1 単位ぶんの箱の長さ
+let cam = space3d.IsometricCamera(unit = 0.82, box = (16, 9))
+let light = (0.55, 1, 0.3)
+let base = #6ea8ff
+
+for (a, b) in space3d.grid((0, 0, 0), 10.5, 10.5, 1.5).edges(cam) {
+  v.place(Line(from = a, to = b, stroke = #22304d, strokeWidth = 0.025, zIndex = -90))
+}
+
+# 積み木 1 つにつき、見える面は多くて 3 枚
+let side = 5
+let blocks = []
+for n in 0..(side * side) {
+  let faces = []
+  for k in 0..3 {
+    let p = Polygon(points = [(0, 0)], fill = base, stroke = #0f1420, strokeWidth = 0.02, opacity = 0)
+    v.place(p)
+    faces.push(p)
+  }
+  blocks.push(faces)
+}
+
+let wave = motion (t) {
+  0..1: {
+    let n = 0
+    for i in 0..side {
+      for j in 0..side {
+        let x = (i - (side - 1) / 2) * 1.5
+        let z = (j - (side - 1) / 2) * 1.5
+        # 中心から外へ広がる波。高さだけ変えて、毎コマ箱を作り直す
+        let r = math.sqrt(x * x + z * z)
+        let h = 0.4 + 1.9 * (0.5 + 0.5 * math.sin(math.TAU * (t * 2 - r / 7)))
+        let face = space3d.box((x, h / 2, z), (1.05, h, 1.05)).faces(cam)
+        for (k, p) in blocks[n].enumerate() {
+          p.opacity = if k < face.len() { 1 } else { 0 }
+          if k < face.len() {
+            p.points = face[k].points
+            # 高いほど明るい色にしてから、面の向きで陰を付ける
+            p.fill = space3d.shade(color.mix(base, #a9e0ff, h / 2.3), face[k].normal, light)
+            # 積み木どうしの重なりは、面の奥行きで決める (遠いほど後ろ)
+            p.zIndex = -face[k].depth
+          }
+        }
+        n = n + 1
+      }
+    }
+  }
+}
+wave.duration = 10s
+v.addTrack(wave)
+
+output v

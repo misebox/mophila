@@ -10491,6 +10491,20 @@
    "listed": true
   },
   {
+   "name": "blocks",
+   "desc": "等角のカメラで積み木を並べ、中心から広がる波で上下させる。",
+   "code": "# blocks.moph — 等角のカメラで積み木を並べ、中心から広がる波で上下させる。\n# 面の向きと光で陰を付け、面の奥行きを zIndex にして重なりを決める (space3d の例)\n\nimport space3d\nimport math\nimport color\n\nlet v = View(box = (16, 9))\n# 奥行きで並べ替えるので、背景と床はいちばん後ろだと書いておく\nv.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #0f1420, zIndex = -100))\n\n# 等角投影は視点を持たない。unit が 3D の 1 単位ぶんの箱の長さ\nlet cam = space3d.IsometricCamera(unit = 0.82, box = (16, 9))\nlet light = (0.55, 1, 0.3)\nlet base = #6ea8ff\n\nfor (a, b) in space3d.grid((0, 0, 0), 10.5, 10.5, 1.5).edges(cam) {\n  v.place(Line(from = a, to = b, stroke = #22304d, strokeWidth = 0.025, zIndex = -90))\n}\n\n# 積み木 1 つにつき、見える面は多くて 3 枚\nlet side = 5\nlet blocks = []\nfor n in 0..(side * side) {\n  let faces = []\n  for k in 0..3 {\n    let p = Polygon(points = [(0, 0)], fill = base, stroke = #0f1420, strokeWidth = 0.02, opacity = 0)\n    v.place(p)\n    faces.push(p)\n  }\n  blocks.push(faces)\n}\n\nlet wave = motion (t) {\n  0..1: {\n    let n = 0\n    for i in 0..side {\n      for j in 0..side {\n        let x = (i - (side - 1) / 2) * 1.5\n        let z = (j - (side - 1) / 2) * 1.5\n        # 中心から外へ広がる波。高さだけ変えて、毎コマ箱を作り直す\n        let r = math.sqrt(x * x + z * z)\n        let h = 0.4 + 1.9 * (0.5 + 0.5 * math.sin(math.TAU * (t * 2 - r / 7)))\n        let face = space3d.box((x, h / 2, z), (1.05, h, 1.05)).faces(cam)\n        for (k, p) in blocks[n].enumerate() {\n          p.opacity = if k < face.len() { 1 } else { 0 }\n          if k < face.len() {\n            p.points = face[k].points\n            # 高いほど明るい色にしてから、面の向きで陰を付ける\n            p.fill = space3d.shade(color.mix(base, #a9e0ff, h / 2.3), face[k].normal, light)\n            # 積み木どうしの重なりは、面の奥行きで決める (遠いほど後ろ)\n            p.zIndex = -face[k].depth\n          }\n        }\n        n = n + 1\n      }\n    }\n  }\n}\nwave.duration = 10s\nv.addTrack(wave)\n\noutput v\n",
+   "length": 10.0,
+   "media": {
+    "width": 1280,
+    "height": 720,
+    "fps": 30.0,
+    "seconds": 10.0
+   },
+   "trim": "",
+   "listed": true
+  },
+  {
    "name": "julia",
    "desc": "Julia 集合。定数 c を円周上でゆっくり動かすと、形が移り変わる",
    "code": "# julia.moph — Julia 集合。定数 c を円周上でゆっくり動かすと、形が移り変わる\n\nimport math\nimport { escape_time, julia, smooth_bands } from fractal\n\nlet v = View(box = Vector(16, 9))\nlet total = 40s\n\nlet stops = [#061a3f, #1c4f9c, #5c9be6, #cfe6ff, #ffffff, #cfe6ff, #5c9be6, #1c4f9c, #061a3f]\n\nlet set = escape_time(\n  # c = 0.7885 e^(iθ)。θ は π から始めて 40 秒で 1 周 (最初はつながった形)\n  formula = julia(func (t) { Vector(0.7885 * math.cos(math.PI + t / 40 * math.TAU), 0.7885 * math.sin(math.PI + t / 40 * math.TAU)) }),\n  coloring = smooth_bands(stops, 48, inside = #061a3f),\n  center = Vector(0, 0),\n  span = 3.6,\n  max_steps = func (zoom) { 300 },\n  samples = 4,\n)\nv.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = set))\n\nlet track = Timeline(duration = total)\nv.addTrack(track)\noutput v\n",

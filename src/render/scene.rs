@@ -68,7 +68,8 @@ pub fn build(view: &ObjRef, shot: Shot, t: f64, cache: &mut RenderCache) -> Resu
     let scale = area.width() / source.width();
     let transform = Affine::translate((area.x0, area.y0)) * Affine::scale(scale) * Affine::translate((-source.x0, -source.y0));
     let mut scene = Scene::new();
-    let frame = Frame { viewport: Rect::new(0.0, 0.0, shot.width, shot.height), t };
+    // 絵が載るのはこの矩形の中だけ。外は帯なので、塗りもレイヤーもここで切る
+    let frame = Frame { picture: area, t };
     // 切り取ったときは、絵の載る矩形の外に中身がはみ出す。帯の中に描かないように切る
     let bands = area.x0 > 0.0 || area.y0 > 0.0 || area.x1 < shot.width || area.y1 < shot.height;
     if bands {
@@ -106,7 +107,8 @@ pub fn picture(view: &ObjRef, shot: Shot) -> Result<Rect> {
 
 /// 1 フレームの間、全図形に共通のもの
 struct Frame {
-    viewport: Rect,
+    /// 出力の中で絵が実際に載る矩形
+    picture: Rect,
     t: f64,
 }
 
@@ -140,7 +142,7 @@ fn draw_view(scene: &mut Scene, view: &ObjRef, transform: Affine, frame: &Frame,
         let area = match clip {
             true => transform.transform_rect_bbox(Rect::new(0.0, 0.0, bw, bh)),
             // 文字の縁など、囲む四角の計算がわずかに小さいことがあるので少し広げる
-            false => drawn_bounds(view, transform, cache)?.inflate(2.0, 2.0).intersect(frame.viewport),
+            false => drawn_bounds(view, transform, cache)?.inflate(2.0, 2.0).intersect(frame.picture),
         };
         // 混色用の領域は、レイヤーの面積ぶん GPU に要る
         cache.layer_bytes += (area.width().max(0.0) * area.height().max(0.0) * 4.0) as u64;
@@ -840,7 +842,7 @@ fn draw_shader_fill(scene: &mut Scene, path: &BezPath, transform: Affine, opacit
     let Some(runner) = cache.shaders.as_mut() else {
         return err(Kind::ShaderUnavailable, "a Shader fill needs the GPU (render, preview, sheet)");
     };
-    let bounds = transform.transform_rect_bbox(path.bounding_box()).intersect(frame.viewport);
+    let bounds = transform.transform_rect_bbox(path.bounding_box()).intersect(frame.picture);
     if bounds.is_zero_area() {
         return Ok(());
     }

@@ -89,9 +89,19 @@ struct State<'a> {
 
 impl Player<'_> {
     fn open(&mut self, event_loop: &ActiveEventLoop) -> Result<(), Box<dyn Error>> {
+        // --size をそのまま出すと、画面に入らないときに OS が片方だけ詰めて比が崩れる。
+        // 入らない分は縦横を同じだけ縮めて、指定した比のまま開く
+        let (mut w, mut h) = (f64::from(self.size.0), f64::from(self.size.1));
+        if let Some(screen) = event_loop.primary_monitor().or_else(|| event_loop.available_monitors().next()) {
+            let area = screen.size().to_logical::<f64>(screen.scale_factor());
+            // 上のバーやドックのぶんを見て、画面の 9 割に収める
+            let room = (area.width * 0.9 / w).min(area.height * 0.9 / h).min(1.0);
+            w *= room;
+            h *= room;
+        }
         let attrs = Window::default_attributes()
             .with_title(&self.name)
-            .with_inner_size(LogicalSize::new(self.size.0, self.size.1));
+            .with_inner_size(LogicalSize::new(w, h));
         let window = Arc::new(event_loop.create_window(attrs)?);
         let inner = window.inner_size();
         let mut context = RenderContext::new();

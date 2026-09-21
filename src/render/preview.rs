@@ -1,14 +1,18 @@
-//! ウィンドウを開いて実時間で再生する。描画が間に合わなければコマは飛ぶ。
+//! ウィンドウを開いて再生する。コマは少し先まで描いておき、順に出す。
+//!
+//! 描くのが実時間に間に合わないときは、コマを飛ばさずに**出せる速さで**出す (絵はゆっくりになるが跳ねない)。
+//! 音があるときだけは音が親時計なので、遅れたぶんは飛ばして追いつく。
 //!
 //! 操作: Space で一時停止・再開。← → または h l で 10 秒移動 (一時停止中は 1 秒)。Shift を押しながらで全体の 10%。
 //! 最後まで再生したら最後の場面で止まる (--loop なら先頭に戻る)。閉じるのはウィンドウを閉じる。
 //! --at で時刻を指定すると、その時刻の画面を一時停止で出す。
 //! 音声は audio が出力デバイスに流す。字幕は画面の下に重ねる
 
+use std::collections::VecDeque;
 use std::error::Error;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use vello::util::{RenderContext, RenderSurface};
 use vello::{AaConfig, AaSupport, RenderParams, Renderer, RendererOptions, wgpu};
@@ -26,6 +30,13 @@ use crate::render::media::{Cue, Media};
 use crate::render::scene;
 use crate::lang::value::ObjRef;
 
+/// 先に描いておくコマの数。多いほど重いコマを吸収できるが、キー操作の効きが遅れる
+const LOOKAHEAD: usize = 4;
+/// 1 回の描画で作り足すコマの数。作りすぎると、いま出すコマがそのぶん遅れる
+const PER_TURN: usize = 2;
+/// 中身を進める刻み。間に合わないときも、この刻みのまま順に出す
+const STEP: f64 = 1.0 / 60.0;
+
 pub fn run(name: String, interp: Interp, view: ObjRef, duration: f64, shot: crate::render::scene::Shot, looping: bool, start: Option<f64>, media: &Media) -> Result<(), Box<dyn Error>> {
     let size = (shot.width as u32, shot.height as u32);
     // 音が出せなくても再生はする
@@ -34,6 +45,7 @@ pub fn run(name: String, interp: Interp, view: ObjRef, duration: f64, shot: crat
     } else {
         audio::Output::open(media).map_err(|e| eprintln!("audio disabled: {e}")).ok()
     };
+    let position = start.unwrap_or(0.0).clamp(0.0, duration.max(0.0));
     let mut player = Player {
         shot,
         name,
@@ -43,27 +55,45 @@ pub fn run(name: String, interp: Interp, view: ObjRef, duration: f64, shot: crat
         size,
         looping,
         state: None,
-        position: start.unwrap_or(0.0).clamp(0.0, duration.max(0.0)),
+        position,
+        next_t: position,
         playing: start.is_none(),
-        last_tick: Instant::now(),
+        due: Instant::now(),
+        last_shown: Instant::now(),
         shift: false,
         error: None,
         audio,
         cues: media.cues.clone(),
+        ready: VecDeque::new(),
+        spare: Vec::new(),
+        shown: None,
         fps: 0.0,
+        last_note: Instant::now(),
         title: String::new(),
         timing: crate::timing::Timing::from_env(),
-        slow: 0,
+        starved: 0,
     };
     EventLoop::new()?.run_app(&mut player)?;
     player.timing.report();
-    if player.slow > 0 {
-        eprintln!("preview: {} frames took longer than 33ms (the picture waits for them; render is not affected)", player.slow);
+    if player.starved > 0 {
+        eprintln!(
+            "preview: {} frames were not drawn in time, so the picture ran slower than real time (what render writes does not change)",
+            player.starved
+        );
     }
     match player.error {
         Some(e) => Err(e),
         None => Ok(()),
     }
+}
+
+/// 描き終わって、まだ出していないコマ
+struct Ready {
+    /// 使い回すので持っておく。view はここから作ったもの
+    _texture: wgpu::Texture,
+    view: wgpu::TextureView,
+    /// その絵の中身の時刻 (秒)
+    t: f64,
 }
 
 struct Player<'a> {
@@ -77,23 +107,35 @@ struct Player<'a> {
     shot: crate::render::scene::Shot,
     looping: bool,
     state: Option<State<'a>>,
-    /// 再生位置 (秒)
+    /// いま出しているコマの時刻 (秒)
     position: f64,
+    /// 次に描くコマの時刻 (秒)。出しているコマより先に進んでいる
+    next_t: f64,
     playing: bool,
-    /// 前回の描画時刻。再生中はここからの経過分だけ position を進める
-    last_tick: Instant,
+    /// 次のコマを出す時刻。実時間の歩幅はここで決める
+    due: Instant,
+    /// 前にコマを入れ替えた時刻。fps を出すのに使う
+    last_shown: Instant,
     shift: bool,
     error: Option<Box<dyn Error>>,
     audio: Option<audio::Output>,
     cues: Vec<Cue>,
+    /// 描き終わって順番を待っているコマ
+    ready: VecDeque<Ready>,
+    /// 使い回すテクスチャ。窓の大きさが変わったら捨てる
+    spare: Vec<Ready>,
+    /// いま窓に出しているコマ
+    shown: Option<Ready>,
     /// ならした fps。題に出す
     fps: f64,
+    /// MOPHILA_TIMING のときに、進み具合を知らせた時刻
+    last_note: Instant,
     /// いま題に出している文字。同じなら書き直さない
     title: String,
     /// MOPHILA_TIMING で段階ごとの時間を測る
     timing: crate::timing::Timing,
-    /// 30fps に間に合わなかったコマの数
-    slow: usize,
+    /// 出す番が来たのに描き終わっていなかった回数
+    starved: usize,
 }
 
 struct State<'a> {
@@ -101,6 +143,22 @@ struct State<'a> {
     context: RenderContext,
     surface: RenderSurface<'a>,
     renderer: Renderer,
+}
+
+/// Vello が描き込むテクスチャ。窓へは blit で写す
+fn new_target(device: &wgpu::Device, width: u32, height: u32) -> Ready {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("mophila preview frame"),
+        size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        view_formats: &[],
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    Ready { _texture: texture, view, t: 0.0 }
 }
 
 impl Player<'_> {
@@ -140,45 +198,27 @@ impl Player<'_> {
             eprintln!("preview: drawing {w}x{h} ({ratio:.2}x the pixels of --size {}x{})", self.size.0, self.size.1);
         }
         self.state = Some(State { window, context, surface, renderer });
-        self.last_tick = Instant::now();
+        self.due = Instant::now();
         Ok(())
     }
 
-    /// 再生中なら経過時間の分だけ位置を進める。終端に着いたら、--loop なら先頭へ、そうでなければ止まる
-    fn advance(&mut self) {
-        let now = Instant::now();
-        let dt = now.duration_since(self.last_tick).as_secs_f64();
-        self.last_tick = now;
-        if !self.playing || self.duration <= 0.0 {
-            return;
+    /// 作り置きを捨てて、いまの位置から描き直す (seek と一時停止の切り替え)
+    fn restart(&mut self) {
+        self.spare.extend(self.ready.drain(..));
+        if let Some(shown) = self.shown.take() {
+            self.spare.push(shown);
         }
-        // 出ているコマ数。1 コマごとに跳ねると読めないので、ならして出す
-        if dt > 0.0 {
-            let now = 1.0 / dt;
-            self.fps = match self.fps {
-                0.0 => now,
-                before => before * 0.9 + now * 0.1,
-            };
-        }
-        self.position += dt;
-        if self.position < self.duration {
-            return;
-        }
-        if self.looping {
-            self.position %= self.duration;
-        } else {
-            self.position = self.duration;
-            self.playing = false;
+        self.next_t = self.position;
+        self.due = Instant::now();
+        if let Some(state) = &self.state {
+            state.window.request_redraw();
         }
     }
 
     fn seek(&mut self, delta: f64) {
         self.position = (self.position + delta).clamp(0.0, self.duration.max(0.0));
-        self.last_tick = Instant::now();
         self.sync_audio(true);
-        if let Some(state) = &self.state {
-            state.window.request_redraw();
-        }
+        self.restart();
     }
 
     fn toggle_pause(&mut self) {
@@ -186,11 +226,8 @@ impl Player<'_> {
             self.position = 0.0;
         }
         self.playing = !self.playing;
-        self.last_tick = Instant::now();
         self.sync_audio(true);
-        if let Some(state) = &self.state {
-            state.window.request_redraw();
-        }
+        self.restart();
     }
 
     fn sync_audio(&self, force: bool) {
@@ -222,52 +259,156 @@ impl Player<'_> {
         true
     }
 
-    /// 1 フレーム描く
+    /// 1 回の描画。先に何コマか作り、出す番のコマを窓に出す
     fn frame(&mut self) -> Result<(), Box<dyn Error>> {
-        self.advance();
+        self.fill()?;
+        self.pick();
         self.sync_audio(false);
-        let t = self.position;
-        let Some(state) = &mut self.state else { return Ok(()) };
-        let percent = if self.duration > 0.0 { t / self.duration * 100.0 } else { 0.0 };
-        let rate = match self.playing {
-            true => format!("  {:.0}fps", self.fps),
-            false => "  (paused)".to_string(),
-        };
-        let title = format!("{}  {t:.1}s / {:.1}s  {percent:.0}%{rate}", self.name, self.duration);
-        if title != self.title {
-            state.window.set_title(&title);
-            self.title = title;
+        self.retitle();
+        self.show()?;
+        // 再生中は次を求め続ける。止まっていても、まだ何も出していなければ 1 枚出すまで続ける
+        if let Some(state) = &self.state {
+            if self.playing || self.shown.is_none() {
+                state.window.request_redraw();
+            }
         }
+        Ok(())
+    }
 
-        let began = Instant::now();
+    /// 作り置きを補う。窓の空きを待つ前に作るので、待っている間が無駄にならない
+    fn fill(&mut self) -> Result<(), Box<dyn Error>> {
+        let want = if self.playing { LOOKAHEAD } else { 1 };
+        for _ in 0..PER_TURN {
+            if self.ready.len() >= want || self.state.is_none() {
+                return Ok(());
+            }
+            if self.next_t > self.duration {
+                if !self.looping {
+                    return Ok(());
+                }
+                self.next_t = 0.0;
+            }
+            let t = self.next_t;
+            self.draw(t)?;
+            self.next_t = t + STEP;
+        }
+        Ok(())
+    }
+
+    /// 1 コマ描いて作り置きに積む
+    fn draw(&mut self, t: f64) -> Result<(), Box<dyn Error>> {
         self.timing.at(t);
         let step = Instant::now();
         self.interp.begin_frame(t);
         let tracks = crate::lang::eval::all_tracks(&self.view);
         self.interp.apply_tracks(&tracks, t)?;
-        let eval = step.elapsed();
-        self.timing.add("eval", eval);
+        self.timing.add("eval", step.elapsed());
 
-        let step = Instant::now();
+        let Some(state) = &mut self.state else { return Ok(()) };
         let (width, height) = (state.surface.config.width, state.surface.config.height);
+        let step = Instant::now();
         let shot = scene::Shot { width: f64::from(width), height: f64::from(height), ..self.shot };
         let mut scene = scene::build(&self.view, shot, t, self.interp.cache_mut())?;
         // 字幕は絵の中に出す。窓の縦横比が違うと、絵の上下左右に帯が空いている
         let area = scene::picture(&self.view, shot)?;
         scene::overlay_subtitles(&mut scene, self.interp.cache_mut(), &self.cues, t, area);
-        let built = step.elapsed();
-        self.timing.add("scene", built);
+        self.timing.add("scene", step.elapsed());
 
         let step = Instant::now();
         let handle = &state.context.devices[state.surface.dev_id];
+        let mut target = match self.spare.pop() {
+            Some(target) => target,
+            None => new_target(&handle.device, width, height),
+        };
+        target.t = t;
         shader::apply_overrides(&mut state.renderer, self.interp.cache_mut().shaders.as_mut());
         let params = RenderParams { base_color: self.shot.pad, width, height, antialiasing_method: AaConfig::Area };
-        state.renderer.render_to_texture(&handle.device, &handle.queue, &scene, &state.surface.target_view, &params)?;
-        let drawn = step.elapsed();
-        self.timing.add("render", drawn);
-        let spent = (eval, built, drawn);
-        let step = Instant::now();
+        state.renderer.render_to_texture(&handle.device, &handle.queue, &scene, &target.view, &params)?;
+        self.timing.add("render", step.elapsed());
+        self.ready.push_back(target);
+        Ok(())
+    }
 
+    /// 出すコマを決める。まだ時刻が来ていなければ、いま出しているコマをもう一度出す
+    fn pick(&mut self) {
+        let step = Duration::from_secs_f64(STEP);
+        // まだ 1 コマも出していないなら、できた先から出す (開いた直後と seek の後)
+        if self.shown.is_none() {
+            if let Some(next) = self.ready.pop_front() {
+                self.position = next.t;
+                self.shown = Some(next);
+                self.due = Instant::now() + step;
+            }
+            return;
+        }
+        if !self.playing {
+            return;
+        }
+        let now = Instant::now();
+        if now < self.due {
+            return;
+        }
+        if self.ready.is_empty() {
+            // 出す番が来たのに描けていない。飛ばさずに待つので、絵はそのぶんゆっくりになる
+            if !self.done() {
+                self.starved += 1;
+                if self.timing.on() && self.starved <= 20 {
+                    let last = if self.starved == 20 { "  (no more of these)" } else { "" };
+                    eprintln!("preview: {:.2}s was not ready in time{last}", self.next_t);
+                }
+            }
+            self.due = now;
+            return;
+        }
+        // 音があるときは音が親時計。遅れたぶんは飛ばして追いつく
+        let mut take = 1;
+        if self.audio.is_some() {
+            let late = now.duration_since(self.due).as_secs_f64();
+            take = (1 + (late / STEP) as usize).min(self.ready.len());
+        }
+        for _ in 0..take {
+            if let Some(next) = self.ready.pop_front() {
+                self.position = next.t;
+                if let Some(old) = self.shown.replace(next) {
+                    self.spare.push(old);
+                }
+            }
+        }
+        // 遅れは持ち越さない。持ち越すと、一度遅れたあとずっと飛ばし続けることになる
+        self.due = match now.duration_since(self.due) > step {
+            true => now + step,
+            false => self.due + step,
+        };
+        let gap = now.duration_since(self.last_shown).as_secs_f64();
+        self.last_shown = now;
+        if gap > 0.0 {
+            let rate = 1.0 / gap;
+            self.fps = match self.fps {
+                0.0 => rate,
+                before => before * 0.9 + rate * 0.1,
+            };
+        }
+        if self.done() {
+            self.playing = false;
+        }
+        // 進み具合を、ときどき 1 行だけ
+        if self.timing.on() && now.duration_since(self.last_note).as_secs_f64() >= 2.0 {
+            self.last_note = now;
+            eprintln!("preview: {:.2}s  {:.0}fps  {:.2}x real time", self.position, self.fps, self.fps * STEP);
+        }
+    }
+
+    /// 最後まで出し終わったか
+    fn done(&self) -> bool {
+        !self.looping && self.next_t > self.duration && self.ready.is_empty()
+    }
+
+    /// いま出しているコマを窓に出す
+    fn show(&mut self) -> Result<(), Box<dyn Error>> {
+        let Some(state) = &mut self.state else { return Ok(()) };
+        let Some(shown) = &self.shown else { return Ok(()) };
+        let step = Instant::now();
+        let handle = &state.context.devices[state.surface.dev_id];
         let frame = match state.surface.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(f) | wgpu::CurrentSurfaceTexture::Suboptimal(f) => f,
             wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
@@ -284,34 +425,41 @@ impl Player<'_> {
         };
         let mut encoder = handle.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("mophila blit") });
         let target = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        state.surface.blitter.copy(&handle.device, &mut encoder, &state.surface.target_view, &target);
+        state.surface.blitter.copy(&handle.device, &mut encoder, &shown.view, &target);
         handle.queue.submit([encoder.finish()]);
         frame.present();
         self.timing.add("present", step.elapsed());
-        // 止まっているときは次の描画を求めない (seek や再開で求める)
-        if self.playing {
-            state.window.request_redraw();
-        }
-        let whole = began.elapsed();
-        self.timing.add("frame", whole);
-        // 30fps に間に合わなかったコマ。絵はその分だけ待たされる (書き出しには関わらない)
-        if whole.as_secs_f64() > 1.0 / 30.0 {
-            self.slow += 1;
-            // どの時刻の何が重いのかは、窓を閉じる前に知りたい。多すぎても読めないので頭だけ
-            if self.timing.on() && self.slow <= 20 {
-                let ms = |d: std::time::Duration| d.as_secs_f64() * 1000.0;
-                eprintln!(
-                    "preview: {t:.2}s took {:.0}ms (eval {:.0} / scene {:.0} / render {:.0} / present {:.0}){}",
-                    ms(whole),
-                    ms(spent.0),
-                    ms(spent.1),
-                    ms(spent.2),
-                    ms(step.elapsed()),
-                    if self.slow == 20 { "  (no more of these)" } else { "" }
-                );
-            }
-        }
         Ok(())
+    }
+
+    /// 題は中身が変わったときだけ書き換える (毎コマ書くと、そのたびに窓の枠が描き直される)
+    fn retitle(&mut self) {
+        let Some(state) = &self.state else { return };
+        let t = self.position;
+        let percent = if self.duration > 0.0 { t / self.duration * 100.0 } else { 0.0 };
+        // 実時間に追いついていないときは、何倍の速さで出ているかも書く
+        let speed = self.fps * STEP;
+        let rate = match self.playing {
+            true if speed < 0.95 => format!("  {:.0}fps  {speed:.2}x", self.fps),
+            true => format!("  {:.0}fps", self.fps),
+            false => "  (paused)".to_string(),
+        };
+        let title = format!("{}  {t:.1}s / {:.1}s  {percent:.0}%{rate}", self.name, self.duration);
+        if title != self.title {
+            state.window.set_title(&title);
+            self.title = title;
+        }
+    }
+
+    /// 窓の大きさが変わったら、作り置きのテクスチャは捨てて描き直す
+    fn resized(&mut self, size: winit::dpi::PhysicalSize<u32>) {
+        let Some(state) = &mut self.state else { return };
+        state.context.resize_surface(&mut state.surface, size.width, size.height);
+        self.ready.clear();
+        self.spare.clear();
+        self.shown = None;
+        self.next_t = self.position;
+        self.due = Instant::now();
     }
 
     fn fail(&mut self, event_loop: &ActiveEventLoop, e: Box<dyn Error>) {
@@ -332,11 +480,7 @@ impl ApplicationHandler for Player<'_> {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
-            WindowEvent::Resized(size) => {
-                if let Some(state) = &mut self.state {
-                    state.context.resize_surface(&mut state.surface, size.width, size.height);
-                }
-            }
+            WindowEvent::Resized(size) => self.resized(size),
             WindowEvent::ModifiersChanged(modifiers) => self.shift = modifiers.state().shift_key(),
             WindowEvent::KeyboardInput { event, .. } => {
                 self.key(&event);

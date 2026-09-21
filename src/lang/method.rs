@@ -157,6 +157,23 @@ pub const METHODS: &[Method] = &[
         doc: "置いたときに占める幅と高さ (箱の座標)。w を書いていれば幅はその値。重なりを避けて並べたり、はみ出すなら fontSize を下げたりするのに使う",
         call: text_size,
     },
+    Method { receivers: &["Mesh"], name: "transformed", signature: "mesh.transformed(t: Transform3)", returns: "Mesh", doc: "変換を効かせた別の Mesh。元は変わらない", call: mesh_transformed },
+    Method {
+        receivers: &["Mesh"],
+        name: "edges",
+        signature: "mesh.edges(cam: Projection)",
+        returns: "List<(Vector, Vector)>",
+        doc: "投影した線の並び。Line の from と to にそのまま渡せる。映せない線は落とす",
+        call: mesh_edges,
+    },
+    Method {
+        receivers: &["Mesh"],
+        name: "faces",
+        signature: "mesh.faces(cam: Projection)",
+        returns: "List<Face>",
+        doc: "投影した面の並び。遠い順に返し、裏を向いた面は落とす",
+        call: mesh_faces,
+    },
     Method { receivers: &["Transform3"], name: "rotate_x", signature: "t.rotate_x(degrees: Number)", returns: "Transform3", doc: "x 軸まわりの回転を後ろに足す", call: t3_rotate_x },
     Method { receivers: &["Transform3"], name: "rotate_y", signature: "t.rotate_y(degrees: Number)", returns: "Transform3", doc: "y 軸まわりの回転を後ろに足す", call: t3_rotate_y },
     Method { receivers: &["Transform3"], name: "rotate_z", signature: "t.rotate_z(degrees: Number)", returns: "Transform3", doc: "z 軸まわりの回転を後ろに足す", call: t3_rotate_z },
@@ -716,6 +733,23 @@ fn shape_point_at(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
 
 fn text_size(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
     on_object(it, r, "size", args)
+}
+
+fn on_mesh(r: Value, name: &'static str, args: Args) -> Result<Value> {
+    let Value::Object(o) = &r else { return err(Kind::ArgumentType, format!("{name} is a method of Mesh")) };
+    crate::stdlib::space3d::mesh_method(&o.borrow(), name, &args)
+}
+
+fn mesh_transformed(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    on_mesh(r, "transformed", args)
+}
+
+fn mesh_edges(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    on_mesh(r, "edges", args)
+}
+
+fn mesh_faces(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    on_mesh(r, "faces", args)
 }
 
 /// Transform3 のメソッドも計算だけ

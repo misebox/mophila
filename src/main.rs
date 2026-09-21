@@ -331,7 +331,7 @@ fn run() -> Result<(), Box<dyn Error>> {
         return result;
     }
     let cli = Cli::parse();
-    // -f が無くても、台本の代わりにフォルダか .yaml を渡されたら、そこの設定を読む
+    // -f が無くても、スクリプトの代わりにフォルダか .yaml を渡されたら、そこの設定を読む
     let named = cli.config.clone().map(PathBuf::from).or_else(|| script_of(&cli.command).and_then(config_at));
     let project = project::Project::load(named.as_deref().and_then(Path::to_str), &cli.set)?.map(Rc::new);
     if let Some(p) = &project {
@@ -340,7 +340,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     // 走らせているスクリプト。エラーにファイル名を付けるのに使う
     let running = std::cell::RefCell::new(String::new());
     // スクリプトを書かなければ mophila.yaml の entry。どちらも無ければエラー。
-    // フォルダや .yaml は台本ではなく設定の指定なので、entry に回す
+    // フォルダや .yaml はスクリプトではなく設定の指定なので、entry に回す
     let entry = |script: Option<String>| -> Result<String, Box<dyn Error>> {
         let given = match script {
             Some(s) if config_at(&s).is_some() => None,

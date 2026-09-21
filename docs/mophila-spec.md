@@ -715,13 +715,14 @@ String / List / Dict / Range のメソッドは builtin で、`import` は要ら
 | palette | そのまま使える配色。背景・文字・罫線・強調・系列色の組 (`Palette`) を名前で選ぶ |
 | pattern | そのまま `fill` に入れられる模様。縞、細線、市松、水玉、方眼、ざらつき |
 | icon | チェックや矢印などの記号の形。`mark` でそのまま置ける図形になる |
+| space3d | 3D の点 (`Vector3`) と変換 (`Transform3`)、カメラ 3 種、`Mesh` の作り手。投影して 2D の `Vector` と奥行きの `Number` を返す。描くのは既存の図形 |
 | fractal | エスケープタイム系フラクタルの Shader。反復式と色付けを組み合わせる。倍率は `zoom` / `duration` / `camera` のどれかで決める |
 
 ## 7. プロジェクト設定
 
 `mophila.yaml` を、コマンドを実行したディレクトリに置くと自動で読まれる。
-台本の代わりに**そのフォルダか `mophila.yaml` 自身を渡しても読む** (`mophila render project/`、`mophila run project/mophila.yaml`)。
-このときの台本は設定の `entry`。`-f` は、設定と台本が別の場所にあるときに使う (`-f ../shared.yaml scenes/main.moph`)。
+スクリプトの代わりに**そのフォルダか `mophila.yaml` 自身を渡しても読む** (`mophila render project/`、`mophila run project/mophila.yaml`)。
+このときのスクリプトは設定の `entry`。`-f` は、設定とスクリプトが別の場所にあるときに使う (`-f ../shared.yaml scenes/main.moph`)。
 設定に書いたパスは設定ファイルのある場所からの相対なので、どこから実行しても同じものを指す。
 
 ```yaml

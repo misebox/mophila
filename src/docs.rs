@@ -59,7 +59,7 @@ pub fn types() -> &'static [Type] {
 
 /// 分類の並び順
 /// モジュールの中にだけある型。素の名前では作れず、`space3d.Vector3(...)` のように書く
-pub const MODULE_ONLY: &[&str] = &["Vector3", "Transform3", "PerspectiveCamera", "OrthographicCamera", "IsometricCamera"];
+pub const MODULE_ONLY: &[&str] = &["Vector3", "Transform3", "Mesh", "Face", "PerspectiveCamera", "OrthographicCamera", "IsometricCamera"];
 
 pub const CATEGORIES: &[&str] =
     &["Primitive", "Collection", "Function", "Position", "Shape", "Paint", "Scene", "Time", "Media", "Enum", "Union", "Meta"];
@@ -246,6 +246,24 @@ pub const TYPES: &[Type] = &[
         doc: "3D の点。`import space3d` で使う。`+ - * /` と `.x .y .z`。箱の座標に落とすのは space3d のカメラ",
     },
     Type {
+        name: "Mesh",
+        category: "Position",
+        union: "",
+        make: "space3d.box(space3d.Vector3(0, 0, 0), space3d.Vector3(2, 2, 2))",
+        values: &[],
+        members: &[],
+        doc: "3D の頂点と、それを繋ぐ線 (edges) と面 (faces)。edges と faces は points の番号で書く。box や sphere が作る",
+    },
+    Type {
+        name: "Face",
+        category: "Position",
+        union: "",
+        make: "mesh.faces(cam)",
+        values: &[],
+        members: &[],
+        doc: "Mesh.faces が返す、投影済みの 1 面。points を Polygon に渡し、normal を space3d.shade に渡して塗る",
+    },
+    Type {
         name: "Transform3",
         category: "Position",
         union: "",
@@ -257,7 +275,7 @@ pub const TYPES: &[Type] = &[
     Type {
         name: "PerspectiveCamera",
         category: "Position",
-        union: "",
+        union: "Projection",
         make: "space3d.PerspectiveCamera(from = space3d.Vector3(6, 4, 10), to = space3d.Vector3(0, 0, 0), fov = 45, box = Vector(16, 9))",
         values: &[],
         members: &[],
@@ -266,7 +284,7 @@ pub const TYPES: &[Type] = &[
     Type {
         name: "OrthographicCamera",
         category: "Position",
-        union: "",
+        union: "Projection",
         make: "space3d.OrthographicCamera(from = space3d.Vector3(6, 4, 10), to = space3d.Vector3(0, 0, 0), height = 8, box = Vector(16, 9))",
         values: &[],
         members: &[],
@@ -275,7 +293,7 @@ pub const TYPES: &[Type] = &[
     Type {
         name: "IsometricCamera",
         category: "Position",
-        union: "",
+        union: "Projection",
         make: "space3d.IsometricCamera(unit = 1, box = Vector(16, 9))",
         values: &[],
         members: &[],
@@ -487,6 +505,15 @@ pub const TYPES: &[Type] = &[
         doc: "描ける図形をまとめた名前。View に place できて、fill や opacity など図形に共通の属性を持つ",
     },
     Type {
+        name: "Projection",
+        category: "Union",
+        union: "",
+        make: "",
+        values: &[],
+        members: &["PerspectiveCamera", "OrthographicCamera", "IsometricCamera"],
+        doc: "space3d のカメラ 3 種をまとめた名前。どれも同じメソッドを持ち、3D の点を箱の座標に落とす",
+    },
+    Type {
         name: "Placeable",
         category: "Union",
         union: "",
@@ -609,6 +636,12 @@ pub const ATTRS: &[(&str, &str, &str)] = &[
     ("Camera", "to", "それを画面のどこに置くか (箱の座標。省略は from と同じ = 中身を動かさずに拡大だけする)"),
     ("Camera", "scale", "倍率 (省略は 1)"),
     ("View", "camera", "箱の中身の寄り引き。枠は動かさず中身だけ動かす。position や scale は枠ごと動かすもので、別物"),
+    ("Mesh", "points", "頂点 (Vector3 の List)"),
+    ("Mesh", "edges", "線。points の番号 2 つの組の List"),
+    ("Mesh", "faces", "面。points の番号の List の List。外から見て反時計回りに並べると表になる"),
+    ("Face", "points", "投影済みの頂点 (箱の座標)。Polygon の points にそのまま渡せる"),
+    ("Face", "normal", "面の向き (3D、長さ 1)"),
+    ("Face", "depth", "視点からの奥行き。faces は遠い順に返すので、並べ替えには要らない"),
     ("Transform3", "m", "変換の中身 (12 個の Number)。メソッドが作るもので、手で書くものではない"),
     ("PerspectiveCamera", "from", "視点 (3D)"),
     ("PerspectiveCamera", "to", "見ている先 (3D)。画面の中心に来る"),

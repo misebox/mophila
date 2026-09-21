@@ -12,7 +12,7 @@
 2. この拡張を入れる。リポジトリの一番上で:
 
 ```
-make install-vscode
+bun run install-vscode
 ```
 
 組み立てから入れるところまでやる。入れ直すときも同じで、外すのは `scripts/install-vscode.sh --uninstall`。

@@ -2,8 +2,13 @@
   "name": "mophila-root",
   "private": true,
   "scripts": {
-    "docs": "bun run --cwd site dev",
-    "docs:build": "bun run --cwd site build",
-    "docs:gen": "python3 scripts/docgen.py --media"
+    "all": "bun run check && bun run docs",
+    "check": "cargo build && cargo test && python3 scripts/check_examples.py && python3 scripts/check_attrs.py",
+    "docs": "bun run --cwd site build",
+    "dev": "bun run --cwd site dev",
+    "media": "cargo build && python3 scripts/docgen.py --media && bun run --cwd site build",
+    "install-skill": "scripts/install-skill.sh",
+    "install-vscode": "scripts/install-vscode.sh",
+    "bump": "scripts/bump-version.sh"
   }
 }

@@ -159,10 +159,22 @@ pub struct MemberDecl {
     pub def: Rc<FuncDef>,
 }
 
+/// 型注釈。`List<Vector>` なら name が "List"、args が [Vector]。
+/// 決まった Symbol は name が ":center"、関数の型は name が "Func"
 #[derive(Debug, Clone)]
 pub struct TypeAnn {
     pub name: String,
+    /// < > の中。書いていなければ空
+    pub args: Vec<TypeAnn>,
+    /// 書いたままの姿。エラーに出す
     pub text: String,
+}
+
+impl TypeAnn {
+    /// < > の無い型
+    pub fn plain(name: &str) -> TypeAnn {
+        TypeAnn { name: name.to_string(), args: Vec::new(), text: name.to_string() }
+    }
 }
 
 /// 文と、その開始行
@@ -176,7 +188,7 @@ pub struct Stmt {
 pub enum StmtKind {
     Let(Pattern, Option<TypeAnn>, Expr),
     /// type Name = A | B
-    TypeDef(String, Vec<String>),
+    TypeDef(String, Vec<TypeAnn>),
     /// record name(field: Type, ...)
     /// struct / record の宣言
     TypeDecl(Rc<TypeDecl>),

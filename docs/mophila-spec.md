@@ -120,7 +120,13 @@ builtin の型の名前は予約されていて、`struct` / `record` / `type` �
 
 既存の型を `|` で結んだ名前。`type Fill = Color | Gradient`。値は作れず、引数や属性の型として書く。
 
-言語が持つ union: `Shape` (図形すべて)、`Placeable` (`Shape | View`)、`Paint` (`Color | Gradient | Shader`)、`Font` (`String | List`。候補を並べられる)。
+言語が持つ union: `Shape` (図形すべて)、`Placeable` (`Shape | View`)、`Paint` (`Color | Gradient | Shader`)、`Font` (`String | List`。候補を並べられる)、`Projection` (space3d のカメラ 3 種)。
+
+型名の後ろに `< >` を書くと、中身の型まで見る。`List<Vector>` は要素が全部 `Vector`、`Dict<String, Number>` は値が全部 `Number`、`Tuple<Number, String>` は 1 つずつ。`Tuple<Number>` のように 1 つだけ書いたら全部その型。`< >` を書かなければ入れ物の型だけを見る。
+
+```
+type Points = List<Vector3>    # 形のある型にも名前を付けられる
+```
 
 ### 3.6 record と struct
 

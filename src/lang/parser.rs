@@ -581,7 +581,6 @@ impl Parser {
         self.ident()
     }
 
-    /// 型注釈。Name または Name<...>。< > の中はトークンをそのまま文字列にする
     /// 関数の型 `(A, B) -> R`。宣言 `func (a: A, b: B) -> R` と同じ形
     fn func_type(&mut self) -> Result<TypeAnn> {
         self.expect(Tok::LParen)?;
@@ -603,66 +602,50 @@ impl Parser {
         self.expect(Tok::RParen)?;
         self.expect(Tok::Arrow)?;
         let returns = self.type_ann()?;
-        Ok(TypeAnn { name: "Func".to_string(), text: format!("({}) -> {}", params.join(", "), returns.text) })
+        Ok(TypeAnn { name: "Func".to_string(), args: Vec::new(), text: format!("({}) -> {}", params.join(", "), returns.text) })
     }
 
+    /// 型注釈。`Dict<String, List<Number>>` のように入れ子で読む
     fn type_ann(&mut self) -> Result<TypeAnn> {
         if *self.peek() == Tok::LParen {
             return self.func_type();
         }
         let name = self.ident()?;
         if *self.peek() != Tok::Lt {
-            return Ok(TypeAnn { text: name.clone(), name });
+            return Ok(TypeAnn::plain(&name));
         }
         self.next();
-        let mut depth = 1;
-        let mut parts: Vec<String> = Vec::new();
-        loop {
-            let tok = self.next();
-            let part = match tok {
-                Tok::Lt => {
-                    depth += 1;
-                    "<".to_string()
-                }
-                Tok::Gt => {
-                    depth -= 1;
-                    if depth == 0 {
-                        break;
-                    }
-                    ">".to_string()
-                }
-                Tok::Ident(n) => n,
-                Tok::Comma => ",".to_string(),
-                Tok::Arrow => "->".to_string(),
-                Tok::DotDot => "...".to_string(),
-                Tok::Dot => ".".to_string(),
-                Tok::LParen => "(".to_string(),
-                Tok::RParen => ")".to_string(),
-                Tok::Eof | Tok::Newline => return self.unexpected("\">\""),
-                other => return err(Kind::UnexpectedToken, format!("line {}:{}: unexpected {other:?} in type", self.line(), self.col())),
-            };
-            parts.push(part);
+        let mut args = vec![self.type_arg()?];
+        while *self.peek() == Tok::Comma {
+            self.next();
+            args.push(self.type_arg()?);
         }
-        let mut text = String::new();
-        for (i, part) in parts.iter().enumerate() {
-            if i > 0 && part != "," && part != "..." && parts[i - 1] != "<" && part != ">" {
-                text.push(' ');
-            }
-            text.push_str(part);
+        if *self.peek() != Tok::Gt {
+            return self.unexpected("\">\"");
         }
-        Ok(TypeAnn { text: format!("{name}<{text}>"), name })
+        self.next();
+        let text = format!("{name}<{}>", args.iter().map(|a| a.text.clone()).collect::<Vec<_>>().join(", "));
+        Ok(TypeAnn { name, args, text })
+    }
+
+    /// < > の中の 1 つ。型のほか、決まった Symbol と可変長の `Number...` が書ける
+    fn type_arg(&mut self) -> Result<TypeAnn> {
+        let mut ann = self.type_member()?;
+        if *self.peek() == Tok::DotDot && *self.peek_at(1) == Tok::Dot {
+            self.next();
+            self.next();
+            ann.text.push_str("...");
+        }
+        Ok(ann)
     }
 
     /// type の右辺の 1 つ。型名、決まった Symbol (":center")、関数の型
-    fn type_member(&mut self) -> Result<String> {
+    fn type_member(&mut self) -> Result<TypeAnn> {
         if let Tok::Symbol(name) = self.peek().clone() {
             self.next();
-            return Ok(format!(":{name}"));
+            return Ok(TypeAnn::plain(&format!(":{name}")));
         }
-        if *self.peek() == Tok::LParen {
-            return Ok(self.func_type()?.text);
-        }
-        self.ident()
+        self.type_ann()
     }
 
     /// struct / record の中身。フィールドと func / method

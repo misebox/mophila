@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use std::cell::Cell;
 
-use crate::lang::ast::{Arg, BinOp, DictKey, Expr, ImportKind, ImportSource, MotionDef, Pattern, RowItem, Stmt, StmtKind};
+use crate::lang::ast::{Arg, BinOp, DictKey, Expr, ImportKind, ImportSource, MotionDef, Pattern, RowItem, Stmt, StmtKind, TypeAnn};
 use crate::lang::error::{Kind, MophError, Result, err};
 use crate::lang::value::{Audio, Clip, Closure, Module, Motion, MotionRowVal, ObjRef, Object, Placed, Ratio, Record, Scopes, Timeline, TlAssign, TlKeyframe, TlTarget, Track, UserType, Value, next_object_id, new_scope};
 use crate::stdlib;
@@ -31,7 +31,7 @@ pub struct Interp {
     scopes: Scopes,
     pub output: Option<ObjRef>,
     /// type Name = A | B の定義
-    types: HashMap<String, Vec<String>>,
+    types: HashMap<String, Vec<TypeAnn>>,
     /// フォント検索、テキストレイアウト、描画命令のキャッシュ。初回に必要になったときに作る
     cache: Option<crate::render::text::RenderCache>,
     /// 終わった Timeline の最後の値。キーは (Timeline のポインタ, 絶対開始時刻のビット)
@@ -77,12 +77,12 @@ pub struct Interp {
 impl Interp {
     pub fn new() -> Self {
         // union がまとめる型と、決まった Symbol しか取らない型は docs::TYPES が持っている
-        let mut types: HashMap<String, Vec<String>> = HashMap::new();
+        let mut types: HashMap<String, Vec<TypeAnn>> = HashMap::new();
         for t in crate::docs::types() {
             if !t.members.is_empty() {
-                types.insert(t.name.to_string(), t.members.iter().map(|m| m.to_string()).collect());
+                types.insert(t.name.to_string(), t.members.iter().map(|m| TypeAnn::plain(m)).collect());
             } else if !t.values.is_empty() {
-                types.insert(t.name.to_string(), t.values.iter().map(|(v, _)| v.to_string()).collect());
+                types.insert(t.name.to_string(), t.values.iter().map(|(v, _)| TypeAnn::plain(v)).collect());
             }
         }
         Self { scopes: vec![root_scope()], output: None, types, cache: None, finished: HashMap::new(), last_t: f64::NEG_INFINITY, base_dir: PathBuf::from("."), exports: Vec::new(), sources: HashMap::new(), assets: HashMap::new(), initial: Vec::new(), modules: HashMap::new(), loading: Vec::new(), returning: None, breaking: false, constructing: Vec::new(), warned: std::collections::HashSet::new(), later_writes: std::collections::HashSet::new(), inside: Vec::new(), calling: None, assigned: RefCell::new(None), project: None }
@@ -145,7 +145,7 @@ impl Interp {
             StmtKind::Let(pat, ann, e) => {
                 let v = self.eval(e)?;
                 if let Some(ann) = ann {
-                    self.check_type(&v, &ann.name)?;
+                    self.check_ann(&v, ann, "value")?;
                 }
                 self.bind(pat, v)?;
                 Ok(Flow::Next(Value::Nothing))
@@ -322,32 +322,44 @@ impl Interp {
     }
 
     /// フィールドに入れる値。エラーには型名とフィールド名を出す
-    fn check_field(&self, owner: &str, field: &str, v: &Value, ann: &str) -> Result<()> {
-        let full = self.real_type_name(ann);
-        let name: &str = &full;
-        let head = name.split_once('<').map_or(name, |(h, _)| h);
-        if !self.known_type(head) {
-            return err(Kind::UndefinedVariable, format!("{owner}.{field}: \"{head}\" is not a type"));
-        }
-        if self.matches_type(v, name) {
-            return Ok(());
-        }
-        Err(self.wrong_type(Kind::AttributeType, &format!("{owner}.{field}"), name, v))
+    fn check_field(&self, owner: &str, field: &str, v: &Value, ann: &TypeAnn) -> Result<()> {
+        self.check_ann(v, ann, &format!("{owner}.{field}"))
     }
 
-    /// 値が型名に合うか。Union は定義をたどる
-    fn check_type(&self, v: &Value, name: &str) -> Result<()> {
-        let full = self.real_type_name(name);
-        let name: &str = &full;
-        // List<Number> のような書き方は、外側の名前だけ見る
-        let head = name.split_once('<').map_or(name, |(h, _)| h);
-        if !self.known_type(head) {
-            return err(Kind::UndefinedVariable, format!("\"{head}\" is not a type"));
+    /// 値が型名に合うか。Union は定義をたどり、< > を書いてあれば要素まで見る
+    fn check_ann(&self, v: &Value, ann: &TypeAnn, what: &str) -> Result<()> {
+        let head = self.real_type_name(&ann.name);
+        if !self.known_type(&head) {
+            return err(Kind::UndefinedVariable, format!("{what}: \"{head}\" is not a type"));
         }
-        if self.matches_type(v, name) {
+        if self.matches_ann(v, ann) {
             return Ok(());
         }
-        Err(self.wrong_type(Kind::AttributeType, "value", name, v))
+        // 入れ物は合っていて中身が違うなら、違う要素を指す ("found List" では直せない)
+        if let ([want], Some(bad)) = (&ann.args[..], self.first_mismatch(v, ann)) {
+            return err(Kind::AttributeType, format!("{what} expects {}, found {} in it (expected {})", ann.text, bad.type_name(), want.text));
+        }
+        Err(self.wrong_type(Kind::AttributeType, what, &ann.text, v))
+    }
+
+    /// 並びの中で、最初に型が合わない要素
+    fn first_mismatch(&self, v: &Value, ann: &TypeAnn) -> Option<Value> {
+        let [want] = &ann.args[..] else { return None };
+        if !self.matches_type(v, &self.real_type_name(&ann.name)) {
+            return None;
+        }
+        let bad = |xs: &[Value]| xs.iter().find(|x| !self.matches_ann(x, want)).cloned();
+        match v {
+            Value::List(xs) => bad(&xs.borrow()),
+            Value::Tuple(xs) => bad(xs),
+            Value::Dict(items) => items.borrow().iter().map(|(_, x)| x).find(|x| !self.matches_ann(x, want)).cloned(),
+            _ => None,
+        }
+    }
+
+    /// 型名だけで確かめる (builtin の中から呼ぶもの)
+    fn check_type(&self, v: &Value, name: &str) -> Result<()> {
+        self.check_ann(v, &TypeAnn::plain(name), "value")
     }
 
     /// 型が合わないときのエラー。決まった値しか取らない型なら、取れる値を並べる
@@ -357,8 +369,9 @@ impl Interp {
             return MophError::new(kind, format!("{what} expects the {expected} declared here, but this one was declared somewhere else"));
         }
         match self.types.get(expected) {
-            Some(values) if values.iter().all(|m| m.starts_with(':')) => {
-                MophError::new(Kind::OutOfRange, format!("{what} is one of {}, found {v}", values.join(" | ")))
+            Some(values) if values.iter().all(|m| m.name.starts_with(':')) => {
+                let names = values.iter().map(|m| m.text.clone()).collect::<Vec<_>>().join(" | ");
+                MophError::new(Kind::OutOfRange, format!("{what} is one of {names}, found {v}"))
             }
             _ => MophError::new(kind, format!("{what} expects {expected}, found {}", v.type_name())),
         }
@@ -368,18 +381,19 @@ impl Interp {
     pub(crate) fn set_attr(&self, obj: &ObjRef, attr: &str, value: Value) -> Result<()> {
         let mut o = obj.borrow_mut();
         // 期待する型の名前。schema は 'static、宣言は借りたまま使う
-        let expected: &str = match &o.decl {
+        // 合わなかったときだけ、期待した型の名前を作る (毎フレーム通るので確保しない)
+        let wrong: Option<String> = match &o.decl {
             Some(ty) => match ty.decl.fields.iter().find(|f| f.name == attr) {
-                Some(f) => &f.ann.name,
+                Some(f) => (!self.matches_ann(&value, &f.ann)).then(|| f.ann.text.clone()),
                 None => return err(Kind::UndefinedAttribute, format!("{} has no attribute \"{attr}\"", o.kind)),
             },
             None => match schema(&o.kind).and_then(|s| s.iter().find(|a| a.name == attr)) {
-                Some(a) => a.ty,
+                Some(a) => (!self.matches_type(&value, &self.real_type_name(a.ty))).then(|| a.ty.to_string()),
                 None => return err(Kind::UndefinedAttribute, format!("{} has no attribute \"{attr}\"", o.kind)),
             },
         };
-        if !self.matches_type(&value, &self.real_type_name(expected)) {
-            let (expected, kind) = (expected.to_string(), o.kind.clone());
+        if let Some(expected) = wrong {
+            let kind = o.kind.clone();
             drop(o);
             return Err(self.wrong_type(Kind::AttributeType, &format!("{kind}.{attr}"), &expected, &value));
         }
@@ -456,7 +470,40 @@ impl Interp {
                 _ => true,
             };
         }
-        self.types.get(name).is_some_and(|members| members.iter().any(|m| self.matches_type(v, m)))
+        self.types.get(name).is_some_and(|members| members.iter().any(|m| self.matches_ann(v, m)))
+    }
+
+    /// 注釈に合うか。`List<Vector>` のように < > を書いてあれば、要素まで見る
+    fn matches_ann(&self, v: &Value, ann: &TypeAnn) -> bool {
+        if !self.matches_type(v, &self.real_type_name(&ann.name)) {
+            return false;
+        }
+        ann.args.is_empty() || self.matches_args(v, &ann.args)
+    }
+
+    /// < > の中を見る。要素の数だけ検査が増えるので、書いたときだけ走る
+    fn matches_args(&self, v: &Value, args: &[TypeAnn]) -> bool {
+        let every = |xs: &[Value]| args.len() == 1 && xs.iter().all(|x| self.matches_ann(x, &args[0]));
+        match v {
+            Value::List(xs) => every(&xs.borrow()),
+            // Tuple は 1 つ書いたら全部その型、並べて書いたら 1 つずつ
+            Value::Tuple(xs) => match args.len() {
+                1 => every(xs),
+                n => xs.len() == n && xs.iter().zip(args).all(|(x, a)| self.matches_ann(x, a)),
+            },
+            // Dict のキーは必ず String なので、Dict<V> とも Dict<String, V> とも書ける
+            Value::Dict(items) => {
+                let value_type = match args {
+                    [v] => v,
+                    [k, v] if k.name == "String" => v,
+                    _ => return false,
+                };
+                items.borrow().iter().all(|(_, x)| self.matches_ann(x, value_type))
+            }
+            Value::Range(..) => args.len() == 1 && args[0].name == "Number",
+            // 中身を見ない型 (Func など) は、頭の名前が合っていればよい
+            _ => true,
+        }
     }
 
     /// font に書いた候補から、この機械にある最初の名前を選ぶ。1 つも無ければエラー。
@@ -1286,7 +1333,7 @@ impl Interp {
                     None => return err(Kind::ArityMismatch, format!("{}.{} is not given", decl.name, f.name)),
                 },
             };
-            self.check_field(&decl.name, &f.name, &v, &f.ann.name)?;
+            self.check_field(&decl.name, &f.name, &v, &f.ann)?;
             fields.push((f.name.clone(), v));
         }
         Ok(if decl.immutable {
@@ -1801,8 +1848,8 @@ impl Interp {
                 };
                 // 型を書いてあれば、渡された値を確かめる
                 if let Some(ann) = &param.ann {
-                    if !self.matches_type(&value, &self.real_type_name(&ann.name)) {
-                        return Err(self.wrong_type(Kind::ArgumentType, &crate::lang::ast::pattern_text(&param.pattern), &ann.name, &value));
+                    if !self.matches_ann(&value, ann) {
+                        return Err(self.wrong_type(Kind::ArgumentType, &crate::lang::ast::pattern_text(&param.pattern), &ann.text, &value));
                     }
                 }
                 self.bind(&param.pattern, value)?;
@@ -1815,8 +1862,8 @@ impl Interp {
             }
             let out = self.run_block(&closure.def.body).map(Flow::value)?;
             if let Some(ann) = &closure.def.returns {
-                if !self.matches_type(&out, &self.real_type_name(&ann.name)) {
-                    return Err(self.wrong_type(Kind::ArgumentType, "the return value", &ann.name, &out));
+                if !self.matches_ann(&out, ann) {
+                    return Err(self.wrong_type(Kind::ArgumentType, "the return value", &ann.text, &out));
                 }
             }
             Ok(out)

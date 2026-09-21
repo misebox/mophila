@@ -6,7 +6,7 @@
 //! 描く時刻のほうを飛ばす (描いてから捨てるのでは追いつけない)。
 //!
 //! 操作: Space で一時停止・再開。← → または h l で 10 秒移動 (一時停止中は 1 秒)。Shift を押しながらで全体の 10%。
-//! [ ] で再生速度、0 で 1x に戻す。s でステータスバー、? で操作の一覧、q で終了。
+//! [ ] で再生速度、0 で 1x に戻す。s でステータスバー、? で操作の一覧、q か ⌘W で終了。
 //! 最後まで再生したら最後の場面で止まる (--loop なら先頭に戻る)。
 //! --at で時刻を指定すると、その時刻の画面を一時停止で出す。
 //! 音声は audio が出力デバイスに流す。字幕とステータスバーは絵の中に重ねる
@@ -71,6 +71,7 @@ pub fn run(name: String, interp: Interp, view: ObjRef, duration: f64, shot: crat
         last_tick: Instant::now(),
         last_content: Instant::now(),
         shift: false,
+        cmd: false,
         error: None,
         audio,
         cost: 0.0,
@@ -139,6 +140,8 @@ struct Player<'a> {
     /// 前にコマを入れ替えた時刻。fps を出すのに使う
     last_content: Instant,
     shift: bool,
+    /// Command キーを押しているか (⌘W で閉じる)
+    cmd: bool,
     error: Option<Box<dyn Error>>,
     audio: Option<audio::Output>,
     /// 1 コマ描くのにかかる時間 (ならし)。出す間隔をこれから決める
@@ -188,7 +191,7 @@ fn keys_text() -> String {
         "0        速さを 1x に戻す",
         "s        ステータスバー",
         "?        この一覧",
-        "q        終了",
+        "q  ⌘W   終了",
     ]
     .join("\n")
 }
@@ -333,6 +336,14 @@ impl Player<'_> {
         } else {
             1.0
         };
+        // ⌘W はウィンドウを閉じる。メニューを持たないので自分で受ける
+        if self.cmd {
+            if matches!(&event.logical_key, Key::Character(c) if c.eq_ignore_ascii_case("w")) {
+                event_loop.exit();
+                return true;
+            }
+            return false;
+        }
         match &event.logical_key {
             Key::Named(NamedKey::Space) => self.toggle_pause(),
             Key::Named(NamedKey::ArrowLeft) => self.seek(-step),
@@ -617,7 +628,10 @@ impl ApplicationHandler for Player<'_> {
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => self.resized(size),
-            WindowEvent::ModifiersChanged(modifiers) => self.shift = modifiers.state().shift_key(),
+            WindowEvent::ModifiersChanged(modifiers) => {
+                self.shift = modifiers.state().shift_key();
+                self.cmd = modifiers.state().super_key();
+            }
             WindowEvent::KeyboardInput { event, .. } => {
                 self.key(event_loop, &event);
             }

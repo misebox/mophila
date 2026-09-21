@@ -27,6 +27,9 @@ pub struct Method {
 /// 並びのある入れ物 (List / Tuple / Range) が共通で持つメソッドの受け手
 const SEQ: &[&str] = &["List", "Tuple", "Range"];
 
+/// space3d のカメラ。どれも同じメソッドを持ち、投影の仕方だけが違う
+const CAMERAS: &[&str] = &["PerspectiveCamera", "OrthographicCamera", "IsometricCamera"];
+
 pub const METHODS: &[Method] = &[
     Method { receivers: &["String"], name: "len", signature: "s.len()", returns: "Number", doc: "文字数", call: str_len },
     Method { receivers: &["String"], name: "replace", signature: "s.replace(from: String, to: String)", returns: "String", doc: "from を to に置き換えた文字列", call: str_replace },
@@ -153,6 +156,40 @@ pub const METHODS: &[Method] = &[
         returns: "Vector",
         doc: "置いたときに占める幅と高さ (箱の座標)。w を書いていれば幅はその値。重なりを避けて並べたり、はみ出すなら fontSize を下げたりするのに使う",
         call: text_size,
+    },
+    Method { receivers: CAMERAS, name: "project", signature: "cam.project(p: Vector3)", returns: "Vector", doc: "箱の座標に落とす。視点より手前の点は ValueError.OutOfRange", call: cam_project },
+    Method {
+        receivers: CAMERAS,
+        name: "project_all",
+        signature: "cam.project_all(points: List<Vector3>)",
+        returns: "List<Vector>",
+        doc: "並びをまとめて落とす。1 点ずつ呼ぶより速い",
+        call: cam_project_all,
+    },
+    Method {
+        receivers: CAMERAS,
+        name: "depth",
+        signature: "cam.depth(p: Vector3)",
+        returns: "Number",
+        doc: "視線に沿った奥行き。遠いほど大きい。奥から描くには zIndex に -depth を入れる",
+        call: cam_depth,
+    },
+    Method { receivers: CAMERAS, name: "depth_all", signature: "cam.depth_all(points: List<Vector3>)", returns: "List<Number>", doc: "並びの奥行き", call: cam_depth_all },
+    Method {
+        receivers: CAMERAS,
+        name: "scale_at",
+        signature: "cam.scale_at(p: Vector3)",
+        returns: "Number",
+        doc: "その位置の 1 単位が箱でいくつになるか。図形の大きさや線幅に掛ける",
+        call: cam_scale_at,
+    },
+    Method {
+        receivers: CAMERAS,
+        name: "in_front",
+        signature: "cam.in_front(p: Vector3)",
+        returns: "Bool",
+        doc: "視点より前にあるか。project する前にこれで選り分ける。IsometricCamera は視点を持たないので必ず true",
+        call: cam_in_front,
     },
     Method {
         receivers: &["Motion"],
@@ -664,6 +701,36 @@ fn shape_point_at(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
 
 fn text_size(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
     on_object(it, r, "size", args)
+}
+
+/// カメラのメソッドは計算だけで、インタプリタの状態に触らない
+fn on_camera(r: Value, name: &'static str, args: Args) -> Result<Value> {
+    let Value::Object(o) = &r else { return err(Kind::ArgumentType, format!("{name} is a method of a space3d camera")) };
+    crate::stdlib::space3d::camera_method(&o.borrow(), name, &args)
+}
+
+fn cam_project(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    on_camera(r, "project", args)
+}
+
+fn cam_project_all(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    on_camera(r, "project_all", args)
+}
+
+fn cam_depth(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    on_camera(r, "depth", args)
+}
+
+fn cam_depth_all(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    on_camera(r, "depth_all", args)
+}
+
+fn cam_scale_at(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    on_camera(r, "scale_at", args)
+}
+
+fn cam_in_front(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    on_camera(r, "in_front", args)
 }
 
 fn motion_apply(it: &mut Interp, r: Value, args: Args) -> Result<Value> {

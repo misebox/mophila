@@ -58,6 +58,9 @@ pub fn types() -> &'static [Type] {
 }
 
 /// 分類の並び順
+/// モジュールの中にだけある型。素の名前では作れず、`space3d.Vector3(...)` のように書く
+pub const MODULE_ONLY: &[&str] = &["Vector3", "PerspectiveCamera", "OrthographicCamera", "IsometricCamera"];
+
 pub const CATEGORIES: &[&str] =
     &["Primitive", "Collection", "Function", "Position", "Shape", "Paint", "Scene", "Time", "Media", "Enum", "Union", "Meta"];
 
@@ -241,6 +244,33 @@ pub const TYPES: &[Type] = &[
         values: &[],
         members: &[],
         doc: "3D の点。`import space3d` で使う。`+ - * /` と `.x .y .z`。箱の座標に落とすのは space3d のカメラ",
+    },
+    Type {
+        name: "PerspectiveCamera",
+        category: "Position",
+        union: "",
+        make: "space3d.PerspectiveCamera(from = space3d.Vector3(6, 4, 10), to = space3d.Vector3(0, 0, 0), fov = 45, box = Vector(16, 9))",
+        values: &[],
+        members: &[],
+        doc: "透視投影。遠いものほど小さくなる。project で箱の座標に落とす",
+    },
+    Type {
+        name: "OrthographicCamera",
+        category: "Position",
+        union: "",
+        make: "space3d.OrthographicCamera(from = space3d.Vector3(6, 4, 10), to = space3d.Vector3(0, 0, 0), height = 8, box = Vector(16, 9))",
+        values: &[],
+        members: &[],
+        doc: "平行投影。遠くても大きさが変わらない。height は画面に収める高さ (3D の単位)",
+    },
+    Type {
+        name: "IsometricCamera",
+        category: "Position",
+        union: "",
+        make: "space3d.IsometricCamera(unit = 1, box = Vector(16, 9))",
+        values: &[],
+        members: &[],
+        doc: "等角投影。x が右下、z が左下、y が上へ伸びる。unit は 1 単位が箱でいくつになるか。視点を持たないので、どこまでも同じ大きさ",
     },
     Type {
         name: "Color",
@@ -570,6 +600,18 @@ pub const ATTRS: &[(&str, &str, &str)] = &[
     ("Camera", "to", "それを画面のどこに置くか (箱の座標。省略は from と同じ = 中身を動かさずに拡大だけする)"),
     ("Camera", "scale", "倍率 (省略は 1)"),
     ("View", "camera", "箱の中身の寄り引き。枠は動かさず中身だけ動かす。position や scale は枠ごと動かすもので、別物"),
+    ("PerspectiveCamera", "from", "視点 (3D)"),
+    ("PerspectiveCamera", "to", "見ている先 (3D)。画面の中心に来る"),
+    ("PerspectiveCamera", "up", "どちらを上とするか (省略は space3d.Vector3(0, 1, 0))"),
+    ("PerspectiveCamera", "fov", "縦の画角 (度、0 より大きく 180 未満。省略は 45)。小さいほど望遠になる"),
+    ("PerspectiveCamera", "box", "落とし先の箱の幅と高さ。View の box と同じものを渡す"),
+    ("OrthographicCamera", "from", "視点 (3D)"),
+    ("OrthographicCamera", "to", "見ている先 (3D)。画面の中心に来る"),
+    ("OrthographicCamera", "up", "どちらを上とするか (省略は space3d.Vector3(0, 1, 0))"),
+    ("OrthographicCamera", "height", "画面の高さに収める 3D の長さ (省略は 8)"),
+    ("OrthographicCamera", "box", "落とし先の箱の幅と高さ。View の box と同じものを渡す"),
+    ("IsometricCamera", "unit", "3D の 1 単位が箱でいくつになるか (省略は 1)"),
+    ("IsometricCamera", "box", "落とし先の箱の幅と高さ。View の box と同じものを渡す"),
 ];
 
 /// 型と属性の説明。型ごとの説明が無ければ共通のもの

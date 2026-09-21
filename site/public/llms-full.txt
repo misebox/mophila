@@ -1983,6 +1983,57 @@ space3d.Vector3(1, 2, 3)
 - `v.cross(w: Vector3)` -> Vector3 — 外積。2 つの辺から面の向きを出す
 - `v.lerp(w: Vector3, k: Number)` -> Vector3 — 2 点の間。k が 0 で自分、1 で相手
 
+### PerspectiveCamera
+
+透視投影。遠いものほど小さくなる。project で箱の座標に落とす
+
+作り方:
+
+```
+space3d.PerspectiveCamera(from = space3d.Vector3(6, 4, 10), to = space3d.Vector3(0, 0, 0), fov = 45, box = Vector(16, 9))
+```
+
+属性:
+
+- `from`: Vector3 (必須) — 
+- `to`: Vector3 (必須) — 
+- `up`: Vector3 — 
+- `fov`: Number — 
+- `box`: Vector (必須) — 
+
+### OrthographicCamera
+
+平行投影。遠くても大きさが変わらない。height は画面に収める高さ (3D の単位)
+
+作り方:
+
+```
+space3d.OrthographicCamera(from = space3d.Vector3(6, 4, 10), to = space3d.Vector3(0, 0, 0), height = 8, box = Vector(16, 9))
+```
+
+属性:
+
+- `from`: Vector3 (必須) — 
+- `to`: Vector3 (必須) — 
+- `up`: Vector3 — 
+- `height`: Number — 
+- `box`: Vector (必須) — 
+
+### IsometricCamera
+
+等角投影。x が右下、y が左下、z が上へ伸びる。unit は 1 単位の長さ
+
+作り方:
+
+```
+space3d.IsometricCamera(unit = 1, box = Vector(16, 9))
+```
+
+属性:
+
+- `unit`: Number — 
+- `box`: Vector (必須) — 
+
 ### Color
 
 1 つの色。# は 16 進で、3 桁と 4 桁は各桁を 2 回書いたものと同じ (#48e は #4488ee)。4 桁と 8 桁の最後は不透明度。Color の r g b は 0..255、a は 0..1
@@ -2445,6 +2496,9 @@ EspeakVoiceEngine(voice = "ja")
 ### space3d
 
 - `space3d.Vector3(x: Number, y: Number, z: Number)` -> Vector3 — 3D の点。+ - * / と .x .y .z が使える
+- `space3d.PerspectiveCamera(from, to, up, fov, box)` -> PerspectiveCamera — 透視投影。遠いものほど小さくなる
+- `space3d.OrthographicCamera(from, to, up, height, box)` -> OrthographicCamera — 平行投影。遠くても大きさが変わらない
+- `space3d.IsometricCamera(unit, box)` -> IsometricCamera — 等角投影。x は右下、y は左下、z は上へ
 
 ### color
 

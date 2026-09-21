@@ -1001,7 +1001,16 @@ impl Interp {
     }
 
     /// 型名を呼んで値を作る
+    /// 素の名前からの生成。モジュールの中にだけある型はここでは作れない
     fn construct(&mut self, kind: &str, args: &[Arg]) -> Result<Value> {
+        if crate::docs::MODULE_ONLY.contains(&kind) {
+            return self.cannot_construct(kind);
+        }
+        self.construct_kind(kind, args)
+    }
+
+    /// モジュール経由の生成 (space3d.PerspectiveCamera(...) など)
+    fn construct_kind(&mut self, kind: &str, args: &[Arg]) -> Result<Value> {
         match kind {
             "Vector" => {
                 let map = self.resolve_args(kind, &["x", "y"], args)?;
@@ -1351,7 +1360,7 @@ impl Interp {
                     }
                     if let Value::BuiltinType(name) = &item {
                         let name = name.clone();
-                        return self.construct(&name, args);
+                        return self.construct_kind(&name, args);
                     }
                     let values = self.eval_args(args)?.into_iter().map(|(_, v)| v).collect::<Vec<_>>();
                     return match item {
@@ -1715,6 +1724,8 @@ impl Interp {
                 obj.borrow_mut().tracks.push(placed);
                 Ok(Value::Nothing)
             }
+            // カメラは投影の計算だけで、インタプリタの状態に触らない
+            ("PerspectiveCamera" | "OrthographicCamera" | "IsometricCamera", _) => stdlib::space3d::camera_method(&obj.borrow(), method, &args),
             _ => err(Kind::UndefinedAttribute, format!("{kind} has no method \"{method}\"")),
         }
     }
@@ -2466,7 +2477,7 @@ pub fn font_names(v: &Value) -> Vec<String> {
 const LOOP_LIMIT: usize = 1_000_000;
 
 pub const KINDS: &[&str] =
-    &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "View", "Timeline", "Narration", "SayVoiceEngine", "EspeakVoiceEngine", "Shader", "ZoomPath", "Camera", "Gradient", "Color"];
+    &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "View", "Timeline", "Narration", "SayVoiceEngine", "EspeakVoiceEngine", "Shader", "ZoomPath", "Camera", "Gradient", "Color", "PerspectiveCamera", "OrthographicCamera", "IsometricCamera"];
 
 /// builtin 型の属性と型
 /// 型の名前は大文字で始まり、builtin の型と union の名前は使えない
@@ -2507,6 +2518,13 @@ fn point_at(path: &vello::kurbo::BezPath, u: f64) -> Value {
 
 pub fn defaults(kind: &str) -> Vec<(&'static str, Value)> {
     let num = |n: f64| Value::num(n);
+    // 3D のカメラ。up は y が上、fov は度
+    match kind {
+        "PerspectiveCamera" => return vec![("up", Value::Vector3(0.0, 1.0, 0.0)), ("fov", num(45.0))],
+        "OrthographicCamera" => return vec![("up", Value::Vector3(0.0, 1.0, 0.0)), ("height", num(8.0))],
+        "IsometricCamera" => return vec![("unit", num(1.0))],
+        _ => {}
+    }
     let sym = |s: &str| Value::Symbol(s.to_string());
     let mut out: Vec<(&'static str, Value)> = Vec::new();
     if schema(kind).is_some_and(|s| s.iter().any(|a| a.name == "opacity")) {
@@ -2632,6 +2650,12 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
         &[req("center", "Vector"), req("zoom", "Func"), req("duration", "Duration"), opt("unit", "Number"), opt("scale", "List")];
     // 箱の中身の寄り引き。from を to に、scale 倍で置く
     const CAMERA: &[Attr] = &[req("from", "Vector"), opt("to", "Vector"), opt("scale", "Number")];
+    // 3D のカメラ。box は投影先の箱の大きさ (View の box と同じ)
+    const PERSPECTIVE: &[Attr] =
+        &[req("from", "Vector3"), req("to", "Vector3"), opt("up", "Vector3"), opt("fov", "Number"), req("box", "Vector")];
+    const ORTHOGRAPHIC: &[Attr] =
+        &[req("from", "Vector3"), req("to", "Vector3"), opt("up", "Vector3"), opt("height", "Number"), req("box", "Vector")];
+    const ISOMETRIC: &[Attr] = &[opt("unit", "Number"), req("box", "Vector")];
     // to は :linear、radius は :radial のときだけ要るので、必須にはしない
     const GRADIENT: &[Attr] = &[
         req("stops", "List"),
@@ -2655,6 +2679,9 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
         "Shader" => SHADER,
         "ZoomPath" => ZOOM_MAP,
         "Camera" => CAMERA,
+        "PerspectiveCamera" => PERSPECTIVE,
+        "OrthographicCamera" => ORTHOGRAPHIC,
+        "IsometricCamera" => ISOMETRIC,
         "Gradient" => GRADIENT,
         _ => return None,
     })

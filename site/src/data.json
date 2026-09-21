@@ -1451,6 +1451,225 @@
   {
    "attrs": [
     {
+     "doc": "視点 (3D)",
+     "name": "from",
+     "required": true,
+     "type": "Vector3"
+    },
+    {
+     "doc": "見ている先 (3D)。画面の中心に来る",
+     "name": "to",
+     "required": true,
+     "type": "Vector3"
+    },
+    {
+     "doc": "どちらを上とするか (省略は space3d.Vector3(0, 1, 0))",
+     "name": "up",
+     "required": false,
+     "type": "Vector3"
+    },
+    {
+     "doc": "縦の画角 (度、0 より大きく 180 未満。省略は 45)。小さいほど望遠になる",
+     "name": "fov",
+     "required": false,
+     "type": "Number"
+    },
+    {
+     "doc": "落とし先の箱の幅と高さ。View の box と同じものを渡す",
+     "name": "box",
+     "required": true,
+     "type": "Vector"
+    }
+   ],
+   "category": "Position",
+   "doc": "透視投影。遠いものほど小さくなる。project で箱の座標に落とす",
+   "make": "space3d.PerspectiveCamera(from = space3d.Vector3(6, 4, 10), to = space3d.Vector3(0, 0, 0), fov = 45, box = Vector(16, 9))",
+   "members": [],
+   "methods": [
+    {
+     "doc": "箱の座標に落とす。視点より手前の点は ValueError.OutOfRange",
+     "name": "project",
+     "returns": "Vector",
+     "signature": "cam.project(p: Vector3)"
+    },
+    {
+     "doc": "並びをまとめて落とす。1 点ずつ呼ぶより速い",
+     "name": "project_all",
+     "returns": "List<Vector>",
+     "signature": "cam.project_all(points: List<Vector3>)"
+    },
+    {
+     "doc": "視線に沿った奥行き。遠いほど大きい。奥から描くには zIndex に -depth を入れる",
+     "name": "depth",
+     "returns": "Number",
+     "signature": "cam.depth(p: Vector3)"
+    },
+    {
+     "doc": "並びの奥行き",
+     "name": "depth_all",
+     "returns": "List<Number>",
+     "signature": "cam.depth_all(points: List<Vector3>)"
+    },
+    {
+     "doc": "その位置の 1 単位が箱でいくつになるか。図形の大きさや線幅に掛ける",
+     "name": "scale_at",
+     "returns": "Number",
+     "signature": "cam.scale_at(p: Vector3)"
+    },
+    {
+     "doc": "視点より前にあるか。project する前にこれで選り分ける。IsometricCamera は視点を持たないので必ず true",
+     "name": "in_front",
+     "returns": "Bool",
+     "signature": "cam.in_front(p: Vector3)"
+    }
+   ],
+   "name": "PerspectiveCamera",
+   "union": "",
+   "values": []
+  },
+  {
+   "attrs": [
+    {
+     "doc": "視点 (3D)",
+     "name": "from",
+     "required": true,
+     "type": "Vector3"
+    },
+    {
+     "doc": "見ている先 (3D)。画面の中心に来る",
+     "name": "to",
+     "required": true,
+     "type": "Vector3"
+    },
+    {
+     "doc": "どちらを上とするか (省略は space3d.Vector3(0, 1, 0))",
+     "name": "up",
+     "required": false,
+     "type": "Vector3"
+    },
+    {
+     "doc": "画面の高さに収める 3D の長さ (省略は 8)",
+     "name": "height",
+     "required": false,
+     "type": "Number"
+    },
+    {
+     "doc": "落とし先の箱の幅と高さ。View の box と同じものを渡す",
+     "name": "box",
+     "required": true,
+     "type": "Vector"
+    }
+   ],
+   "category": "Position",
+   "doc": "平行投影。遠くても大きさが変わらない。height は画面に収める高さ (3D の単位)",
+   "make": "space3d.OrthographicCamera(from = space3d.Vector3(6, 4, 10), to = space3d.Vector3(0, 0, 0), height = 8, box = Vector(16, 9))",
+   "members": [],
+   "methods": [
+    {
+     "doc": "箱の座標に落とす。視点より手前の点は ValueError.OutOfRange",
+     "name": "project",
+     "returns": "Vector",
+     "signature": "cam.project(p: Vector3)"
+    },
+    {
+     "doc": "並びをまとめて落とす。1 点ずつ呼ぶより速い",
+     "name": "project_all",
+     "returns": "List<Vector>",
+     "signature": "cam.project_all(points: List<Vector3>)"
+    },
+    {
+     "doc": "視線に沿った奥行き。遠いほど大きい。奥から描くには zIndex に -depth を入れる",
+     "name": "depth",
+     "returns": "Number",
+     "signature": "cam.depth(p: Vector3)"
+    },
+    {
+     "doc": "並びの奥行き",
+     "name": "depth_all",
+     "returns": "List<Number>",
+     "signature": "cam.depth_all(points: List<Vector3>)"
+    },
+    {
+     "doc": "その位置の 1 単位が箱でいくつになるか。図形の大きさや線幅に掛ける",
+     "name": "scale_at",
+     "returns": "Number",
+     "signature": "cam.scale_at(p: Vector3)"
+    },
+    {
+     "doc": "視点より前にあるか。project する前にこれで選り分ける。IsometricCamera は視点を持たないので必ず true",
+     "name": "in_front",
+     "returns": "Bool",
+     "signature": "cam.in_front(p: Vector3)"
+    }
+   ],
+   "name": "OrthographicCamera",
+   "union": "",
+   "values": []
+  },
+  {
+   "attrs": [
+    {
+     "doc": "3D の 1 単位が箱でいくつになるか (省略は 1)",
+     "name": "unit",
+     "required": false,
+     "type": "Number"
+    },
+    {
+     "doc": "落とし先の箱の幅と高さ。View の box と同じものを渡す",
+     "name": "box",
+     "required": true,
+     "type": "Vector"
+    }
+   ],
+   "category": "Position",
+   "doc": "等角投影。x が右下、z が左下、y が上へ伸びる。unit は 1 単位が箱でいくつになるか。視点を持たないので、どこまでも同じ大きさ",
+   "make": "space3d.IsometricCamera(unit = 1, box = Vector(16, 9))",
+   "members": [],
+   "methods": [
+    {
+     "doc": "箱の座標に落とす。視点より手前の点は ValueError.OutOfRange",
+     "name": "project",
+     "returns": "Vector",
+     "signature": "cam.project(p: Vector3)"
+    },
+    {
+     "doc": "並びをまとめて落とす。1 点ずつ呼ぶより速い",
+     "name": "project_all",
+     "returns": "List<Vector>",
+     "signature": "cam.project_all(points: List<Vector3>)"
+    },
+    {
+     "doc": "視線に沿った奥行き。遠いほど大きい。奥から描くには zIndex に -depth を入れる",
+     "name": "depth",
+     "returns": "Number",
+     "signature": "cam.depth(p: Vector3)"
+    },
+    {
+     "doc": "並びの奥行き",
+     "name": "depth_all",
+     "returns": "List<Number>",
+     "signature": "cam.depth_all(points: List<Vector3>)"
+    },
+    {
+     "doc": "その位置の 1 単位が箱でいくつになるか。図形の大きさや線幅に掛ける",
+     "name": "scale_at",
+     "returns": "Number",
+     "signature": "cam.scale_at(p: Vector3)"
+    },
+    {
+     "doc": "視点より前にあるか。project する前にこれで選り分ける。IsometricCamera は視点を持たないので必ず true",
+     "name": "in_front",
+     "returns": "Bool",
+     "signature": "cam.in_front(p: Vector3)"
+    }
+   ],
+   "name": "IsometricCamera",
+   "union": "",
+   "values": []
+  },
+  {
+   "attrs": [
+    {
      "doc": "赤 0..255",
      "name": "r",
      "type": "Number"
@@ -2505,6 +2724,24 @@
      "name": "Vector3",
      "returns": "Vector3",
      "signature": "space3d.Vector3(x: Number, y: Number, z: Number)"
+    },
+    {
+     "doc": "透視投影。遠いものほど小さくなる",
+     "name": "PerspectiveCamera",
+     "returns": "PerspectiveCamera",
+     "signature": "space3d.PerspectiveCamera(from, to, up, fov, box)"
+    },
+    {
+     "doc": "平行投影。遠くても大きさが変わらない",
+     "name": "OrthographicCamera",
+     "returns": "OrthographicCamera",
+     "signature": "space3d.OrthographicCamera(from, to, up, height, box)"
+    },
+    {
+     "doc": "等角投影。x は右下、z は左下、y は上へ。視点は持たない",
+     "name": "IsometricCamera",
+     "returns": "IsometricCamera",
+     "signature": "space3d.IsometricCamera(unit, box)"
     }
    ],
    "items": []

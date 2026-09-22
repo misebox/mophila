@@ -631,7 +631,7 @@ pub fn compile(closure: &Closure, camera: bool) -> Result<String> {
     wgsl.push_str(RING);
     wgsl.push_str(
         "@group(0) @binding(1) var<storage, read> args: array<f32>;\n\
-         @group(0) @binding(2) var out: texture_storage_2d<rgba8unorm, write>;\n\
+         @group(0) @binding(2) var out: texture_storage_2d_array<rgba8unorm, write>;\n\
          \n",
     );
     for d in &g.decls {
@@ -656,7 +656,7 @@ pub fn compile(closure: &Closure, camera: bool) -> Result<String> {
          \x20           acc += clamp(color(x, y, u.t{CAM}), vec4<f32>(0.0), vec4<f32>(1.0));\n\
          \x20       }\n\
          \x20   }\n\
-         \x20   textureStore(out, vec2<i32>(i32(id.x), i32(id.y)), acc / f32(g * g));\n\
+         \x20   textureStore(out, vec2<i32>(i32(id.x), i32(id.y)), 0, acc / f32(g * g));\n\
          }\n",
     );
     wgsl.push_str(STRIP);
@@ -669,7 +669,7 @@ const UNIFORM: &str = "struct U {\n\
     \x20   w: u32, h: u32, n: u32, s: u32,\n\
     \x20   cx: f32, cy: f32, ustart: f32, lnk: f32, cpe: f32,\n\
     \x20   c0: i32, ring: u32, rows: u32, cam: f32,\n\
-    \x20   ea: f32, eb: f32,\n\
+    \x20   ea: f32, eb: f32, wide: u32,\n\
     }\n\
     @group(0) @binding(0) var<uniform> u: U;\n";
 
@@ -730,13 +730,30 @@ const STRIP: &str = "\n@compute @workgroup_size(8, 8)\n\
     \x20       }\n\
     \x20   }\n\
     \x20   let col = ((c % i32(u.ring)) + i32(u.ring)) % i32(u.ring);\n\
-    \x20   textureStore(out, vec2<i32>(col, i32(id.y)), acc / f32(g * g));\n\
+    \x20   let v = acc / f32(g * g);\n\
+    \x20   let wide = i32(u.wide);\n\
+    \x20   textureStore(out, vec2<i32>(col % wide, i32(id.y)), col / wide, v);\n\
+    \x20   // 層の先頭は、1 つ前の層の右端にも置く (最初の層の先頭は最後の層の右端へ回り込む)\n\
+    \x20   if (col % wide == 0) {\n\
+    \x20       let back = (col / wide + i32(u.ring) / wide - 1) % (i32(u.ring) / wide);\n\
+    \x20       textureStore(out, vec2<i32>(wide, i32(id.y)), back, v);\n\
+    \x20   }\n\
     }\n";
 
 /// 帯から 1 フレームを組む。どの Shader でも同じなので、これだけ別のモジュールにする
-const FRAME: &str = "@group(0) @binding(1) var strip: texture_2d<f32>;\n\
+const FRAME: &str = "@group(0) @binding(1) var strip: texture_2d_array<f32>;\n\
     @group(0) @binding(2) var samp: sampler;\n\
-    @group(0) @binding(3) var out: texture_storage_2d<rgba8unorm, write>;\n\
+    @group(0) @binding(3) var out: texture_storage_2d_array<rgba8unorm, write>;\n\
+    \n\
+    // 帯は幅がテクスチャの上限を超えることがあるので (4K で 18500 列) 層に分けてある。\n\
+    // 各層は右端に次の層の先頭を 1 列だけ写して持っているので、層の中で補間すれば継ぎ目は出ない\n\
+    fn mz_column(cw: f32) -> vec2<f32> {\n\
+    \x20   let ring = f32(u.ring);\n\
+    \x20   let cm = cw - floor(cw / ring) * ring;\n\
+    \x20   let base = i32(floor(cm));\n\
+    \x20   let wide = i32(u.wide);\n\
+    \x20   return vec2<f32>(f32(base % wide) + cm - floor(cm), f32(base / wide));\n\
+    }\n\
     \n\
     @compute @workgroup_size(8, 8)\n\
     fn main(@builtin(global_invocation_id) id: vec3<u32>) {\n\
@@ -758,12 +775,12 @@ const FRAME: &str = "@group(0) @binding(1) var strip: texture_2d<f32>;\n\
     \x20       for (var i = 0; i < n; i++) {\n\
     \x20           let ox = ((f32(i) + 0.5) / f32(n) - 0.5) * fc;\n\
     \x20           let oy = ((f32(j) + 0.5) / f32(n) - 0.5) * fr;\n\
-    \x20           // 環状バッファの継ぎ目は repeat で回り込む (隣り合う列は c でも隣り合う)\n\
-    \x20           let uv = vec2<f32>((c + ox + 0.5) / f32(u.ring), (mz_mark(th) / per + oy + 0.5) / f32(u.rows));\n\
-    \x20           acc += textureSampleLevel(strip, samp, uv, 0.0);\n\
+    \x20           let at = mz_column(c + ox);\n\
+    \x20           let uv = vec2<f32>((at.x + 0.5) / f32(u.wide + 1u), (mz_mark(th) / per + oy + 0.5) / f32(u.rows));\n\
+    \x20           acc += textureSampleLevel(strip, samp, uv, i32(at.y), 0.0);\n\
     \x20       }\n\
     \x20   }\n\
-    \x20   textureStore(out, vec2<i32>(i32(id.x), i32(id.y)), acc / f32(n * n));\n\
+    \x20   textureStore(out, vec2<i32>(i32(id.x), i32(id.y)), 0, acc / f32(n * n));\n\
     }\n";
 
 // ---------- GPU で走らせる ----------
@@ -829,7 +846,7 @@ impl ZoomPath<'_> {
 }
 
 /// uniform の中身。WGSL の struct U と並びを合わせること
-const UNIFORM_BYTES: usize = 80;
+const UNIFORM_BYTES: usize = 96;
 
 #[derive(Default)]
 struct Uniforms {
@@ -851,6 +868,8 @@ struct Uniforms {
     cam: f64,
     /// 中心から画面の縁までの左右・上下の距離 (画素)。帯の角度軸の刻みに使う
     edge: (f64, f64),
+    /// 帯 1 層あたりの列数。テクスチャの上限を超える幅は層に分ける
+    wide: u32,
 }
 
 impl Uniforms {
@@ -872,6 +891,7 @@ impl Uniforms {
         for f in [self.cam, self.edge.0, self.edge.1] {
             out.extend_from_slice(&(f as f32).to_le_bytes());
         }
+        out.extend_from_slice(&self.wide.to_le_bytes());
         out.resize(UNIFORM_BYTES, 0);
         out
     }
@@ -889,8 +909,10 @@ struct Strip {
     /// 最後に使ったフレームの番号
     used: u64,
     view: wgpu::TextureView,
-    /// 列数 (環状バッファの幅)
+    /// 列数 (環状バッファの幅)。テクスチャの上限を超えるときは層に分ける
     ring: u32,
+    /// 1 層あたりの列数
+    wide: u32,
     /// 行数 (角度の刻み)
     rows: u32,
     /// 列 0 の u (中心からの距離の対数)
@@ -1062,7 +1084,7 @@ impl ShaderRunner {
             .max(corner(f64::from(req.width), f64::from(req.height)))
             .max(2.0);
         // 帯の細かさは、いちばん外側で 1 テクセル = 1 ピクセルになるように。
-        // テクスチャの上限に収まらないときは、そのぶん粗くする (絵は少し甘くなる)。
+        // 列はテクスチャの上限を超えることがあるので (4K で 18500 列)、そのときは層に分ける。
         // 角度方向は方向ごとに画面の縁までの距離で足りるので、その積分 (RING と同じ式) を行数にする。
         // 中心が真ん中でなくても足りるように、左右・上下とも広いほうを使う
         let edge = (
@@ -1073,18 +1095,19 @@ impl ShaderRunner {
         let efolds = (2.0 * radius).ln();
         let max = self.device.limits().max_texture_dimension_2d;
         let rows = (ring_marks.ceil() as u32).next_multiple_of(8).clamp(8, max);
-        let want = (efolds * radius).ceil() as u32 + 8;
-        let ring = want.clamp(8, max);
-        let cpe = if ring < want { f64::from(ring - 8) / efolds } else { radius };
+        let want = ((efolds * radius).ceil() as u32 + 8).max(8);
+        let wide = want.div_ceil(want.div_ceil(max)).next_multiple_of(8).min(max);
+        let ring = wide * want.div_ceil(wide);
+        let cpe = radius;
         // ln(スケール) はピクセル単位で持つ (箱 1 あたりの長さと、ピクセル 1 あたりの箱の長さ)
         let ln_px = req.step.0.abs().ln();
         let lnk0 = ln_px + map.ln_scale(0.0);
         let ustart = radius.ln() + lnk0;
         let fresh = self.strips.get(&req.shape).is_none_or(|s| {
-            s.size != (req.width, req.height) || s.ring != ring || s.rows != rows || (s.ustart - ustart).abs() > 1e-9
+            s.size != (req.width, req.height) || s.ring != ring || s.wide != wide || s.rows != rows || (s.ustart - ustart).abs() > 1e-9
         });
         if fresh {
-            let strip = self.make_strip(ring, rows, ustart, (req.width, req.height))?;
+            let strip = self.make_strip(ring, wide, rows, ustart, (req.width, req.height))?;
             self.strips.insert(req.shape, strip);
         }
         let lnk = ln_px + map.ln_scale(req.t);
@@ -1118,6 +1141,7 @@ impl ShaderRunner {
                 ring,
                 rows,
                 edge,
+                wide,
                 ..Uniforms::default()
             };
             self.queue.write_buffer(&target.uniforms, 0, &uniforms.bytes());
@@ -1151,6 +1175,7 @@ impl ShaderRunner {
             ring,
             rows,
             edge,
+            wide,
             ..Uniforms::default()
         };
         self.queue.write_buffer(&target.uniforms, 0, &uniforms.bytes());
@@ -1176,11 +1201,11 @@ impl ShaderRunner {
     }
 
     /// 帯を作る。列は環状に使い回すので、窓 1 つ分の幅があれば足りる
-    fn make_strip(&self, ring: u32, rows: u32, ustart: f64, size: (u32, u32)) -> Result<Strip> {
+    fn make_strip(&self, ring: u32, wide: u32, rows: u32, ustart: f64, size: (u32, u32)) -> Result<Strip> {
         let scope = self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
         let texture = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("mophila zoom strip"),
-            size: wgpu::Extent3d { width: ring, height: rows, depth_or_array_layers: 1 },
+            size: wgpu::Extent3d { width: wide + 1, height: rows, depth_or_array_layers: ring / wide },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -1188,11 +1213,11 @@ impl ShaderRunner {
             usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let view = texture.create_view(&wgpu::TextureViewDescriptor { dimension: Some(wgpu::TextureViewDimension::D2Array), ..Default::default() });
         if let Some(e) = pollster::block_on(scope.pop()) {
             return err(Kind::OutOfMemory, oom("a zoom strip", ring, rows, self.bytes(), &e));
         }
-        Ok(Strip { used: 0, view, ring, rows, ustart, have: None, size })
+        Ok(Strip { used: 0, view, ring, wide, rows, ustart, have: None, size })
     }
 
     /// 帯から 1 フレームを組む pipeline。1 度だけ作る
@@ -1207,9 +1232,9 @@ impl ShaderRunner {
             label: Some("mophila zoom frame"),
             entries: &[
                 entry(0, wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None }),
-                entry(1, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
+                entry(1, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2Array, multisampled: false }),
                 entry(2, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)),
-                entry(3, wgpu::BindingType::StorageTexture { access: wgpu::StorageTextureAccess::WriteOnly, format: wgpu::TextureFormat::Rgba8Unorm, view_dimension: wgpu::TextureViewDimension::D2 }),
+                entry(3, wgpu::BindingType::StorageTexture { access: wgpu::StorageTextureAccess::WriteOnly, format: wgpu::TextureFormat::Rgba8Unorm, view_dimension: wgpu::TextureViewDimension::D2Array }),
             ],
         });
         let pipeline_layout = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("mophila zoom frame"), bind_group_layouts: &[Some(&layout)], immediate_size: 0 });
@@ -1221,10 +1246,10 @@ impl ShaderRunner {
             compilation_options: Default::default(),
             cache: None,
         });
-        // 列も角度も端で回り込む。列が回り込む先は帯の中で隣り合う列なので、これで継ぎ目は出ない
+        // 角度は端で回り込む。列は層をまたぐので、こちらで位置を出してから層の中を読む
         let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("mophila zoom strip"),
-            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::Repeat,
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
@@ -1245,7 +1270,7 @@ impl ShaderRunner {
             entries: &[
                 wgpu::BindGroupLayoutEntry { binding: 0, visibility: wgpu::ShaderStages::COMPUTE, ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None }, count: None },
                 wgpu::BindGroupLayoutEntry { binding: 1, visibility: wgpu::ShaderStages::COMPUTE, ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None }, count: None },
-                wgpu::BindGroupLayoutEntry { binding: 2, visibility: wgpu::ShaderStages::COMPUTE, ty: wgpu::BindingType::StorageTexture { access: wgpu::StorageTextureAccess::WriteOnly, format: wgpu::TextureFormat::Rgba8Unorm, view_dimension: wgpu::TextureViewDimension::D2 }, count: None },
+                wgpu::BindGroupLayoutEntry { binding: 2, visibility: wgpu::ShaderStages::COMPUTE, ty: wgpu::BindingType::StorageTexture { access: wgpu::StorageTextureAccess::WriteOnly, format: wgpu::TextureFormat::Rgba8Unorm, view_dimension: wgpu::TextureViewDimension::D2Array }, count: None },
             ],
         });
         let pipeline_layout = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("mophila shader"), bind_group_layouts: &[Some(&layout)], immediate_size: 0 });
@@ -1279,7 +1304,7 @@ impl ShaderRunner {
             usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
         });
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let view = texture.create_view(&wgpu::TextureViewDescriptor { dimension: Some(wgpu::TextureViewDimension::D2Array), ..Default::default() });
         let image = ImageData {
             // 中身は使わない。描く直前に override_image でテクスチャに差し替えるので、
             // Vello が見るのは大きさと Blob の番号だけ。空にしておくと全画面 1 枚につき w×h×4 の RAM が浮く

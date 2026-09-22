@@ -17,7 +17,10 @@ aliases:
 render:
   size: fhd
   fps: 30
-  codec-args: -crf 20        # ffmpeg の出力側にそのまま渡る
+  codec: libx265
+  # ffmpeg の出力側にそのまま渡る。mp4 に HEVC を入れるときの既定のタグは hev1 で、
+  # QuickTime と Safari はそれを再生しないので hvc1 にする
+  codec-args: -crf 24 -tag:v hvc1
 
 # import config で読める値。数・文字列・真偽の 3 つ。
 # MOPHILA_<大文字の名前> か --set 名前=値 で上書きできる

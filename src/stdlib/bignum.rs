@@ -325,6 +325,11 @@ impl Cx {
         Cx { re: 0.5, im: 0.0, e: k + 1 }
     }
 
+    /// |z|
+    fn abs(self) -> f64 {
+        self.log2_abs().exp2()
+    }
+
     /// log2 |z|。0 なら NEVER
     fn log2_abs(self) -> f64 {
         let s = self.re.hypot(self.im);
@@ -465,7 +470,7 @@ fn newton(c: (Fix, Fix), period: usize, digits: usize, rounds: usize) -> Result<
 /// 中心 c、周期 p のミニチュアの大きさ (心臓形の幅。全体の集合なら 1)。
 /// f^p を 0 の近くで 2 次式に見立てたときの縮尺 1 / (a·d)。a は z の 2 階微分の半分、d は c の 1 階微分で、
 /// どちらも軌道の積 L_k = z_1 … z_k で書ける: a·d = L² Σ_{k=1..p} 2^(2p-1-k) / L_(k-1)
-fn size_of(c: (&Fix, &Fix), period: usize) -> f64 {
+fn size_of(c: (&Fix, &Fix), period: usize) -> Cx {
     let n = c.0.len();
     let mut z = (Fix::zero(n), Fix::zero(n));
     let (mut l, mut s) = (Cx::new(1.0, 0.0), Cx::new(0.0, 0.0));
@@ -477,7 +482,7 @@ fn size_of(c: (&Fix, &Fix), period: usize) -> f64 {
         z = step((&z.0, &z.1), c);
         l = l.mul(Cx::new(z.0.to_f64(), z.1.to_f64()));
     }
-    (-(2.0 * l.log2_abs() + s.log2_abs())).exp2()
+    l.mul(l).mul(s).inv()
 }
 
 fn find_center(re: &str, im: &str, radius: f64, digits: usize, max_period: usize) -> Result<(String, String, usize, f64)> {
@@ -487,11 +492,22 @@ fn find_center(re: &str, im: &str, radius: f64, digits: usize, max_period: usize
         return err(Kind::OutOfRange, format!("find_center: no minibrot of period up to {max_period} within {radius} of that point"));
     };
     let (cre, cim) = newton(c, period, digits, 40)?;
-    let size = size_of((&cre, &cim), period);
+    let size = size_of((&cre, &cim), period).abs();
     Ok((cre.to_decimal(digits), cim.to_decimal(digits), period, size))
 }
 
+/// 中心が周期点 (ミニチュアの中心) なら、その周期。軌道が最初に 0 に戻る m。戻らなければ 0
+fn nucleus_period(orbit: &[f64]) -> usize {
+    (1..orbit.len() / 2).find(|&m| orbit[2 * m].hypot(orbit[2 * m + 1]) < 1e-30).unwrap_or(0)
+}
+
 pub const DOCS: &[crate::docs::Entry] = &[
+    crate::docs::Entry {
+        name: "nucleus_period",
+        signature: "bignum.nucleus_period(orbit: Array)",
+        returns: "Number",
+        doc: "基準軌道の中心が周期点 (ミニチュアの中心) なら、その周期。軌道が最初に 0 に戻る反復。戻らなければ 0",
+    },
     crate::docs::Entry {
         name: "reference_orbit",
         signature: "bignum.reference_orbit(re: String, im: String, digits: Number, steps: Number)",
@@ -515,7 +531,7 @@ pub const DOCS: &[crate::docs::Entry] = &[
 /// `import bignum` で束縛されるもの
 pub fn module() -> Module {
     let mut items = HashMap::new();
-    for f in ["reference_orbit", "bla_table", "find_center"] {
+    for f in ["reference_orbit", "bla_table", "find_center", "nucleus_period"] {
         items.insert(f.into(), Value::Builtin(name_of(f)));
     }
     Module { name: "bignum".into(), items }
@@ -525,6 +541,7 @@ fn name_of(f: &str) -> &'static str {
     match f {
         "reference_orbit" => "bignum.reference_orbit",
         "bla_table" => "bignum.bla_table",
+        "nucleus_period" => "bignum.nucleus_period",
         "find_center" => "bignum.find_center",
         other => panic!("bignum に {other} は無い"),
     }
@@ -571,6 +588,8 @@ pub fn call(f: &str, values: &[Value]) -> Result<Value> {
             Ok(array(table))
         }
         ("bla_table", _) => err(Kind::ArgumentType, format!("{name} takes (orbit: Array, eps: Number)")),
+        ("nucleus_period", [Value::Array(orbit)]) => Ok(Value::num(nucleus_period(&orbit.nums) as f64)),
+        ("nucleus_period", _) => err(Kind::ArgumentType, format!("{name} takes (orbit: Array)")),
         ("find_center", [Value::Str(re), Value::Str(im), Value::Number(radius, _), Value::Number(digits, _), Value::Number(max_period, _)]) => {
             if *radius <= 0.0 {
                 return err(Kind::OutOfRange, format!("{name}: radius must be positive"));
@@ -924,7 +943,7 @@ mod tests {
         let c = (-6.0e-30f64, 0.0f64);
         let (mut t64, mut t32) = (Vec::new(), Vec::new());
         let n64 = deep_cx_trace(&table64, c, 20_000, 256.0, &mut t64);
-        let n32 = deep_f32_trace(&table32, (c.0 as f32, c.1 as f32), 20_000, 256.0, &mut t32);
+        let n32 = deep_f32_trace(&table32, (c.0 as f32, c.1 as f32), 20_000, 256.0, 0, &mut t32);
         eprintln!("f64 {n64:?} ({} rows)   f32 {n32:?} ({} rows)", t64.len(), t32.len());
         let mut shown = 0;
         for i in 0..t64.len().min(t32.len()) {
@@ -940,10 +959,11 @@ mod tests {
 
     /// WGSL を f32 で 1 行ずつ写したもの。GPU で起きることはここでも起きる
     fn deep_f32(table: &[f32], c: (f32, f32), limit: usize, escape: f32) -> Option<usize> {
-        deep_f32_trace(table, c, limit, escape, &mut Vec::new())
+        deep_f32_trace(table, c, limit, escape, 0, &mut Vec::new())
     }
 
-    fn deep_f32_trace(table: &[f32], c: (f32, f32), limit: usize, escape: f32, trace: &mut Vec<(f32, f32, f32, f32)>) -> Option<usize> {
+    /// period は中心の周期 (0 なら中の点の打ち切りをしない)。打ち切ったときも None
+    fn deep_f32_trace(table: &[f32], c: (f32, f32), limit: usize, escape: f32, period: usize, trace: &mut Vec<(f32, f32, f32, f32)>) -> Option<usize> {
         let never = -1e30f32;
         let log2_len = |v: (f32, f32)| {
             let a = v.0.abs().max(v.1.abs());
@@ -959,87 +979,120 @@ mod tests {
         let levels = table[1] as usize;
         let ob = 2.0 + table[1];
         let at = |x: f32| table[x as u32 as usize];
+        let (window, window_inv) = (2f32.powi(24), 2f32.powi(-24));
         // 画素の差を (仮数, 指数) に
-        let lcabs = c.0.hypot(c.1).log2();
-        let ce = lcabs.floor();
+        let lc = c.0.hypot(c.1).log2();
+        let ce = lc.floor();
         let cm = (c.0 * (-ce).exp2(), c.1 * (-ce).exp2());
-        let lc = ce + log2_len(cm);
         let (mut dm, mut de) = ((0.0f32, 0.0f32), 0.0f32);
-        let (mut m, mut n) = (0.0f32, 0.0f32);
+        let (mut s1, mut s2) = (1.0f32, ce.exp2());
+        let (mut m, mut n, mut skip) = (0.0f32, 0.0f32, 0u32);
+        let period = period as f32;
+        let (mut pm, mut pe, mut ldiff, mut hits) = ((0.0f32, 0.0f32), 0.0f32, never, 0);
         for _ in 0..limit {
             if n >= limit as f32 {
                 break;
             }
             let mut zz = (at(ob + 2.0 * m), at(ob + 2.0 * m + 1.0));
-            let z = (zz.0 + dm.0 * de.exp2(), zz.1 + dm.1 * de.exp2());
+            let z = (zz.0 + dm.0 * s1, zz.1 + dm.1 * s1);
             let r2 = z.0 * z.0 + z.1 * z.1;
             if r2 > escape {
                 return Some(n as usize);
             }
-            let mut ld = de + log2_len(dm);
-            trace.push((n, m, ld, r2));
-            if 0.5 * r2.log2() < ld || m + 1.0 >= m_len {
+            trace.push((n, m, de + log2_len(dm), r2));
+            if r2 < (dm.0 * dm.0 + dm.1 * dm.1) * s1 * s1 || m + 1.0 >= m_len {
                 dm = z;
                 de = 0.0;
                 m = 0.0;
+                skip = 0;
                 zz = (at(ob), at(ob + 1.0));
                 if dm.0 != 0.0 || dm.1 != 0.0 {
                     let shift = log2_len(dm).floor();
                     dm = (dm.0 * (-shift).exp2(), dm.1 * (-shift).exp2());
                     de = shift;
                 }
-                ld = de + log2_len(dm);
+                s1 = de.exp2();
+                s2 = (ce - de).exp2();
             }
-            let mut took = false;
-            for j in 0..levels {
-                let k = (levels - 1 - j) as f32;
-                let hop = k.exp2();
-                let i = (m / hop).floor();
-                if i * hop == m && m + hop < m_len {
-                    let a = at(2.0 + k) + 8.0 * i;
-                    let bias = at(a + 7.0) + lc - at(a + 6.0);
-                    if bias < 0.0 && ld < at(a + 6.0) + (1.0 - bias.exp2()).log2() {
-                        let e2 = at(a + 5.0) + ce;
-                        let t2 = cmul((at(a + 3.0), at(a + 4.0)), cm);
-                        if dm.0 == 0.0 && dm.1 == 0.0 {
-                            (dm, de) = (t2, e2);
-                        } else {
-                            let e1 = at(a + 2.0) + de;
-                            let big = e1.max(e2);
-                            let t1 = cmul((at(a), at(a + 1.0)), dm);
-                            let (f1, f2) = ((e1 - big).exp2(), (e2 - big).exp2());
-                            dm = (t1.0 * f1 + t2.0 * f2, t1.1 * f1 + t2.1 * f2);
-                            de = big;
-                        }
-                        m += hop;
-                        n += hop;
-                        took = true;
+            let mut best = None;
+            let mut hop = 1.0f32;
+            if skip > 0 {
+                skip -= 1;
+            } else {
+                let ld = if dm.0 == 0.0 && dm.1 == 0.0 { never } else { de + 0.5 * (dm.0 * dm.0 + dm.1 * dm.1).log2() };
+                for k in 0..levels {
+                    if (m / hop).floor() * hop != m || m + hop >= m_len {
                         break;
+                    }
+                    let a = at(2.0 + k as f32) + 8.0 * (m / hop).floor();
+                    let p = at(a + 6.0);
+                    if ld >= p {
+                        break;
+                    }
+                    let bias = at(a + 7.0) + lc - p;
+                    if bias >= 0.0 || (bias <= -1.0 && ld >= p - 1.0) || (bias > -1.0 && ld >= p + (1.0 - bias.exp2()).log2()) {
+                        break;
+                    }
+                    best = Some((k as f32, hop));
+                    hop *= 2.0;
+                }
+                if best.is_none() {
+                    skip = SCAN_REST;
+                }
+            }
+            match best {
+                Some((k, hop)) => {
+                    let a = at(2.0 + k) + 8.0 * (m / hop).floor();
+                    let e2 = at(a + 5.0) + ce;
+                    let t2 = cmul((at(a + 3.0), at(a + 4.0)), cm);
+                    if dm.0 == 0.0 && dm.1 == 0.0 {
+                        (dm, de) = (t2, e2);
+                    } else {
+                        let e1 = at(a + 2.0) + de;
+                        let big = e1.max(e2);
+                        let t1 = cmul((at(a), at(a + 1.0)), dm);
+                        let (f1, f2) = ((e1 - big).exp2(), (e2 - big).exp2());
+                        dm = (t1.0 * f1 + t2.0 * f2, t1.1 * f1 + t2.1 * f2);
+                        de = big;
+                    }
+                    m += hop;
+                    n += hop;
+                    s1 = de.exp2();
+                    s2 = (ce - de).exp2();
+                }
+                None => {
+                    if dm.0 == 0.0 && dm.1 == 0.0 {
+                        (dm, de) = (cm, ce);
+                        s1 = ce.exp2();
+                        s2 = 1.0;
+                    } else {
+                        let (t1, t2) = (cmul(zz, dm), cmul(dm, dm));
+                        dm = (2.0 * t1.0 + t2.0 * s1 + cm.0 * s2, 2.0 * t1.1 + t2.1 * s1 + cm.1 * s2);
+                    }
+                    m += 1.0;
+                    n += 1.0;
+                    // 周期点の次の歩。前の周期の同じ歩との差が 4 回続けて 0.5 bit 以上縮むなら、周期点に引き込まれている
+                    if period > 0.0 && m - period * (m / period).floor() == 1.0 {
+                        let e = de.max(pe);
+                        let (fd, fp) = ((de - e).exp2(), (pe - e).exp2());
+                        let diff = (dm.0 * fd - pm.0 * fp, dm.1 * fd - pm.1 * fp);
+                        let ld2 = e + log2_len(diff);
+                        hits = if ld2 < ldiff - 0.5 { hits + 1 } else { 0 };
+                        if hits >= 4 {
+                            return None;
+                        }
+                        (ldiff, pm, pe) = (ld2, dm, de);
                     }
                 }
             }
-            if !took {
-                if dm.0 == 0.0 && dm.1 == 0.0 {
-                    (dm, de) = (cm, ce);
-                } else {
-                    let big = de.max(2.0 * de).max(ce);
-                    let t1 = cmul(zz, dm);
-                    let t2 = cmul(dm, dm);
-                    let (f1, f2, f3) = (2.0 * (de - big).exp2(), (2.0 * de - big).exp2(), (ce - big).exp2());
-                    dm = (t1.0 * f1 + t2.0 * f2 + cm.0 * f3, t1.1 * f1 + t2.1 * f2 + cm.1 * f3);
-                    de = big;
-                }
-                m += 1.0;
-                n += 1.0;
-            }
-            // 仮数を常に [1, 2) にそろえる。2 乗で窓を見ると先に 0 に潰れて、仮数ごと消える
-            if dm.0 != 0.0 || dm.1 != 0.0 {
-                let shift = log2_len(dm).floor();
+            // 仮数が窓を外れたら指数を動かす
+            let a = dm.0.abs().max(dm.1.abs());
+            if a > window || (a < window_inv && a > 0.0) {
+                let shift = a.log2().floor();
                 dm = (dm.0 * (-shift).exp2(), dm.1 * (-shift).exp2());
                 de += shift;
-                if !(dm.0.is_finite() && dm.1.is_finite() && de.is_finite()) {
-                    return None;
-                }
+                s1 = de.exp2();
+                s2 = (ce - de).exp2();
             }
         }
         None
@@ -1052,7 +1105,7 @@ mod tests {
         let orbit = reference_orbit(re, im, 40, 100_000).expect("orbit");
         let table: Vec<f32> = bla_table(&orbit, 2f64.powi(-24)).into_iter().map(|x| x as f32).collect();
         let mut trace = Vec::new();
-        let n = deep_f32_trace(&table, (1e-19, 0.0), 20_000, 256.0, &mut trace);
+        let n = deep_f32_trace(&table, (1e-19, 0.0), 20_000, 256.0, 0, &mut trace);
         eprintln!("escaped: {n:?}, steps taken: {}, orbit len {}", trace.len(), orbit.len() / 2);
         for (i, row) in trace.iter().enumerate() {
             if i < 40 || i % 500 == 0 || i + 20 > trace.len() {
@@ -1175,6 +1228,58 @@ mod tests {
                 };
                 assert!(close, "c = {c:?}: deep {deep:?}, shallow {shallow:?}");
             }
+        }
+    }
+
+    /// 中心が周期点なら、ミニチュアの中の点は周期ごとの差分の縮みで数周期のうちに「中」と分かること。
+    /// 外の点 (尖りのそば、|ĉ| がわずかに 0.25 を超える) は打ち切られないこと
+    #[test]
+    fn period_check_finds_the_inside() {
+        let (re, im, p, _) = find_center("-0.743643887037158704752191506114774", "0.131825904205311970493132056385139", 2e-30, 60, 20_000).expect("center");
+        let orbit = reference_orbit(&re, &im, 40, 100_000).expect("orbit");
+        assert_eq!(nucleus_period(&orbit), p);
+        let table: Vec<f32> = bla_table(&orbit, 2f64.powi(-24)).into_iter().map(|x| x as f32).collect();
+        // 大きさは向きも持つ (複素数) ので、ミニチュアの座標 ĉ を画素の差に写せる
+        let n = limbs_for(60);
+        let c = (Fix::parse(&re, n).expect("re"), Fix::parse(&im, n).expect("im"));
+        let size = size_of((&c.0, &c.1), p);
+        let run = |x: f64, y: f64| {
+            let f = 2f64.powi(size.e);
+            let d = (((x * size.re - y * size.im) * f) as f32, ((x * size.im + y * size.re) * f) as f32);
+            let mut trace = Vec::new();
+            let escaped = deep_f32_trace(&table, d, 100_000, 256.0, p, &mut trace);
+            (escaped, trace.last().map_or(0, |row| row.0 as usize))
+        };
+        // 心臓形の内側 (乗数 0.7 未満) は数周期で分かる
+        for (x, y) in [(0.1, 0.0), (0.0, 0.2), (-0.3, 0.1), (-0.2, -0.3), (0.01, 0.0)] {
+            let (escaped, last_n) = run(x, y);
+            assert!(escaped.is_none() && last_n < 8 * p, "ĉ = ({x}, {y}): {escaped:?}, reached {last_n}");
+        }
+        // 尖りのそば、遠く、周期 2 の円のそばの外の点は打ち切られない
+        for (x, y) in [(0.26, 0.0), (0.3, 0.05), (1.5, 0.0), (0.0, 1.5), (-0.8, 0.3)] {
+            let (escaped, last_n) = run(x, y);
+            assert!(escaped.is_some() || last_n >= 100_000 - 8192, "ĉ = ({x}, {y}): {escaped:?}, reached {last_n}");
+        }
+    }
+
+    /// 1 周期 (8007 歩) を進むのに、カーネルのループが何回回るか。BLA の効き具合
+    #[test]
+    #[ignore]
+    fn kernel_iterations_per_period() {
+        let (re, im, p, _) = find_center("-0.743643887037158704752191506114774", "0.131825904205311970493132056385139", 2e-30, 60, 20_000).expect("center");
+        let orbit = reference_orbit(&re, &im, 40, 100_000).expect("orbit");
+        let table: Vec<f32> = bla_table(&orbit, 2f64.powi(-24)).into_iter().map(|x| x as f32).collect();
+        let n = limbs_for(60);
+        let c = (Fix::parse(&re, n).expect("re"), Fix::parse(&im, n).expect("im"));
+        let size = size_of((&c.0, &c.1), p);
+        for (x, y) in [(0.1, 0.0), (-0.3, 0.1), (0.6, 0.0), (0.26, 0.0), (1.0, 0.5)] {
+            let f = 2f64.powi(size.e);
+            let d = (((x * size.re - y * size.im) * f) as f32, ((x * size.im + y * size.re) * f) as f32);
+            let mut trace = Vec::new();
+            let escaped = deep_f32_trace(&table, d, 100_000, 256.0, 0, &mut trace);
+            let reached = trace.last().map_or(0, |row| row.0 as usize);
+            let hist: Vec<usize> = (0..=(reached / p)).map(|k| trace.iter().filter(|row| (row.0 as usize) / p == k).count()).collect();
+            eprintln!("ĉ = ({x}, {y}): {escaped:?}, {} loop iterations for {} steps ({:.0}/period), per period {hist:?}", trace.len(), reached, trace.len() as f64 / (reached as f64 / p as f64));
         }
     }
 

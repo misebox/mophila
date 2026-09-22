@@ -15,6 +15,9 @@ let LN10 = 2.302585092994046
 let SHALLOW_DEPTH = 26
 # BLA の段 0 で駄目だったあと、判定を休む反復の数。差は rebase まで縮まないので、休んでもほぼ飛べる歩を逃さない
 let SCAN_REST = 32
+# 深い版で差分の仮数を収める窓 (2^±24)。外れたときだけ指数を動かす
+let WINDOW = math.exp2(24)
+let WINDOW_INV = math.exp2(-24)
 
 # log2 |v|。0 なら「どの半径より小さい」数。2 乗すると f32 で先に潰れるので、大きいほうの成分を基準に取る
 func log2_len(v: Vector) -> Number {
@@ -126,6 +129,8 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
   let deep_digits = if digits > 0 { digits } else { math.max(20, math.ceil(-math.log10(finest)) + 6) }
   # Array にしておくと、Shader の args として毎フレーム送り直さずに済む
   let orbit = if deep { bignum.reference_orbit(center[0], center[1], deep_digits, ref_steps) } else { Array(reference()) }
+  # 中心が周期点 (ミニチュアの中心) なら、その周期。中の点を上限まで回さずに打ち切るのに使う
+  let period = if deep { bignum.nucleus_period(orbit) } else { 0 }
   let ref_len = orbit.len() / 2
   # 深いときは、反復をまとめて飛ばす表 (BLA) を軌道に付けて渡す。f32 の精度 2^-24 まで許す
   let table = if deep { bignum.bla_table(orbit, math.exp2(-24)) } else { orbit }
@@ -208,35 +213,44 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
             }
             return coloring(-1, Vector(0, 0))
           }
-          # 深いところは数を (仮数, 2 の指数) で持つ。f32 は 1e-38 で潰れるが、差はそれより小さくなる
+          # 深いところは数を (仮数, 2 の指数) で持つ。f32 は 1e-38 で潰れるが、差はそれより小さくなる。
+          # 仮数は窓 2^±24 に収め、外れたときだけ指数を動かす。s1 = 2^de、s2 = 2^(ce - de) は指数が動いたときだけ作り直す
           let ce = math.floor(u / LN2)
           let cm = math.exp(u - ce * LN2) * Vector(math.cos(th), math.sin(th) * up)
           let dm = Vector(0, 0)
           let de = 0
+          let s1 = 1
+          let s2 = math.exp2(ce)
           let m = 0
           let n = 0
           let skip = 0
+          # 中の点の打ち切り。前の周期の同じ歩の差分と、その差の大きさ (log2)、縮んだ回数
+          let pm = Vector(0, 0)
+          let pe = 0
+          let ldiff = -1e30
+          let hits = 0
           for iter in 0..limit {
             if n >= limit { break }
             let Z = Vector(ref[ob + 2 * m], ref[ob + 2 * m + 1])
-            let z = Z + dm * math.exp2(de)
+            let z = Z + dm * s1
             let r2 = abs_squared(z)
             if r2 > escape_at { return coloring(escaped(n, r2), z) }
-            let ld = de + log2_len(dm)
-            # 基準の点より差のほうが大きくなったら (基準が尽きたときも)、先頭に戻して差 = z から数え直す
-            if 0.5 * math.log2(r2) < ld or m + 1 >= M {
+            # 基準の点より差のほうが大きくなったら (基準が尽きたときも)、先頭に戻して差 = z から数え直す。
+            # |d|² = |dm|²·s1² は |d| < 1e-19 で 0 に潰れるが、そのとき rebase は要らない
+            if r2 < abs_squared(dm) * s1 * s1 or m + 1 >= M {
               dm = z
               de = 0
               m = 0
               skip = 0
               Z = Vector(ref[ob], ref[ob + 1])
-              # z は小さいことがあるので、ここでも仮数をそろえておく
+              # z は小さいことがあるので、ここで仮数をそろえておく
               if dm.x != 0 or dm.y != 0 {
                 let shift = math.floor(log2_len(dm))
                 dm = dm * math.exp2(-shift)
                 de = shift
               }
-              ld = de + log2_len(dm)
+              s1 = math.exp2(de)
+              s2 = math.exp2(ce - de)
             }
             # まとめて飛べるだけ飛ぶ。半径は段が上がるほど狭く、m の倍数条件も厳しくなるので、
             # 下の段から見て駄目になった所で止めれば、飛べない歩は 1 段見るだけで済む
@@ -245,6 +259,7 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
             if skip > 0 {
               skip = skip - 1
             } else {
+              let ld = if dm.x == 0 and dm.y == 0 { -1e30 } else { de + 0.5 * math.log2(abs_squared(dm)) }
               for k in 0..L {
                 if math.floor(m / hop) * hop != m or m + hop >= M { break }
                 let at = ref[2 + k] + 8 * math.floor(m / hop)
@@ -277,25 +292,42 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
               m = m + hop
               n = n + hop
               took = 1
+              s1 = math.exp2(de)
+              s2 = math.exp2(ce - de)
             }
             if took == 0 {
-              # 1 歩ぶん: d = 2 Z d + d² + c
+              # 1 歩ぶん: d = 2 Z d + d² + c。指数は de のまま (d² は s1 倍、c は s2 倍で合わせる)
               if dm.x == 0 and dm.y == 0 {
                 dm = cm
                 de = ce
+                s1 = math.exp2(ce)
+                s2 = 1
               } else {
-                let big = math.max(math.max(de, 2 * de), ce)
-                dm = complex_mul(Z, dm) * (2 * math.exp2(de - big)) + complex_mul(dm, dm) * math.exp2(2 * de - big) + cm * math.exp2(ce - big)
-                de = big
+                dm = complex_mul(Z, dm) * 2 + complex_mul(dm, dm) * s1 + cm * s2
               }
               m = m + 1
               n = n + 1
+              # 周期点の次の歩 (m ≡ 1)。前の周期の同じ歩との差が 4 回続けて 0.5 bit 以上縮むなら、周期点に引き込まれている = 中。
+              # 尖りのそばの外の点は縮みが 0.57, 0.68, 0.76 … と鈍るので 2 回で途切れる
+              if period > 0 and m - period * math.floor(m / period) == 1 {
+                let e = math.max(de, pe)
+                let diff = dm * math.exp2(de - e) - pm * math.exp2(pe - e)
+                let ld2 = e + log2_len(diff)
+                if ld2 < ldiff - 0.5 { hits = hits + 1 } else { hits = 0 }
+                if hits >= 4 { return coloring(-1, Vector(0, 0)) }
+                ldiff = ld2
+                pm = dm
+                pe = de
+              }
             }
-            # 仮数を毎回 [1, 2) にそろえる。窓の外だけそろえる形だと、2 乗が先に 0 に潰れて仮数ごと消える
-            if dm.x != 0 or dm.y != 0 {
-              let shift = math.floor(log2_len(dm))
+            # 仮数が窓を外れたら指数を動かす
+            let a = math.max(math.abs(dm.x), math.abs(dm.y))
+            if a > WINDOW or (a < WINDOW_INV and a > 0) {
+              let shift = math.floor(math.log2(a))
               dm = dm * math.exp2(-shift)
               de = de + shift
+              s1 = math.exp2(de)
+              s2 = math.exp2(ce - de)
             }
           }
           coloring(-1, Vector(0, 0))

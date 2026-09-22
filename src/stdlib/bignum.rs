@@ -495,14 +495,14 @@ pub const DOCS: &[crate::docs::Entry] = &[
     crate::docs::Entry {
         name: "reference_orbit",
         signature: "bignum.reference_orbit(re: String, im: String, digits: Number, steps: Number)",
-        returns: "List<Number>",
-        doc: "中心の点の軌道を、指定した 10 進の桁数で回して [re, im, re, im, …] で返す。深いズームの基準軌道。脱出したらそこで止まる",
+        returns: "Array",
+        doc: "中心の点の軌道を、指定した 10 進の桁数で回して [re, im, re, im, …] の Array で返す。深いズームの基準軌道。脱出したらそこで止まる",
     },
     crate::docs::Entry {
         name: "bla_table",
-        signature: "bignum.bla_table(orbit: List<Number>, eps: Number)",
-        returns: "List<Number>",
-        doc: "基準軌道から、反復をまとめて飛ばす表 (BLA) を作る。eps は許す誤差 (f32 なら 2^-24)。軌道と表を 1 本にした配列を返す (shader の args に渡す)",
+        signature: "bignum.bla_table(orbit: Array, eps: Number)",
+        returns: "Array",
+        doc: "基準軌道から、反復をまとめて飛ばす表 (BLA) を作る。eps は許す誤差 (f32 なら 2^-24)。軌道と表を 1 本にした Array を返す (Shader の args に渡す)",
     },
     crate::docs::Entry {
         name: "find_center",
@@ -530,8 +530,8 @@ fn name_of(f: &str) -> &'static str {
     }
 }
 
-fn list(items: Vec<f64>) -> Value {
-    Value::List(std::rc::Rc::new(std::cell::RefCell::new(items.into_iter().map(Value::num).collect())))
+fn array(items: Vec<f64>) -> Value {
+    Value::Array(std::rc::Rc::new(crate::lang::value::Array::new(items)))
 }
 
 /// 基準軌道の長さの上限。軌道と BLA 表を合わせた配列の添字が f32 で正確に表せる 2^24 に収まる長さ
@@ -546,24 +546,31 @@ pub fn call(f: &str, values: &[Value]) -> Result<Value> {
     };
     match (f, values) {
         ("reference_orbit", [Value::Str(re), Value::Str(im), Value::Number(digits, _), Value::Number(steps, _)]) => {
-            Ok(list(reference_orbit(re, im, whole("digits", *digits, 5000.0)?, whole("steps", *steps, MAX_STEPS)?)?))
+            Ok(array(reference_orbit(re, im, whole("digits", *digits, 5000.0)?, whole("steps", *steps, MAX_STEPS)?)?))
         }
         ("reference_orbit", _) => err(Kind::ArgumentType, format!("{name} takes (re: String, im: String, digits: Number, steps: Number)")),
-        ("bla_table", [Value::List(orbit), Value::Number(eps, _)]) => {
-            let orbit = orbit
-                .borrow()
-                .iter()
-                .map(|v| match v {
-                    Value::Number(x, _) => Ok(*x),
-                    v => err(Kind::ArgumentType, format!("{name}: orbit must be a List of Number, found {}", v.type_name())),
-                })
-                .collect::<Result<Vec<f64>>>()?;
+        ("bla_table", [orbit @ (Value::Array(_) | Value::List(_)), Value::Number(eps, _)]) => {
             if *eps <= 0.0 {
                 return err(Kind::OutOfRange, format!("{name}: eps must be positive"));
             }
-            Ok(list(bla_table(&orbit, *eps)))
+            let table = match orbit {
+                Value::Array(a) => bla_table(&a.nums, *eps),
+                Value::List(items) => {
+                    let orbit = items
+                        .borrow()
+                        .iter()
+                        .map(|v| match v {
+                            Value::Number(x, _) => Ok(*x),
+                            v => err(Kind::ArgumentType, format!("{name}: orbit must hold Numbers, found {}", v.type_name())),
+                        })
+                        .collect::<Result<Vec<f64>>>()?;
+                    bla_table(&orbit, *eps)
+                }
+                _ => unreachable!(),
+            };
+            Ok(array(table))
         }
-        ("bla_table", _) => err(Kind::ArgumentType, format!("{name} takes (orbit: List<Number>, eps: Number)")),
+        ("bla_table", _) => err(Kind::ArgumentType, format!("{name} takes (orbit: Array, eps: Number)")),
         ("find_center", [Value::Str(re), Value::Str(im), Value::Number(radius, _), Value::Number(digits, _), Value::Number(max_period, _)]) => {
             if *radius <= 0.0 {
                 return err(Kind::OutOfRange, format!("{name}: radius must be positive"));
@@ -1066,6 +1073,173 @@ mod tests {
             let n64 = deep_cx(&table64, (f64::from(c.0), f64::from(c.1)), 20_000, 256.0);
             eprintln!("c = {c:?}: f64 {n64:?}  f32 {n32:?}");
             assert_eq!(n32.is_some(), n64.is_some(), "c = {c:?}: f64 {n64:?}, f32 {n32:?}");
+        }
+    }
+
+    /// fractal.moph の SCAN_REST と同じ。段 0 で駄目だったあと判定を休む反復の数
+    const SCAN_REST: u32 = 32;
+
+    /// fractal.moph の浅い側 (差分を f32 のまま持ち、表で飛ぶ) を f32 で 1 行ずつ写したもの
+    fn shallow_f32(table: &[f32], c: (f32, f32), limit: usize, escape: f32) -> Option<usize> {
+        let m_len = table[0] as usize;
+        let levels = table[1] as usize;
+        let ob = 2 + levels;
+        let at = |i: usize| table[i];
+        let cmul = |a: (f32, f32), b: (f32, f32)| (a.0 * b.0 - a.1 * b.1, a.0 * b.1 + a.1 * b.0);
+        let lc = c.0.hypot(c.1).log2();
+        let (mut d, mut m, mut n, mut skip) = ((0.0f32, 0.0f32), 0usize, 0usize, 0u32);
+        while n < limit {
+            let mut z_ref = (at(ob + 2 * m), at(ob + 2 * m + 1));
+            let z = (z_ref.0 + d.0, z_ref.1 + d.1);
+            let r2 = z.0 * z.0 + z.1 * z.1;
+            if r2 > escape {
+                return Some(n);
+            }
+            let mut d2 = d.0 * d.0 + d.1 * d.1;
+            if r2 < d2 || m + 1 >= m_len {
+                d = z;
+                d2 = r2;
+                m = 0;
+                skip = 0;
+                z_ref = (at(ob), at(ob + 1));
+            }
+            let mut best = None;
+            let mut hop = 1usize;
+            if skip > 0 {
+                skip -= 1;
+            } else {
+                let ld = if d2 == 0.0 { -1e30 } else { 0.5 * d2.log2() };
+                for k in 0..levels {
+                    if m % hop != 0 || m + hop >= m_len {
+                        break;
+                    }
+                    let e = at(2 + k) as usize + 8 * (m / hop);
+                    let p = at(e + 6);
+                    if ld >= p {
+                        break;
+                    }
+                    let bias = at(e + 7) + lc - p;
+                    if bias >= 0.0 || (bias <= -1.0 && ld >= p - 1.0) || (bias > -1.0 && ld >= p + (1.0 - bias.exp2()).log2()) {
+                        break;
+                    }
+                    best = Some((k, hop));
+                    hop *= 2;
+                }
+                if best.is_none() {
+                    skip = SCAN_REST;
+                }
+            }
+            match best {
+                Some((k, hop)) => {
+                    let e = at(2 + k) as usize + 8 * (m / hop);
+                    let a = ((at(e) * at(e + 2).exp2()), (at(e + 1) * at(e + 2).exp2()));
+                    let b = ((at(e + 3) * at(e + 5).exp2()), (at(e + 4) * at(e + 5).exp2()));
+                    let (ad, bc) = (cmul(a, d), cmul(b, c));
+                    d = (ad.0 + bc.0, ad.1 + bc.1);
+                    m += hop;
+                    n += hop;
+                }
+                None => {
+                    let (zd, dd) = (cmul(z_ref, d), cmul(d, d));
+                    d = (2.0 * zd.0 + dd.0 + c.0, 2.0 * zd.1 + dd.1 + c.1);
+                    m += 1;
+                    n += 1;
+                }
+            }
+        }
+        None
+    }
+
+    /// 浅い側の f32 の版が、同じ f32 の表を使う深い側の版と同じ脱出回数になること (1e15 から 1e25 まで)。
+    /// f64 の基準軌道とは、敏感な点で数 % ずれる (基準を f32 に丸めた分は両方の版に同じに乗る) ので、脱出の有無だけ比べる
+    #[test]
+    fn shallow_f32_kernel_matches_deep() {
+        let (re, im) = ("-0.743643887037158704752191506114774", "0.131825904205311970493132056385139");
+        let orbit = reference_orbit(re, im, 40, 100_000).expect("orbit");
+        let table64 = bla_table(&orbit, 2f64.powi(-24));
+        let table: Vec<f32> = table64.iter().map(|x| *x as f32).collect();
+        for e in [15, 20, 25] {
+            let s = 10f64.powi(-e);
+            for (x, y) in [(1.0, 0.5), (-2.0, 1.0), (1.5, -1.5), (0.0, 1.8), (-1.0, -0.3), (0.7, 0.7)] {
+                let c = (x * s, y * s);
+                let c32 = (c.0 as f32, c.1 as f32);
+                let n64 = deep_cx(&table64, c, 100_000, 256.0);
+                let deep = deep_f32(&table, c32, 100_000, 256.0);
+                let shallow = shallow_f32(&table, c32, 100_000, 256.0);
+                assert_eq!(n64.is_some(), shallow.is_some(), "c = {c:?}: f64 {n64:?}, shallow {shallow:?}");
+                // 敏感な点では飛び方の違いが 1% ほどの差になる
+                let close = match (deep, shallow) {
+                    (Some(a), Some(b)) => (a as i64 - b as i64).abs() <= 2.max(a as i64 / 50),
+                    (None, None) => true,
+                    _ => false,
+                };
+                assert!(close, "c = {c:?}: deep {deep:?}, shallow {shallow:?}");
+            }
+        }
+    }
+
+    /// 素の摂動法 (差分を f32 で持つ、表なし) が何桁まで f64 と合うか。切り替える深さを決める材料
+    #[test]
+    #[ignore]
+    fn plain_f32_depth_limit() {
+        let (re, im) = ("-0.743643887037158704752191506114774", "0.131825904205311970493132056385139");
+        let orbit = reference_orbit(re, im, 40, 100_000).expect("orbit");
+        let orbit32: Vec<f32> = orbit.iter().map(|x| *x as f32).collect();
+        let m_len = orbit.len() / 2;
+        let plain64 = |c: (f64, f64), limit: usize| -> Option<usize> {
+            let (mut dr, mut di, mut m) = (0.0f64, 0.0f64, 0);
+            for n in 0..limit {
+                let (zr, zi) = (orbit[2 * m], orbit[2 * m + 1]);
+                let (xr, xi) = (zr + dr, zi + di);
+                let r2 = xr * xr + xi * xi;
+                if r2 > 256.0 {
+                    return Some(n);
+                }
+                if r2 < dr * dr + di * di || m + 1 >= m_len {
+                    (dr, di, m) = (xr, xi, 0);
+                }
+                let (zr, zi) = (orbit[2 * m], orbit[2 * m + 1]);
+                (dr, di) = (2.0 * (zr * dr - zi * di) + (dr * dr - di * di) + c.0, 2.0 * (zr * di + zi * dr) + 2.0 * dr * di + c.1);
+                m += 1;
+            }
+            None
+        };
+        let plain32 = |c: (f32, f32), limit: usize| -> Option<usize> {
+            let (mut dr, mut di, mut m) = (0.0f32, 0.0f32, 0);
+            for n in 0..limit {
+                let (zr, zi) = (orbit32[2 * m], orbit32[2 * m + 1]);
+                let (xr, xi) = (zr + dr, zi + di);
+                let r2 = xr * xr + xi * xi;
+                if r2 > 256.0 {
+                    return Some(n);
+                }
+                if r2 < dr * dr + di * di || m + 1 >= m_len {
+                    (dr, di, m) = (xr, xi, 0);
+                }
+                let (zr, zi) = (orbit32[2 * m], orbit32[2 * m + 1]);
+                (dr, di) = (2.0 * (zr * dr - zi * di) + (dr * dr - di * di) + c.0, 2.0 * (zr * di + zi * dr) + 2.0 * dr * di + c.1);
+                m += 1;
+            }
+            None
+        };
+        for e in [10, 13, 15, 17, 19, 21, 23, 25, 28, 30, 33] {
+            let s = 10f64.powi(-e);
+            let mut agree = 0;
+            let mut rows = Vec::new();
+            let cs = [(1.0, 0.5), (-2.0, 1.0), (1.5, -1.5), (0.0, 1.8), (-1.0, -0.3), (0.7, 0.7), (-1.6, -1.2), (2.0, 0.1)];
+            for (x, y) in cs {
+                let c = (x * s, y * s);
+                let a = plain64(c, 100_000);
+                let b = plain32((c.0 as f32, c.1 as f32), 100_000);
+                let same = match (a, b) {
+                    (Some(a), Some(b)) => (a as i64 - b as i64).abs() <= 1,
+                    (None, None) => true,
+                    _ => false,
+                };
+                agree += usize::from(same);
+                rows.push(format!("{a:?}/{b:?}"));
+            }
+            eprintln!("1e-{e:<3} agree {agree}/{}  {}", cs.len(), rows.join(" "));
         }
     }
 

@@ -11,6 +11,10 @@ import bignum
 
 let LN2 = 0.6931471805599453
 let LN10 = 2.302585092994046
+# この深さ (倍率の log10) までは差分を f32 のまま持てる。rebase 付きの摂動法は 1e-28 まで f64 と合う
+let SHALLOW_DEPTH = 26
+# BLA の段 0 で駄目だったあと、判定を休む反復の数。差は rebase まで縮まないので、休んでもほぼ飛べる歩を逃さない
+let SCAN_REST = 32
 
 # log2 |v|。0 なら「どの半径より小さい」数。2 乗すると f32 で先に潰れるので、大きいほうの成分を基準に取る
 func log2_len(v: Vector) -> Number {
@@ -120,7 +124,8 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
   # 桁数は、いちばん深いところの見える幅から決める (書いてあればそれを使う)
   let finest = span / deepest
   let deep_digits = if digits > 0 { digits } else { math.max(20, math.ceil(-math.log10(finest)) + 6) }
-  let orbit = if deep { bignum.reference_orbit(center[0], center[1], deep_digits, ref_steps) } else { reference() }
+  # Array にしておくと、Shader の args として毎フレーム送り直さずに済む
+  let orbit = if deep { bignum.reference_orbit(center[0], center[1], deep_digits, ref_steps) } else { Array(reference()) }
   let ref_len = orbit.len() / 2
   # 深いときは、反復をまとめて飛ばす表 (BLA) を軌道に付けて渡す。f32 の精度 2^-24 まで許す
   let table = if deep { bignum.bla_table(orbit, math.exp2(-24)) } else { orbit }
@@ -138,18 +143,79 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
         args = table,
         zoom = ZoomPath(center = focus, zoom = zoom_of, duration = duration, unit = unit),
         color = func (u, th, t, ref) {
-          # 数は (仮数, 2 の指数) で持つ。f32 は 1e-38 で潰れるが、深いところの差はそれより小さい
           let M = ref[0]
           let L = ref[1]
           let ob = 2 + L
+          let depth = depth_at(u)
+          let limit = math.min(limit_of(depth), M)
+          let lc = u / LN2
+          # 浅いところは差分を f32 のまま持つ。rebase があれば 1e-28 まで f64 と合う。表は同じものを使う
+          if depth < SHALLOW_DEPTH {
+            let c = math.exp(u) * Vector(math.cos(th), math.sin(th) * up)
+            let d = Vector(0, 0)
+            let d2 = 0
+            let m = 0
+            let n = 0
+            let skip = 0
+            for iter in 0..limit {
+              if n >= limit { break }
+              let Z = Vector(ref[ob + 2 * m], ref[ob + 2 * m + 1])
+              let z = Z + d
+              let r2 = abs_squared(z)
+              if r2 > escape_at { return coloring(escaped(n, r2), z) }
+              d2 = abs_squared(d)
+              if r2 < d2 or m + 1 >= M {
+                d = z
+                d2 = r2
+                m = 0
+                skip = 0
+                Z = Vector(ref[ob], ref[ob + 1])
+              }
+              let best = -1
+              let hop = 1
+              # 段 0 で駄目なら差が大きすぎるということ。差は rebase まで縮まないので、しばらく判定を休む (表を読まない)
+              if skip > 0 {
+                skip = skip - 1
+              } else {
+                let ld = if d2 == 0 { -1e30 } else { 0.5 * math.log2(d2) }
+                for k in 0..L {
+                  if math.floor(m / hop) * hop != m or m + hop >= M { break }
+                  let at = ref[2 + k] + 8 * math.floor(m / hop)
+                  if ld >= ref[at + 6] { break }
+                  let bias = ref[at + 7] + lc - ref[at + 6]
+                  if bias >= 0 { break }
+                  # 半径は 2^p - 2^s·|c|。|c| の項が半分以下なら p - 1 で見て、きわどい時だけ正確に
+                  if bias <= -1 and ld >= ref[at + 6] - 1 { break }
+                  if bias > -1 and ld >= ref[at + 6] + math.log2(1 - math.exp2(bias)) { break }
+                  best = k
+                  hop = hop * 2
+                }
+                if best < 0 { skip = SCAN_REST }
+              }
+              if best >= 0 {
+                let hop = math.exp2(best)
+                let at = ref[2 + best] + 8 * math.floor(m / hop)
+                let A = Vector(ref[at], ref[at + 1]) * math.exp2(ref[at + 2])
+                let B = Vector(ref[at + 3], ref[at + 4]) * math.exp2(ref[at + 5])
+                d = complex_mul(A, d) + complex_mul(B, c)
+                m = m + hop
+                n = n + hop
+              } else {
+                d = complex_mul(Z, d) * 2 + complex_mul(d, d) + c
+                m = m + 1
+                n = n + 1
+              }
+            }
+            return coloring(-1, Vector(0, 0))
+          }
+          # 深いところは数を (仮数, 2 の指数) で持つ。f32 は 1e-38 で潰れるが、差はそれより小さくなる
           let ce = math.floor(u / LN2)
           let cm = math.exp(u - ce * LN2) * Vector(math.cos(th), math.sin(th) * up)
-          let lc = ce + log2_len(cm)
-          let limit = math.min(limit_of(depth_at(u)), M)
           let dm = Vector(0, 0)
           let de = 0
           let m = 0
           let n = 0
+          let skip = 0
           for iter in 0..limit {
             if n >= limit { break }
             let Z = Vector(ref[ob + 2 * m], ref[ob + 2 * m + 1])
@@ -162,6 +228,7 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
               dm = z
               de = 0
               m = 0
+              skip = 0
               Z = Vector(ref[ob], ref[ob + 1])
               # z は小さいことがあるので、ここでも仮数をそろえておく
               if dm.x != 0 or dm.y != 0 {
@@ -175,16 +242,22 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
             # 下の段から見て駄目になった所で止めれば、飛べない歩は 1 段見るだけで済む
             let best = -1
             let hop = 1
-            for k in 0..L {
-              if math.floor(m / hop) * hop != m or m + hop >= M { break }
-              let at = ref[2 + k] + 8 * math.floor(m / hop)
-              # 使える半径は 2^p - 2^s·|c| で、2^p より小さい
-              if ld >= ref[at + 6] { break }
-              let bias = ref[at + 7] + lc - ref[at + 6]
-              if bias >= 0 { break }
-              if ld >= ref[at + 6] + math.log2(1 - math.exp2(bias)) { break }
-              best = k
-              hop = hop * 2
+            if skip > 0 {
+              skip = skip - 1
+            } else {
+              for k in 0..L {
+                if math.floor(m / hop) * hop != m or m + hop >= M { break }
+                let at = ref[2 + k] + 8 * math.floor(m / hop)
+                # 使える半径は 2^p - 2^s·|c| で、2^p より小さい
+                if ld >= ref[at + 6] { break }
+                let bias = ref[at + 7] + lc - ref[at + 6]
+                if bias >= 0 { break }
+                if bias <= -1 and ld >= ref[at + 6] - 1 { break }
+                if bias > -1 and ld >= ref[at + 6] + math.log2(1 - math.exp2(bias)) { break }
+                best = k
+                hop = hop * 2
+              }
+              if best < 0 { skip = SCAN_REST }
             }
             let took = 0
             if best >= 0 {

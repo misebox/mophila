@@ -15,6 +15,8 @@ let LN10 = 2.302585092994046
 let SHALLOW_DEPTH = 26
 # BLA の段 0 で駄目だったあと、判定を休む反復の数。差は rebase まで縮まないので、休んでもほぼ飛べる歩を逃さない
 let SCAN_REST = 32
+# BLA の表 1 つぶんの長さ (A.re A.im A.e B.re B.im B.e C.re C.im C.e p s)。bignum.bla_table と合わせる
+let ENTRY = 11
 # 深い版で差分の仮数を収める窓 (2^±24)。外れたときだけ指数を動かす
 let WINDOW = math.exp2(24)
 let WINDOW_INV = math.exp2(-24)
@@ -132,8 +134,10 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
   # 中心が周期点 (ミニチュアの中心) なら、その周期。中の点を上限まで回さずに打ち切るのに使う
   let period = if deep { bignum.nucleus_period(orbit) } else { 0 }
   let ref_len = orbit.len() / 2
-  # 深いときは、反復をまとめて飛ばす表 (BLA) を軌道に付けて渡す。f32 の精度 2^-24 まで許す
-  let table = if deep { bignum.bla_table(orbit, math.exp2(-24)) } else { orbit }
+  # 深いときは、反復をまとめて飛ばす表 (BLA) を軌道に付けて渡す。
+  # 飛べる半径は許容誤差の平方根で決まるので、1 回の f32 の丸め (2^-24) まで締める必要は無い。
+  # 1 画素あたり数百回飛ぶので、積み上がった丸め (数百 × 2^-24 ≈ 2^-15) より下ならそれで足りる
+  let table = if deep { bignum.bla_table(orbit, math.exp2(-18)) } else { orbit }
   if deep and duration <= 0s {
     log("escape_time: 文字列の中心は duration (帯) と一緒に使う。倍率は帯の側で対数のまま扱うので、f32 に収まらない深さまで行ける")
   }
@@ -177,7 +181,7 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
                 Z = Vector(ref[ob], ref[ob + 1])
               }
               let best = -1
-              let hop = 1
+              let hop = 2
               # 段 0 で駄目なら差が大きすぎるということ。差は rebase まで縮まないので、しばらく判定を休む (表を読まない)
               if skip > 0 {
                 skip = skip - 1
@@ -185,24 +189,26 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
                 let ld = if d2 == 0 { -1e30 } else { 0.5 * math.log2(d2) }
                 for k in 0..L {
                   if math.floor(m / hop) * hop != m or m + hop >= M { break }
-                  let at = ref[2 + k] + 8 * math.floor(m / hop)
-                  if ld >= ref[at + 6] { break }
-                  let bias = ref[at + 7] + lc - ref[at + 6]
+                  let at = ref[2 + k] + ENTRY * math.floor(m / hop)
+                  if ld >= ref[at + 9] { break }
+                  let bias = ref[at + 10] + lc - ref[at + 9]
                   if bias >= 0 { break }
                   # 半径は 2^p - 2^s·|c|。|c| の項が半分以下なら p - 1 で見て、きわどい時だけ正確に
-                  if bias <= -1 and ld >= ref[at + 6] - 1 { break }
-                  if bias > -1 and ld >= ref[at + 6] + math.log2(1 - math.exp2(bias)) { break }
+                  if bias <= -1 and ld >= ref[at + 9] - 1 { break }
+                  if bias > -1 and ld >= ref[at + 9] + math.log2(1 - math.exp2(bias)) { break }
                   best = k
                   hop = hop * 2
                 }
                 if best < 0 { skip = SCAN_REST }
               }
               if best >= 0 {
-                let hop = math.exp2(best)
-                let at = ref[2 + best] + 8 * math.floor(m / hop)
+                let hop = math.exp2(best + 1)
+                let at = ref[2 + best] + ENTRY * math.floor(m / hop)
                 let A = Vector(ref[at], ref[at + 1]) * math.exp2(ref[at + 2])
                 let B = Vector(ref[at + 3], ref[at + 4]) * math.exp2(ref[at + 5])
-                d = complex_mul(A, d) + complex_mul(B, c)
+                # C は |A|/|d| まで大きくなって f32 から溢れるので、指数を半分ずつ d に配って C d² = C (d 2^(h/2))²
+                let dh = d * math.exp2(0.5 * ref[at + 8])
+                d = complex_mul(A, d) + complex_mul(B, c) + complex_mul(Vector(ref[at + 6], ref[at + 7]), complex_mul(dh, dh))
                 m = m + hop
                 n = n + hop
               } else {
@@ -224,7 +230,10 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
           let m = 0
           let n = 0
           let skip = 0
-          # 中の点の打ち切り。前の周期の同じ歩の差分と、その差の大きさ (log2)、縮んだ回数
+          # 中の点の打ち切り。次に見る反復 (周期の区切り)、前の区切りの差分と、その差の大きさ (log2)、縮んだ回数。
+          # 周期を知らないときは決して来ない値にしておく
+          let far = 1e30
+          let next = if period > 0 { period } else { far }
           let pm = Vector(0, 0)
           let pe = 0
           let ldiff = -1e30
@@ -242,6 +251,7 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
               de = 0
               m = 0
               skip = 0
+              next = if period > 0 { period } else { far }
               Z = Vector(ref[ob], ref[ob + 1])
               # z は小さいことがあるので、ここで仮数をそろえておく
               if dm.x != 0 or dm.y != 0 {
@@ -255,20 +265,21 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
             # まとめて飛べるだけ飛ぶ。半径は段が上がるほど狭く、m の倍数条件も厳しくなるので、
             # 下の段から見て駄目になった所で止めれば、飛べない歩は 1 段見るだけで済む
             let best = -1
-            let hop = 1
+            let hop = 2
             if skip > 0 {
               skip = skip - 1
             } else {
               let ld = if dm.x == 0 and dm.y == 0 { -1e30 } else { de + 0.5 * math.log2(abs_squared(dm)) }
               for k in 0..L {
-                if math.floor(m / hop) * hop != m or m + hop >= M { break }
-                let at = ref[2 + k] + 8 * math.floor(m / hop)
+                # 周期の区切りは踏み越えない (中の点の判定は、基準の同じ位相どうしで比べる)
+                if math.floor(m / hop) * hop != m or m + hop >= M or m + hop > next { break }
+                let at = ref[2 + k] + ENTRY * math.floor(m / hop)
                 # 使える半径は 2^p - 2^s·|c| で、2^p より小さい
-                if ld >= ref[at + 6] { break }
-                let bias = ref[at + 7] + lc - ref[at + 6]
+                if ld >= ref[at + 9] { break }
+                let bias = ref[at + 10] + lc - ref[at + 9]
                 if bias >= 0 { break }
-                if bias <= -1 and ld >= ref[at + 6] - 1 { break }
-                if bias > -1 and ld >= ref[at + 6] + math.log2(1 - math.exp2(bias)) { break }
+                if bias <= -1 and ld >= ref[at + 9] - 1 { break }
+                if bias > -1 and ld >= ref[at + 9] + math.log2(1 - math.exp2(bias)) { break }
                 best = k
                 hop = hop * 2
               }
@@ -276,8 +287,8 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
             }
             let took = 0
             if best >= 0 {
-              let hop = math.exp2(best)
-              let at = ref[2 + best] + 8 * math.floor(m / hop)
+              let hop = math.exp2(best + 1)
+              let at = ref[2 + best] + ENTRY * math.floor(m / hop)
               let e2 = ref[at + 5] + ce
               let t2 = complex_mul(Vector(ref[at + 3], ref[at + 4]), cm)
               if dm.x == 0 and dm.y == 0 {
@@ -285,8 +296,10 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
                 de = e2
               } else {
                 let e1 = ref[at + 2] + de
-                let big = math.max(e1, e2)
-                dm = complex_mul(Vector(ref[at], ref[at + 1]), dm) * math.exp2(e1 - big) + t2 * math.exp2(e2 - big)
+                let e3 = ref[at + 8] + 2 * de
+                let big = math.max(math.max(e1, e2), e3)
+                let t3 = complex_mul(Vector(ref[at + 6], ref[at + 7]), complex_mul(dm, dm))
+                dm = complex_mul(Vector(ref[at], ref[at + 1]), dm) * math.exp2(e1 - big) + t2 * math.exp2(e2 - big) + t3 * math.exp2(e3 - big)
                 de = big
               }
               m = m + hop
@@ -307,18 +320,19 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
               }
               m = m + 1
               n = n + 1
-              # 周期点の次の歩 (m ≡ 1)。前の周期の同じ歩との差が 4 回続けて 0.5 bit 以上縮むなら、周期点に引き込まれている = 中。
-              # 尖りのそばの外の点は縮みが 0.57, 0.68, 0.76 … と鈍るので 2 回で途切れる
-              if period > 0 and m - period * math.floor(m / period) == 1 {
-                let e = math.max(de, pe)
-                let diff = dm * math.exp2(de - e) - pm * math.exp2(pe - e)
-                let ld2 = e + log2_len(diff)
-                if ld2 < ldiff - 0.5 { hits = hits + 1 } else { hits = 0 }
-                if hits >= 4 { return coloring(-1, Vector(0, 0)) }
-                ldiff = ld2
-                pm = dm
-                pe = de
-              }
+            }
+            # 周期の区切り。前の区切りとの差が 4 回続けて 0.5 bit 以上縮むなら、周期点に引き込まれている = 中。
+            # 尖りのそばの外の点は縮みが 0.57, 0.68, 0.76 … と鈍るので 2 回で途切れる
+            if m == next {
+              let e = math.max(de, pe)
+              let diff = dm * math.exp2(de - e) - pm * math.exp2(pe - e)
+              let ld2 = e + log2_len(diff)
+              if ld2 < ldiff - 0.5 { hits = hits + 1 } else { hits = 0 }
+              if hits >= 4 { return coloring(-1, Vector(0, 0)) }
+              ldiff = ld2
+              pm = dm
+              pe = de
+              next = next + period
             }
             # 仮数が窓を外れたら指数を動かす
             let a = math.max(math.abs(dm.x), math.abs(dm.y))

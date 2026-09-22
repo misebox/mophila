@@ -343,13 +343,23 @@ impl Cx {
 /// 「有効になることは無い」半径 (log2)。-inf は f32 にすると扱いに困るので、十分小さい数
 const NEVER: f64 = -1.0e30;
 
-/// 反復を l 回まとめて飛ばす線形近似。d' = A d + B c。
+/// 「どんな半径でも使える」。1 歩ぶんは元の式そのものなので誤差が出ない
+const ALWAYS: f64 = 1.0e30;
+
+/// 反復を l 回まとめて飛ばす 2 次の近似。d' = A d + B c + C d²。
 /// 使えるのは |d| < 2^p - 2^s·|c| のとき。半径を c の 1 次の下界で持つので、
-/// 画素の差 c が倍率で変わっても表は 1 本で済む (焼き込むと倍率ごとに作り直しになる)
+/// 画素の差 c が倍率で変わっても表は 1 本で済む (焼き込むと倍率ごとに作り直しになる)。
+///
+/// 1 次だけだと、落ちる d² が |2 Z d| に対して eps 以下でないと使えない (|d| < eps|Z|)。
+/// d² を持てば落ちるのは合成で出る 3 次からで、半径は √(eps|A|/|D|) まで広がる。
+/// 基準の軌道が伸びにくい (集合の境界のそばの) ところでは、飛べない歩の数がこれで半分以下になる
 #[derive(Clone, Copy)]
 struct Bla {
     a: Cx,
     b: Cx,
+    c: Cx,
+    /// 落とした 3 次の係数。半径を決めるのに使うだけで、表には入れない
+    d: Cx,
     /// c = 0 のときの半径 (log2)
     p: f64,
     /// c に掛かる傾き (log2)。NEVER なら 0
@@ -365,50 +375,75 @@ fn log2_add(a: f64, b: f64) -> f64 {
     }
 }
 
-/// 1 回ぶん。d² を落とすので、|d| が |2 Z d| に対して ε 以下に小さいときだけ
-fn single(z: (f64, f64), eps: f64) -> Bla {
-    let zabs = z.0.hypot(z.1);
-    let p = match zabs == 0.0 {
-        true => NEVER,
-        false => (eps * zabs).log2(),
-    };
-    Bla { a: Cx::new(2.0 * z.0, 2.0 * z.1), b: Cx::new(1.0, 0.0), p, s: NEVER }
+/// 1 回ぶん: d' = 2 Z d + d² + c。落とすものが無いので、どんな半径でも使える
+fn single(z: (f64, f64)) -> Bla {
+    let one = Cx::new(1.0, 0.0);
+    Bla { a: Cx::new(2.0 * z.0, 2.0 * z.1), b: one, c: one, d: Cx::new(0.0, 0.0), p: ALWAYS, s: NEVER }
 }
 
-/// x の後に y を続けたもの。x を掛けた後の d が y の半径に収まる範囲まで:
-///   r(c) = min(rx(c), (ry(c) - |Bx| c) / |Ax|)  ≥  min(px, py/|Ax|) - max(sx, (sy + |Bx|)/|Ax|) c
-fn merge(x: Bla, y: Bla) -> Bla {
+/// x の後に y を続けたもの。係数は代入して同じ次数を集めるだけ:
+///   A = Ay Ax、B = Ay Bx + By、C = Ay Cx + Cy Ax²、落ちる 3 次は D = Ay Dx + 2 Cy Ax Cx + Dy Ax³
+/// 半径は 3 つの条件のいちばん厳しいもの。x の半径、3 次が eps 以下 (|d|² < eps|A|/|D|)、
+/// それと x を通った後の d が y の半径に収まること。最後のものは |Ax| r + |Cx| r² = 2^py を解く
+fn merge(x: Bla, y: Bla, eps: f64) -> Bla {
     let a = y.a.mul(x.a);
     let b = y.a.mul(x.b).add(y.b);
+    let c = y.a.mul(x.c).add(y.c.mul(x.a).mul(x.a));
+    let d = y.a.mul(x.d).add(Cx::new(2.0, 0.0).mul(y.c).mul(x.a).mul(x.c)).add(y.d.mul(x.a).mul(x.a).mul(x.a));
     let ax = x.a.log2_abs();
     if ax <= NEVER || x.p <= NEVER || y.p <= NEVER {
-        return Bla { a, b, p: NEVER, s: NEVER };
+        return Bla { a, b, c, d, p: NEVER, s: NEVER };
     }
-    let p = x.p.min(y.p - ax);
-    let s = x.s.max(log2_add(y.s, x.b.log2_abs()) - ax);
-    Bla { a, b, p, s }
+    let unless = |v: Cx, f: &dyn Fn(f64) -> f64| match v.log2_abs() <= NEVER {
+        true => ALWAYS,
+        false => f(v.log2_abs()),
+    };
+    let trunc = unless(d, &|ld| 0.5 * (eps.log2() + a.log2_abs() - ld));
+    // x を通った後の d が y の半径に収まる最大の |d|。|Ax| r + |Cx| r² = 2^py を解く (Cx = 0 なら 2^(py-ax))
+    let cx = x.c.log2_abs();
+    let reach = y.p - (log2_add(ax, 0.5 * log2_add(2.0 * ax, cx + y.p + 2.0)) - 1.0);
+    // Cy d₁² を展開すると c との交差項 2 Cy Ax Bx d c と Cy Bx² c² も出る。どちらも落とすので、
+    // 残す B c に対して eps 以下に抑える。前者は |d| の条件、後者は |c| の条件なので、
+    // 後者は「|c| が 2^kmax で半径が 0 になる傾き」に直して s に入れる
+    let (bl, cy, bx) = (b.log2_abs(), y.c.log2_abs(), x.b.log2_abs());
+    let loose = cy <= NEVER || bx <= NEVER || bl <= NEVER;
+    let cross = if loose { ALWAYS } else { eps.log2() + bl - 1.0 - cy - ax - bx };
+    let kmax = if loose { ALWAYS } else { eps.log2() + bl - cy - 2.0 * bx };
+    let p = x.p.min(reach).min(trunc).min(cross);
+    // c の傾きは、半径のところでの伸び率 |Ax| + 2|Cx| r で割り戻す
+    let s = x.s.max(log2_add(y.s, bx) - log2_add(ax, cx + p + 1.0)).max(p - kmax);
+    Bla { a, b, c, d, p, s }
 }
 
+/// 表 1 つぶんの長さ (A.re A.im A.e B.re B.im B.e C.re C.im C.e p s)
+const ENTRY: usize = 11;
+
 /// 基準軌道から BLA の表を作り、shader が読む 1 本の配列にまとめる。
-/// 並び: [M, L, off_0 … off_{L-1}, 軌道 (re, im) × M, 表 (A.re A.im A.e B.re B.im B.e p s) × …]。
-/// 段 k の表は 2^k 回ぶんを飛ばすもので、i 番目が反復 i·2^k から。off_k はその段の先頭
+/// 並び: [M, L, off_0 … off_{L-1}, 軌道 (re, im) × M, 表 × …]。
+/// 段 k の表は 2^(k+1) 回ぶんを飛ばすもので、i 番目が反復 i·2^(k+1) から。off_k はその段の先頭。
+/// 1 歩ぶん (2^0) は入れない。元の式そのものなので、表を読むより直に 1 歩進めるほうが速い
 fn bla_table(orbit: &[f64], eps: f64) -> Vec<f64> {
     let m = orbit.len() / 2;
-    let mut levels: Vec<Vec<Bla>> = vec![(0..m).map(|i| single((orbit[2 * i], orbit[2 * i + 1]), eps)).collect()];
-    while levels.last().is_some_and(|l| l.len() >= 2) {
-        let prev = levels.last().expect("just checked");
-        let next: Vec<Bla> = (0..prev.len() / 2).map(|i| merge(prev[2 * i], prev[2 * i + 1])).collect();
+    let ones: Vec<Bla> = (0..m).map(|i| single((orbit[2 * i], orbit[2 * i + 1]))).collect();
+    let mut levels: Vec<Vec<Bla>> = Vec::new();
+    loop {
+        let prev: &[Bla] = levels.last().map_or(&ones, |l| l);
+        if prev.len() < 2 {
+            break;
+        }
+        let next: Vec<Bla> = (0..prev.len() / 2).map(|i| merge(prev[2 * i], prev[2 * i + 1], eps)).collect();
         levels.push(next);
     }
     let head = 2 + levels.len();
     let mut out = vec![0.0; head];
+    out.reserve(orbit.len() + ENTRY * levels.iter().map(Vec::len).sum::<usize>());
     out[0] = m as f64;
     out[1] = levels.len() as f64;
     out.extend_from_slice(orbit);
     for (k, level) in levels.iter().enumerate() {
         out[2 + k] = out.len() as f64;
         for b in level {
-            out.extend([b.a.re, b.a.im, f64::from(b.a.e), b.b.re, b.b.im, f64::from(b.b.e), b.p, b.s]);
+            out.extend([b.a.re, b.a.im, f64::from(b.a.e), b.b.re, b.b.im, f64::from(b.b.e), b.c.re, b.c.im, f64::from(b.c.e), b.p, b.s]);
         }
     }
     out
@@ -673,11 +708,12 @@ mod tests {
         let table = bla_table(&orbit, 2f64.powi(-24));
         let l = table[1] as usize;
         assert!(l >= 5, "levels {l}");
-        // 段 4 (16 回) の 1 番目 (反復 16 から)。0 番目は Z_0 = 0 を含むので使えない
-        let at = table[2 + 4] as usize + 8;
+        // 段 3 (2^4 = 16 回) の 1 番目 (反復 16 から)。0 番目は Z_0 = 0 を含むので使えない
+        let at = table[2 + 3] as usize + ENTRY;
         let a = Cx { re: table[at], im: table[at + 1], e: table[at + 2] as i32 };
         let b = Cx { re: table[at + 3], im: table[at + 4], e: table[at + 5] as i32 };
-        let (p, s) = (table[at + 6], table[at + 7]);
+        let q = Cx { re: table[at + 6], im: table[at + 7], e: table[at + 8] as i32 };
+        let (p, s) = (table[at + 9], table[at + 10]);
         let (d0, c): ((f64, f64), (f64, f64)) = ((1e-22, 2e-22), (3e-23, -1e-23));
         // 有効半径 2^p - 2^s |c| の中にあること
         let radius = 2f64.powf(p) - 2f64.powf(s) * c.0.hypot(c.1);
@@ -688,7 +724,8 @@ mod tests {
             let (zr, zi) = (orbit[2 * n], orbit[2 * n + 1]);
             (dr, di) = (2.0 * (zr * dr - zi * di) + (dr * dr - di * di) + c.0, 2.0 * (zr * di + zi * dr) + 2.0 * dr * di + c.1);
         }
-        let skipped = a.mul(Cx::new(d0.0, d0.1)).add(b.mul(Cx::new(c.0, c.1)));
+        let d0x = Cx::new(d0.0, d0.1);
+        let skipped = a.mul(d0x).add(b.mul(Cx::new(c.0, c.1))).add(q.mul(d0x).mul(d0x));
         let f = 2f64.powi(skipped.e);
         let (sr, si) = (skipped.re * f, skipped.im * f);
         let scale = dr.hypot(di);
@@ -759,12 +796,12 @@ mod tests {
                 }
                 let mut took = false;
                 for k in (0..levels).rev() {
-                    let hop = 1usize << k;
+                    let hop = 1usize << (k + 1);
                     if m % hop != 0 || m + hop >= m_len {
                         continue;
                     }
-                    let at = table[2 + k] as usize + 8 * (m / hop);
-                    let (p, s) = (table[at + 6], table[at + 7]);
+                    let at = table[2 + k] as usize + ENTRY * (m / hop);
+                    let (p, s) = (table[at + 9], table[at + 10]);
                     let bias = s + lc - p;
                     if bias >= 0.0 {
                         continue;
@@ -772,7 +809,8 @@ mod tests {
                     if ld < p + (1.0 - 2f64.powf(bias)).log2() {
                         let a = Cx { re: table[at], im: table[at + 1], e: table[at + 2] as i32 };
                         let b = Cx { re: table[at + 3], im: table[at + 4], e: table[at + 5] as i32 };
-                        d = a.mul(d).add(b.mul(cx));
+                        let q = Cx { re: table[at + 6], im: table[at + 7], e: table[at + 8] as i32 };
+                        d = a.mul(d).add(b.mul(cx)).add(q.mul(d).mul(d));
                         m += hop;
                         n += hop;
                         took = true;
@@ -831,12 +869,12 @@ mod tests {
             }
             let mut took = false;
             for k in (0..levels).rev() {
-                let hop = 1usize << k;
+                let hop = 1usize << (k + 1);
                 if m % hop != 0 || m + hop >= m_len {
                     continue;
                 }
-                let at = table[2 + k] as usize + 8 * (m / hop);
-                let (p, s) = (table[at + 6], table[at + 7]);
+                let at = table[2 + k] as usize + ENTRY * (m / hop);
+                let (p, s) = (table[at + 9], table[at + 10]);
                 let bias = s + lc - p;
                 if bias >= 0.0 {
                     continue;
@@ -844,7 +882,8 @@ mod tests {
                 if ld < p + (1.0 - 2f64.powf(bias)).log2() {
                     let a = Cx { re: table[at], im: table[at + 1], e: table[at + 2] as i32 };
                     let b = Cx { re: table[at + 3], im: table[at + 4], e: table[at + 5] as i32 };
-                    d = a.mul(d).add(b.mul(cx));
+                    let q = Cx { re: table[at + 6], im: table[at + 7], e: table[at + 8] as i32 };
+                    d = a.mul(d).add(b.mul(cx)).add(q.mul(d).mul(d));
                     m += hop;
                     n += hop;
                     took = true;
@@ -988,7 +1027,9 @@ mod tests {
         let (mut s1, mut s2) = (1.0f32, ce.exp2());
         let (mut m, mut n, mut skip) = (0.0f32, 0.0f32, 0u32);
         let period = period as f32;
-        let (mut pm, mut pe, mut ldiff, mut hits) = ((0.0f32, 0.0f32), 0.0f32, never, 0);
+        let far = 1e30f32;
+        let start = if period > 0.0 { period } else { far };
+        let (mut next, mut pm, mut pe, mut ldiff, mut hits) = (start, (0.0f32, 0.0f32), 0.0f32, never, 0);
         for _ in 0..limit {
             if n >= limit as f32 {
                 break;
@@ -1005,6 +1046,7 @@ mod tests {
                 de = 0.0;
                 m = 0.0;
                 skip = 0;
+                next = start;
                 zz = (at(ob), at(ob + 1.0));
                 if dm.0 != 0.0 || dm.1 != 0.0 {
                     let shift = log2_len(dm).floor();
@@ -1015,21 +1057,21 @@ mod tests {
                 s2 = (ce - de).exp2();
             }
             let mut best = None;
-            let mut hop = 1.0f32;
+            let mut hop = 2.0f32;
             if skip > 0 {
                 skip -= 1;
             } else {
                 let ld = if dm.0 == 0.0 && dm.1 == 0.0 { never } else { de + 0.5 * (dm.0 * dm.0 + dm.1 * dm.1).log2() };
                 for k in 0..levels {
-                    if (m / hop).floor() * hop != m || m + hop >= m_len {
+                    if (m / hop).floor() * hop != m || m + hop >= m_len || m + hop > next {
                         break;
                     }
-                    let a = at(2.0 + k as f32) + 8.0 * (m / hop).floor();
-                    let p = at(a + 6.0);
+                    let a = at(2.0 + k as f32) + ENTRY as f32 * (m / hop).floor();
+                    let p = at(a + 9.0);
                     if ld >= p {
                         break;
                     }
-                    let bias = at(a + 7.0) + lc - p;
+                    let bias = at(a + 10.0) + lc - p;
                     if bias >= 0.0 || (bias <= -1.0 && ld >= p - 1.0) || (bias > -1.0 && ld >= p + (1.0 - bias.exp2()).log2()) {
                         break;
                     }
@@ -1042,17 +1084,19 @@ mod tests {
             }
             match best {
                 Some((k, hop)) => {
-                    let a = at(2.0 + k) + 8.0 * (m / hop).floor();
+                    let a = at(2.0 + k) + ENTRY as f32 * (m / hop).floor();
                     let e2 = at(a + 5.0) + ce;
                     let t2 = cmul((at(a + 3.0), at(a + 4.0)), cm);
                     if dm.0 == 0.0 && dm.1 == 0.0 {
                         (dm, de) = (t2, e2);
                     } else {
                         let e1 = at(a + 2.0) + de;
-                        let big = e1.max(e2);
+                        let e3 = at(a + 8.0) + 2.0 * de;
+                        let big = e1.max(e2).max(e3);
                         let t1 = cmul((at(a), at(a + 1.0)), dm);
-                        let (f1, f2) = ((e1 - big).exp2(), (e2 - big).exp2());
-                        dm = (t1.0 * f1 + t2.0 * f2, t1.1 * f1 + t2.1 * f2);
+                        let t3 = cmul((at(a + 6.0), at(a + 7.0)), cmul(dm, dm));
+                        let (f1, f2, f3) = ((e1 - big).exp2(), (e2 - big).exp2(), (e3 - big).exp2());
+                        dm = (t1.0 * f1 + t2.0 * f2 + t3.0 * f3, t1.1 * f1 + t2.1 * f2 + t3.1 * f3);
                         de = big;
                     }
                     m += hop;
@@ -1071,19 +1115,20 @@ mod tests {
                     }
                     m += 1.0;
                     n += 1.0;
-                    // 周期点の次の歩。前の周期の同じ歩との差が 4 回続けて 0.5 bit 以上縮むなら、周期点に引き込まれている
-                    if period > 0.0 && m - period * (m / period).floor() == 1.0 {
-                        let e = de.max(pe);
-                        let (fd, fp) = ((de - e).exp2(), (pe - e).exp2());
-                        let diff = (dm.0 * fd - pm.0 * fp, dm.1 * fd - pm.1 * fp);
-                        let ld2 = e + log2_len(diff);
-                        hits = if ld2 < ldiff - 0.5 { hits + 1 } else { 0 };
-                        if hits >= 4 {
-                            return None;
-                        }
-                        (ldiff, pm, pe) = (ld2, dm, de);
-                    }
                 }
+            }
+            // 周期の区切り。前の区切りとの差が 4 回続けて 0.5 bit 以上縮むなら、周期点に引き込まれている
+            if m == next {
+                let e = de.max(pe);
+                let (fd, fp) = ((de - e).exp2(), (pe - e).exp2());
+                let diff = (dm.0 * fd - pm.0 * fp, dm.1 * fd - pm.1 * fp);
+                let ld2 = e + log2_len(diff);
+                hits = if ld2 < ldiff - 0.5 { hits + 1 } else { 0 };
+                if hits >= 4 {
+                    return None;
+                }
+                (ldiff, pm, pe) = (ld2, dm, de);
+                next += period;
             }
             // 仮数が窓を外れたら指数を動かす
             let a = dm.0.abs().max(dm.1.abs());
@@ -1157,7 +1202,7 @@ mod tests {
                 z_ref = (at(ob), at(ob + 1));
             }
             let mut best = None;
-            let mut hop = 1usize;
+            let mut hop = 2usize;
             if skip > 0 {
                 skip -= 1;
             } else {
@@ -1166,12 +1211,12 @@ mod tests {
                     if m % hop != 0 || m + hop >= m_len {
                         break;
                     }
-                    let e = at(2 + k) as usize + 8 * (m / hop);
-                    let p = at(e + 6);
+                    let e = at(2 + k) as usize + ENTRY * (m / hop);
+                    let p = at(e + 9);
                     if ld >= p {
                         break;
                     }
-                    let bias = at(e + 7) + lc - p;
+                    let bias = at(e + 10) + lc - p;
                     if bias >= 0.0 || (bias <= -1.0 && ld >= p - 1.0) || (bias > -1.0 && ld >= p + (1.0 - bias.exp2()).log2()) {
                         break;
                     }
@@ -1184,11 +1229,14 @@ mod tests {
             }
             match best {
                 Some((k, hop)) => {
-                    let e = at(2 + k) as usize + 8 * (m / hop);
-                    let a = ((at(e) * at(e + 2).exp2()), (at(e + 1) * at(e + 2).exp2()));
-                    let b = ((at(e + 3) * at(e + 5).exp2()), (at(e + 4) * at(e + 5).exp2()));
-                    let (ad, bc) = (cmul(a, d), cmul(b, c));
-                    d = (ad.0 + bc.0, ad.1 + bc.1);
+                    let e = at(2 + k) as usize + ENTRY * (m / hop);
+                    let scaled = |i: usize| (at(i) * at(i + 2).exp2(), at(i + 1) * at(i + 2).exp2());
+                    let (a, b) = (scaled(e), scaled(e + 3));
+                    // C は |A|/|d| まで大きくなって f32 から溢れるので、指数の半分ずつ d に配って C d² = C (d 2^(h/2))²
+                    let h = (0.5 * at(e + 8)).exp2();
+                    let dh = (d.0 * h, d.1 * h);
+                    let (ad, bc, qd) = (cmul(a, d), cmul(b, c), cmul((at(e + 6), at(e + 7)), cmul(dh, dh)));
+                    d = (ad.0 + bc.0 + qd.0, ad.1 + bc.1 + qd.1);
                     m += hop;
                     n += hop;
                 }
@@ -1262,25 +1310,86 @@ mod tests {
         }
     }
 
-    /// 1 周期 (8007 歩) を進むのに、カーネルのループが何回回るか。BLA の効き具合
+    /// 表の許容誤差ごとに、カーネルのループが何回回るか (費用) と、1 歩ずつ回した脱出回数とのずれ (精度)。
+    /// 深いところは飛べない歩が費用のほとんどなので、eps を緩めるとどこまで速くなるかをここで見る
     #[test]
     #[ignore]
-    fn kernel_iterations_per_period() {
+    fn cost_and_error_by_tolerance() {
         let (re, im, p, _) = find_center("-0.743643887037158704752191506114774", "0.131825904205311970493132056385139", 2e-30, 60, 20_000).expect("center");
         let orbit = reference_orbit(&re, &im, 40, 100_000).expect("orbit");
-        let table: Vec<f32> = bla_table(&orbit, 2f64.powi(-24)).into_iter().map(|x| x as f32).collect();
+        let m_len = orbit.len() / 2;
+        // 1 歩ずつの f64 (rebase だけ)。答え合わせ用
+        let plain = |c: (f64, f64)| -> Option<usize> {
+            let (mut dr, mut di, mut m) = (0.0, 0.0, 0);
+            for n in 0..100_000 {
+                let (zr, zi) = (orbit[2 * m], orbit[2 * m + 1]);
+                let (xr, xi) = (zr + dr, zi + di);
+                let r2 = xr * xr + xi * xi;
+                if r2 > 256.0 {
+                    return Some(n);
+                }
+                if r2 < dr * dr + di * di || m + 1 >= m_len {
+                    (dr, di, m) = (xr, xi, 0);
+                }
+                let (zr, zi) = (orbit[2 * m], orbit[2 * m + 1]);
+                (dr, di) = (2.0 * (zr * dr - zi * di) + (dr * dr - di * di) + c.0, 2.0 * (zr * di + zi * dr) + 2.0 * dr * di + c.1);
+                m += 1;
+            }
+            None
+        };
         let n = limbs_for(60);
-        let c = (Fix::parse(&re, n).expect("re"), Fix::parse(&im, n).expect("im"));
-        let size = size_of((&c.0, &c.1), p);
-        for (x, y) in [(0.1, 0.0), (-0.3, 0.1), (0.6, 0.0), (0.26, 0.0), (1.0, 0.5)] {
+        let nucleus = (Fix::parse(&re, n).expect("re"), Fix::parse(&im, n).expect("im"));
+        let size = size_of((&nucleus.0, &nucleus.1), p);
+        let spots = [(0.1, 0.0), (-0.3, 0.1), (0.6, 0.0), (0.26, 0.0), (1.0, 0.5), (0.8, -0.4), (1.3, 0.2)];
+        let at = |x: f64, y: f64| {
             let f = 2f64.powi(size.e);
-            let d = (((x * size.re - y * size.im) * f) as f32, ((x * size.im + y * size.re) * f) as f32);
-            let mut trace = Vec::new();
-            let escaped = deep_f32_trace(&table, d, 100_000, 256.0, 0, &mut trace);
-            let reached = trace.last().map_or(0, |row| row.0 as usize);
-            let hist: Vec<usize> = (0..=(reached / p)).map(|k| trace.iter().filter(|row| (row.0 as usize) / p == k).count()).collect();
-            eprintln!("ĉ = ({x}, {y}): {escaped:?}, {} loop iterations for {} steps ({:.0}/period), per period {hist:?}", trace.len(), reached, trace.len() as f64 / (reached as f64 / p as f64));
+            ((x * size.re - y * size.im) * f, (x * size.im + y * size.re) * f)
+        };
+        for bits in [24, 22, 20, 18, 16] {
+            let table: Vec<f32> = bla_table(&orbit, 2f64.powi(-bits)).into_iter().map(|x| x as f32).collect();
+            let (mut loops, mut worst) = (0usize, 0.0f64);
+            for (x, y) in spots {
+                let c = at(x, y);
+                let mut trace = Vec::new();
+                let escaped = deep_f32_trace(&table, (c.0 as f32, c.1 as f32), 100_000, 256.0, p, &mut trace);
+                loops += trace.len();
+                if let (Some(a), Some(b)) = (plain(c), escaped) {
+                    worst = worst.max((a as f64 - b as f64).abs() / a as f64);
+                }
+            }
+            eprintln!("eps 2^-{bits:<3} {loops:>6} loop iterations, worst escape count off by {:.3}%", 100.0 * worst);
         }
+    }
+
+    /// 深い列を 8×8 のタイルで回したときの無駄。タイルの中でいちばん遅いテクセルに全員が付き合うので、
+    /// (合計 / (64 × 最大)) がそのタイルの利用率。1e32 の見えている範囲を粗く抜き取って集計する
+    #[test]
+    #[ignore]
+    fn tile_divergence_at_depth_32() {
+        let (re, im, p, size) = find_center("-0.743643887037158704752191506114774", "0.131825904205311970493132056385139", 2e-30, 60, 20_000).expect("center");
+        let orbit = reference_orbit(&re, &im, 40, 340_000).expect("orbit");
+        let table: Vec<f32> = bla_table(&orbit, 2f64.powi(-24)).into_iter().map(|x| x as f32).collect();
+        let cost = |c: (f32, f32)| {
+            let mut trace = Vec::new();
+            deep_f32_trace(&table, c, 340_000, 256.0, p, &mut trace);
+            trace.len()
+        };
+        // 幅 4 × size の画面を 640x360 で見たときの画素。その中から 8×8 のタイルを 40 個
+        let width = 4.0 * size;
+        let px = width / 640.0;
+        let (mut total, mut waited) = (0usize, 0usize);
+        let mut seed = 12345u64;
+        for _ in 0..40 {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            let x0 = (seed >> 33) as usize % 632;
+            let y0 = (seed >> 13) as usize % 352;
+            let costs: Vec<usize> = (0..64).map(|i| cost(((((x0 + i % 8) as f64 - 320.0) * px) as f32, (((y0 + i / 8) as f64 - 180.0) * px) as f32))).collect();
+            let (sum, max) = (costs.iter().sum::<usize>(), *costs.iter().max().unwrap_or(&0));
+            total += sum;
+            waited += 64 * max;
+            eprintln!("tile ({x0}, {y0}): mean {:>6} max {:>6}  utilization {:.0}%", sum / 64, max, 100.0 * sum as f64 / (64 * max) as f64);
+        }
+        eprintln!("overall utilization {:.0}%  (mean {} loop iterations per texel)", 100.0 * total as f64 / waited as f64, total / (40 * 64));
     }
 
     /// 素の摂動法 (差分を f32 で持つ、表なし) が何桁まで f64 と合うか。切り替える深さを決める材料

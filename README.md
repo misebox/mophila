@@ -76,6 +76,17 @@ cargo install --path .
 
 `.webp` は ffmpeg が libwebp 付きで作られている必要がある。
 
+画質やビットレートは `--codec-args` で ffmpeg にそのまま渡す。出力ファイルの直前に置くので、
+コーデックの指定も入れ物の指定も書ける。
+
+```
+mophila render a.moph -o a.mp4 --codec-args "-crf 18 -preset slow"
+mophila render a.moph -o a.mp4 --codec hevc_nvenc --codec-args "-cq 20 -preset p6"
+```
+
+`libx264` と `libx265` は書かなければ既定の CRF (23 / 28) で動く。`*_nvenc` は既定のビットレートが
+低いので、4K のような大きな絵では `-cq` を書くこと。
+
 ### 並列に組む
 
 `--jobs N` で、フレームの組み立てを N 本のスレッドに分ける。1 フレームの状態は前のフレームに依存しないので、スレッドごとにスクリプトを実行して別々に組める。

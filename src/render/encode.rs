@@ -11,6 +11,8 @@ pub struct Settings<'a> {
     pub fps: u32,
     pub codec: &'a str,
     pub pix_fmt: &'a str,
+    /// --codec-args。出力の直前に足す。コーデックの指定 (-crf、-cq) も入れ物の指定も書ける
+    pub extra: &'a [String],
     /// 音声と字幕と、動画の長さ (秒)。画像出力では None
     pub media: Option<(&'a Media, f64)>,
     /// 拡張子ごとの追加の指定 (GIF のパレットなど)
@@ -103,7 +105,9 @@ impl Ffmpeg {
         let stamp = format!("comment=mophila {}", env!("CARGO_PKG_VERSION"));
         let mut child = cmd
             .args(["-metadata", &stamp])
-            .args(["-c:v", s.codec, "-pix_fmt", s.pix_fmt, output])
+            .args(["-c:v", s.codec, "-pix_fmt", s.pix_fmt])
+            .args(s.extra)
+            .arg(output)
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::piped())

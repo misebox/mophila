@@ -146,6 +146,9 @@ struct OutputArgs {
     /// ffmpeg pixel format (-pix_fmt). Taken from the extension if omitted
     #[arg(long)]
     pix_fmt: Option<String>,
+    /// More ffmpeg options for the output, split on spaces (e.g. "-crf 18 -preset slow", "-cq 20" for nvenc)
+    #[arg(long, allow_hyphen_values = true)]
+    codec_args: Option<String>,
     /// For an image, the frame at this time; for a window, open paused there (e.g. 1.5s, 500ms, 01:23)
     #[arg(long, value_parser = parse_duration)]
     at: Option<f64>,
@@ -570,6 +573,7 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
         return Err(format!("--trim starts at {from}s but the video ends at {duration}s").into());
     }
     let media = render::media::prepare(&view, duration, from, to, true, &cache)?;
+    let extra: Vec<String> = args.codec_args.iter().flat_map(|a| a.split_whitespace().map(str::to_string)).collect();
     let mut ffmpeg = render::encode::Ffmpeg::spawn(
         &output,
         render::encode::Settings {
@@ -578,6 +582,7 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
             fps: args.fps,
             codec: args.codec.as_deref().unwrap_or(format.codec),
             pix_fmt: args.pix_fmt.as_deref().unwrap_or(format.pix_fmt),
+            extra: &extra,
             media: if format.media { Some((&media, to - from)) } else { None },
             filter: format.filter,
         },
@@ -712,7 +717,7 @@ fn sheet(src: &str, base_dir: std::path::PathBuf, project: &Option<Rc<project::P
         progress.step(i + 1);
     }
     progress.finish();
-    let mut ffmpeg = render::encode::Ffmpeg::spawn(output, render::encode::Settings { width, height, fps: 1, codec: "png", pix_fmt: "rgba", media: None, filter: None })?;
+    let mut ffmpeg = render::encode::Ffmpeg::spawn(output, render::encode::Settings { width, height, fps: 1, codec: "png", pix_fmt: "rgba", extra: &[], media: None, filter: None })?;
     ffmpeg.write_frame(&canvas)?;
     ffmpeg.finish()?;
     Ok(())

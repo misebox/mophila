@@ -628,9 +628,11 @@ pub fn compile(closure: &Closure, camera: bool) -> Result<String> {
         return err(Kind::ArgumentType, format!("Shader.color must return Color, found {}", ret.map_or("nothing".to_string(), Ty::name)));
     }
     let mut wgsl = String::from(UNIFORM);
+    wgsl.push_str(RING);
     wgsl.push_str(
         "@group(0) @binding(1) var<storage, read> args: array<f32>;\n\
-         @group(0) @binding(2) var out: texture_storage_2d<rgba8unorm, write>;\n\n",
+         @group(0) @binding(2) var out: texture_storage_2d<rgba8unorm, write>;\n\
+         \n",
     );
     for d in &g.decls {
         wgsl.push_str(d);
@@ -667,8 +669,48 @@ const UNIFORM: &str = "struct U {\n\
     \x20   w: u32, h: u32, n: u32, s: u32,\n\
     \x20   cx: f32, cy: f32, ustart: f32, lnk: f32, cpe: f32,\n\
     \x20   c0: i32, ring: u32, rows: u32, cam: f32,\n\
+    \x20   ea: f32, eb: f32,\n\
     }\n\
     @group(0) @binding(0) var<uniform> u: U;\n";
+
+/// 帯の角度軸の刻み。等間隔ではなく、その方向で画面の縁までの距離 R(th) に比例した密度で刻む。
+/// 帯の列は「画面の隅に届くまで」使い回すので、必要な細かさは方向ごとに R(th) までで、
+/// 上下のように早く画面から出る方向に隅と同じ細かさを持たせるのは誰も見ない計算になる (16:9 で 3 割)。
+/// 目盛りは F(th) = ∫R dth。R は矩形なので区間ごとに a/cos で、F と逆向きは asinh と sinh で書ける。
+/// ea eb は中心から縁までの左右・上下の距離 (中心が真ん中でなければ広いほうに合わせる)
+const RING: &str = "const MZ_QP: f32 = 1.5707963267948966;\n\
+    fn mz_q1() -> f32 { return u.ea * asinh(u.eb / u.ea); }\n\
+    fn mz_q2() -> f32 { return u.eb * asinh(u.ea / u.eb); }\n\
+    fn mz_total() -> f32 { return 4.0 * (mz_q1() + mz_q2()); }\n\
+    fn mz_reach(th: f32) -> f32 {\n\
+    \x20   let c = abs(cos(th));\n\
+    \x20   let s = abs(sin(th));\n\
+    \x20   return min(select(1.0e30, u.ea / c, c > 1.0e-6), select(1.0e30, u.eb / s, s > 1.0e-6));\n\
+    }\n\
+    // 四分円ごとに、先に来る辺と後に来る辺が入れ替わる。1 周ぶんの目盛りはどの四分円でも同じ\n\
+    fn mz_sides(k: f32) -> vec2<f32> {\n\
+    \x20   let odd = (k - 2.0 * floor(k * 0.5)) > 0.5;\n\
+    \x20   return vec2<f32>(select(u.ea, u.eb, odd), select(u.eb, u.ea, odd));\n\
+    }\n\
+    fn mz_mark(th: f32) -> f32 {\n\
+    \x20   let k = floor(th / MZ_QP);\n\
+    \x20   let r = th - k * MZ_QP;\n\
+    \x20   let e = mz_sides(k);\n\
+    \x20   let first = e.x * asinh(e.y / e.x);\n\
+    \x20   var m = first + e.y * (asinh(tan(r - MZ_QP)) + asinh(e.x / e.y));\n\
+    \x20   if (r < atan2(e.y, e.x)) { m = e.x * asinh(tan(r)); }\n\
+    \x20   return k * (mz_q1() + mz_q2()) + m;\n\
+    }\n\
+    fn mz_angle(f: f32) -> f32 {\n\
+    \x20   let per = mz_q1() + mz_q2();\n\
+    \x20   let k = floor(f / per);\n\
+    \x20   let g = f - k * per;\n\
+    \x20   let e = mz_sides(k);\n\
+    \x20   let first = e.x * asinh(e.y / e.x);\n\
+    \x20   var r = MZ_QP + atan(sinh((g - first) / e.y - asinh(e.x / e.y)));\n\
+    \x20   if (g < first) { r = atan(sinh(g / e.x)); }\n\
+    \x20   return k * MZ_QP + r;\n\
+    }\n";
 
 /// 帯を作る。列 c は中心からの距離の対数 u = ustart - c / cpe、行は角度。
 /// 書き込み先は環状バッファなので c を ring で折り返す
@@ -677,12 +719,13 @@ const STRIP: &str = "\n@compute @workgroup_size(8, 8)\n\
     \x20   if (id.x >= u.w || id.y >= u.h) { return; }\n\
     \x20   let c = u.c0 + i32(id.x);\n\
     \x20   let g = max(u.s, 1u);\n\
+    \x20   let per = mz_total() / f32(u.rows);\n\
     \x20   var acc = vec4<f32>(0.0);\n\
     \x20   for (var j = 0u; j < g; j++) {\n\
     \x20       for (var i = 0u; i < g; i++) {\n\
     \x20           let cf = f32(c) + (f32(i) + 0.5) / f32(g) - 0.5;\n\
     \x20           let x = u.ustart - cf * u.sx;\n\
-    \x20           let y = (f32(id.y) + (f32(j) + 0.5) / f32(g)) * u.sy;\n\
+    \x20           let y = mz_angle((f32(id.y) + (f32(j) + 0.5) / f32(g)) * per);\n\
     \x20           acc += clamp(color(x, y, u.t{CAM}), vec4<f32>(0.0), vec4<f32>(1.0));\n\
     \x20       }\n\
     \x20   }\n\
@@ -706,8 +749,9 @@ const FRAME: &str = "@group(0) @binding(1) var strip: texture_2d<f32>;\n\
     \x20   if (th < 0.0) { th = th + 6.283185307179586; }\n\
     \x20   let c = (u.ustart - (log(rho) + u.lnk)) * u.cpe;\n\
     \x20   // 1 画素が覆う帯の広さ。中心に近いほど帯は細かいので、そのぶん平均する\n\
+    \x20   let per = mz_total() / f32(u.rows);\n\
     \x20   let fc = u.cpe / rho;\n\
-    \x20   let fr = f32(u.rows) / (6.283185307179586 * rho);\n\
+    \x20   let fr = mz_reach(th) / (per * rho);\n\
     \x20   let n = i32(clamp(ceil(max(fc, fr)), 1.0, 4.0));\n\
     \x20   var acc = vec4<f32>(0.0);\n\
     \x20   for (var j = 0; j < n; j++) {\n\
@@ -715,7 +759,7 @@ const FRAME: &str = "@group(0) @binding(1) var strip: texture_2d<f32>;\n\
     \x20           let ox = ((f32(i) + 0.5) / f32(n) - 0.5) * fc;\n\
     \x20           let oy = ((f32(j) + 0.5) / f32(n) - 0.5) * fr;\n\
     \x20           // 環状バッファの継ぎ目は repeat で回り込む (隣り合う列は c でも隣り合う)\n\
-    \x20           let uv = vec2<f32>((c + ox + 0.5) / f32(u.ring), (th * f32(u.rows) / 6.283185307179586 + oy + 0.5) / f32(u.rows));\n\
+    \x20           let uv = vec2<f32>((c + ox + 0.5) / f32(u.ring), (mz_mark(th) / per + oy + 0.5) / f32(u.rows));\n\
     \x20           acc += textureSampleLevel(strip, samp, uv, 0.0);\n\
     \x20       }\n\
     \x20   }\n\
@@ -805,6 +849,8 @@ struct Uniforms {
     rows: u32,
     /// camera.scale。camera を入れた Shader だけ使う
     cam: f64,
+    /// 中心から画面の縁までの左右・上下の距離 (画素)。帯の角度軸の刻みに使う
+    edge: (f64, f64),
 }
 
 impl Uniforms {
@@ -823,7 +869,9 @@ impl Uniforms {
         for n in [self.ring, self.rows] {
             out.extend_from_slice(&n.to_le_bytes());
         }
-        out.extend_from_slice(&(self.cam as f32).to_le_bytes());
+        for f in [self.cam, self.edge.0, self.edge.1] {
+            out.extend_from_slice(&(f as f32).to_le_bytes());
+        }
         out.resize(UNIFORM_BYTES, 0);
         out
     }
@@ -1014,10 +1062,17 @@ impl ShaderRunner {
             .max(corner(f64::from(req.width), f64::from(req.height)))
             .max(2.0);
         // 帯の細かさは、いちばん外側で 1 テクセル = 1 ピクセルになるように。
-        // テクスチャの上限に収まらないときは、そのぶん粗くする (絵は少し甘くなる)
+        // テクスチャの上限に収まらないときは、そのぶん粗くする (絵は少し甘くなる)。
+        // 角度方向は方向ごとに画面の縁までの距離で足りるので、その積分 (RING と同じ式) を行数にする。
+        // 中心が真ん中でなくても足りるように、左右・上下とも広いほうを使う
+        let edge = (
+            center_px.0.max(f64::from(req.width) - center_px.0).max(1.0),
+            center_px.1.max(f64::from(req.height) - center_px.1).max(1.0),
+        );
+        let ring_marks = 4.0 * (edge.0 * (edge.1 / edge.0).asinh() + edge.1 * (edge.0 / edge.1).asinh());
         let efolds = (2.0 * radius).ln();
         let max = self.device.limits().max_texture_dimension_2d;
-        let rows = ((std::f64::consts::TAU * radius).ceil() as u32).next_multiple_of(8).clamp(8, max);
+        let rows = (ring_marks.ceil() as u32).next_multiple_of(8).clamp(8, max);
         let want = (efolds * radius).ceil() as u32 + 8;
         let ring = want.clamp(8, max);
         let cpe = if ring < want { f64::from(ring - 8) / efolds } else { radius };
@@ -1062,6 +1117,7 @@ impl ShaderRunner {
                 c0: a as i32,
                 ring,
                 rows,
+                edge,
                 ..Uniforms::default()
             };
             self.queue.write_buffer(&target.uniforms, 0, &uniforms.bytes());
@@ -1074,6 +1130,7 @@ impl ShaderRunner {
                     wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&strip.view) },
                 ],
             });
+            // レーンが自分で次の塊を取りに行くので、投入する組は GPU を埋める数だけでよい
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("mophila zoom strip"), timestamp_writes: None });
             pass.set_pipeline(&pipeline.strip);
             pass.set_bind_group(0, &bind, &[]);
@@ -1093,6 +1150,7 @@ impl ShaderRunner {
             cpe,
             ring,
             rows,
+            edge,
             ..Uniforms::default()
         };
         self.queue.write_buffer(&target.uniforms, 0, &uniforms.bytes());
@@ -1142,7 +1200,7 @@ impl ShaderRunner {
         if self.frame.is_some() {
             return;
         }
-        let source = format!("{UNIFORM}{FRAME}");
+        let source = format!("{UNIFORM}{RING}{FRAME}");
         let module = self.device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("mophila zoom frame"), source: wgpu::ShaderSource::Wgsl(source.into()) });
         let entry = |binding, ty| wgpu::BindGroupLayoutEntry { binding, visibility: wgpu::ShaderStages::COMPUTE, ty, count: None };
         let layout = self.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {

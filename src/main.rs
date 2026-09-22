@@ -579,8 +579,9 @@ fn load(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Source
 /// 置かれた読み上げを音声にして混ぜる。voice: を書いていなければ、書いてくれと言う
 /// mophila.yaml の render: を、コマンドラインに書かなかったところに入れる。
 /// 書いていない名前は黙って既定のまま。読めない値と知らない名前だけ言って、その項目は捨てる
-fn from_config(args: &mut OutputArgs, project: &Option<Rc<project::Project>>) {
-    let Some(project) = project else { return };
+fn from_config(args: &mut OutputArgs, project: &Option<Rc<project::Project>>) -> Vec<String> {
+    let mut taken_names = Vec::new();
+    let Some(project) = project else { return taken_names };
     let complain = |name: &str, why: String| eprintln!("{}: render.{name} {why}", project.path.display());
     for (name, text) in &project.render {
         let taken = match name.as_str() {
@@ -599,23 +600,27 @@ fn from_config(args: &mut OutputArgs, project: &Option<Rc<project::Project>>) {
                 continue;
             }
         };
-        if let Err(why) = taken {
-            complain(name, format!("{why}; using the default instead"));
+        match taken {
+            Err(why) => complain(name, format!("{why}; using the default instead")),
+            Ok(true) => taken_names.push(name.clone()),
+            Ok(false) => {}
         }
     }
+    taken_names
 }
 
-/// コマンドラインに書いてあればそのまま。書いていなければ設定の値を読んで入れる
-fn fill<T>(slot: &mut Option<T>, text: &str, read: impl Fn(&str) -> Result<T, String>) -> Result<(), String> {
+/// コマンドラインに書いてあればそのまま。書いていなければ設定の値を読んで入れる。
+/// 戻り値は、設定の値を使ったかどうか
+fn fill<T>(slot: &mut Option<T>, text: &str, read: impl Fn(&str) -> Result<T, String>) -> Result<bool, String> {
     if slot.is_some() {
-        return Ok(());
+        return Ok(false);
     }
     *slot = Some(read(text)?);
-    Ok(())
+    Ok(true)
 }
 
 fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sources>, project: &Option<Rc<project::Project>>, name: String, mut args: OutputArgs) -> Result<(), Box<dyn Error>> {
-    from_config(&mut args, project);
+    let from_yaml = from_config(&mut args, project);
     let (width, height) = args.size.unwrap_or((960, 540));
     let fps = args.fps.unwrap_or(DEFAULT_FPS);
     // 箱のどこを、どう寄せて出すか
@@ -650,14 +655,26 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
     }
     let media = render::media::prepare(&view, duration, from, to, true, &cache)?;
     let extra: Vec<String> = args.codec_args.iter().flat_map(|a| a.split_whitespace().map(str::to_string)).collect();
+    // 何で描くかを先に出す。ffmpeg が起動に失敗しても、何を頼んだかは残る
+    let codec = args.codec.as_deref().unwrap_or(format.codec);
+    let pix_fmt = args.pix_fmt.as_deref().unwrap_or(format.pix_fmt);
+    let more = match extra.is_empty() {
+        true => String::new(),
+        false => format!(" {}", extra.join(" ")),
+    };
+    let source = match from_yaml.is_empty() {
+        true => String::new(),
+        false => format!("   ({} from mophila.yaml)", from_yaml.join(" ")),
+    };
+    eprintln!("render {width}x{height} {fps}fps {codec} {pix_fmt}{more} -> {output}{source}");
     let mut ffmpeg = render::encode::Ffmpeg::spawn(
         &output,
         render::encode::Settings {
             width,
             height,
             fps,
-            codec: args.codec.as_deref().unwrap_or(format.codec),
-            pix_fmt: args.pix_fmt.as_deref().unwrap_or(format.pix_fmt),
+            codec,
+            pix_fmt,
             extra: &extra,
             media: if format.media { Some((&media, to - from)) } else { None },
             filter: format.filter,

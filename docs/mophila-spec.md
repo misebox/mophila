@@ -763,6 +763,12 @@ render:
 値はコマンドラインに書くのと同じ形で、コマンドラインに書いたほうが勝つ。書かなかった名前は既定のまま (何も言わない)。
 知らない名前と読めない値のときだけ、そう言ってその項目を捨てる。
 
+描き始める前に、効いた指定を 1 行出す。括弧の中は、そのうち設定から取ったもの。
+
+```
+render 3840x2160 60fps hevc_nvenc p010le -cq 20 -b:v 0 -> out.mp4   (size fps codec pix-fmt codec-args from mophila.yaml)
+```
+
 `config` の値は数・文字列・真偽の 3 つ。`import config` で読む。
 
 ```

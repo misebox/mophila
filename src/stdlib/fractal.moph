@@ -130,10 +130,17 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
   let finest = span / deepest
   let deep_digits = if digits > 0 { digits } else { math.max(20, math.ceil(-math.log10(finest)) + 6) }
   # Array にしておくと、Shader の args として毎フレーム送り直さずに済む
-  let orbit = if deep { bignum.reference_orbit(center[0], center[1], deep_digits, ref_steps) } else { Array(reference()) }
+  let full = if deep { bignum.reference_orbit(center[0], center[1], deep_digits, ref_steps) } else { Array(reference()) }
   # 中心が周期点 (ミニチュアの中心) なら、その周期。中の点を上限まで回さずに打ち切るのに使う
-  let period = if deep { bignum.nucleus_period(orbit) } else { 0 }
+  let period = if deep { bignum.nucleus_period(full) } else { 0 }
+  # 周期のところは Z = 0 なので、そこでの「差分を z で持ち直す」は何もしないのと同じ。
+  # 基準も表も 1 周期ぶん持てば足りる。表が周期の数ぶん小さくなって GPU のキャッシュに載るので、
+  # まとめて飛べる歩が 1 周期で頭打ちになるぶんより速い (2 周期ぶん、9 周期ぶんとも測って確かめた)
+  let orbit = if period > 0 { full[0..math.min(2 * (period + 1), full.len())] } else { full }
   let ref_len = orbit.len() / 2
+  # 折り返せるなら反復の上限は max_steps だけ。折り返せないときは、軌道が尽きたところで
+  # 差分を z で持ち直して精度が f32 に落ちるので、そこで頭打ちにする
+  let cap = if period > 0 { 1e30 } else { ref_len }
   # 深いときは、反復をまとめて飛ばす表 (BLA) を軌道に付けて渡す。
   # 飛べる半径は許容誤差の平方根で決まるので、1 回の f32 の丸め (2^-24) まで締める必要は無い。
   # 1 画素あたり数百回飛ぶので、積み上がった丸め (数百 × 2^-24 ≈ 2^-15) より下ならそれで足りる
@@ -156,7 +163,7 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
           let L = ref[1]
           let ob = 2 + L
           let depth = depth_at(u)
-          let limit = math.min(limit_of(depth), M)
+          let limit = math.min(limit_of(depth), cap)
           let lc = u / LN2
           # 浅いところは差分を f32 のまま持つ。rebase があれば 1e-28 まで f64 と合う。表は同じものを使う
           if depth < SHALLOW_DEPTH {
@@ -353,7 +360,7 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
       color = func (u, th, t, ref) {
         let r = math.exp(u)
         let dp = Vector(r * math.cos(th), r * math.sin(th) * up)
-        let limit = math.min(limit_of(depth_at(u)), ref_len)
+        let limit = math.min(limit_of(depth_at(u)), cap)
         let k = param(0)
         let d = start(dp)
         let m = 0
@@ -381,7 +388,7 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
       camera = camera,
       color = func (x, y, t, cam, ref) {
         let dp = Vector(x * unit, y * unit * up)
-        let limit = math.min(limit_of(math.log10(cam)), ref_len)
+        let limit = math.min(limit_of(math.log10(cam)), cap)
         let k = param(t)
         let d = start(dp)
         let m = 0
@@ -408,7 +415,7 @@ export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, cent
     color = func (x, y, t, ref) {
       let zm = zoom_of(t)
       let dp = Vector((x - top_left.x - size.x / 2) * unit / zm, (y - top_left.y - size.y / 2) * unit / zm * up)
-      let limit = math.min(limit_of(math.log10(zm)), ref_len)
+      let limit = math.min(limit_of(math.log10(zm)), cap)
       let k = param(t)
       let d = start(dp)
       let m = 0

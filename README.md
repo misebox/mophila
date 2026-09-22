@@ -85,7 +85,17 @@ mophila render a.moph -o a.mp4 --codec hevc_nvenc --codec-args "-cq 20 -preset p
 ```
 
 `libx264` と `libx265` は書かなければ既定の CRF (23 / 28) で動く。`*_nvenc` は既定のビットレートが
-低いので、4K のような大きな絵では `-cq` を書くこと。
+低いので、4K のような大きな絵では `-cq 20 -b:v 0` のように書くこと (`-b:v 0` が無いとビットレートの上限が先に効く)。
+
+いつも同じ形で出すなら `mophila.yaml` の `render:` に置ける。
+
+```yaml
+render:
+  size: 4k
+  fps: 60
+  codec: hevc_nvenc
+  codec-args: -cq 20 -b:v 0
+```
 
 ### 並列に組む
 

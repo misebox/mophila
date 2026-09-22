@@ -72,6 +72,8 @@ pub struct Project {
     pub aliases: HashMap<String, PathBuf>,
     /// `import config` で読める値。書いた順を保つ
     pub config: Vec<(String, Setting)>,
+    /// render の既定。コマンドラインに書いたほうが勝つ。書いた順を保つ
+    pub render: Vec<(String, String)>,
     /// 既定のスクリプト
     pub entry: Option<PathBuf>,
 }
@@ -135,7 +137,23 @@ impl Project {
                 config.push((name.to_string(), value));
             }
         }
-        let mut project = Project { path, root, aliases, config, entry };
+        // render の既定。値はコマンドラインに書くのと同じ形の文字列にそろえる
+        let mut render = Vec::new();
+        if let Some(map) = at("render") {
+            let Some(map) = map.as_mapping() else {
+                return Err(format!("{}: render must be a list of name: value", path.display()).into());
+            };
+            for (k, v) in map {
+                let name = k.as_str();
+                let text = match v {
+                    serde_yml::Value::Number(n) => n.to_string(),
+                    serde_yml::Value::String(s) => s.clone(),
+                    _ => return Err(format!("{}: render.{name} must be a number or a string", path.display()).into()),
+                };
+                render.push((name.to_string(), text));
+            }
+        }
+        let mut project = Project { path, root, aliases, config, render, entry };
         project.apply_env()?;
         project.apply_overrides(overrides)?;
         Ok(Some(project))

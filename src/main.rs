@@ -134,20 +134,20 @@ struct OutputArgs {
     /// render defaults to output.mp4 (output.png with --at)
     #[arg(short, long)]
     output: Option<String>,
-    /// Frames per second
-    #[arg(long, default_value_t = DEFAULT_FPS)]
-    fps: u32,
-    /// Frame size as WIDTHxHEIGHT, or a name: 360p 480p 720p|hd 1080p|fhd 1440p|wqhd 2160p|4k|uhd (16:9), vga svga xga (4:3)
-    #[arg(long, default_value = "960x540", value_parser = parse_size)]
-    size: (u32, u32),
-    /// ffmpeg video codec (-c:v). Taken from the extension if omitted
+    /// Frames per second (default 10)
     #[arg(long)]
+    fps: Option<u32>,
+    /// Frame size as WIDTHxHEIGHT, or a name: 360p 480p 720p|hd 1080p|fhd 1440p|wqhd 2160p|4k|uhd (16:9), vga svga xga (4:3). Default 960x540
+    #[arg(long, value_parser = parse_size)]
+    size: Option<(u32, u32)>,
+    /// ffmpeg video codec (-c:v). Taken from the extension if omitted. MOPHILA_CODEC does the same
+    #[arg(long, env = "MOPHILA_CODEC")]
     codec: Option<String>,
-    /// ffmpeg pixel format (-pix_fmt). Taken from the extension if omitted
-    #[arg(long)]
+    /// ffmpeg pixel format (-pix_fmt). Taken from the extension if omitted. MOPHILA_PIX_FMT does the same
+    #[arg(long, env = "MOPHILA_PIX_FMT")]
     pix_fmt: Option<String>,
-    /// More ffmpeg options for the output, split on spaces (e.g. "-crf 18 -preset slow", "-cq 20" for nvenc)
-    #[arg(long, allow_hyphen_values = true)]
+    /// More ffmpeg options for the output, split on spaces (e.g. "-crf 18 -preset slow", "-cq 20" for nvenc). MOPHILA_CODEC_ARGS does the same
+    #[arg(long, allow_hyphen_values = true, env = "MOPHILA_CODEC_ARGS")]
     codec_args: Option<String>,
     /// For an image, the frame at this time; for a window, open paused there (e.g. 1.5s, 500ms, 01:23)
     #[arg(long, value_parser = parse_duration)]
@@ -160,8 +160,8 @@ struct OutputArgs {
     trim: Option<Trim>,
     /// Threads that build frames (default 1). 0 picks a number from the CPU count.
     /// Only helps when building costs more than drawing. A Shader always uses one
-    #[arg(long, default_value_t = 1)]
-    jobs: usize,
+    #[arg(long)]
+    jobs: Option<usize>,
     /// Warn about frames that need more GPU memory than this (e.g. 512MB, 2GB)
     #[arg(long, value_parser = parse_bytes)]
     gpu_budget: Option<u64>,
@@ -577,8 +577,47 @@ fn load(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Source
 }
 
 /// 置かれた読み上げを音声にして混ぜる。voice: を書いていなければ、書いてくれと言う
-fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sources>, project: &Option<Rc<project::Project>>, name: String, args: OutputArgs) -> Result<(), Box<dyn Error>> {
-    let (width, height) = args.size;
+/// mophila.yaml の render: を、コマンドラインに書かなかったところに入れる。
+/// 書いていない名前は黙って既定のまま。読めない値と知らない名前だけ言って、その項目は捨てる
+fn from_config(args: &mut OutputArgs, project: &Option<Rc<project::Project>>) {
+    let Some(project) = project else { return };
+    let complain = |name: &str, why: String| eprintln!("{}: render.{name} {why}", project.path.display());
+    for (name, text) in &project.render {
+        let taken = match name.as_str() {
+            "fps" => fill(&mut args.fps, text, |t| t.parse().map_err(|_| "takes a whole number".to_string())),
+            "size" => fill(&mut args.size, text, |t| parse_size(t)),
+            "jobs" => fill(&mut args.jobs, text, |t| t.parse().map_err(|_| "takes a whole number".to_string())),
+            "codec" => fill(&mut args.codec, text, |t| Ok(t.to_string())),
+            "pix-fmt" => fill(&mut args.pix_fmt, text, |t| Ok(t.to_string())),
+            "codec-args" => fill(&mut args.codec_args, text, |t| Ok(t.to_string())),
+            "gpu-budget" => fill(&mut args.gpu_budget, text, parse_bytes),
+            "crop" => fill(&mut args.crop, text, parse_crop),
+            "align" => fill(&mut args.align, text, parse_align),
+            "pad" => fill(&mut args.pad, text, parse_pad),
+            _ => {
+                complain(name, "is not one of fps size jobs codec pix-fmt codec-args gpu-budget crop align pad".to_string());
+                continue;
+            }
+        };
+        if let Err(why) = taken {
+            complain(name, format!("{why}; using the default instead"));
+        }
+    }
+}
+
+/// コマンドラインに書いてあればそのまま。書いていなければ設定の値を読んで入れる
+fn fill<T>(slot: &mut Option<T>, text: &str, read: impl Fn(&str) -> Result<T, String>) -> Result<(), String> {
+    if slot.is_some() {
+        return Ok(());
+    }
+    *slot = Some(read(text)?);
+    Ok(())
+}
+
+fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sources>, project: &Option<Rc<project::Project>>, name: String, mut args: OutputArgs) -> Result<(), Box<dyn Error>> {
+    from_config(&mut args, project);
+    let (width, height) = args.size.unwrap_or((960, 540));
+    let fps = args.fps.unwrap_or(DEFAULT_FPS);
     // 箱のどこを、どう寄せて出すか
     let shot = render::scene::Shot {
         width: f64::from(width),
@@ -604,8 +643,8 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
     let is_image = format.image;
     // --trim の区間。映像はこの時刻から描き、音声と字幕もこの区間に合わせてずらして切る
     let trim = args.trim.unwrap_or(Trim { from: None, to: None });
-    let from = trim.from.map_or(0.0, |a| a.secs(duration, args.fps)).clamp(0.0, duration);
-    let to = trim.to.map_or(duration, |a| a.secs(duration, args.fps)).clamp(0.0, duration);
+    let from = trim.from.map_or(0.0, |a| a.secs(duration, fps)).clamp(0.0, duration);
+    let to = trim.to.map_or(duration, |a| a.secs(duration, fps)).clamp(0.0, duration);
     if !is_image && to <= from {
         return Err(format!("--trim leaves nothing to write: {from}s to {to}s, of a {duration}s video").into());
     }
@@ -616,7 +655,7 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
         render::encode::Settings {
             width,
             height,
-            fps: args.fps,
+            fps,
             codec: args.codec.as_deref().unwrap_or(format.codec),
             pix_fmt: args.pix_fmt.as_deref().unwrap_or(format.pix_fmt),
             extra: &extra,
@@ -629,8 +668,8 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
     let times: Vec<f64> = if is_image {
         vec![args.at.ok_or("--at is required for image output")?]
     } else {
-        let frames = ((to - from) * f64::from(args.fps)).round() as u32;
-        (0..frames).map(|f| from + f64::from(f) / f64::from(args.fps)).collect()
+        let frames = ((to - from) * f64::from(fps)).round() as u32;
+        (0..frames).map(|f| from + f64::from(f) / f64::from(fps)).collect()
     };
     // GPU には 2 フレームまで投入しておき、次を投入する前に古い方を読み戻す。
     // 待ちの間に次のフレームが GPU に入っているので、読み戻しで止まらない。
@@ -643,7 +682,7 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
     // Shader の塗りは描画命令を組む時点で GPU を使うので、別スレッドでは組めない
     let workers = match render::scene::uses_shader(&view) {
         true => 1,
-        false => match args.jobs {
+        false => match args.jobs.unwrap_or(1) {
             0 => std::thread::available_parallelism().map_or(1, |n| n.get().min(4)).max(1),
             n => n.max(1),
         },

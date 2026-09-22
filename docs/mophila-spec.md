@@ -750,9 +750,18 @@ config:
   width: 16                  # import config で読める値
   title: "mophila"
   debug: false
+render:
+  size: 4k                   # render の既定。コマンドラインに書いたほうが勝つ
+  fps: 60
+  codec: hevc_nvenc
+  codec-args: -cq 20 -b:v 0
 ```
 
 **設定の中に書いたパスは、設定ファイルのある場所からの相対**。コマンドラインに書いたパスは、いま居るディレクトリからの相対。設定はプロジェクトの形を書いたものなので、どこで実行しても同じ場所を指す。
+
+`render` に書けるのは `fps` `size` `jobs` `codec` `pix-fmt` `codec-args` `gpu-budget` `crop` `align` `pad`。
+値はコマンドラインに書くのと同じ形で、コマンドラインに書いたほうが勝つ。書かなかった名前は既定のまま (何も言わない)。
+知らない名前と読めない値のときだけ、そう言ってその項目を捨てる。
 
 `config` の値は数・文字列・真偽の 3 つ。`import config` で読む。
 

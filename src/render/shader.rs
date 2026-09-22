@@ -673,6 +673,9 @@ const UNIFORM: &str = "struct U {\n\
     }\n\
     @group(0) @binding(0) var<uniform> u: U;\n";
 
+/// 帯を 1 回の dispatch でいくつのテクセルまで作るか。長すぎるとドライバに切り上げられるので区切る
+const STRIP_TEXELS: u32 = 1 << 20;
+
 /// 帯の角度軸の刻み。等間隔ではなく、その方向で画面の縁までの距離 R(th) に比例した密度で刻む。
 /// 帯の列は「画面の隅に届くまで」使い回すので、必要な細かさは方向ごとに R(th) までで、
 /// 上下のように早く画面から出る方向に隅と同じ細かさを持たせるのは誰も見ない計算になる (16:9 で 3 割)。
@@ -1128,23 +1131,9 @@ impl ShaderRunner {
         let target = &self.targets[&req.shape];
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("mophila zoom") });
         if let Some((a, b)) = todo {
-            let count = (b - a + 1) as u32;
-            let uniforms = Uniforms {
-                t: req.t,
-                w: count,
-                h: rows,
-                n: args_len,
-                s: grid,
-                ustart,
-                step: (1.0 / cpe, std::f64::consts::TAU / f64::from(rows)),
-                c0: a as i32,
-                ring,
-                rows,
-                edge,
-                wide,
-                ..Uniforms::default()
-            };
-            self.queue.write_buffer(&target.uniforms, 0, &uniforms.bytes());
+            // 動画の最初のコマは窓ぜんぶを作るので、1 回に投げると数分かかる dispatch になり、
+            // GPU のドライバに切り上げられる (NVIDIA なら Xid 109 CTX SWITCH TIMEOUT)。列を区切って投げる
+            let step = i64::from(STRIP_TEXELS / rows.max(1)).max(1);
             let bind = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("mophila zoom strip"),
                 layout: &pipeline.layout,
@@ -1154,15 +1143,36 @@ impl ShaderRunner {
                     wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&strip.view) },
                 ],
             });
-            // レーンが自分で次の塊を取りに行くので、投入する組は GPU を埋める数だけでよい
-            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("mophila zoom strip"), timestamp_writes: None });
-            pass.set_pipeline(&pipeline.strip);
-            pass.set_bind_group(0, &bind, &[]);
-            pass.dispatch_workgroups(count.div_ceil(8), rows.div_ceil(8), 1);
-            drop(pass);
-            // 帯と、このあとのフレーム組みは別の uniform なので、ここで一度流す
-            self.queue.submit([encoder.finish()]);
-            encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("mophila zoom") });
+            let mut at = a;
+            while at <= b {
+                let end = (at + step - 1).min(b);
+                let count = (end - at + 1) as u32;
+                let uniforms = Uniforms {
+                    t: req.t,
+                    w: count,
+                    h: rows,
+                    n: args_len,
+                    s: grid,
+                    ustart,
+                    step: (1.0 / cpe, std::f64::consts::TAU / f64::from(rows)),
+                    c0: at as i32,
+                    ring,
+                    rows,
+                    edge,
+                    wide,
+                    ..Uniforms::default()
+                };
+                self.queue.write_buffer(&target.uniforms, 0, &uniforms.bytes());
+                let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("mophila zoom strip"), timestamp_writes: None });
+                pass.set_pipeline(&pipeline.strip);
+                pass.set_bind_group(0, &bind, &[]);
+                pass.dispatch_workgroups(count.div_ceil(8), rows.div_ceil(8), 1);
+                drop(pass);
+                // uniform を書き換えて次の区切りを投げるので、ここで 1 度流す
+                self.queue.submit([encoder.finish()]);
+                encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("mophila zoom") });
+                at = end + 1;
+            }
         }
         let uniforms = Uniforms {
             t: req.t,

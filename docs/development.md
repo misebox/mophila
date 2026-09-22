@@ -45,6 +45,10 @@ preview で詰まったものが出力の不具合かどうかは、両方に付
 
 `MOPHILA_WGSL=1` を付けると、Shader の `color` から組み立てた WGSL をそのまま stderr に出す (`.moph` からの変換を確かめる用)。
 
+GPU に 1 度に投げる仕事は区切ってある。`ZoomPath` の帯は動画の最初のコマで窓ぜんぶを作るので、
+まとめて投げると数分かかる dispatch になり、ドライバに切り上げられる
+(NVIDIA なら `dmesg` に `Xid ... 109 CTX SWITCH TIMEOUT`)。`shader.rs` の `STRIP_TEXELS` がその区切り。
+
 ## 標準ライブラリ
 
 `src/stdlib/`。`import math` `import space3d` `import bignum` は Rust、他は `.moph` を `include_str!` で実行ファイルに埋め込んでいる (`src/stdlib/mod.rs` の `FILES`)。別に配るファイルは無い。

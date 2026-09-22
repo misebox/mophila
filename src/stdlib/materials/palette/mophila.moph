@@ -2,15 +2,16 @@
 
 import { Palette } from .palette
 
-## mophila のロゴの色。青い字に、i の点だけが橙。その橙が accent
+## mophila のロゴの色。i の点の橙が accent、ロゴの青は series の 2 色目。本文はクリーム色に合う暖かい黒
 ## @category 明るい
 ## @type {Palette} 1 つの配色
 export let MOPHILA = Palette(
   back = #f8f4ed,
-  ink = #16213a,
-  sub = #7c8494,
+  ink = #26221e,
+  sub = #8a8177,
   line = #d8d2c6,
   accent = #f0883a,
   track = #ebe5d9,
-  series = [#f0883a, #2f6fb5, #3f9e8c, #d9a73c, #7b62b8],
+  # ロゴの橙と青だけで 5 色。橙は暗くすると土色になるので明るい側へ、暗い側は青で作る
+  series = [#f0883a, #2f6fb5, #1a4a80, #7ea6d5, #f5b07f],
 )

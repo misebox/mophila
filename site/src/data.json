@@ -9128,7 +9128,7 @@
      "isFunc": false,
      "signature": "MOPHILA",
      "call": "MOPHILA",
-     "summary": "mophila のロゴの色。青い字に、i の点だけが橙。その橙が accent",
+     "summary": "mophila のロゴの色。i の点の橙が accent、ロゴの青は series の 2 色目。本文はクリーム色に合う暖かい黒",
      "params": [],
      "returns": {
       "type": "Palette",

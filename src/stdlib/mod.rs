@@ -40,6 +40,7 @@ pub const FILES: &[(&str, &str, &str)] = &[
     ("palette", "materials/palette/index.moph", include_str!("materials/palette/index.moph")),
     ("", "materials/palette/palette.moph", include_str!("materials/palette/palette.moph")),
     ("", "materials/palette/house.moph", include_str!("materials/palette/house.moph")),
+    ("", "materials/palette/mophila.moph", include_str!("materials/palette/mophila.moph")),
     ("", "materials/palette/paper.moph", include_str!("materials/palette/paper.moph")),
     ("", "materials/palette/earth.moph", include_str!("materials/palette/earth.moph")),
     ("", "materials/palette/mono.moph", include_str!("materials/palette/mono.moph")),

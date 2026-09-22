@@ -29,24 +29,29 @@ func scene(title: String, no: Number) -> View {
 
 # ---- palette。1 枚が 1 つの配色。名前 (ink)、accent の帯、series の 5 色 ----
 let sets = [
-  (palette.HOUSE, "HOUSE"), (palette.PAPER, "PAPER"), (palette.EARTH, "EARTH"),
-  (palette.MONO, "MONO"), (palette.OCEAN, "OCEAN"), (palette.SLATE, "SLATE"),
-  (palette.CANDY, "CANDY"), (palette.NIGHT, "NIGHT"), (palette.NEON, "NEON"),
-  (palette.FOREST, "FOREST"), (palette.SUNSET, "SUNSET"), (palette.BLUEPRINT, "BLUEPRINT"),
+  (palette.HOUSE, "HOUSE"), (palette.MOPHILA, "MOPHILA"), (palette.PAPER, "PAPER"),
+  (palette.EARTH, "EARTH"), (palette.MONO, "MONO"), (palette.OCEAN, "OCEAN"),
+  (palette.SLATE, "SLATE"), (palette.CANDY, "CANDY"), (palette.NIGHT, "NIGHT"),
+  (palette.NEON, "NEON"), (palette.FOREST, "FOREST"), (palette.SUNSET, "SUNSET"),
+  (palette.BLUEPRINT, "BLUEPRINT"),
 ]
 let colors = scene("palette — 配色", 0)
+# 7 列 2 段。カードの幅も中身も、外周 0.6 を空けた残りから割り出す
+let card_step = 14.8 / 7
+let card_w = card_step - 0.2
+let bar_w = (card_w - 0.32 - 0.05 * 4) / 5
 let cards = []
 for (i, set) in sets.enumerate() {
   let (p, name) = set
-  let card = View(box = Vector(2.3, 3.5), opacity = 0)
-  card.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 2.3, h = 3.5, fill = p.back))
-  card.place(TextArea(position = Pos(1.15, 0.5), text = name, fontSize = 0.28, fill = p.ink))
-  card.place(Rect(position = Pos(0.2, 0.9, anchor = :topLeft), w = 1.9, h = 0.5, fill = p.accent))
+  let card = View(box = Vector(card_w, 3.5), opacity = 0)
+  card.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = card_w, h = 3.5, fill = p.back))
+  card.place(TextArea(position = Pos(card_w / 2, 0.5), text = name, fontSize = 0.26, fill = p.ink))
+  card.place(Rect(position = Pos(0.16, 0.9, anchor = :topLeft), w = card_w - 0.32, h = 0.5, fill = p.accent))
   for (j, c) in p.series.enumerate() {
-    card.place(Rect(position = Pos(0.2 + j * 0.39, 1.85, anchor = :topLeft), w = 0.33, h = 1.45, fill = c))
+    card.place(Rect(position = Pos(0.16 + j * (bar_w + 0.05), 1.85, anchor = :topLeft), w = bar_w, h = 1.45, fill = c))
   }
-  card.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 2.3, h = 3.5, stroke = p.line, strokeWidth = 0.03))
-  colors.place(card, at = Pos(0.6 + (i - math.floor(i / 6) * 6) * 2.5, 1.0 + math.floor(i / 6) * 3.7, anchor = :topLeft), w = 2.3)
+  card.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = card_w, h = 3.5, stroke = p.line, strokeWidth = 0.03))
+  colors.place(card, at = Pos(0.6 + (i - math.floor(i / 7) * 7) * card_step, 1.0 + math.floor(i / 7) * 3.7, anchor = :topLeft), w = card_w)
   cards.push(card)
 }
 stagger(track, cards, func (c) { fade_in(c, 0.4s) }, at = 0.15s, stagger = 0.08s)

@@ -1,0 +1,16 @@
+# mophila.moph — mophila 自身の色
+
+import { Palette } from .palette
+
+## mophila のロゴの色。青い字に、i の点だけが橙。その橙が accent
+## @category 明るい
+## @type {Palette} 1 つの配色
+export let MOPHILA = Palette(
+  back = #f8f4ed,
+  ink = #16213a,
+  sub = #7c8494,
+  line = #d8d2c6,
+  accent = #f0883a,
+  track = #ebe5d9,
+  series = [#f0883a, #2f6fb5, #3f9e8c, #d9a73c, #7b62b8],
+)

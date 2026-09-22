@@ -12,6 +12,13 @@ aliases:
   parts: parts
   scenes: scenes
 
+# render の既定。コマンドラインに書いたほうが勝つ。
+# 書けるのは fps size jobs codec pix-fmt codec-args gpu-budget crop align pad
+render:
+  size: fhd
+  fps: 30
+  codec-args: -crf 20        # ffmpeg の出力側にそのまま渡る
+
 # import config で読める値。数・文字列・真偽の 3 つ。
 # MOPHILA_<大文字の名前> か --set 名前=値 で上書きできる
 config:

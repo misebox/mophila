@@ -25,7 +25,7 @@ pub struct Method {
 }
 
 /// 並びのある入れ物 (List / Tuple / Range) が共通で持つメソッドの受け手
-const SEQ: &[&str] = &["List", "Tuple", "Range"];
+const SEQ: &[&str] = &["List", "Tuple", "Range", "Array"];
 
 /// space3d のカメラ。どれも同じメソッドを持ち、投影の仕方だけが違う
 const CAMERAS: &[&str] = &["PerspectiveCamera", "OrthographicCamera", "IsometricCamera"];
@@ -268,6 +268,7 @@ fn items_of(v: &Value) -> Vec<Value> {
         Value::List(items) => items.borrow().clone(),
         Value::Tuple(items) => items.clone(),
         Value::Range(a, b) => (*a..*b).map(|i| Value::num(i as f64)).collect(),
+        Value::Array(a) => a.nums.iter().map(|x| Value::num(*x)).collect(),
         _ => Vec::new(),
     }
 }
@@ -432,6 +433,7 @@ fn seq_len(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
         Value::List(items) => items.borrow().len() as f64,
         Value::Tuple(items) => items.len() as f64,
         Value::Range(a, b) => (b - a).max(0) as f64,
+        Value::Array(a) => a.nums.len() as f64,
         _ => 0.0,
     }))
 }

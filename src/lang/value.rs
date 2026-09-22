@@ -11,6 +11,24 @@ pub type ObjRef = Rc<RefCell<Object>>;
 pub type Scope = Rc<RefCell<HashMap<String, Value>>>;
 pub type Scopes = Vec<Scope>;
 
+/// Number だけを詰めた配列。Rust の関数が作り、Rust の関数や Shader.args にそのまま渡す。要素ごとの Value を持たない
+#[derive(Debug)]
+pub struct Array {
+    pub nums: Vec<f64>,
+    /// GPU に送る f32 の写し。最初に要るときに 1 回だけ作る
+    f32s: std::cell::OnceCell<Vec<f32>>,
+}
+
+impl Array {
+    pub fn new(nums: Vec<f64>) -> Array {
+        Array { nums, f32s: std::cell::OnceCell::new() }
+    }
+
+    pub fn f32s(&self) -> &[f32] {
+        self.f32s.get_or_init(|| self.nums.iter().map(|x| *x as f32).collect())
+    }
+}
+
 pub fn new_scope() -> Scope {
     Rc::new(RefCell::new(HashMap::new()))
 }
@@ -95,6 +113,8 @@ pub enum Value {
     Apos(String, f64, f64),
     Tuple(Vec<Value>),
     List(Rc<RefCell<Vec<Value>>>),
+    /// Number だけの配列。作ったら変えない
+    Array(Rc<Array>),
     /// start..end (end は含まない)
     Range(i64, i64),
     /// 挿入順を保つ
@@ -631,6 +651,7 @@ impl Value {
             Value::Apos(..) => "Pos",
             Value::Tuple(_) => "Tuple",
             Value::List(_) => "List",
+            Value::Array(_) => "Array",
             Value::Range(..) => "Range",
             Value::Dict(_) => "Dict",
             Value::Timeline(_) => "Timeline",
@@ -657,6 +678,7 @@ impl Value {
             Value::Apos(..) => "Pos".into(),
             Value::Tuple(_) => "Tuple".into(),
             Value::List(_) => "List".into(),
+            Value::Array(_) => "Array".into(),
             Value::Range(..) => "Range".into(),
             Value::Dict(_) => "Dict".into(),
             Value::Object(o) => o.borrow().kind.clone(),
@@ -749,6 +771,13 @@ impl fmt::Display for Value {
             Value::List(items) => {
                 let parts: Vec<String> = items.borrow().iter().map(|v| v.to_string()).collect();
                 write!(f, "[{}]", parts.join(", "))
+            }
+            Value::Array(a) => {
+                let shown: Vec<String> = a.nums.iter().take(16).map(|x| x.to_string()).collect();
+                match a.nums.len() > shown.len() {
+                    true => write!(f, "Array[{}, … ({} 個)]", shown.join(", "), a.nums.len()),
+                    false => write!(f, "Array[{}]", shown.join(", ")),
+                }
             }
             Value::Range(a, b) => write!(f, "{a}..{b}"),
             Value::Dict(entries) => {

@@ -60,6 +60,7 @@ name_1             # 識別子は英字・数字・_。先頭は英字か _
 | Symbol | `:center` `:linear` | 名前そのものが値。同じ名前どうしだけが等しい |
 | Tuple | `(1, 1.5)` | 要素ごとに型が違ってよい。長さは書いたときに決まる。要素 1 つは `(1,)`、空は `()` |
 | List | `[1, 2, 3]` | 値を順に並べたもの。要素の型は検査しない。メソッドの署名の `T` は要素の型、`U` は変換後の型 |
+| Array | `Array(1, 2, 3)` `Array(list)` | Number だけを詰めた配列。要素ごとの値を持たないので、Rust で作った大きな並びを Rust の関数や `Shader.args` にそのまま渡せる (同じ Array である間は GPU に送り直さない)。作ったら変えない。添字・範囲・for・len は List と同じ |
 | Dict | `{ "k": v }` `{ x, y }` | キーは String。挿入順を保つ。`{ x, y }` は `{ "x": x, "y": y }` の省略形 |
 | Range | `0..5` `0..=5` | 整数の範囲。`..` は末尾を含まない。両端が整数でなければ `ValueError.OutOfRange` |
 | Func | `func (x) { x }` | 型表記は `(引数) -> 戻り値` |
@@ -350,7 +351,7 @@ Shader(color = func (x, y, t) { Color(x * 16, 0, 128) })
 | 属性 | 型 | 意味 |
 |---|---|---|
 | `color` | (Number, Number, Number) -> Color | 箱の座標 x, y と動画の時刻 t 秒から、そのピクセルの色を返す |
-| `args` | List | Number の並び。`color` の 4 つ目の引数として渡る |
+| `args` | Array か List | Number の並び。`color` の 4 つ目の引数として渡る。Array なら同じものである間は GPU に送り直さない |
 | `samples` | Number | 1 ピクセルあたりの評価点の数。平方数に切り上げ、4 なら 2x2 の平均。省略は 1 |
 | `zoom` | ZoomPath | ズーム動画の道筋。入れると `color` の引数の意味が変わる |
 
@@ -366,7 +367,7 @@ Shader(color = func (x, y, t) { Color(x * 16, 0, 128) })
 
 書けないもの: 文字列、Duration、図形、Dict、素の Tuple。
 
-`args` は毎フレーム読むので、motion の行で変えれば動く。`run` では走らず、`render` `preview` `sheet` で走る。GPU の実数は 32 bit。
+`args` は毎フレーム読むので、motion の行で変えれば動く。大きな表は Array で渡す (List は毎フレーム写して送るが、Array は同じものである間は送らない)。`run` では走らず、`render` `preview` `sheet` で走る。GPU の実数は 32 bit。
 
 **ZoomPath** — 1 点へ寄っていくだけのズーム動画は、(中心からの距離の対数, 角度) で見るとどのフレームも同じ絵の平行移動になる。`Shader.zoom` に `ZoomPath` を入れると、1 フレームずつ描かずに、その座標系の帯を伸ばしながら使い回す。帯は 1 フレームあたり数列しか伸びないので、1 枚ずつ描くより桁違いに速い。
 

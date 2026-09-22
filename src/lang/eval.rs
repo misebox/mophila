@@ -584,6 +584,7 @@ impl Interp {
         let every = |xs: &[Value]| args.len() == 1 && xs.iter().all(|x| self.matches_ann(x, &args[0]));
         match v {
             Value::List(xs) => every(&xs.borrow()),
+            Value::Array(_) => args.len() == 1 && args[0].name == "Number",
             // Tuple は 1 つ書いたら全部その型、並べて書いたら 1 つずつ
             Value::Tuple(xs) => match args.len() {
                 1 => every(xs),
@@ -766,6 +767,7 @@ impl Interp {
         match self.eval(e)? {
             Value::List(items) => Ok(items.borrow().clone()),
             Value::Tuple(items) => Ok(items),
+            Value::Array(a) => Ok(a.nums.iter().map(|x| Value::num(*x)).collect()),
             Value::Range(a, b) => Ok((a..b).map(|i| Value::num(i as f64)).collect()),
             Value::Dict(entries) => Ok(entries.borrow().iter().map(|(k, v)| Value::Tuple(vec![Value::Str(k.clone()), v.clone()])).collect()),
             v => err(Kind::ArgumentType, format!("cannot iterate over {}", v.type_name())),
@@ -996,6 +998,7 @@ impl Interp {
             }
             match &v {
                 Value::List(items) => out.extend(items.borrow().iter().map(|i| (None, i.clone()))),
+                Value::Array(a) => out.extend(a.nums.iter().map(|x| (None, Value::num(*x)))),
                 Value::Tuple(items) => out.extend(items.iter().map(|i| (None, i.clone()))),
                 Value::Range(a, b) => out.extend((*a..*b).map(|i| (None, Value::num(i as f64)))),
                 // Dict は キー = 値 の名前付き引数になる
@@ -1203,6 +1206,25 @@ impl Interp {
             }
             "Tuple" => Ok(Value::Tuple(self.positional(kind, args)?)),
             "List" => Ok(Value::List(Rc::new(RefCell::new(self.positional(kind, args)?)))),
+            "Array" => {
+                let items = self.positional(kind, args)?;
+                // 1 つだけ渡した並びは、その中身
+                let items = match items.as_slice() {
+                    [Value::List(xs)] => xs.borrow().clone(),
+                    [Value::Tuple(xs)] => xs.clone(),
+                    [Value::Array(a)] => return Ok(Value::Array(Rc::clone(a))),
+                    [Value::Range(a, b)] => (*a..*b).map(|i| Value::num(i as f64)).collect(),
+                    _ => items,
+                };
+                let nums = items
+                    .iter()
+                    .map(|v| match v {
+                        Value::Number(x, _) => Ok(*x),
+                        other => err(Kind::ArgumentType, format!("Array holds Numbers only, found {}", other.type_name())),
+                    })
+                    .collect::<Result<Vec<f64>>>()?;
+                Ok(Value::Array(Rc::new(crate::lang::value::Array::new(nums))))
+            }
             "Dict" => {
                 let mut items: Vec<(String, Value)> = Vec::new();
                 for a in args {
@@ -2367,6 +2389,22 @@ fn index_value(target: &Value, index: &Value) -> Result<Value> {
         }
         return Ok(Value::Str(chars[at as usize].to_string()));
     }
+    if let Value::Array(a) = target {
+        let n = a.nums.len() as i64;
+        if let Value::Range(x, y) = index {
+            let (x, y) = ((*x).clamp(0, n) as usize, (*y).clamp(0, n) as usize);
+            return Ok(Value::Array(Rc::new(crate::lang::value::Array::new(a.nums[x.min(y)..y].to_vec()))));
+        }
+        let Value::Number(i, _) = index else {
+            return err(Kind::OperandType, format!("index must be Number, found {}", index.type_name()));
+        };
+        let i = whole(*i, "an index")?;
+        let at = if i < 0 { i + n } else { i };
+        if at < 0 || at >= n {
+            return err(Kind::OutOfRange, format!("index {i} out of range for length {n}"));
+        }
+        return Ok(Value::num(a.nums[at as usize]));
+    }
     // 借りたまま読む。ここで並び全体を複製すると、xs[i] を n 回で O(n²) になる
     let borrowed;
     let items: &[Value] = match target {
@@ -2409,6 +2447,7 @@ pub(crate) fn equals(a: &Value, b: &Value) -> bool {
         (Value::Color(x), Value::Color(y)) => x == y,
         (Value::Range(x0, y0), Value::Range(x1, y1)) => x0 == x1 && y0 == y1,
         // 入れ物は中身が同じなら等しい。Dict は並び順を見ない
+        (Value::Array(x), Value::Array(y)) => Rc::ptr_eq(x, y) || x.nums == y.nums,
         (Value::List(x), Value::List(y)) => Rc::ptr_eq(x, y) || {
             let (x, y) = (x.borrow(), y.borrow());
             x.len() == y.len() && x.iter().zip(y.iter()).all(|(a, b)| equals(a, b))
@@ -2826,7 +2865,7 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
     ];
     // 読み上げ。voice は engine に渡す声の名前、volume は混ぜるときの音量
     const NARRATION: &[Attr] = &[req("text", "String"), req("duration", "Duration"), opt("volume", "Number")];
-    const SHADER: &[Attr] = &[req("color", "Func"), opt("args", "List<Number>"), opt("samples", "Number"), opt("zoom", "ZoomPath"), opt("camera", "Camera")];
+    const SHADER: &[Attr] = &[req("color", "Func"), opt("args", "Numbers"), opt("samples", "Number"), opt("zoom", "ZoomPath"), opt("camera", "Camera")];
     // 倍率の表は zoom と duration と unit から作る (作るのは construct)。scale は作った結果
     const ZOOM_MAP: &[Attr] =
         &[req("center", "Vector"), req("zoom", "Func"), req("duration", "Duration"), opt("unit", "Number"), opt("scale", "List")];

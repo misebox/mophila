@@ -725,13 +725,28 @@ const FRAME: &str = "@group(0) @binding(1) var strip: texture_2d<f32>;\n\
 // ---------- GPU で走らせる ----------
 
 /// 1 つの図形の塗りの依頼
+/// Shader.args。Array は同じ実体である間 GPU に送り直さない。List は毎フレーム写して送る
+pub enum Args<'a> {
+    Plain(&'a [f32]),
+    Shared(&'a Rc<crate::lang::value::Array>),
+}
+
+impl Args<'_> {
+    fn f32s(&self) -> &[f32] {
+        match self {
+            Args::Plain(xs) => xs,
+            Args::Shared(a) => a.f32s(),
+        }
+    }
+}
+
 pub struct Request<'a> {
     /// 塗る図形の通し番号 (テクスチャの使い回しの鍵)
     pub shape: u64,
     /// いま組んでいるフレームの番号。使わなくなったものを手放すのに使う
     pub frame: u64,
     pub closure: &'a Rc<Closure>,
-    pub args: &'a [f32],
+    pub args: Args<'a>,
     pub t: f64,
     pub width: u32,
     pub height: u32,
@@ -849,6 +864,8 @@ struct Target {
     image: ImageData,
     uniforms: wgpu::Buffer,
     args: wgpu::Buffer,
+    /// args に送ってある Array。同じものが来たら送らない (持っておくので、その番地が別の Array に回ることも無い)
+    shared: Option<Rc<crate::lang::value::Array>>,
 }
 
 pub struct ShaderRunner {
@@ -922,16 +939,27 @@ impl ShaderRunner {
         if let Some(strip) = self.strips.get_mut(&req.shape) {
             strip.used = req.frame;
         }
-        let args_len = req.args.len() as u32;
+        let args = req.args.f32s();
+        let args_len = args.len() as u32;
         {
             let target = self.targets.get_mut(&req.shape).expect("inserted above");
-            let needed = (req.args.len().max(4) * 4) as u64;
-            if target.args.size() < needed {
-                target.args = self.device.create_buffer(&wgpu::BufferDescriptor { label: Some("mophila shader args"), size: needed, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
-            }
-            if !req.args.is_empty() {
-                let data: Vec<u8> = req.args.iter().flat_map(|f| f.to_le_bytes()).collect();
-                self.queue.write_buffer(&target.args, 0, &data);
+            let sent = match &req.args {
+                Args::Shared(a) => target.shared.as_ref().is_some_and(|s| Rc::ptr_eq(s, a)),
+                Args::Plain(_) => false,
+            };
+            if !sent {
+                let needed = (args.len().max(4) * 4) as u64;
+                if target.args.size() < needed {
+                    target.args = self.device.create_buffer(&wgpu::BufferDescriptor { label: Some("mophila shader args"), size: needed, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+                }
+                if !args.is_empty() {
+                    let data: Vec<u8> = args.iter().flat_map(|f| f.to_le_bytes()).collect();
+                    self.queue.write_buffer(&target.args, 0, &data);
+                }
+                target.shared = match &req.args {
+                    Args::Shared(a) => Some(Rc::clone(a)),
+                    Args::Plain(_) => None,
+                };
             }
         }
         let grid = (f64::from(req.samples.max(1)).sqrt().ceil()) as u32;
@@ -1208,7 +1236,7 @@ impl ShaderRunner {
         if let Some(e) = pollster::block_on(scope.pop()) {
             return err(Kind::OutOfMemory, oom("a Shader fill", width, height, self.bytes(), &e));
         }
-        Ok(Target { used: 0, texture, view, width, height, image, uniforms, args })
+        Ok(Target { used: 0, texture, view, width, height, image, uniforms, args, shared: None })
     }
 }
 

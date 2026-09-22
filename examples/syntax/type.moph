@@ -11,10 +11,12 @@
 #           r/g/b 0..255, a 0..1
 # Tuple     (1, 1.5)            = Tuple(1, 1.5)      要素ごとに型が違ってよい
 # List      [1, 2, 3]           = List(1, 2, 3)      要素は同じ型
+# Array     Array(1, 2, 3)      = Array([1, 2, 3])   Number だけ。Rust の関数の出入りと Shader.args 向け。作ったら変えない
 # Dict      { "red": #e04040 }  = Dict(red = #e04040)  キーは String
 # Range     0..5                = Range(0, 5)        0..=5 は Range(0, 6)
 # Func      func (x) { x }      下記
 log([1, 2, 3] == List(1, 2, 3), { "a": 1 } == Dict(a = 1), (0..5) == Range(0, 5))
+log(Array(1, 2, 3)[1], Array(0..5).len(), Array([1, 2]) == Array(1, 2), type_of(Array(1)))
 
 # ---- Func ----
 # 型の表記は宣言と同じ形: (引数の型, ...) -> 戻り値の型

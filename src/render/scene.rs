@@ -815,17 +815,23 @@ fn draw_shader_fill(scene: &mut Scene, path: &BezPath, transform: Affine, opacit
     let Some(Value::Func(closure)) = sh.attrs.get("color") else {
         return err(Kind::AttributeType, "Shader.color must be a func (x, y, t)");
     };
-    let args: Vec<f32> = match sh.attrs.get("args") {
-        Some(Value::List(items)) => items
-            .borrow()
-            .iter()
-            .map(|v| match v {
-                Value::Number(n, _) => Ok(*n as f32),
-                other => err(Kind::AttributeType, format!("Shader.args must hold Numbers, found {}", other.type_name())),
-            })
-            .collect::<Result<_>>()?,
-        Some(other) => return err(Kind::AttributeType, format!("Shader.args expects List, found {}", other.type_name())),
-        None => Vec::new(),
+    // Array はそのまま渡す (同じ実体なら GPU に送り直さない)。List は毎フレーム写す
+    let plain: Vec<f32>;
+    let args = match sh.attrs.get("args") {
+        Some(Value::Array(a)) => crate::render::shader::Args::Shared(a),
+        Some(Value::List(items)) => {
+            plain = items
+                .borrow()
+                .iter()
+                .map(|v| match v {
+                    Value::Number(n, _) => Ok(*n as f32),
+                    other => err(Kind::AttributeType, format!("Shader.args must hold Numbers, found {}", other.type_name())),
+                })
+                .collect::<Result<_>>()?;
+            crate::render::shader::Args::Plain(&plain)
+        }
+        Some(other) => return err(Kind::AttributeType, format!("Shader.args expects Array or List, found {}", other.type_name())),
+        None => crate::render::shader::Args::Plain(&[]),
     };
     // ズーム動画。中心と、時刻から倍率への表をもらう
     let zoom = match sh.attrs.get("zoom") {
@@ -884,7 +890,7 @@ fn draw_shader_fill(scene: &mut Scene, path: &BezPath, transform: Affine, opacit
         frame: cache.frame,
         shape: key,
         closure,
-        args: &args,
+        args,
         t: frame.t,
         width,
         height,

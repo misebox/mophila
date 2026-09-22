@@ -3088,6 +3088,12 @@
    "path": "src/stdlib/bignum.rs",
    "entries": [
     {
+     "doc": "基準軌道の中心が周期点 (ミニチュアの中心) なら、その周期。軌道が最初に 0 に戻る反復。戻らなければ 0",
+     "name": "nucleus_period",
+     "returns": "Number",
+     "signature": "bignum.nucleus_period(orbit: Array)"
+    },
+    {
      "doc": "中心の点の軌道を、指定した 10 進の桁数で回して [re, im, re, im, …] の Array で返す。深いズームの基準軌道。脱出したらそこで止まる",
      "name": "reference_orbit",
      "returns": "Array",

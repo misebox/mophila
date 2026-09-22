@@ -56,10 +56,17 @@ pub fn format_of(path: &str) -> Option<Format> {
     })
 }
 
-/// ffmpeg を子プロセスとして起動し、stdin に RGBA フレームを流し込む
+/// 書き込みを待たせるフレームの数。ffmpeg が詰まっている間も、この分だけは描き続けられる
+const QUEUE: usize = 3;
+
+/// ffmpeg を子プロセスとして起動し、stdin に RGBA フレームを流し込む。
+/// 書き込みは別スレッド。ffmpeg (x264) が 1 フレームを噛んでいる間に次のフレームを描けるように
 pub struct Ffmpeg {
     child: Child,
-    stdin: Option<ChildStdin>,
+    /// 書き込みスレッドへフレームを渡す口。ffmpeg が先に落ちたら閉じる
+    tx: Option<std::sync::mpsc::SyncSender<Vec<u8>>>,
+    /// 書き込みスレッド。全部書けたら true
+    writer: Option<std::thread::JoinHandle<bool>>,
     /// エラーに出す。使えないコーデックを指した場合に分かるように
     codec: String,
     /// 終わったら消す一時ファイル (字幕)
@@ -99,15 +106,26 @@ impl Ffmpeg {
             .stdout(Stdio::null())
             .spawn()
             .map_err(|e| format!("cannot start ffmpeg: {e}"))?;
-        let stdin = child.stdin.take().ok_or("cannot take the stdin of ffmpeg")?;
-        Ok(Self { child, stdin: Some(stdin), codec: s.codec.to_string(), temp_files })
+        let mut stdin: ChildStdin = child.stdin.take().ok_or("cannot take the stdin of ffmpeg")?;
+        let (tx, rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(QUEUE);
+        // 送り手が閉じたら for が終わり、stdin が落ちて ffmpeg に終わりが伝わる
+        let writer = std::thread::spawn(move || {
+            for frame in rx {
+                if stdin.write_all(&frame).is_err() {
+                    return false;
+                }
+            }
+            true
+        });
+        Ok(Self { child, tx: Some(tx), writer: Some(writer), codec: s.codec.to_string(), temp_files })
     }
 
+    /// 列に積む。列が一杯なら空くまで待つ (ffmpeg の速さに合わせる)
     pub fn write_frame(&mut self, rgba: &[u8]) -> Result<(), Box<dyn Error>> {
-        let Some(stdin) = &mut self.stdin else { return Err("ffmpeg has already exited".into()) };
-        if stdin.write_all(rgba).is_err() {
-            // ffmpeg が先に落ちた。理由は ffmpeg が stderr に出している
-            self.stdin = None;
+        let Some(tx) = &self.tx else { return Err("ffmpeg has already exited".into()) };
+        if tx.send(rgba.to_vec()).is_err() {
+            // 書き込みスレッドが終わっている = ffmpeg が先に落ちた。理由は ffmpeg が stderr に出している
+            self.tx = None;
             let _ = self.child.wait();
             return Err(self.failed());
         }
@@ -115,8 +133,9 @@ impl Ffmpeg {
     }
 
     pub fn finish(mut self) -> Result<(), Box<dyn Error>> {
-        self.stdin = None;
-        if !self.child.wait()?.success() {
+        self.tx = None;
+        let written = self.writer.take().is_none_or(|w| w.join().unwrap_or(false));
+        if !self.child.wait()?.success() || !written {
             return Err(self.failed());
         }
         Ok(())

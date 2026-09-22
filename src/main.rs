@@ -135,7 +135,7 @@ struct OutputArgs {
     #[arg(short, long)]
     output: Option<String>,
     /// Frames per second
-    #[arg(long, default_value_t = 10)]
+    #[arg(long, default_value_t = DEFAULT_FPS)]
     fps: u32,
     /// Frame size as WIDTHxHEIGHT, or a name: 360p 480p 720p|hd 1080p|fhd 1440p|wqhd 2160p|4k|uhd (16:9), vga svga xga (4:3)
     #[arg(long, default_value = "960x540", value_parser = parse_size)]
@@ -155,7 +155,7 @@ struct OutputArgs {
     /// In a window, start over when it reaches the end
     #[arg(long)]
     r#loop: bool,
-    /// Write only this span: 00:15..00:30 (15s to 30s), 00:15 (from 15s on), ..01:30 (up to 1m30s)
+    /// Write only this span: 00:15..00:30, 00:15 (from 15s on), ..01:30 (up to it), 94%..96%, or bare numbers for frames
     #[arg(long, value_parser = parse_trim)]
     trim: Option<Trim>,
     /// Threads that build frames (default 1). 0 picks a number from the CPU count.
@@ -176,20 +176,56 @@ struct OutputArgs {
     pad: Option<String>,
 }
 
+/// --fps を書かなかったときのコマ数
+const DEFAULT_FPS: u32 = 10;
+
+/// --trim に書く時刻。割合とコマ数は、動画の長さと fps が分かってから秒になる
+#[derive(Clone, Copy)]
+enum At {
+    Sec(f64),
+    /// 全体に対する割合 (0..1)
+    Part(f64),
+    /// 単位を書かなかったときのコマ数
+    Frame(f64),
+}
+
+impl At {
+    fn secs(self, duration: f64, fps: u32) -> f64 {
+        match self {
+            At::Sec(s) => s,
+            At::Part(p) => p * duration,
+            At::Frame(n) => n / f64::from(fps.max(1)),
+        }
+    }
+}
+
 /// --trim の区間。None は端まで
 #[derive(Clone, Copy)]
 struct Trim {
-    from: Option<f64>,
-    to: Option<f64>,
+    from: Option<At>,
+    to: Option<At>,
 }
 
 fn parse_trim(s: &str) -> Result<Trim, String> {
-    let side = |part: &str| -> Result<Option<f64>, String> { if part.is_empty() { Ok(None) } else { parse_duration(part).map(Some) } };
+    let side = |part: &str| -> Result<Option<At>, String> {
+        if part.is_empty() {
+            return Ok(None);
+        }
+        if part.ends_with('%') {
+            return parse_ratio(part, "--trim").map(|p| Some(At::Part(p)));
+        }
+        // 単位も区切りも無ければコマ数
+        match part.parse::<f64>() {
+            Ok(n) if !part.contains(':') => Ok(Some(At::Frame(n))),
+            _ => parse_duration(part).map(|v| Some(At::Sec(v))),
+        }
+    };
     let trim = match s.split_once("..") {
         Some((a, b)) => Trim { from: side(a)?, to: side(b)? },
         None => Trim { from: side(s)?, to: None },
     };
-    if let (Some(a), Some(b)) = (trim.from, trim.to) {
+    // 片方が割合だと長さを知るまで比べられないので、両方そろっているときだけ見る
+    if let (Some(At::Sec(a)), Some(At::Sec(b))) | (Some(At::Part(a)), Some(At::Part(b))) | (Some(At::Frame(a)), Some(At::Frame(b))) = (trim.from, trim.to) {
         if b <= a {
             return Err(format!("trim end must be after start: {s}"));
         }
@@ -418,8 +454,9 @@ fn run() -> Result<(), Box<dyn Error>> {
             let script = entry(script)?;
             let (_, view, duration) = load(&read_script(&script)?, base_dir(&script), None, &project)?;
             let trim = trim.unwrap_or(Trim { from: None, to: None });
-            let from = trim.from.unwrap_or(0.0).min(duration);
-            let to = trim.to.unwrap_or(duration).min(duration);
+            // 字幕を出すだけなので fps は要らない。コマ数で書かれていたら render の既定で読む
+            let from = trim.from.map_or(0.0, |a| a.secs(duration, DEFAULT_FPS)).clamp(0.0, duration);
+            let to = trim.to.map_or(duration, |a| a.secs(duration, DEFAULT_FPS)).clamp(0.0, duration);
             // 動画に入るのと同じものを、同じ道で組む (音声は作らない)
             let media = render::media::prepare(&view, duration, from, to, false, &render::voice::cache_dir())?;
             let cues = &media.cues;
@@ -567,10 +604,10 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
     let is_image = format.image;
     // --trim の区間。映像はこの時刻から描き、音声と字幕もこの区間に合わせてずらして切る
     let trim = args.trim.unwrap_or(Trim { from: None, to: None });
-    let from = trim.from.unwrap_or(0.0).min(duration);
-    let to = trim.to.unwrap_or(duration).min(duration);
+    let from = trim.from.map_or(0.0, |a| a.secs(duration, args.fps)).clamp(0.0, duration);
+    let to = trim.to.map_or(duration, |a| a.secs(duration, args.fps)).clamp(0.0, duration);
     if !is_image && to <= from {
-        return Err(format!("--trim starts at {from}s but the video ends at {duration}s").into());
+        return Err(format!("--trim leaves nothing to write: {from}s to {to}s, of a {duration}s video").into());
     }
     let media = render::media::prepare(&view, duration, from, to, true, &cache)?;
     let extra: Vec<String> = args.codec_args.iter().flat_map(|a| a.split_whitespace().map(str::to_string)).collect();

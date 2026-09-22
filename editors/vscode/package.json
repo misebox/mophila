@@ -2,7 +2,7 @@
   "name": "mophila",
   "displayName": "mophila",
   "description": "Language support for mophila (.moph) motion graphics scripts",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "icon": "icon.png",
   "publisher": "mophila",
   "license": "MIT",

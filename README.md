@@ -86,6 +86,7 @@ mophila render a.moph -o a.mp4 --codec hevc_nvenc --codec-args "-cq 20 -preset p
 
 `libx264` と `libx265` は書かなければ既定の CRF (23 / 28) で動く。`*_nvenc` は既定のビットレートが
 低いので、4K のような大きな絵では `-cq 20 -b:v 0` のように書くこと (`-b:v 0` が無いとビットレートの上限が先に効く)。
+mp4 に HEVC を入れるなら `-tag:v hvc1` も足す。既定のタグは `hev1` で、QuickTime と Safari はそれを再生しない。
 
 いつも同じ形で出すなら `mophila.yaml` の `render:` に置ける。
 

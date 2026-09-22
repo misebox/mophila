@@ -57,6 +57,7 @@ pub const METHODS: &[Method] = &[
     Method { receivers: &["Vector"], name: "cdiv", signature: "v.cdiv(w: Vector)", returns: "Vector", doc: "複素数としての商。w が 0 なら ValueError.DivisionByZero", call: vec_cdiv },
     Method { receivers: SEQ, name: "len", signature: "xs.len()", returns: "Number", doc: "要素数", call: seq_len },
     Method { receivers: &["List"], name: "push", signature: "xs.push(値: T)", returns: "Nothing", doc: "末尾に追加する。その List 自身が変わる", call: list_push },
+    Method { receivers: &["List"], name: "pop", signature: "xs.pop()", returns: "T", doc: "末尾を外して返す。その List 自身が変わる。空なら ValueError.OutOfRange", call: list_pop },
     Method { receivers: SEQ, name: "enumerate", signature: "xs.enumerate()", returns: "List<(Number, T)>", doc: "番号と要素の組。for (i, x) in xs.enumerate() で使う", call: seq_enumerate },
     Method { receivers: SEQ, name: "reverse", signature: "xs.reverse()", returns: "List<T>", doc: "逆順にした新しい List", call: seq_reverse },
     Method { receivers: SEQ, name: "contains", signature: "xs.contains(値: T)", returns: "Bool", doc: "その値を含むか", call: seq_contains },
@@ -444,6 +445,20 @@ fn list_push(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
     };
     target.borrow_mut().push(v.clone());
     Ok(Value::Nothing)
+}
+
+fn list_pop(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    if !args.is_empty() {
+        return arity("pop", "no arguments", args.len());
+    }
+    let Value::List(target) = &r else {
+        return err(Kind::ArgumentType, "List.pop takes a List");
+    };
+    let last = target.borrow_mut().pop();
+    match last {
+        Some(v) => Ok(v),
+        None => err(Kind::OutOfRange, "List.pop: the list is empty"),
+    }
 }
 
 fn seq_enumerate(_: &mut Interp, r: Value, args: Args) -> Result<Value> {

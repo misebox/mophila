@@ -69,6 +69,8 @@ pub struct Ffmpeg {
     writer: Option<std::thread::JoinHandle<bool>>,
     /// エラーに出す。使えないコーデックを指した場合に分かるように
     codec: String,
+    /// ffmpeg が stderr に言ったこと。進捗の行が書き直しで上書きしてしまうので、こちらで拾っておく
+    said: std::sync::Arc<std::sync::Mutex<String>>,
     /// 終わったら消す一時ファイル (字幕)
     temp_files: Vec<PathBuf>,
 }
@@ -104,8 +106,21 @@ impl Ffmpeg {
             .args(["-c:v", s.codec, "-pix_fmt", s.pix_fmt, output])
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
+            .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| format!("cannot start ffmpeg: {e}"))?;
+        let said = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+        if let Some(mut err) = child.stderr.take() {
+            let into = std::sync::Arc::clone(&said);
+            std::thread::spawn(move || {
+                let mut all = String::new();
+                if std::io::Read::read_to_string(&mut err, &mut all).is_ok() {
+                    // 長いときは終わりだけ。理由は最後に出る
+                    let tail: Vec<&str> = all.lines().rev().take(8).collect();
+                    *into.lock().expect("stderr") = tail.into_iter().rev().collect::<Vec<_>>().join("\n");
+                }
+            });
+        }
         let mut stdin: ChildStdin = child.stdin.take().ok_or("cannot take the stdin of ffmpeg")?;
         let (tx, rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(QUEUE);
         // 送り手が閉じたら for が終わり、stdin が落ちて ffmpeg に終わりが伝わる
@@ -117,7 +132,7 @@ impl Ffmpeg {
             }
             true
         });
-        Ok(Self { child, tx: Some(tx), writer: Some(writer), codec: s.codec.to_string(), temp_files })
+        Ok(Self { child, tx: Some(tx), writer: Some(writer), codec: s.codec.to_string(), said, temp_files })
     }
 
     /// 列に積む。列が一杯なら空くまで待つ (ffmpeg の速さに合わせる)
@@ -141,9 +156,14 @@ impl Ffmpeg {
         Ok(())
     }
 
-    /// ffmpeg が理由を stderr に出しているので、こちらは何を頼んだかだけ言う
+    /// ffmpeg が言ったことをそのまま添える。何も言っていなければ、よくある原因を挙げる
     fn failed(&self) -> Box<dyn Error> {
-        format!("ffmpeg failed (-c:v {}). see its output above", self.codec).into()
+        let said = self.said.lock().map(|s| s.clone()).unwrap_or_default();
+        let why = match said.trim().is_empty() {
+            false => format!("\n{}", said.trim()),
+            true => " (it said nothing; the disk filling up or the file system's size limit are the usual reasons)".to_string(),
+        };
+        format!("ffmpeg failed (-c:v {}){why}", self.codec).into()
     }
 }
 

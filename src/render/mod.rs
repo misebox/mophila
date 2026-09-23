@@ -5,6 +5,7 @@ pub mod encode;
 pub mod frames;
 pub mod gpu;
 pub mod media;
+pub mod mesh;
 pub mod preview;
 pub mod progress;
 pub mod scene;

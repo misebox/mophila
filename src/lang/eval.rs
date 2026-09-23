@@ -2681,7 +2681,7 @@ pub fn font_names(v: &Value) -> Vec<String> {
 const LOOP_LIMIT: usize = 1_000_000;
 
 pub const KINDS: &[&str] =
-    &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "View", "Timeline", "Narration", "SayVoiceEngine", "EspeakVoiceEngine", "Shader", "ZoomPath", "Camera", "Gradient", "Color", "PerspectiveCamera", "OrthographicCamera", "IsometricCamera", "Transform3", "Mesh", "Face"];
+    &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "View", "Timeline", "Narration", "SayVoiceEngine", "EspeakVoiceEngine", "Shader", "ZoomPath", "Camera", "Gradient", "Color", "PerspectiveCamera", "OrthographicCamera", "IsometricCamera", "Transform3", "Mesh", "Face", "Solid", "World"];
 
 /// builtin 型の属性と型
 /// 型の名前は大文字で始まり、builtin の型と union の名前は使えない
@@ -2728,6 +2728,8 @@ pub fn defaults(kind: &str) -> Vec<(&'static str, Value)> {
         "OrthographicCamera" => return vec![("up", Value::Vector3(0.0, 1.0, 0.0)), ("height", num(8.0))],
         "IsometricCamera" => return vec![("unit", num(1.0))],
         "Transform3" => return vec![("m", stdlib::space3d::identity())],
+        "Solid" => return vec![("fill", Value::Color([0.5, 0.5, 0.5, 1.0]))],
+        "World" => return vec![("light", Value::Vector3(0.4, 0.8, 0.5)), ("ambient", num(0.25))],
         _ => {}
     }
     let sym = |s: &str| Value::Symbol(s.to_string());
@@ -2879,6 +2881,9 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
     const ISOMETRIC: &[Attr] = &[opt("unit", "Number"), req("box", "Vector")];
     const TRANSFORM3: &[Attr] = &[opt("m", "List<Number>")];
     const MESH: &[Attr] = &[req("points", "List<Vector3>"), opt("edges", "List<Tuple>"), opt("faces", "List<List<Number>>")];
+    const SOLID: &[Attr] = &[req("mesh", "Mesh"), opt("fill", "Color"), opt("transform", "Transform3")];
+    const WORLD: &[Attr] =
+        &[req("camera", "Projection"), req("parts", "List<Solid>"), opt("light", "Vector3"), opt("ambient", "Number"), opt("background", "Color")];
     const FACE: &[Attr] = &[req("points", "List<Vector>"), req("normal", "Vector3"), req("depth", "Number")];
     // to は :linear、radius は :radial のときだけ要るので、必須にはしない
     const GRADIENT: &[Attr] = &[
@@ -2909,6 +2914,8 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
         "Transform3" => TRANSFORM3,
         "Mesh" => MESH,
         "Face" => FACE,
+        "Solid" => SOLID,
+        "World" => WORLD,
         "Gradient" => GRADIENT,
         _ => return None,
     })

@@ -110,11 +110,11 @@ fn vs(@location(0) at: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) c
     // 透視。w を奥行きにして、割り算を GPU に任せる
     out.clip = vec4<f32>(
       s.z * bx + s.x * v.focal * ax,
-      s.z * by - s.y * v.focal * ay,
+      s.z * by + s.y * v.focal * ay,
       v.far * (s.z - v.near) / (v.far - v.near),
       s.z);
   } else {
-    out.clip = vec4<f32>(bx + s.x * v.unit * ax, by - s.y * v.unit * ay, (s.z - v.near) / (v.far - v.near), 1.0);
+    out.clip = vec4<f32>(bx + s.x * v.unit * ax, by + s.y * v.unit * ay, (s.z - v.near) / (v.far - v.near), 1.0);
   }
   // 面の向きで明るさを決める。space3d.shade と同じ式
   let lit = max(dot(normalize(normal), normalize(v.light)), 0.0);

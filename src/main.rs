@@ -690,14 +690,14 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
     };
     // GPU には 2 フレームまで投入しておき、次を投入する前に古い方を読み戻す。
     // 待ちの間に次のフレームが GPU に入っているので、読み戻しで止まらない。
-    // ただし Shader を使う絵では、compute と描画が GPU を取り合って遅くなるので 1 枚ずつにする
-    let depth = if render::scene::uses_shader(&view) { 1 } else { 2 };
+    // ただし塗りに GPU を使う絵では、その仕事と描画が GPU を取り合って遅くなるので 1 枚ずつにする
+    let depth = if render::scene::uses_gpu_fill(&view) { 1 } else { 2 };
     let mut pending: std::collections::VecDeque<usize> = std::collections::VecDeque::new();
     // 置いたものは描いている間に増えないので、1 度集めて使い回す
     let tracks = lang::eval::all_tracks(&view);
     let mut progress = render::progress::Progress::new(&name, times.len());
-    // Shader の塗りは描画命令を組む時点で GPU を使うので、別スレッドでは組めない
-    let workers = match render::scene::uses_shader(&view) {
+    // Shader と World の塗りは描画命令を組む時点で GPU を使うので、別スレッドでは組めない
+    let workers = match render::scene::uses_gpu_fill(&view) {
         true => 1,
         false => match args.jobs.unwrap_or(1) {
             0 => std::thread::available_parallelism().map_or(1, |n| n.get().min(4)).max(1),

@@ -12,7 +12,7 @@
     { "name": "constant.numeric.duration.mophila", "match": "\\b[0-9]+(\\.[0-9]+)?(ms|s|m|h)(\\b|(?=[0-9]))|\\b[0-9]+:[0-9]+(:[0-9]+)?(\\.[0-9]+)?" },
     { "name": "constant.numeric.mophila", "match": "\\b[0-9]+(\\.[0-9]+)?%?" },
     { "name": "constant.other.symbol.mophila", "match": ":[A-Za-z_][A-Za-z0-9_]*" },
-    { "name": "support.class.mophila", "match": "\\b(Align|Anchor|Array|Audio|Blend|Bool|Camera|Circle|Color|Dict|Duration|Easing|Ellipse|EspeakVoiceEngine|Face|Font|Func|Gradient|GradientKind|Image|IsometricCamera|Line|List|Mesh|Module|Motion|Narration|Nothing|Number|Numbers|OrthographicCamera|Paint|Path|PerspectiveCamera|Placeable|Polygon|Pos|Projection|Range|Rect|SayVoiceEngine|Shader|Shape|String|StrokeCap|StrokeJoin|Symbol|TextArea|Timeline|Transform3|Tuple|Type|Vector|Vector3|View|ZoomPath)\\b" },
+    { "name": "support.class.mophila", "match": "\\b(Align|Anchor|Array|Audio|Blend|Bool|Camera|Circle|Color|Dict|Duration|Easing|Ellipse|EspeakVoiceEngine|Face|Font|Func|Gradient|GradientKind|Image|IsometricCamera|Line|List|Mesh|Module|Motion|Narration|Nothing|Number|Numbers|OrthographicCamera|Paint|Path|PerspectiveCamera|Placeable|Polygon|Pos|Projection|Range|Rect|SayVoiceEngine|Shader|Shape|Solid|String|StrokeCap|StrokeJoin|Symbol|TextArea|Timeline|Transform3|Tuple|Type|Vector|Vector3|View|World|ZoomPath)\\b" },
     { "name": "entity.name.function.macro.mophila", "match": "\\b[A-Za-z_][A-Za-z0-9_]*!(?=\\()" },
     { "name": "support.function.mophila", "match": "\\b(log|type_of)(?=\\()" },
     { "name": "entity.name.function.mophila", "match": "\\b[A-Za-z_][A-Za-z0-9_]*(?=\\()" },

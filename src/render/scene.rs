@@ -164,7 +164,7 @@ fn draw_view(scene: &mut Scene, view: &ObjRef, transform: Affine, frame: &Frame,
         let c = child.borrow();
         let key = child.borrow().id;
         // Shader の塗りは毎フレーム計算し直す
-        if let Some(shader) = shader_fill(&c) {
+        if let Some(shader) = gpu_fill(&c) {
             draw_object(scene, &c, transform, frame, key, Some(&shader), cache)?;
             continue;
         }
@@ -312,10 +312,10 @@ fn camera_of(attrs: &Attrs) -> Result<Option<(Affine, Point, f64)>> {
     Ok(Some((Affine::translate(to.to_vec2()) * Affine::scale(scale) * Affine::translate(-from.to_vec2()), to, scale)))
 }
 
-/// fill が Shader ならその実体
-fn shader_fill(c: &crate::lang::value::Object) -> Option<ObjRef> {
+/// fill が GPU で作る塗り (Shader か World) ならその実体
+fn gpu_fill(c: &crate::lang::value::Object) -> Option<ObjRef> {
     match c.attrs.get("fill") {
-        Some(Value::Object(o)) if o.borrow().kind == "Shader" => Some(o.clone()),
+        Some(Value::Object(o)) if matches!(o.borrow().kind.as_str(), "Shader" | "World") => Some(o.clone()),
         _ => None,
     }
 }
@@ -435,7 +435,10 @@ fn draw_object(scene: &mut Scene, c: &crate::lang::value::Object, transform: Aff
         scene.push_layer(Fill::NonZero, mode, 1.0, placed, &path);
     }
     if let Some(shader) = shader {
-        draw_shader_fill(scene, &path, placed, opacity, shader, frame, key, cache)?;
+        match shader.borrow().kind.as_str() {
+            "World" => draw_world_fill(scene, &path, placed, opacity, shader, frame, key, cache)?,
+            _ => draw_shader_fill(scene, &path, placed, opacity, shader, frame, key, cache)?,
+        }
     } else if image_fill(scene, c, &path, placed, opacity, cache)? {
     } else if let Some(fill) = brush(&c.attrs, "fill", kind)? {
         scene.fill(Fill::NonZero, placed, &fill.multiply_alpha(opacity), None, &path);
@@ -808,6 +811,32 @@ pub fn overlay_help(scene: &mut Scene, cache: &mut RenderCache, text: &str, area
     text::draw(scene, layout, Affine::translate((x0 + pad, y0 + pad)), Color::from_rgba8(240, 240, 240, 255), None);
 }
 
+/// World の塗り。Mesh を GPU で描いて、その画像で図形を塗る。
+/// 面を図形に開かないので、スクリプト側の仕事は面の数に依らない
+fn draw_world_fill(scene: &mut Scene, path: &BezPath, transform: Affine, opacity: f32, world: &ObjRef, frame: &Frame, key: u64, cache: &mut RenderCache) -> Result<()> {
+    let (mut view, vertices, background) = crate::stdlib::space3d::world_parts(&world.borrow())?;
+    let Some(runner) = cache.shaders.as_mut() else {
+        return err(Kind::ShaderUnavailable, "a World fill needs the GPU (render, preview, sheet)");
+    };
+    let bounds = transform.transform_rect_bbox(path.bounding_box()).intersect(frame.picture);
+    if bounds.is_zero_area() {
+        return Ok(());
+    }
+    let (x0, y0) = (bounds.x0.floor(), bounds.y0.floor());
+    let width = (bounds.x1.ceil() - x0).max(1.0) as u32;
+    let height = (bounds.y1.ceil() - y0).max(1.0) as u32;
+    // 箱 → ピクセルは拡大と平行移動だけなので、逆は 1 次式
+    let [s, _, _, _, tx, ty] = transform.as_coeffs();
+    view.origin = [((x0 - tx) / s) as f32, ((y0 - ty) / s) as f32];
+    view.step = [(1.0 / s) as f32, (1.0 / s) as f32];
+    view.size = [width as f32, height as f32];
+    let image = runner.run_world(crate::render::shader::World { shape: key, frame: cache.frame, width, height, view, background, vertices: &vertices })?;
+    let mut brush = ImageBrush::new(image);
+    brush.sampler.alpha = opacity;
+    scene.fill(Fill::NonZero, transform, &Brush::Image(brush), Some(transform.inverse() * Affine::translate((x0, y0))), path);
+    Ok(())
+}
+
 /// Shader の塗り。図形の範囲 (画面内) のピクセルを compute shader で計算し、その画像で図形を塗る
 #[allow(clippy::too_many_arguments)]
 fn draw_shader_fill(scene: &mut Scene, path: &BezPath, transform: Affine, opacity: f32, shader: &ObjRef, frame: &Frame, key: u64, cache: &mut RenderCache) -> Result<()> {
@@ -919,10 +948,10 @@ fn draw_shader_fill(scene: &mut Scene, path: &BezPath, transform: Affine, opacit
     Ok(())
 }
 
-/// View の中に Shader の塗りがあるか。あると描画命令を組むのに GPU が要る
-pub fn uses_shader(view: &ObjRef) -> bool {
+/// View の中に GPU が要る塗り (Shader か World) があるか。あると描画命令を組むのに GPU を使う
+pub fn uses_gpu_fill(view: &ObjRef) -> bool {
     let v = view.borrow();
-    shader_fill(&v).is_some() || v.children.iter().any(uses_shader)
+    gpu_fill(&v).is_some() || v.children.iter().any(uses_gpu_fill)
 }
 
 

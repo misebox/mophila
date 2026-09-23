@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """宣言した属性が、本当に絵に効くかを確かめる。
 
-`mophila doc` が挙げる図形の属性を 2 通りの値で描いて、絵が変わることを見る。
+`mophila doc` が挙げる図形と 3D の塗りの属性を 2 通りの値で描いて、絵が変わることを見る。
 変わらなければ「代入できるのに何も起こらない」属性なので、描画側を直すか宣言から外す。
 属性を足したのにここに書き方が無ければ、それも失敗として出る。
 
@@ -86,6 +86,42 @@ VIEW_CASES = [
     ("pivot", "Vector(0, 0)", "Vector(3, 3)", {"rotation": "30"}),
     ("camera", "Camera(from = Vector(1, 1), to = Vector(1.5, 1.5), scale = 1)", "Camera(from = Vector(1, 1), to = Vector(1.5, 1.5), scale = 2)", {}),
 ]
+
+
+# World と Solid は図形ではなく塗りなので別に書く。Rect の fill に入れて描く
+WORLD_BASE = {"camera": "space3d.PerspectiveCamera(from = (3, 2.5, 5), to = (0, 0, 0), fov = 40, box = (4, 4))", "parts": "[solid]"}
+SOLID_BASE = {"mesh": "space3d.box((0, 0, 0), (2, 2, 2))"}
+# (型, 属性, 値 1, 値 2)
+PAINT_CASES = [
+    ("World", "camera", WORLD_BASE["camera"], "space3d.PerspectiveCamera(from = (3, 2.5, 5), to = (0, 0, 0), fov = 25, box = (4, 4))"),
+    ("World", "parts", "[solid]", "[]"),
+    ("World", "light", "(0.4, 0.8, 0.5)", "(-0.7, 0.2, 0.5)"),
+    ("World", "ambient", "0.1", "0.8"),
+    ("World", "background", "#101010", "#2060a0"),
+    ("Solid", "mesh", SOLID_BASE["mesh"], "space3d.sphere((0, 0, 0), 1.2, 8, 16)"),
+    ("Solid", "fill", "#e04040", "#4040e0"),
+    ("Solid", "transform", "space3d.Transform3()", "space3d.Transform3().rotate_y(35)"),
+]
+
+
+def draw_world(kind: str, attr: str, value: str, work: Path) -> str:
+    """Rect の fill に World を入れて描く。attr は World か Solid のどちらかに書き足す"""
+    world, solid = dict(WORLD_BASE), dict(SOLID_BASE)
+    (world if kind == "World" else solid)[attr] = value
+    body = ", ".join(f"{k} = {v}" for k, v in world.items())
+    part = ", ".join(f"{k} = {v}" for k, v in solid.items())
+    src, out = work / "case.moph", work / "case.png"
+    src.write_text(
+        "import space3d\n"
+        "let v = View(box = Vector(4, 4))\n"
+        f"let solid = space3d.Solid({part})\n"
+        f"v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 4, h = 4, fill = space3d.World({body})))\n"
+        "output v\n"
+    )
+    r = subprocess.run([BIN, "render", str(src), "-o", str(out), "--at", "0s"], capture_output=True, text=True)
+    if r.returncode != 0:
+        return "ERR: " + (r.stderr.strip().splitlines() or ["?"])[-1]
+    return hashlib.sha1(out.read_bytes()).hexdigest()
 
 
 def draw_view(attrs: dict, place: dict, work: Path) -> str:
@@ -185,6 +221,19 @@ def main() -> int:
         missing = [a for a in types.get("View", []) if a not in {c[0] for c in VIEW_CASES}]
         if missing:
             failed.append(f"View: 試す値が scripts/check_attrs.py に無い: {' '.join(missing)}")
+        # 3D の塗りも同じように見る
+        for kind, attr, a, b in PAINT_CASES:
+            checked += 1
+            ha = draw_world(kind, attr, a, work)
+            hb = draw_world(kind, attr, b, work)
+            if ha.startswith("ERR") or hb.startswith("ERR"):
+                failed.append(f"{kind}.{attr}: {ha if ha.startswith('ERR') else hb}")
+            elif ha == hb:
+                failed.append(f"{kind}.{attr}: 値を変えても絵が変わらない")
+        for kind in ("World", "Solid"):
+            missing = [a for a in types.get(kind, []) if a not in {c[1] for c in PAINT_CASES if c[0] == kind}]
+            if missing:
+                failed.append(f"{kind}: 試す値が scripts/check_attrs.py に無い: {' '.join(missing)}")
         n, bad = check_required(doc, work)
         checked += n
         failed += bad

@@ -121,7 +121,7 @@ builtin の型の名前は予約されていて、`struct` / `record` / `type` �
 
 既存の型を `|` で結んだ名前。`type Fill = Color | Gradient`。値は作れず、引数や属性の型として書く。
 
-言語が持つ union: `Shape` (図形すべて)、`Placeable` (`Shape | View`)、`Paint` (`Color | Gradient | Shader`)、`Font` (`String | List`。候補を並べられる)、`Projection` (space3d のカメラ 3 種)。
+言語が持つ union: `Shape` (図形すべて)、`Placeable` (`Shape | View`)、`Paint` (`Color | Gradient | Shader | Image | World`)、`Font` (`String | List`。候補を並べられる)、`Projection` (space3d のカメラ 3 種)。
 
 型名の後ろに `< >` を書くと、中身の型まで見る。`List<Vector>` は要素が全部 `Vector`、`Dict<String, Number>` は値が全部 `Number`、`Tuple<Number, String>` は 1 つずつ。`Tuple<Number>` のように 1 つだけ書いたら全部その型。`< >` を書かなければ入れ物の型だけを見る。
 
@@ -330,7 +330,7 @@ v.camera = Camera(from = Vector(3, 2.5), to = Vector(8, 4.5), scale = 10)
 motion (t) { 0..1: { v.camera.scale = math.exp(math.ln(1e12) * t) } }
 ```
 
-`fill` に入れられるのは `Color` `Gradient` `Shader` (`Paint`)。
+`fill` に入れられるのは `Color` `Gradient` `Shader` `Image` `World` (`Paint`)。
 
 ```
 Gradient(from = Vector(0, 0), to = Vector(16, 9), stops = [#4080e0, #e0604a])
@@ -385,6 +385,32 @@ Shader(zoom = ZoomPath(center = Vector(8, 4.5), zoom = func (t) { t + 1 }, durat
 `zoom` を入れると `color` の引数は `(中心からの距離の対数, 角度, 時刻)` になる。倍率は増えていくこと (戻ると帯を作り直すので遅い)。手で組むものではなく、標準ライブラリ `fractal` の `escape_time` が `duration` を書いたときに組み立てる。
 
 `escape_time` の `center` を 10 進の文字列 2 つで渡すと、倍率が 32 bit にも 64 bit にも収まらない深さまで行ける。中心の点の軌道 (基準軌道) を多倍長で計算し、GPU は指数を別に持つ数でそこからの差分を回し、線形近似 (BLA) で反復をまとめて飛ばす。倍率そのものは扱えないので `max_steps` には倍率の log10 が渡る。寄る先は `find_center` で探せる (その点の近くにあるミニチュアの中心・周期・大きさを返す)。
+
+**World** — `space3d` の 3D の場面。図形の `fill` に入れると、その図形の中に GPU が `Mesh` をそのまま描く。面を 1 枚ずつ図形に開く書き方と違って、1 コマにスクリプトがするのは `Solid` の置き方を書き換えることだけなので、面が何万枚あっても 1 コマの手間は変わらない。前後は深度で決まるので `zIndex` で並べ替えなくていい。
+
+```
+let ball = space3d.Solid(mesh = space3d.sphere((0, 0, 0), 1, 16, 32), fill = #6fa3d6)
+v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,
+             fill = space3d.World(camera = cam, parts = [ball], background = #101520)))
+```
+
+| 属性 | 型 | 意味 |
+|---|---|---|
+| `camera` | Projection | space3d のカメラ。`box` は塗る図形の大きさに合わせる |
+| `parts` | List<Solid> | 描くもの |
+| `light` | Vector3 | 光の向き。省略は `(0.4, 0.8, 0.5)` |
+| `ambient` | Number | 光に背いた面の明るさ。省略は 0.25 |
+| `background` | Color | 何も無いところの色。省略は透明 |
+
+`Solid` は形と色と置き方の組。
+
+| 属性 | 型 | 意味 |
+|---|---|---|
+| `mesh` | Mesh | 形。`space3d.box` などが返すもの。いくつもの `Solid` で使い回せる |
+| `fill` | Color | 塗り。面の向きと `light` で陰が付く。省略は `#808080` |
+| `transform` | Transform3 | 置き方。省略は `Mesh` の座標のまま。motion で入れ替えれば動く |
+
+こちらを向いていない面は描かない。`Mesh` の `edges` は使わない (線は引かない)。`run` では走らず、`render` `preview` `sheet` で走る。
 
 ### 3.14 時間
 
@@ -730,7 +756,7 @@ String / List / Dict / Range のメソッドは builtin で、`import` は要ら
 | palette | そのまま使える配色。背景・文字・罫線・強調・系列色の組 (`Palette`) を名前で選ぶ |
 | pattern | そのまま `fill` に入れられる模様。縞、細線、市松、水玉、方眼、ざらつき |
 | icon | チェックや矢印などの記号の形。`mark` でそのまま置ける図形になる |
-| space3d | 3D の点 (`Vector3`) と変換 (`Transform3`)、カメラ 3 種、`Mesh` の作り手。投影して 2D の `Vector` と奥行きの `Number` を返す。描くのは既存の図形 |
+| space3d | 3D の点 (`Vector3`) と変換 (`Transform3`)、カメラ 3 種、`Mesh` の作り手。投影して 2D の `Vector` と奥行きの `Number` を返し、描くのは既存の図形。`World` を図形の `fill` に入れれば、面を図形に開かず GPU が `Mesh` のまま描く |
 | fractal | エスケープタイム系フラクタルの Shader。反復式と色付けを組み合わせる。倍率は `zoom` / `duration` / `camera` のどれかで決める。中心を文字列で渡すと多倍長の基準軌道で深くまで寄れる。`find_center` は寄る先 (ミニチュアの中心) を探す |
 | bignum | 多倍長の計算。`fractal` が使う基準軌道と BLA の表、ミニチュアの探索。Rust でループを回すので、深いズームの準備がスクリプトで待たされない |
 

@@ -788,6 +788,20 @@ const FRAME: &str = "@group(0) @binding(1) var strip: texture_2d_array<f32>;\n\
 
 // ---------- GPU で走らせる ----------
 
+/// 3D の塗りの依頼。頂点は面ごとに分けて並べてある (平らに塗るため)
+pub struct World<'a> {
+    /// 塗る図形の通し番号 (テクスチャの使い回しの鍵)
+    pub shape: u64,
+    /// いま組んでいるフレームの番号
+    pub frame: u64,
+    pub width: u32,
+    pub height: u32,
+    pub view: crate::render::mesh::View3,
+    /// 何も無いところの色
+    pub background: [f32; 4],
+    pub vertices: &'a [crate::render::mesh::Vertex],
+}
+
 /// 1 つの図形の塗りの依頼
 /// Shader.args。Array は同じ実体である間 GPU に送り直さない。List は毎フレーム写して送る
 pub enum Args<'a> {
@@ -931,6 +945,11 @@ struct Target {
     used: u64,
     texture: wgpu::Texture,
     view: wgpu::TextureView,
+    /// 描き先として渡すときの view (層を持たない形)。3D のときだけ使う
+    attach: wgpu::TextureView,
+    /// 3D の前後を決める深度テクスチャと、頂点を置く場所。要るときに作る
+    depth: Option<wgpu::TextureView>,
+    points: Option<wgpu::Buffer>,
     width: u32,
     height: u32,
     /// Vello に渡す画像。中身は使わず、テクスチャで差し替える
@@ -952,6 +971,8 @@ pub struct ShaderRunner {
     strips: HashMap<u64, Strip>,
     /// 帯から 1 フレームを組む pipeline。どの Shader でも同じなので 1 つだけ
     frame: Option<(wgpu::ComputePipeline, wgpu::BindGroupLayout, wgpu::Sampler)>,
+    /// Mesh を描く pipeline。どの World でも同じなので 1 つだけ
+    meshes: Option<crate::render::mesh::Meshes>,
     /// 描画の前に Vello へ登録する (画像, テクスチャ)
     pub overrides: Vec<(ImageData, wgpu::Texture)>,
     /// 手放したテクスチャ。Vello の登録も外さないと、あちらが持っているぶんが解放されない
@@ -967,6 +988,7 @@ impl ShaderRunner {
             targets: HashMap::new(),
             strips: HashMap::new(),
             frame: None,
+            meshes: None,
             overrides: Vec::new(),
             released: Vec::new(),
         }
@@ -990,6 +1012,76 @@ impl ShaderRunner {
             alive
         });
         self.strips.retain(|_, s| now.saturating_sub(s.used) <= keep);
+    }
+
+    /// Mesh を GPU で描き、塗りに使う画像を返す。描画の前に overrides を Vello に登録すること
+    pub fn run_world(&mut self, req: World) -> Result<ImageData> {
+        let needs_new = self.targets.get(&req.shape).is_none_or(|t| t.width != req.width || t.height != req.height);
+        if needs_new {
+            let target = self.make_target(req.width, req.height)?;
+            if let Some(old) = self.targets.insert(req.shape, target) {
+                self.released.push(old.image);
+            }
+        }
+        if self.meshes.is_none() {
+            self.meshes = Some(crate::render::mesh::Meshes::new(&self.device));
+        }
+        let scope = self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+        let want = (req.vertices.len().max(3) * crate::render::mesh::VERTEX_BYTES) as u64;
+        let depth = match needs_new {
+            true => None,
+            false => self.targets.get_mut(&req.shape).and_then(|t| t.depth.take()),
+        };
+        let depth = match depth {
+            Some(view) => view,
+            None => {
+                let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("mophila mesh depth"),
+                    size: wgpu::Extent3d { width: req.width, height: req.height, depth_or_array_layers: 1 },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: crate::render::mesh::DEPTH,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                    view_formats: &[],
+                });
+                texture.create_view(&wgpu::TextureViewDescriptor::default())
+            }
+        };
+        let points = match self.targets.get_mut(&req.shape).and_then(|t| t.points.take()) {
+            Some(buffer) if buffer.size() >= want => buffer,
+            _ => self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("mophila mesh points"),
+                size: want,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }),
+        };
+        if let Some(e) = pollster::block_on(scope.pop()) {
+            return err(Kind::OutOfMemory, oom("a 3D fill", req.width, req.height, self.bytes(), &e));
+        }
+        self.queue.write_buffer(&points, 0, &crate::render::mesh::bytes_of(req.vertices));
+        let target = self.targets.get_mut(&req.shape).expect("inserted above");
+        target.used = req.frame;
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("mophila mesh") });
+        self.meshes.as_ref().expect("made above").draw(
+            &self.device,
+            &self.queue,
+            &mut encoder,
+            &target.attach,
+            &depth,
+            &target.uniforms,
+            &points,
+            &req.view,
+            req.vertices.len() as u32,
+            req.background,
+        );
+        self.queue.submit([encoder.finish()]);
+        let image = target.image.clone();
+        self.overrides.push((image.clone(), target.texture.clone()));
+        target.depth = Some(depth);
+        target.points = Some(points);
+        Ok(image)
     }
 
     /// compute shader を投入し、塗りに使う画像を返す。描画の前に overrides を Vello に登録すること
@@ -1311,10 +1403,11 @@ impl ShaderRunner {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
+            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::RENDER_ATTACHMENT,
             view_formats: &[],
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor { dimension: Some(wgpu::TextureViewDimension::D2Array), ..Default::default() });
+        let attach = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let image = ImageData {
             // 中身は使わない。描く直前に override_image でテクスチャに差し替えるので、
             // Vello が見るのは大きさと Blob の番号だけ。空にしておくと全画面 1 枚につき w×h×4 の RAM が浮く
@@ -1324,12 +1417,14 @@ impl ShaderRunner {
             width,
             height,
         };
-        let uniforms = self.device.create_buffer(&wgpu::BufferDescriptor { label: Some("mophila shader uniforms"), size: UNIFORM_BYTES as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+        // Shader と 3D で中身が違うので、大きいほうに合わせる
+        let room = UNIFORM_BYTES.max(crate::render::mesh::VIEW_BYTES) as u64;
+        let uniforms = self.device.create_buffer(&wgpu::BufferDescriptor { label: Some("mophila shader uniforms"), size: room, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
         let args = self.device.create_buffer(&wgpu::BufferDescriptor { label: Some("mophila shader args"), size: 16, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
         if let Some(e) = pollster::block_on(scope.pop()) {
             return err(Kind::OutOfMemory, oom("a Shader fill", width, height, self.bytes(), &e));
         }
-        Ok(Target { used: 0, texture, view, width, height, image, uniforms, args, shared: None })
+        Ok(Target { used: 0, texture, view, attach, depth: None, points: None, width, height, image, uniforms, args, shared: None })
     }
 }
 

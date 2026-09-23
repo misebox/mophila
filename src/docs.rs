@@ -59,7 +59,8 @@ pub fn types() -> &'static [Type] {
 
 /// 分類の並び順
 /// モジュールの中にだけある型。素の名前では作れず、`space3d.Vector3(...)` のように書く
-pub const MODULE_ONLY: &[&str] = &["Vector3", "Transform3", "Mesh", "Face", "PerspectiveCamera", "OrthographicCamera", "IsometricCamera"];
+pub const MODULE_ONLY: &[&str] =
+    &["Vector3", "Transform3", "Mesh", "Face", "Solid", "World", "PerspectiveCamera", "OrthographicCamera", "IsometricCamera"];
 
 pub const CATEGORIES: &[&str] =
     &["Primitive", "Collection", "Function", "Position", "Shape", "Paint", "Scene", "Time", "Media", "Enum", "Union", "Meta"];
@@ -551,12 +552,31 @@ pub const TYPES: &[Type] = &[
         doc: "Number の並び。Array か、Number だけの List。Shader.args がこれ",
     },
     Type {
+        name: "Solid",
+        category: "Shape",
+        union: "",
+        make: "space3d.Solid(mesh = ball, fill = #6fa3d6)",
+        values: &[],
+        members: &[],
+        doc: "World に入れる 1 つの物体。Mesh と色と、置き方 (transform)。transform を書き換えれば動く",
+    },
+    Type {
+        name: "World",
+        category: "Paint",
+        union: "Paint",
+        make: "space3d.World(camera = cam, parts = [space3d.Solid(mesh = ball)])",
+        values: &[],
+        members: &[],
+        doc: "3D の場面。図形の fill に入れると、その図形の中に GPU が Mesh を描く。前後は深度で決まるので、\
+              面を図形に開かない。1 コマあたりのスクリプトの仕事が面の数に依らないぶん、面が多いほど速い",
+    },
+    Type {
         name: "Paint",
         category: "Union",
         union: "",
         make: "",
         values: &[],
-        members: &["Color", "Gradient", "Shader", "Image"],
+        members: &["Color", "Gradient", "Shader", "Image", "World"],
         doc: "図形の fill に入れられるものをまとめた名前",
     },
     Type {

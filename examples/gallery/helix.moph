@@ -1,0 +1,63 @@
+# helix.moph — 二重らせんを回す。面を 1 枚ずつ図形に開かず、World を図形の fill に入れて
+# Mesh のまま GPU に描かせる。1 コマの仕事は Solid の置き方を書き換えるだけなので、
+# 玉をいくら細かくしてもスクリプトの手間は変わらない (space3d の例)
+
+import space3d
+import math
+import color
+
+let v = View(box = (16, 9))
+
+let cam = space3d.PerspectiveCamera(from = (0, 2.2, 17), to = (0, 0, 0), fov = 32, box = (16, 9))
+
+# 形は 1 つずつ作って使い回す。どこに置くかは Solid の transform が持つ
+let radius = 2.4
+let bead = space3d.sphere((0, 0, 0), 0.45, 12, 24)
+let bar = space3d.box((0, 0, 0), (0.16, 0.16, radius * 2))
+
+let steps = 20
+let twist = 1 / 9     # 横木 1 つあたり何周ぶん回るか
+let pitch = 0.62      # 横木どうしの間隔
+
+# 鎖 2 本を色で分ける。それぞれ端から端へ明るくなる
+let chains = [(#2f6fd0, #86d8ff), (#d9552c, #ffb583)]
+
+# 横木は段に 1 つ、玉は 2 本の鎖に 1 つずつ。World に入れる順は問わない (前後は深度で決まる)
+let parts = []
+let bars = []
+let beads = []
+for i in 0..steps {
+  let b = space3d.Solid(mesh = bar, fill = #7d90ad)
+  bars.push(b)
+  parts.push(b)
+  let k = i / (steps - 1)
+  for s in 0..2 {
+    let ball = space3d.Solid(mesh = bead, fill = color.mix(chains[s][0], chains[s][1], k))
+    beads.push(ball)
+    parts.push(ball)
+  }
+}
+
+# World は自分の背景も塗るので、後ろに Rect を敷かなくていい
+v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,
+             fill = space3d.World(camera = cam, parts = parts, light = (0.35, 0.9, 0.5), ambient = 0.22, background = #0b0f1a)))
+
+let spin = motion (t) {
+  0..1: {
+    for i in 0..steps {
+      # 段の置き方。x 軸まわりに回してから、軸に沿って送る
+      let place = space3d.Transform3().rotate_x((t + i * twist) * 360).translate(((i - (steps - 1) / 2) * pitch, 0, 0))
+      bars[i].transform = place
+      for s in 0..2 {
+        # らせんに沿って波が進む。玉の大きさだけ変える
+        let k = 0.88 + 0.18 * math.sin(math.TAU * (t * 2 - i / steps))
+        # 玉は横木の両端。まず自分の場所まで出してから、段ごと回す
+        beads[i * 2 + s].transform = space3d.Transform3().scale(k).translate((0, 0, if s == 0 { radius } else { -radius })).then(place)
+      }
+    }
+  }
+}
+spin.duration = 12s
+v.addTrack(spin)
+
+output v

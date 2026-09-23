@@ -39,6 +39,18 @@ pub const DOCS: &[Entry] = &[
     },
     Entry { name: "Mesh", signature: "space3d.Mesh(points, edges, faces)", returns: "Mesh", doc: "頂点と、それを繋ぐ線や面。作り手 (box など) が返すもの" },
     Entry { name: "Face", signature: "space3d.Face(points, normal, depth)", returns: "Face", doc: "Mesh.faces が返す、投影済みの 1 面" },
+    Entry {
+        name: "Solid",
+        signature: "space3d.Solid(mesh: Mesh, fill: Color = #808080, transform: Transform3 = :none)",
+        returns: "Solid",
+        doc: "World に入れる 1 つの物体。transform を書き換えれば動く",
+    },
+    Entry {
+        name: "World",
+        signature: "space3d.World(camera: Projection, parts: List<Solid>, light: Vector3 = (0.4, 0.8, 0.5), ambient: Number = 0.25, background: Color = 透明)",
+        returns: "World",
+        doc: "3D の場面。図形の fill に入れると、GPU が Mesh をそのまま描く。前後は深度で決まるので面を図形に開かず、1 コマのスクリプトの仕事が面の数に依らない",
+    },
     Entry { name: "Transform3", signature: "space3d.Transform3()", returns: "Transform3", doc: "何もしない変換。rotate_x などを繋いで組み立てる" },
     Entry { name: "PerspectiveCamera", signature: "space3d.PerspectiveCamera(from, to, up, fov, box)", returns: "PerspectiveCamera", doc: "透視投影。遠いものほど小さくなる" },
     Entry { name: "OrthographicCamera", signature: "space3d.OrthographicCamera(from, to, up, height, box)", returns: "OrthographicCamera", doc: "平行投影。遠くても大きさが変わらない" },
@@ -51,7 +63,7 @@ pub fn module() -> Module {
     for f in ["box", "plane", "sphere", "path", "grid", "shade"] {
         items.insert(f.into(), Value::Builtin(name_of(f)));
     }
-    for t in ["Vector3", "Mesh", "Face", "Transform3", "PerspectiveCamera", "OrthographicCamera", "IsometricCamera"] {
+    for t in ["Vector3", "Mesh", "Face", "Solid", "World", "Transform3", "PerspectiveCamera", "OrthographicCamera", "IsometricCamera"] {
         items.insert(t.into(), Value::BuiltinType(t.into()));
     }
     Module { name: "space3d".into(), items }
@@ -168,6 +180,20 @@ fn dot(a: P3, b: P3) -> f64 {
 
 fn cross(a: P3, b: P3) -> P3 {
     (a.1 * b.2 - a.2 * b.1, a.2 * b.0 - a.0 * b.2, a.0 * b.1 - a.1 * b.0)
+}
+
+/// 面の法線と重心。法線は Newell の式なので、先頭の 3 点が一直線に並んでいても
+/// (球の極のように点が重なっていても) 面そのものの向きが出る
+fn face_plane(points: &[P3], f: &[usize]) -> (P3, P3) {
+    let (mut n, mut sum) = ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0));
+    for k in 0..f.len() {
+        let a = points[f[k]];
+        let b = points[f[(k + 1) % f.len()]];
+        n = (n.0 + (a.1 - b.1) * (a.2 + b.2), n.1 + (a.2 - b.2) * (a.0 + b.0), n.2 + (a.0 - b.0) * (a.1 + b.1));
+        sum = (sum.0 + a.0, sum.1 + a.1, sum.2 + a.2);
+    }
+    let count = f.len() as f64;
+    (n, (sum.0 / count, sum.1 / count, sum.2 / count))
 }
 
 fn normalized(name: &str, what: &str, v: P3) -> Result<P3> {
@@ -368,6 +394,109 @@ fn rotation(axis: usize, degrees: f64) -> M34 {
 
 fn numbers(m: &M34) -> Value {
     Value::List(std::rc::Rc::new(std::cell::RefCell::new(m.iter().map(|n| Value::num(*n)).collect())))
+}
+
+/// World の中身を、GPU に送れる形にする。
+/// カメラは箱の座標までの係数に、面は三角形の頂点に開く (向こう向きの面はここで落とす)。
+/// 面ごとに頂点を分けて持つので、法線は面のものになり平らに塗れる
+pub fn world_parts(o: &Object) -> Result<(crate::render::mesh::View3, Vec<crate::render::mesh::Vertex>, [f32; 4])> {
+    use crate::render::mesh::{Vertex, View3};
+    let Some(Value::Object(c)) = o.attrs.get("camera") else {
+        return err(Kind::UndefinedAttribute, "World.camera is not set");
+    };
+    let cam = Camera::of(&c.borrow())?;
+    let light = match o.attrs.get("light") {
+        Some(v) => normalized("World.light", "light", point("World.light", v)?)?,
+        None => (0.4, 0.8, 0.5),
+    };
+    let ambient = match o.attrs.get("ambient") {
+        Some(Value::Number(n, _)) => *n,
+        Some(v) => return err(Kind::AttributeType, format!("World.ambient must be a Number, found {}", v.type_name())),
+        None => 0.25,
+    };
+    let background = match o.attrs.get("background") {
+        Some(Value::Color(c)) => *c,
+        Some(v) => return err(Kind::AttributeType, format!("World.background must be a Color, found {}", v.type_name())),
+        None => [0.0, 0.0, 0.0, 0.0],
+    };
+    let Some(Value::List(parts)) = o.attrs.get("parts") else {
+        return err(Kind::UndefinedAttribute, "World.parts is not set");
+    };
+    let mut out: Vec<Vertex> = Vec::new();
+    let (mut near, mut far) = (f64::INFINITY, f64::NEG_INFINITY);
+    for part in parts.borrow().iter() {
+        let Value::Object(part) = part else {
+            return err(Kind::AttributeType, format!("World.parts must hold Solid, found {}", part.type_name()));
+        };
+        let part = part.borrow();
+        if part.kind != "Solid" {
+            return err(Kind::AttributeType, format!("World.parts must hold Solid, found {}", part.kind));
+        }
+        let Some(Value::Object(m)) = part.attrs.get("mesh") else {
+            return err(Kind::UndefinedAttribute, "Solid.mesh is not set");
+        };
+        let shape = Shape::of(&m.borrow())?;
+        let points = match part.attrs.get("transform") {
+            Some(Value::Object(t)) if t.borrow().kind == "Transform3" => {
+                let m = matrix(&t.borrow())?;
+                shape.points.iter().map(|p| applied(&m, *p)).collect()
+            }
+            Some(v) if !matches!(v, Value::Nothing) => {
+                return err(Kind::AttributeType, format!("Solid.transform must be a Transform3, found {}", v.type_name()));
+            }
+            _ => shape.points.clone(),
+        };
+        let color = match part.attrs.get("fill") {
+            Some(Value::Color(c)) => *c,
+            Some(v) => return err(Kind::AttributeType, format!("Solid.fill must be a Color, found {}", v.type_name())),
+            None => [0.5, 0.5, 0.5, 1.0],
+        };
+        for f in &shape.faces {
+            let (normal, center) = face_plane(&points, f);
+            // 向こう向きの面は描かない。面ごとの図形に開く道と同じ決め方
+            if dot(normal, normal) < 1e-24 || !cam.faces_us(normal, center) {
+                continue;
+            }
+            let n = normalized("World", "a face", normal)?;
+            let normal = [n.0 as f32, n.1 as f32, n.2 as f32];
+            // 多角形は先頭から扇に開く
+            for k in 1..f.len() - 1 {
+                for p in [points[f[0]], points[f[k]], points[f[k + 1]]] {
+                    let z = cam.seen(p).2;
+                    (near, far) = (near.min(z), far.max(z));
+                    out.push(Vertex { at: [p.0 as f32, p.1 as f32, p.2 as f32], normal, color });
+                }
+            }
+        }
+    }
+    // 奥行きの幅。端が深度の外に出ないよう、両側に少し足す。
+    // 1 枚の面だけの場面は幅が 0 になるので、その奥行きに見合う幅を下限にする
+    if !near.is_finite() || !far.is_finite() {
+        (near, far) = (0.0, 1.0);
+    }
+    let pad = ((far - near) * 0.01).max(far.abs() * 1e-3).max(1e-6);
+    let (near, far) = (near - pad, far + pad);
+    let (focal, unit) = match cam.lens {
+        Lens::Perspective(f) => (f, 0.0),
+        Lens::Parallel(k) => (0.0, k),
+    };
+    let three = |p: P3| [p.0 as f32, p.1 as f32, p.2 as f32];
+    let view = View3 {
+        eye: three(cam.eye),
+        focal: focal as f32,
+        right: three(cam.right),
+        unit: unit as f32,
+        up: three(cam.up),
+        // 透視は視点より手前を映せない。少しでも前に出しておく
+        near: near.max(if focal > 0.0 { 1e-6 } else { f64::NEG_INFINITY }) as f32,
+        fwd: three(cam.fwd),
+        far: far as f32,
+        center: [cam.center.0 as f32, cam.center.1 as f32],
+        light: three(light),
+        ambient: ambient as f32,
+        ..View3::default()
+    };
+    Ok((view, out, background))
 }
 
 /// Transform3 の中身。attrs の m は自分で作ったものなので、壊れていたら作り直せと言う
@@ -697,11 +826,7 @@ pub fn mesh_method(o: &Object, name: &str, args: &[(Option<String>, Value)]) -> 
         "faces" => {
             let mut out: Vec<(f64, Value)> = Vec::new();
             for f in &mesh.faces {
-                let at = |i: usize| mesh.points[f[i]];
-                let normal = cross(sub(at(1), at(0)), sub(at(2), at(0)));
-                let count = f.len() as f64;
-                let sum = f.iter().fold((0.0, 0.0, 0.0), |a, i| (a.0 + mesh.points[*i].0, a.1 + mesh.points[*i].1, a.2 + mesh.points[*i].2));
-                let center = (sum.0 / count, sum.1 / count, sum.2 / count);
+                let (normal, center) = face_plane(&mesh.points, f);
                 if dot(normal, normal) < 1e-24 || !cam.faces_us(normal, center) {
                     continue;
                 }

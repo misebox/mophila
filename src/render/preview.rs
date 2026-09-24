@@ -587,6 +587,10 @@ impl Player<'_> {
     /// ウィンドウの大きさが変わったら、作り置きのテクスチャは捨てて描き直す
     fn resized(&mut self, size: winit::dpi::PhysicalSize<u32>) {
         let Some(state) = &mut self.state else { return };
+        // 開いた直後は、同じ大きさの Resized が来る。作り置きを捨てると立ち上がりがそのぶん延びる
+        if (state.surface.config.width, state.surface.config.height) == (size.width, size.height) {
+            return;
+        }
         state.context.resize_surface(&mut state.surface, size.width, size.height);
         self.ready.clear();
         self.spare.clear();

@@ -257,7 +257,8 @@ fn reference_orbit(re: &str, im: &str, digits: usize, steps: usize) -> Result<Ve
     let c = (Fix::parse(re, n)?, Fix::parse(im, n)?);
     let mut z = (Fix::zero(n), Fix::zero(n));
     let mut out = Vec::with_capacity(steps * 2);
-    for _ in 0..steps {
+    for i in 0..steps {
+        crate::render::progress::working("the reference orbit", i, steps);
         let (zr, zi) = (z.0.to_f64(), z.1.to_f64());
         out.push(zr);
         out.push(zi);
@@ -443,7 +444,15 @@ const ENTRY: usize = 11;
 /// 1 歩ぶん (2^0) は入れない。元の式そのものなので、表を読むより直に 1 歩進めるほうが速い
 fn bla_table(orbit: &[f64], eps: f64) -> Vec<f64> {
     let m = orbit.len() / 2;
-    let ones: Vec<Bla> = (0..m).map(|i| single((orbit[2 * i], orbit[2 * i + 1]))).collect();
+    // 1 段目が m 個、その上は半分ずつなので、作る数は合わせて 2m ほど
+    let all = 2 * m;
+    let ones: Vec<Bla> = (0..m)
+        .map(|i| {
+            crate::render::progress::working("the BLA table", i, all);
+            single((orbit[2 * i], orbit[2 * i + 1]))
+        })
+        .collect();
+    let mut made = m;
     let mut levels: Vec<Vec<Bla>> = Vec::new();
     loop {
         let prev: &[Bla] = levels.last().map_or(&ones, |l| l);
@@ -451,6 +460,8 @@ fn bla_table(orbit: &[f64], eps: f64) -> Vec<f64> {
             break;
         }
         let next: Vec<Bla> = (0..prev.len() / 2).map(|i| merge(prev[2 * i], prev[2 * i + 1], eps)).collect();
+        made += next.len();
+        crate::render::progress::working("the BLA table", made, all);
         levels.push(next);
     }
     let head = 2 + levels.len();
@@ -478,6 +489,7 @@ fn ball_period(c: (&Fix, &Fix), radius: f64, max_period: usize) -> Option<usize>
     let mut z = (Fix::zero(n), Fix::zero(n));
     let mut r = 0.0f64;
     for p in 1..=max_period {
+        crate::render::progress::working("looking for the period", p, max_period);
         let before = z.0.to_f64().hypot(z.1.to_f64());
         r = 2.0 * before * r + r * r + radius;
         z = step((&z.0, &z.1), c);
@@ -498,10 +510,12 @@ fn newton(c: (Fix, Fix), period: usize, digits: usize, rounds: usize) -> Result<
     let n = c.0.len();
     let (mut cre, mut cim) = c;
     let close = 10f64.powi(-(digits as i32) - 2);
-    for _ in 0..rounds {
+    for round in 0..rounds {
         let mut z = (Fix::zero(n), Fix::zero(n));
         let (mut dre, mut dim) = (0.0f64, 0.0f64);
-        for _ in 0..period {
+        for i in 0..period {
+            // 寄り切れば途中で抜けるので、これは上限のほう
+            crate::render::progress::working("centring on the minibrot", round * period + i, rounds * period);
             let (zr, zi) = (z.0.to_f64(), z.1.to_f64());
             (dre, dim) = (2.0 * (zr * dre - zi * dim) + 1.0, 2.0 * (zr * dim + zi * dre));
             z = step((&z.0, &z.1), (&cre, &cim));

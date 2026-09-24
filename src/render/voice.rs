@@ -257,7 +257,10 @@ pub fn set_cues(media: &mut Media, _cache: &Path) {
 }
 
 pub fn mix_in(media: &mut Media, cache: &Path) -> Result<(), Box<dyn Error>> {
-    for line in std::mem::take(&mut media.narrations) {
+    let lines = std::mem::take(&mut media.narrations);
+    let all = lines.len();
+    for (i, line) in lines.into_iter().enumerate() {
+        crate::render::progress::working("the spoken lines", i, all);
         let engine = match &line.engine {
             Some(name) => by_name(name).ok_or_else(|| format!("no voice engine \"{name}\""))?,
             None => default_engine()?,
@@ -278,6 +281,7 @@ pub fn mix_in(media: &mut Media, cache: &Path) -> Result<(), Box<dyn Error>> {
             looping: false,
         });
     }
+    crate::render::progress::working("the spoken lines", all, all);
     Ok(())
 }
 

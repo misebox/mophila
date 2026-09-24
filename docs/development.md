@@ -47,12 +47,18 @@ preview で詰まったものが出力の不具合かどうかは、両方に付
 1 行を書き換えながら経過を刻み、ウィンドウが開いた時点と再生が始まった時点で内訳を残す。
 
 ```
-preview: window open after 5.8s (script 5.1s, sound 0.0s, window 0.7s)
-preview: playing after 7.0s (5 frames in 1.2s)
+preview: the reference orbit  [#########-----------]  45%  1.2s
+preview: window open after 3.7s (script 2.5s, sound 0.0s, window 1.2s)
+preview: playing after 3.9s (5 frames in 0.2s)
 ```
 
-`script` はスクリプトの実行 (深いズームの基準軌道はここ)、`sound` は読み上げの合成と音声の展開、
-`window` は GPU と Vello の用意、最後がコマを溜めるぶん。再生は作り置きが `LOOKAHEAD` 溜まるまで待つ。
+`script` はスクリプトの実行、`sound` は読み上げの合成と音声の展開、`window` は GPU と Vello の用意、
+最後がコマを溜めるぶん。再生は作り置きが `LOOKAHEAD` 溜まるまで待つ。
+
+回数の分かるループは `progress::working(何を, 済み, 全部)` で目盛りを出す。
+入っているのは基準軌道・BLA の表・周期の探索・ニュートン法・読み上げ・音声の読み込みと、最初のコマ。
+preview の立ち上がり以外では、札 (`AtomicBool`) を見るだけで戻るので、深いループに置いても費用にならない。
+スクリプトの実行そのものと Vello の pipeline は総量が分からないので、経過だけを刻む。
 
 `MOPHILA_WGSL=1` を付けると、Shader の `color` から組み立てた WGSL をそのまま stderr に出す (`.moph` からの変換を確かめる用)。
 

@@ -47,7 +47,8 @@ impl Output {
 
         let mut decoded: HashMap<PathBuf, Arc<Vec<f32>>> = HashMap::new();
         let mut clips = Vec::new();
-        for c in &media.clips {
+        for (i, c) in media.clips.iter().enumerate() {
+            crate::render::progress::working("reading the sound", i, media.clips.len());
             let pcm = match decoded.get(&c.path) {
                 Some(p) => p.clone(),
                 None => {
@@ -67,6 +68,7 @@ impl Output {
                 looping: c.looping,
             });
         }
+        crate::render::progress::working("reading the sound", media.clips.len(), media.clips.len());
         let state = Arc::new(Mutex::new(Mixer { clips, position: 0.0, playing: false, rate: f64::from(rate), channels }));
         let err_fn = |e| eprintln!("audio: {e}");
         let stream = match supported.sample_format() {

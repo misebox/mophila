@@ -44,7 +44,8 @@ const SLACK: f64 = 2.0;
 /// 間隔を広げる限度 (これ以上は遅くしない)
 const MAX_HOLDS: usize = 12;
 
-pub fn run(name: String, interp: Interp, view: ObjRef, duration: f64, shot: crate::render::scene::Shot, looping: bool, start: Option<f64>, media: &Media) -> Result<(), Box<dyn Error>> {
+#[allow(clippy::too_many_arguments)]
+pub fn run(name: String, interp: Interp, view: ObjRef, duration: f64, shot: crate::render::scene::Shot, looping: bool, start: Option<f64>, media: &Media, mut steps: crate::render::progress::Startup) -> Result<(), Box<dyn Error>> {
     let size = (shot.width as u32, shot.height as u32);
     // 音が出せなくても再生はする
     let audio = if media.clips.is_empty() {
@@ -52,6 +53,7 @@ pub fn run(name: String, interp: Interp, view: ObjRef, duration: f64, shot: crat
     } else {
         audio::Output::open(media).map_err(|e| eprintln!("audio disabled: {e}")).ok()
     };
+    steps.stage("opening the window", "window");
     let position = start.unwrap_or(0.0).clamp(0.0, duration.max(0.0));
     let mut player = Player {
         shot,
@@ -89,8 +91,10 @@ pub fn run(name: String, interp: Interp, view: ObjRef, duration: f64, shot: crat
         last_note: Instant::now(),
         timing: crate::timing::Timing::from_env(),
         starved: 0,
+        steps,
     };
     EventLoop::new()?.run_app(&mut player)?;
+    player.steps.stop();
     player.timing.report();
     if player.starved > 0 {
         eprintln!(
@@ -172,6 +176,8 @@ struct Player<'a> {
     timing: crate::timing::Timing,
     /// 出す番が来たのに描き終わっていなかった回数
     starved: usize,
+    /// 再生が始まるまでの段階を stderr に出す
+    steps: crate::render::progress::Startup,
 }
 
 struct State<'a> {
@@ -253,6 +259,8 @@ impl Player<'_> {
             eprintln!("preview: drawing {w}x{h} ({ratio:.2}x the pixels of --size {}x{})", self.size.0, self.size.1);
         }
         self.state = Some(State { window, context, surface, renderer });
+        self.steps.opened();
+        self.steps.stage("filling the first frames", "frames");
         Ok(())
     }
 
@@ -399,6 +407,11 @@ impl Player<'_> {
             let t = self.next_t;
             self.draw(t)?;
             self.next_t = t + self.step;
+            if !self.started {
+                // 1 コマは出す方に回るので、手元にあるぶんは作り置きと合わせて数える
+                let have = self.ready.len() + usize::from(self.shown.is_some());
+                self.steps.count(have, want + usize::from(self.playing));
+            }
         }
         Ok(())
     }
@@ -478,6 +491,10 @@ impl Player<'_> {
             if let Some(next) = self.ready.pop_front() {
                 (self.position, self.anchor, self.anchor_t) = (next.t, now, next.t);
                 self.shown = Some(next);
+                // 止めたまま開いたなら、1 コマ出したところが立ち上がりの終わり
+                if !self.playing {
+                    self.steps.playing(1);
+                }
             }
             return;
         }
@@ -491,6 +508,7 @@ impl Player<'_> {
             }
             (self.started, self.anchor, self.anchor_t) = (true, now, self.position);
             self.audio_at(true);
+            self.steps.playing(self.ready.len() + 1);
         }
         let wall = self.wall_t(now);
         // 出す時刻が来たものを出す。来ていなければ、同じコマをもう一度出す

@@ -420,7 +420,10 @@ fn run() -> Result<(), Box<dyn Error>> {
         }
         Command::Preview { script, size, r#loop, at, crop, align, pad } => {
             let script = entry(script)?;
+            let mut steps = render::progress::Startup::new(true);
+            steps.stage("reading the script", "script");
             let (interp, view, duration) = load(&read_script(&script)?, base_dir(&script), None, &project)?;
+            steps.stage("preparing the sound", "sound");
             let media = render::media::prepare(&view, duration, 0.0, duration, true, &render::voice::cache_dir())?;
             let shot = render::scene::Shot {
                 width: f64::from(size.0),
@@ -429,7 +432,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                 align: align.unwrap_or((0.5, 0.5)),
                 pad: pad_color(pad.as_deref()),
             };
-            render::preview::run(file_name(&script), interp, view, duration, shot, r#loop, at, &media)
+            render::preview::run(file_name(&script), interp, view, duration, shot, r#loop, at, &media, steps)
         }
         Command::Timeline { script, filter } => {
             let script = entry(script)?;
@@ -631,11 +634,15 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
         align: args.align.unwrap_or((0.5, 0.5)),
         pad: pad_color(args.pad.as_deref()),
     };
+    // -o を書かなければウィンドウで見せる。そちらは立ち上がりが長くなりうるので段階を出す
+    let mut steps = render::progress::Startup::new(args.output.is_none());
+    steps.stage("reading the script", "script");
     let (mut interp, view, duration) = load(src, base_dir, sources, project)?;
     let cache = render::voice::cache_dir();
     let Some(output) = args.output else {
+        steps.stage("preparing the sound", "sound");
         let media = render::media::prepare(&view, duration, 0.0, duration, true, &cache)?;
-        return render::preview::run(name, interp, view, duration, shot, args.r#loop, args.at, &media);
+        return render::preview::run(name, interp, view, duration, shot, args.r#loop, args.at, &media, steps);
     };
 
     let mut timing = timing::Timing::from_env();

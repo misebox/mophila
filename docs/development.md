@@ -43,6 +43,17 @@ preview は実時間で出すので、描くのが間に合わなければその
 render は時間で進まないので、同じ場面が重くても出力のコマは変わらない。
 preview で詰まったものが出力の不具合かどうかは、両方に付けて worst の時刻を見比べる。
 
+再生が始まるまでの立ち上がりは、何も付けなくても stderr に段階が出る。
+1 行を書き換えながら経過を刻み、ウィンドウが開いた時点と再生が始まった時点で内訳を残す。
+
+```
+preview: window open after 5.8s (script 5.1s, sound 0.0s, window 0.7s)
+preview: playing after 7.0s (5 frames in 1.2s)
+```
+
+`script` はスクリプトの実行 (深いズームの基準軌道はここ)、`sound` は読み上げの合成と音声の展開、
+`window` は GPU と Vello の用意、最後がコマを溜めるぶん。再生は作り置きが `LOOKAHEAD` 溜まるまで待つ。
+
 `MOPHILA_WGSL=1` を付けると、Shader の `color` から組み立てた WGSL をそのまま stderr に出す (`.moph` からの変換を確かめる用)。
 
 GPU に 1 度に投げる仕事は区切ってある。`ZoomPath` の帯は動画の最初のコマで窓ぜんぶを作るので、

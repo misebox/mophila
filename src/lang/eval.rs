@@ -460,8 +460,24 @@ impl Interp {
         }
     }
 
+    /// Group に名前を付けて入れた中身。属性の名前なら None
+    fn group_member(obj: &ObjRef, name: &str) -> Option<Value> {
+        let o = obj.borrow();
+        if o.kind != "Group" || schema("Group").is_some_and(|s| s.iter().any(|a| a.name == name)) {
+            return None;
+        }
+        o.attrs.get(name).cloned()
+    }
+
     /// 属性に値を書く。型は宣言 (struct / record) か schema から引く
     pub(crate) fn set_attr(&self, obj: &ObjRef, attr: &str, value: Value) -> Result<()> {
+        // Group の名前付きの中身。中の属性を書いた後、同じ実体が書き戻されてくる。入れ替えはできない
+        if let Some(Value::Object(member)) = Self::group_member(obj, attr) {
+            return match &value {
+                Value::Object(v) if Rc::ptr_eq(v, &member) => Ok(()),
+                _ => err(Kind::AttributeType, format!("Group.{attr} is a member and cannot be replaced; change its attributes instead")),
+            };
+        }
         let mut o = obj.borrow_mut();
         // 期待する型の名前。schema は 'static、宣言は借りたまま使う
         // 型に合わせて Tuple を作り直してから確かめる。合わなければ、どこが合わないかを出す
@@ -1151,11 +1167,11 @@ impl Interp {
     }
 
     /// Group(...) の名前の無い引数。図形か Group だけを受ける
-    fn group_items(&mut self, args: &[Arg]) -> Result<Vec<ObjRef>> {
+    fn group_items(&mut self, args: &[Arg]) -> Result<Vec<(Option<String>, ObjRef)>> {
         let mut items = Vec::new();
-        for a in args.iter().filter(|a| a.name.is_none()) {
+        for a in args.iter().filter(|a| !is_group_attr(a)) {
             let v = self.eval(&a.value)?;
-            items.push(self.group_item(v)?);
+            items.push((a.name.clone(), self.group_item(v)?));
         }
         Ok(items)
     }
@@ -1276,7 +1292,7 @@ impl Interp {
                 Ok(Value::Timeline(Rc::new(Timeline::empty(duration))))
             }
             _ => {
-                // Group は名前の無い引数が中身。残りが属性
+                // Group は属性の名前でない引数が中身。名前を付けた中身は、その名前で読める
                 let items = match kind {
                     "Group" => self.group_items(args)?,
                     _ => Vec::new(),
@@ -1284,7 +1300,7 @@ impl Interp {
                 let named: Vec<Arg>;
                 let args = match kind {
                     "Group" => {
-                        named = args.iter().filter(|a| a.name.is_some()).cloned().collect();
+                        named = args.iter().filter(|a| is_group_attr(a)).cloned().collect();
                         &named[..]
                     }
                     _ => args,
@@ -1323,7 +1339,13 @@ impl Interp {
                     if kind == "ZoomPath" {
                         attrs.insert("scale".into(), self.zoom_table(&attrs)?);
                     }
-                    return Ok(Value::Object(Rc::new(RefCell::new(Object { id: next_object_id(), kind: kind.to_string(), decl: None, attrs, children: items, placed: false, tracks: vec![] }))));
+                    for (name, item) in &items {
+                        if let Some(name) = name {
+                            attrs.insert(name.clone(), Value::Object(item.clone()));
+                        }
+                    }
+                    let children = items.into_iter().map(|(_, item)| item).collect();
+                    return Ok(Value::Object(Rc::new(RefCell::new(Object { id: next_object_id(), kind: kind.to_string(), decl: None, attrs, children, placed: false, tracks: vec![] }))));
                 }
                 let Some(ty) = self.lookup_type(kind) else {
                     return self.cannot_construct(kind);
@@ -2719,6 +2741,12 @@ pub fn font_names(v: &Value) -> Vec<String> {
 
 /// while を 1 回の評価で回せる上限。超えたら止まらない繰り返しとみなす
 const LOOP_LIMIT: usize = 1_000_000;
+
+/// Group(...) の引数が、Group 自身の属性か。そうでなければ中身
+fn is_group_attr(a: &Arg) -> bool {
+    let attrs = schema("Group").unwrap_or(&[]);
+    a.name.as_deref().is_some_and(|name| attrs.iter().any(|attr| attr.name == name))
+}
 
 pub const KINDS: &[&str] =
     &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "View", "Timeline", "Narration", "SayVoiceEngine", "EspeakVoiceEngine", "Shader", "ZoomPath", "Camera", "Gradient", "Color", "PerspectiveCamera", "OrthographicCamera", "IsometricCamera", "Transform3", "Mesh", "Face", "Solid", "World", "Group"];

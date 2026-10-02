@@ -2,14 +2,15 @@
 
 let v = View(box = Vector(16, 9))
 
-# 名前の無い引数が中身。書いた順に描く
-let square = Rect(position = Pos(0, 0), w = 1.2, h = 1.2, fill = #ffb583)
+# 属性でない引数が中身。書いた順に描く。名前を付けた中身は、その名前で読める
 let badge = Group(
-  Circle(position = Pos(0, 0), radius = 1.4, fill = #2f6fd0),
-  square,
+  ring   = Circle(position = Pos(0, 0), radius = 1.4, fill = #2f6fd0),
+  square = Rect(position = Pos(0, 0), w = 1.2, h = 1.2, fill = #ffb583),
   position = Pos(2, 4.5),
 )
 v.place(badge)
+badge.ring.fill = #1d4f9c
+log(badge.square.w)
 
 # Group の中に Group。原点は外側から順に足される
 let pair = Group(
@@ -29,8 +30,8 @@ v.place(row)
 
 # Group を動かせば中身ごと動く。中の図形は別々に動かせる
 let move = motion (t) {
-  0s:  badge.position = Pos(2, 4.5), pair.rotation = 0, square.rotation = 0
-  4s:  badge.position = Pos(14, 4.5), pair.rotation = 180, square.rotation = 90
+  0s:  badge.position = Pos(2, 4.5), pair.rotation = 0, badge.square.rotation = 0
+  4s:  badge.position = Pos(14, 4.5), pair.rotation = 180, badge.square.rotation = 90
 }
 let track = Timeline()
 track.place(move)

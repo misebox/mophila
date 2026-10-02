@@ -291,15 +291,18 @@ pen.position = Pos(line.point_at(1))
 
 ```
 let badge = Group(
-  Circle(position = Pos(0, 0), radius = 1.4, fill = #2f6fd0),
-  Rect(position = Pos(0, 0), w = 1.2, h = 1.2, fill = #ffb583),
+  ring   = Circle(position = Pos(0, 0), radius = 1.4, fill = #2f6fd0),
+  square = Rect(position = Pos(0, 0), w = 1.2, h = 1.2, fill = #ffb583),
   position = Pos(8, 4.5),
 )
 v.place(badge)
 badge.position = Pos(12, 4.5)   # 丸と四角が一緒に動く
+badge.square.rotation = 45      # 中身は名前で読み書きできる
 ```
 
-名前の無い引数が中身で、書いた順に描く。図形と Group を入れられる (View は入れられない)。`place` で後から足せる。
+Group の属性 (下の表) でない引数が中身で、書いた順に描く。名前を付けた中身は `badge.square` のように読める。motion の対象にも書ける (`0s: badge.square.rotation = 0`)。名前は付けなくてもいい。中身そのものの入れ替えはできない。
+
+図形と Group を入れられる (View は入れられない)。`place` で後から足せる。
 
 | 属性 | 型 | 意味 |
 |---|---|---|

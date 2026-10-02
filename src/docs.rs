@@ -196,11 +196,11 @@ pub const TYPES: &[Type] = &[
         name: "Group",
         category: "Shape",
         union: "Shape",
-        make: "Group(Circle(position = Pos(0, 0), radius = 1), Rect(position = Pos(0, 0), w = 1, h = 1), position = Pos(8, 4.5))",
+        make: "Group(ring = Circle(position = Pos(0, 0), radius = 1), Rect(position = Pos(0, 0), w = 1, h = 1), position = Pos(8, 4.5))",
         values: &[],
         members: &[],
         doc: "図形をまとめたもの。中の図形の座標は Group の position からの相対で、Group を動かす・回す・薄くすると中身ごと掛かる。\
-              名前の無い引数が中身。Group の中に Group を入れられる。place で後から足せる",
+              属性でない引数が中身で、名前を付けたものは g.ring のように読み書きできる。Group の中に Group を入れられる。place で後から足せる",
     },
     Type {
         name: "Ellipse",

@@ -287,6 +287,31 @@ pen.position = Pos(line.point_at(1))
 | Circle / Ellipse / Line | `strokeJoin` | 角が無い |
 | TextArea | `strokeCap` `dash` `dashOffset` | 字の輪郭を破線にできない |
 
+**Group** — 図形をまとめたもの。中の図形の座標は Group の `position` からの相対になる。Group を動かせば中身ごと動く。
+
+```
+let badge = Group(
+  Circle(position = Pos(0, 0), radius = 1.4, fill = #2f6fd0),
+  Rect(position = Pos(0, 0), w = 1.2, h = 1.2, fill = #ffb583),
+  position = Pos(8, 4.5),
+)
+v.place(badge)
+badge.position = Pos(12, 4.5)   # 丸と四角が一緒に動く
+```
+
+名前の無い引数が中身で、書いた順に描く。図形と Group を入れられる (View は入れられない)。`place` で後から足せる。
+
+| 属性 | 型 | 意味 |
+|---|---|---|
+| `position` | Pos | 中身の原点を置く場所。省略は `Pos(0, 0)` |
+| `rotation` | Number | 中身ごと回す角度 (度) |
+| `scale` | Number | 中身ごと拡大する倍率 |
+| `pivot` | Vector | 回転と拡大の中心 (Group の中の座標)。省略は原点 |
+| `opacity` `blend` | | 中身をまとめて 1 枚として掛かる |
+| `zIndex` | Number | 並びの中での、Group 全体の重なりの順 |
+
+View との違いは、箱を持たないこと。大きさを宣言せず、置くときに伸縮もしない。中の座標の 1 は外の座標の 1 のまま。
+
 ### 3.12 箱
 
 ```

@@ -193,6 +193,16 @@ pub const TYPES: &[Type] = &[
         doc: "position を中心に、radius の半径で描く円",
     },
     Type {
+        name: "Group",
+        category: "Shape",
+        union: "Shape",
+        make: "Group(Circle(position = Pos(0, 0), radius = 1), Rect(position = Pos(0, 0), w = 1, h = 1), position = Pos(8, 4.5))",
+        values: &[],
+        members: &[],
+        doc: "図形をまとめたもの。中の図形の座標は Group の position からの相対で、Group を動かす・回す・薄くすると中身ごと掛かる。\
+              名前の無い引数が中身。Group の中に Group を入れられる。place で後から足せる",
+    },
+    Type {
         name: "Ellipse",
         category: "Shape",
         union: "Shape",
@@ -511,7 +521,7 @@ pub const TYPES: &[Type] = &[
         union: "",
         make: "",
         values: &[],
-        members: &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea"],
+        members: &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "Group"],
         doc: "描ける図形をまとめた名前。View に place できて、fill や opacity など図形に共通の属性を持つ",
     },
     Type {

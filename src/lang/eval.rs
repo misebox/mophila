@@ -1150,6 +1150,24 @@ impl Interp {
         }
     }
 
+    /// Group(...) の名前の無い引数。図形か Group だけを受ける
+    fn group_items(&mut self, args: &[Arg]) -> Result<Vec<ObjRef>> {
+        let mut items = Vec::new();
+        for a in args.iter().filter(|a| a.name.is_none()) {
+            let v = self.eval(&a.value)?;
+            items.push(self.group_item(v)?);
+        }
+        Ok(items)
+    }
+
+    /// View は自分の箱と伸縮を持つので、Group の中身にはしない
+    fn group_item(&self, v: Value) -> Result<ObjRef> {
+        match v {
+            Value::Object(o) if o.borrow().kind != "View" && self.matches_type(&Value::Object(o.clone()), "Shape") => Ok(o),
+            v => err(Kind::ArgumentType, format!("Group holds shapes and Groups, found {}", v.type_name())),
+        }
+    }
+
     /// 型名を呼んで値を作る
     /// 素の名前からの生成。モジュールの中にだけある型はここでは作れない
     fn construct(&mut self, kind: &str, args: &[Arg]) -> Result<Value> {
@@ -1258,6 +1276,19 @@ impl Interp {
                 Ok(Value::Timeline(Rc::new(Timeline::empty(duration))))
             }
             _ => {
+                // Group は名前の無い引数が中身。残りが属性
+                let items = match kind {
+                    "Group" => self.group_items(args)?,
+                    _ => Vec::new(),
+                };
+                let named: Vec<Arg>;
+                let args = match kind {
+                    "Group" => {
+                        named = args.iter().filter(|a| a.name.is_some()).cloned().collect();
+                        &named[..]
+                    }
+                    _ => args,
+                };
                 if let Some(sch) = schema(kind) {
                     let fields: Vec<&str> = sch.iter().map(|a| a.name).collect();
                     let map = self.resolve_args(kind, &fields, args)?;
@@ -1292,7 +1323,7 @@ impl Interp {
                     if kind == "ZoomPath" {
                         attrs.insert("scale".into(), self.zoom_table(&attrs)?);
                     }
-                    return Ok(Value::Object(Rc::new(RefCell::new(Object { id: next_object_id(), kind: kind.to_string(), decl: None, attrs, children: vec![], placed: false, tracks: vec![] }))));
+                    return Ok(Value::Object(Rc::new(RefCell::new(Object { id: next_object_id(), kind: kind.to_string(), decl: None, attrs, children: items, placed: false, tracks: vec![] }))));
                 }
                 let Some(ty) = self.lookup_type(kind) else {
                     return self.cannot_construct(kind);
@@ -1841,6 +1872,15 @@ impl Interp {
                 let (w, h) = (f64::from(layout.width()), f64::from(layout.height()));
                 Ok(Value::Vector(wrap.map_or(w, f64::from), h))
             }
+            // 後から足す。ループで中身を作るとき用
+            ("Group", "place") => match args.as_slice() {
+                [(None, v)] => {
+                    let item = self.group_item(v.clone())?;
+                    obj.borrow_mut().children.push(item);
+                    Ok(Value::Nothing)
+                }
+                _ => err(Kind::ArityMismatch, "Group.place takes one shape"),
+            },
             ("View", "place") => match args.first() {
                 Some((None, Value::Object(child))) if child.borrow().kind == "View" => {
                     if Rc::ptr_eq(child, obj) {
@@ -2681,7 +2721,7 @@ pub fn font_names(v: &Value) -> Vec<String> {
 const LOOP_LIMIT: usize = 1_000_000;
 
 pub const KINDS: &[&str] =
-    &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "View", "Timeline", "Narration", "SayVoiceEngine", "EspeakVoiceEngine", "Shader", "ZoomPath", "Camera", "Gradient", "Color", "PerspectiveCamera", "OrthographicCamera", "IsometricCamera", "Transform3", "Mesh", "Face", "Solid", "World"];
+    &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "View", "Timeline", "Narration", "SayVoiceEngine", "EspeakVoiceEngine", "Shader", "ZoomPath", "Camera", "Gradient", "Color", "PerspectiveCamera", "OrthographicCamera", "IsometricCamera", "Transform3", "Mesh", "Face", "Solid", "World", "Group"];
 
 /// builtin 型の属性と型
 /// 型の名前は大文字で始まり、builtin の型と union の名前は使えない
@@ -2729,6 +2769,7 @@ pub fn defaults(kind: &str) -> Vec<(&'static str, Value)> {
         "IsometricCamera" => return vec![("unit", num(1.0))],
         "Transform3" => return vec![("m", stdlib::space3d::identity())],
         "Solid" => return vec![("fill", Value::Color([0.5, 0.5, 0.5, 1.0]))],
+        "Group" => return vec![("position", Value::Apos("center".to_string(), 0.0, 0.0))],
         "World" => return vec![("light", Value::Vector3(0.4, 0.8, 0.5)), ("ambient", num(0.25))],
         _ => {}
     }
@@ -2881,6 +2922,7 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
     const ISOMETRIC: &[Attr] = &[opt("unit", "Number"), req("box", "Vector")];
     const TRANSFORM3: &[Attr] = &[opt("m", "List<Number>")];
     const MESH: &[Attr] = &[req("points", "List<Vector3>"), opt("edges", "List<Tuple>"), opt("faces", "List<List<Number>>")];
+    const GROUP: &[Attr] = &[opt("position", "Pos"), opt("scale", "Number"), COMMON[0], COMMON[1], COMMON[2], COMMON[3], COMMON[4]];
     const SOLID: &[Attr] = &[req("mesh", "Mesh"), opt("fill", "Color"), opt("transform", "Transform3")];
     const WORLD: &[Attr] =
         &[req("camera", "Projection"), req("parts", "List<Solid>"), opt("light", "Vector3"), opt("ambient", "Number"), opt("background", "Color")];
@@ -2915,6 +2957,7 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
         "Mesh" => MESH,
         "Face" => FACE,
         "Solid" => SOLID,
+        "Group" => GROUP,
         "World" => WORLD,
         "Gradient" => GRADIENT,
         _ => return None,

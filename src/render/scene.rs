@@ -155,10 +155,23 @@ fn draw_view(scene: &mut Scene, view: &ObjRef, transform: Affine, frame: &Frame,
         Some((affine, _, _)) => transform * affine,
         None => transform,
     };
-    for child in &order(&v.children) {
+    draw_children(scene, &v.children, transform, frame, cache)?;
+    if grouped {
+        scene.pop_layer();
+    }
+    Ok(())
+}
+
+/// 置かれたものを順に描く。View と Group は自分の座標系を作ってから中へ降りる
+fn draw_children(scene: &mut Scene, children: &[ObjRef], transform: Affine, frame: &Frame, cache: &mut RenderCache) -> Result<()> {
+    for child in &order(children) {
         if child.borrow().kind == "View" {
             let sub = sub_transform(child, transform)?;
             draw_view(scene, child, sub, frame, cache)?;
+            continue;
+        }
+        if child.borrow().kind == "Group" {
+            draw_group(scene, child, transform, frame, cache)?;
             continue;
         }
         let c = child.borrow();
@@ -183,7 +196,50 @@ fn draw_view(scene: &mut Scene, view: &ObjRef, transform: Affine, frame: &Frame,
         scene.append(&fragment, None);
         cache.fragments.insert(key, crate::render::text::Fragment { print: fp, scene: fragment, used: now });
     }
-    if grouped {
+    Ok(())
+}
+
+/// Group の中の座標から、親の座標へ。position が原点で、回転と拡大は pivot (中の座標。既定は原点) を中心に掛かる
+fn group_transform(group: &crate::lang::value::Object, parent: Affine) -> Result<Affine> {
+    let origin = match group.attrs.get("position") {
+        Some(Value::Apos(_, x, y)) => (*x, *y),
+        _ => (0.0, 0.0),
+    };
+    let pivot = match group.attrs.get("pivot") {
+        Some(v) => point_of(v, "Group.pivot")?,
+        None => Point::ZERO,
+    };
+    let spin = match group.attrs.get("rotation") {
+        Some(Value::Number(deg, _)) => Affine::rotate_about(deg.to_radians(), pivot),
+        _ => Affine::IDENTITY,
+    };
+    let zoom = match group.attrs.get("scale") {
+        Some(Value::Number(k, _)) => Affine::scale_about(*k, pivot),
+        _ => Affine::IDENTITY,
+    };
+    Ok(parent * Affine::translate(origin) * spin * zoom)
+}
+
+/// Group の中身を描く。opacity と blend は中身をまとめて 1 枚として掛ける
+fn draw_group(scene: &mut Scene, group: &ObjRef, parent: Affine, frame: &Frame, cache: &mut RenderCache) -> Result<()> {
+    let g = group.borrow();
+    let opacity = match g.attrs.get("opacity") {
+        Some(Value::Number(o, _)) => o.clamp(0.0, 1.0),
+        _ => 1.0,
+    };
+    if opacity <= 0.0 {
+        return Ok(());
+    }
+    let transform = group_transform(&g, parent)?;
+    let blend = blend_mode(&g.attrs)?.unwrap_or(BlendMode::new(Mix::Normal, Compose::SrcOver));
+    let layered = opacity < 1.0 || blend.mix != Mix::Normal || blend.compose != Compose::SrcOver;
+    if layered {
+        let area = children_bounds(&g.children, transform, cache)?.inflate(2.0, 2.0).intersect(frame.picture);
+        cache.layer_bytes += (area.width().max(0.0) * area.height().max(0.0) * 4.0) as u64;
+        scene.push_layer(Fill::NonZero, blend, opacity as f32, Affine::IDENTITY, &area.to_path(0.01));
+    }
+    draw_children(scene, &g.children, transform, frame, cache)?;
+    if layered {
         scene.pop_layer();
     }
     Ok(())
@@ -202,11 +258,21 @@ fn drawn_bounds(view: &ObjRef, transform: Affine, cache: &mut RenderCache) -> Re
         Some((affine, _, _)) => transform * affine,
         None => transform,
     };
+    children_bounds(&v.children, transform, cache)
+}
+
+/// 置かれたものが描く範囲 (出力座標)。中身が無ければ大きさの無い四角
+fn children_bounds(children: &[ObjRef], transform: Affine, cache: &mut RenderCache) -> Result<Rect> {
     let mut out: Option<Rect> = None;
-    for child in &v.children {
-        let bounds = match child.borrow().kind == "View" {
-            true => drawn_bounds(child, sub_transform(child, transform)?, cache)?,
-            false => object_bounds(&child.borrow(), transform, cache)?,
+    for child in children {
+        let kind = child.borrow().kind.clone();
+        let bounds = match kind.as_str() {
+            "View" => drawn_bounds(child, sub_transform(child, transform)?, cache)?,
+            "Group" => {
+                let g = child.borrow();
+                children_bounds(&g.children, group_transform(&g, transform)?, cache)?
+            }
+            _ => object_bounds(&child.borrow(), transform, cache)?,
         };
         out = Some(match out {
             Some(all) => all.union(bounds),

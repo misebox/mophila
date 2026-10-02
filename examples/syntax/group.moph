@@ -1,0 +1,38 @@
+# group.moph — 図形をまとめる。中の座標は Group の position からの相対
+
+let v = View(box = Vector(16, 9))
+
+# 名前の無い引数が中身。書いた順に描く
+let square = Rect(position = Pos(0, 0), w = 1.2, h = 1.2, fill = #ffb583)
+let badge = Group(
+  Circle(position = Pos(0, 0), radius = 1.4, fill = #2f6fd0),
+  square,
+  position = Pos(2, 4.5),
+)
+v.place(badge)
+
+# Group の中に Group。原点は外側から順に足される
+let pair = Group(
+  Group(Circle(position = Pos(0, 0), radius = 0.5, fill = #d9552c), position = Pos(-1, 0)),
+  Group(Circle(position = Pos(0, 0), radius = 0.5, fill = #2f6fd0), position = Pos(1, 0)),
+  position = Pos(8, 1.5),
+  opacity = 0.5,          # 中身をまとめて 1 枚として薄くする
+)
+v.place(pair)
+
+# 後から足す
+let row = Group(position = Pos(4, 7.5))
+for i in 0..5 {
+  row.place(Circle(position = Pos(i * 2, 0), radius = 0.4, fill = #7d90ad))
+}
+v.place(row)
+
+# Group を動かせば中身ごと動く。中の図形は別々に動かせる
+let move = motion (t) {
+  0s:  badge.position = Pos(2, 4.5), pair.rotation = 0, square.rotation = 0
+  4s:  badge.position = Pos(14, 4.5), pair.rotation = 180, square.rotation = 90
+}
+let track = Timeline()
+track.place(move)
+v.addTrack(track)
+output v

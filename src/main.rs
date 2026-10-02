@@ -158,8 +158,8 @@ struct OutputArgs {
     /// Write only this span: 00:15..00:30, 00:15 (from 15s on), ..01:30 (up to it), 94%..96%, or bare numbers for frames
     #[arg(long, value_parser = parse_trim)]
     trim: Option<Trim>,
-    /// Threads that build frames (default 1). 0 picks a number from the CPU count.
-    /// Only helps when building costs more than drawing. A Shader always uses one
+    /// Threads that build frames. Without it, measured on this machine for this picture:
+    /// as many as building a frame costs more than drawing it. A Shader or World fill always uses one
     #[arg(long)]
     jobs: Option<usize>,
     /// Warn about frames that need more GPU memory than this (e.g. 512MB, 2GB)
@@ -704,12 +704,34 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
     let tracks = lang::eval::all_tracks(&view);
     let mut progress = render::progress::Progress::new(&name, times.len());
     // Shader と World の塗りは描画命令を組む時点で GPU を使うので、別スレッドでは組めない
-    let workers = match render::scene::uses_gpu_fill(&view) {
-        true => 1,
-        false => match args.jobs.unwrap_or(1) {
-            0 => std::thread::available_parallelism().map_or(1, |n| n.get().min(4)).max(1),
-            n => n.max(1),
-        },
+    let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
+    let workers = match (render::scene::uses_gpu_fill(&view), args.jobs) {
+        (true, _) => 1,
+        (false, Some(n)) if n > 0 => n,
+        // 測るぶんのコマも惜しい長さなら、分けない
+        (false, _) if times.len() < 8 => 1,
+        // 書いていなければ、この絵をこの機械で測って決める。真ん中のコマを 2 回組んで描き
+        // (1 回目は初回だけの準備を含むので使わない。残りは速かった回を採る)、組むのが描くのの何倍掛かるかを本数にする
+        (false, _) => {
+            let t = times[times.len() / 2];
+            let (mut build, mut draw) = (f64::INFINITY, f64::INFINITY);
+            for round in 0..4 {
+                let began = std::time::Instant::now();
+                interp.begin_frame(t);
+                interp.apply_tracks(&tracks, t)?;
+                let scene = render::scene::build(&view, shot, t, interp.cache_mut())?;
+                let built = began.elapsed().as_secs_f64();
+                let began = std::time::Instant::now();
+                let frame = renderer.render(&scene, interp.cache_mut().shaders.as_mut())?;
+                renderer.read_pixels(frame, &mut pixels)?;
+                if round > 0 {
+                    (build, draw) = (build.min(built), draw.min(began.elapsed().as_secs_f64()));
+                }
+            }
+            let n = ((build / draw.max(1e-6)).ceil() as usize).clamp(1, cores);
+            eprintln!("jobs {n} (building a frame takes {:.1}ms, drawing {:.1}ms, {cores} cores)", build * 1000.0, draw * 1000.0);
+            n
+        }
     };
     let mut frames = (workers > 1 && times.len() > 1).then(|| {
         render::frames::Frames::start(

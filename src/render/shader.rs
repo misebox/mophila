@@ -915,6 +915,10 @@ impl Uniforms {
 }
 
 struct Pipeline {
+    /// 最後に使ったフレームの番号
+    used: u64,
+    /// 鍵にした関数の持ち主。持っておくので、その番地が別の関数に回って、取り違えることが無い
+    _owner: Rc<Closure>,
     pipeline: wgpu::ComputePipeline,
     /// 帯を伸ばすほう。ズーム動画のときだけ使う
     strip: wgpu::ComputePipeline,
@@ -1012,27 +1016,40 @@ impl ShaderRunner {
             alive
         });
         self.strips.retain(|_, s| now.saturating_sub(s.used) <= keep);
+        // 関数を毎フレーム作る形で溜まらないように。出たり入ったりする Shader は作り直さないよう、長めに持つ
+        self.pipelines.retain(|_, p| now.saturating_sub(p.used) <= keep * 60);
+    }
+
+    /// 図形 shape の描き先を用意する。同じ大きさで、前のフレームまでにしか使っていないものがあれば、それを引き継ぐ。
+    /// 毎フレーム新しい図形を作る形でも、テクスチャを作り直さない。中身は毎回描き直すので、前の持ち主の絵は残らない
+    fn claim_target(&mut self, shape: u64, width: u32, height: u32, frame: u64) -> Result<()> {
+        let fits = |t: &Target| t.width == width && t.height == height;
+        if let Some(own) = self.targets.get_mut(&shape).filter(|t| fits(t)) {
+            own.used = frame;
+            return Ok(());
+        }
+        let spare = self.targets.iter().filter(|(k, t)| **k != shape && fits(t) && t.used < frame).min_by_key(|(k, t)| (t.used, **k)).map(|(k, _)| *k);
+        let mut target = match spare.and_then(|k| self.targets.remove(&k)) {
+            Some(target) => target,
+            None => self.make_target(width, height)?,
+        };
+        target.used = frame;
+        if let Some(old) = self.targets.insert(shape, target) {
+            self.released.push(old.image);
+        }
+        Ok(())
     }
 
     /// Mesh を GPU で描き、塗りに使う画像を返す。描画の前に overrides を Vello に登録すること
     pub fn run_world(&mut self, req: World) -> Result<ImageData> {
-        let needs_new = self.targets.get(&req.shape).is_none_or(|t| t.width != req.width || t.height != req.height);
-        if needs_new {
-            let target = self.make_target(req.width, req.height)?;
-            if let Some(old) = self.targets.insert(req.shape, target) {
-                self.released.push(old.image);
-            }
-        }
+        self.claim_target(req.shape, req.width, req.height, req.frame)?;
         if self.meshes.is_none() {
             self.meshes = Some(crate::render::mesh::Meshes::new(&self.device));
         }
         let scope = self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
         let want = (req.vertices.len().max(3) * crate::render::mesh::VERTEX_BYTES) as u64;
-        let depth = match needs_new {
-            true => None,
-            false => self.targets.get_mut(&req.shape).and_then(|t| t.depth.take()),
-        };
-        let depth = match depth {
+        // 深度は描き先と同じ大きさで作るので、描き先が合っていればそのまま使える
+        let depth = match self.targets.get_mut(&req.shape).and_then(|t| t.depth.take()) {
             Some(view) => view,
             None => {
                 let texture = self.device.create_texture(&wgpu::TextureDescriptor {
@@ -1062,7 +1079,6 @@ impl ShaderRunner {
         }
         self.queue.write_buffer(&points, 0, &crate::render::mesh::bytes_of(req.vertices));
         let target = self.targets.get_mut(&req.shape).expect("inserted above");
-        target.used = req.frame;
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("mophila mesh") });
         self.meshes.as_ref().expect("made above").draw(
             &self.device,
@@ -1090,17 +1106,11 @@ impl ShaderRunner {
         let key = Rc::as_ptr(req.closure) as usize | usize::from(req.camera.is_some());
         if !self.pipelines.contains_key(&key) {
             let wgsl = compile(req.closure, req.camera.is_some())?;
-            let pipeline = self.build_pipeline(&wgsl)?;
+            let pipeline = self.build_pipeline(&wgsl, req.closure)?;
             self.pipelines.insert(key, pipeline);
         }
-        let needs_new = self.targets.get(&req.shape).is_none_or(|t| t.width != req.width || t.height != req.height);
-        if needs_new {
-            let target = self.make_target(req.width, req.height)?;
-            if let Some(old) = self.targets.insert(req.shape, target) {
-                self.released.push(old.image);
-            }
-        }
-        self.targets.get_mut(&req.shape).expect("inserted above").used = req.frame;
+        self.pipelines.get_mut(&key).expect("inserted above").used = req.frame;
+        self.claim_target(req.shape, req.width, req.height, req.frame)?;
         if let Some(strip) = self.strips.get_mut(&req.shape) {
             strip.used = req.frame;
         }
@@ -1360,7 +1370,7 @@ impl ShaderRunner {
         self.frame = Some((pipeline, layout, sampler));
     }
 
-    fn build_pipeline(&self, wgsl: &str) -> Result<Pipeline> {
+    fn build_pipeline(&self, wgsl: &str, owner: &Rc<Closure>) -> Result<Pipeline> {
         // MOPHILA_WGSL を付けると、組み立てた WGSL をそのまま出す (.moph からの変換を確かめる用)
         if std::env::var_os("MOPHILA_WGSL").is_some() {
             eprintln!("{wgsl}");
@@ -1391,7 +1401,7 @@ impl ShaderRunner {
         if let Some(e) = pollster::block_on(scope.pop()) {
             return err(KIND, format!("the GPU rejected the shader: {e}\n--- WGSL ---\n{wgsl}"));
         }
-        Ok(Pipeline { pipeline, strip, layout })
+        Ok(Pipeline { used: 0, _owner: Rc::clone(owner), pipeline, strip, layout })
     }
 
     fn make_target(&self, width: u32, height: u32) -> Result<Target> {

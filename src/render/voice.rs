@@ -75,7 +75,7 @@ impl VoiceEngine for SayVoiceEngine {
         "say"
     }
     fn doc(&self) -> &'static str {
-        "macOS の say で読み上げる。Timeline.place の voice に渡す"
+        "macOS の say で読み上げる。Narration の voice に渡す"
     }
     fn make(&self) -> &'static str {
         "SayVoiceEngine(voice = \"Kyoko\")"
@@ -114,7 +114,7 @@ impl VoiceEngine for EspeakVoiceEngine {
         "espeak-ng"
     }
     fn doc(&self) -> &'static str {
-        "espeak-ng で読み上げる。Timeline.place の voice に渡す"
+        "espeak-ng で読み上げる。Narration の voice に渡す"
     }
     fn make(&self) -> &'static str {
         "EspeakVoiceEngine(voice = \"ja\")"
@@ -158,11 +158,6 @@ pub fn default_engine() -> Result<&'static dyn VoiceEngine, Box<dyn Error>> {
         )
         .into()),
     }
-}
-
-/// engine の型の名前を全部
-pub fn names() -> Vec<&'static str> {
-    ENGINES.iter().map(|e| e.name()).collect()
 }
 
 /// その実行ファイルが PATH にあるか。走らせずに探す

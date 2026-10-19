@@ -12,10 +12,10 @@ import { HOUSE } from ..palette.house
 ## @param wavelength 揺れ 1 回ぶんの長さ (箱の座標)
 ## @param samples 1 ピクセルあたりの評価点
 ## @example
-## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,
-##              fill = waves(#f2f7fb, #dbe7ef, 0.5, 0.25, 2)))
+## Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9,
+##      fill = waves(#f2f7fb, #dbe7ef, 0.5, 0.25, 2))
 export func waves(a: Color, b: Color, pitch: Number = 0.5, amplitude: Number = 0.25, wavelength: Number = 2, samples: Number = 4) -> Shader {
-  let k = math.TAU / wavelength
+  let k = math.tau / wavelength
   Shader(
     color = func (x, y, t) {
       let u = (x + amplitude * math.sin(y * k)) / pitch

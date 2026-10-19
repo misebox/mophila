@@ -1,6 +1,6 @@
-//! 動画に付ける音声と字幕。View に置かれた Timeline を辿り、絶対時刻で集める
+//! 動画に付ける音声と字幕。Composition の Layer を辿り、絶対時刻で集める
 
-use crate::lang::value::{ObjRef, Placed, Track, Value};
+use crate::lang::value::{ObjRef, Value};
 
 /// 音声ファイルの 1 区間
 pub struct AudioClip {
@@ -132,82 +132,66 @@ pub fn prepare(
 }
 
 /// total は動画の長さ。繰り返す音声はそこまで鳴らす
-pub fn collect(view: &ObjRef, total: f64) -> Media {
+pub fn collect(comp: &ObjRef, total: f64) -> Media {
     let mut media = Media::default();
-    let tracks = view.borrow().tracks.clone();
-    for placed in &tracks {
-        walk(placed, 0.0, total, &mut media);
-    }
+    walk(comp, 0.0, total, &mut media);
     media.clips.sort_by(|a, b| a.at.total_cmp(&b.at));
     media.cues.sort_by(|a, b| a.at.total_cmp(&b.at));
     media.narrations.sort_by(|a, b| a.at.total_cmp(&b.at));
     media
 }
 
-/// limit は、ここまでに通った入れ物 (duration を指定した Timeline) の終わりの最小。はみ出した分は切る
-fn walk(placed: &Placed, origin: f64, limit: f64, out: &mut Media) {
-    let start = origin + placed.at;
-    match &placed.track {
-        Track::Container(obj) => {
-            let explicit = match obj.borrow().attrs.get("duration") {
-                Some(Value::Duration(d)) => Some(*d),
-                _ => None,
-            };
-            let limit = explicit.map_or(limit, |d| limit.min(start + d));
-            let children = obj.borrow().tracks.clone();
-            for child in &children {
-                walk(child, start, limit, out);
-            }
-        }
-        Track::Timeline(tl) => {
-            // duration を書いた入れ物は、はみ出した分を切る
-            let limit = tl.duration.get().map_or(limit, |d| limit.min(start + d));
-            for child in tl.tracks.borrow().clone().iter() {
-                walk(child, start, limit, out);
-            }
-        }
-        Track::Audio(audio, clip) => {
-            let natural = if clip.looping { clip.cut.unwrap_or(f64::INFINITY) } else { audio.clip_length(clip) };
-            let length = (start + natural).min(limit) - start;
-            if length <= 0.0 {
-                return;
-            }
-            out.clips.push(AudioClip {
-                path: audio.path.clone(),
-                name: audio.name.clone(),
-                at: start,
-                offset: 0.0,
-                length,
-                fade_in: placed.fade_in,
-                fade_out: placed.fade_out,
-                volume: clip.volume,
-                looping: clip.looping,
-            });
-        }
-        Track::Narration(obj, engine) => {
-            let o = obj.borrow();
-            let text = match o.attrs.get("text") {
-                Some(Value::Str(s)) => s.clone(),
-                _ => String::new(),
-            };
-            // どう喋らせるかは置くときに渡された engine の値が持っている
-            let (engine, settings) = match engine {
-                Some(e) => {
-                    let e = e.borrow();
-                    let settings =
-                        crate::render::voice::Settings(e.attrs.iter().map(|(name, value)| (name.clone(), value.clone())).collect());
-                    (Some(e.kind.clone()), settings)
+/// Composition の Layer を辿る。origin はこの Composition の始まり、limit は外側が許す終わり。はみ出した分は切る
+fn walk(comp: &ObjRef, origin: f64, limit: f64, out: &mut Media) {
+    let layers = comp.borrow().layers.clone();
+    for layer in &layers {
+        let start = origin + layer.at;
+        let end = (origin + layer.out).min(limit);
+        match &layer.content {
+            Value::Object(obj) if obj.borrow().kind == "Composition" => walk(obj, start, end, out),
+            Value::Audio(audio) => {
+                let length = (start + audio.played(layer.out - layer.at)).min(end) - start;
+                if length > 0.0 {
+                    out.clips.push(AudioClip {
+                        path: audio.path.clone(),
+                        name: audio.name.clone(),
+                        at: start,
+                        offset: 0.0,
+                        length,
+                        fade_in: 0.0,
+                        fade_out: 0.0,
+                        volume: audio.volume,
+                        looping: audio.looping,
+                    });
                 }
-                None => (None, crate::render::voice::Settings::default()),
-            };
-            let volume = match o.attrs.get("volume") {
-                Some(Value::Number(v, _)) => *v,
-                _ => 1.0,
-            };
-            let length = (start + placed.track.duration()).min(limit) - start;
-            if length > 0.0 {
-                out.narrations.push(Narration { at: start, length, text, engine, settings, volume });
             }
+            Value::Object(obj) if obj.borrow().kind == "Narration" => {
+                let o = obj.borrow();
+                let text = match o.attrs.get("text") {
+                    Some(Value::Str(s)) => s.clone(),
+                    _ => String::new(),
+                };
+                // どう喋らせるかは voice に入れた engine の値が持っている
+                let (engine, settings) = match o.attrs.get("voice") {
+                    Some(Value::Object(e)) => {
+                        let e = e.borrow();
+                        let settings =
+                            crate::render::voice::Settings(e.attrs.iter().map(|(name, value)| (name.clone(), value.clone())).collect());
+                        (Some(e.kind.clone()), settings)
+                    }
+                    _ => (None, crate::render::voice::Settings::default()),
+                };
+                let volume = match o.attrs.get("volume") {
+                    Some(Value::Number(v, _)) => *v,
+                    _ => 1.0,
+                };
+                let length = end - start;
+                if length > 0.0 {
+                    out.narrations.push(Narration { at: start, length, text, engine, settings, volume });
+                }
+            }
+            // 図形と、時刻から Node を返す関数は、音を持たない
+            _ => {}
         }
     }
 }

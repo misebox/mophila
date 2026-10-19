@@ -68,6 +68,8 @@ pub fn build(view: &ObjRef, shot: Shot, t: f64, cache: &mut RenderCache) -> Resu
     let scale = area.width() / source.width();
     let transform = Affine::translate((area.x0, area.y0)) * Affine::scale(scale) * Affine::translate((-source.x0, -source.y0));
     let mut scene = Scene::new();
+    // 単位つきの長さは、この箱と出力のピクセルに対して数になる
+    let outer = crate::lang::length::set_basis(crate::lang::length::Basis { width: bw, height: bh, pixel: 1.0 / scale });
     // 絵が載るのはこの矩形の中だけ。外は帯なので、塗りもレイヤーもここで切る
     let frame = Frame { picture: area, t };
     // 切り取ったときは、絵の載る矩形の外に中身がはみ出す。帯の中に描かないように切る
@@ -76,7 +78,9 @@ pub fn build(view: &ObjRef, shot: Shot, t: f64, cache: &mut RenderCache) -> Resu
         cache.layer_bytes += (area.width() * area.height() * 4.0) as u64;
         scene.push_layer(Fill::NonZero, BlendMode::new(Mix::Normal, Compose::SrcOver), 1.0, Affine::IDENTITY, &area.to_path(0.01));
     }
-    draw_view(&mut scene, view, transform, &frame, cache)?;
+    let drawn = draw_view(&mut scene, view, transform, &frame, cache);
+    crate::lang::length::set_basis(outer);
+    drawn?;
     if bands {
         scene.pop_layer();
     }
@@ -121,8 +125,8 @@ fn view_box(view: &ObjRef) -> Result<(f64, f64)> {
     }
 }
 
-/// View の中身を描く。transform は箱の座標から出力座標へ。
-/// View の opacity は中身をまとめて 1 枚の層として掛ける (中の図形が重なっても二重に薄くならない)
+/// Composition の 1 コマ (interp.frame が返した木) を描く。transform は箱の座標から出力座標へ。
+/// opacity は中身をまとめて 1 枚の層として掛ける (中の図形が重なっても二重に薄くならない)
 fn draw_view(scene: &mut Scene, view: &ObjRef, transform: Affine, frame: &Frame, cache: &mut RenderCache) -> Result<()> {
     let v = view.borrow();
     let opacity = match v.attrs.get("opacity") {
@@ -132,29 +136,18 @@ fn draw_view(scene: &mut Scene, view: &ObjRef, transform: Affine, frame: &Frame,
     if opacity <= 0.0 {
         return Ok(());
     }
-    // opacity か blend か clip が付いていたら、中身をまとめて 1 枚のレイヤーにする
+    // opacity か blend が付いていたら、中身をまとめて 1 枚のレイヤーにする
     let blend = blend_mode(&v.attrs)?.unwrap_or(BlendMode::new(Mix::Normal, Compose::SrcOver));
-    let clip = matches!(v.attrs.get("clip"), Some(Value::Bool(true)));
-    let grouped = clip || opacity < 1.0 || blend.mix != Mix::Normal || blend.compose != Compose::SrcOver;
+    let grouped = opacity < 1.0 || blend.mix != Mix::Normal || blend.compose != Compose::SrcOver;
     if grouped {
-        // clip なら箱の四角でレイヤーを切る。外へはみ出した中身は描かれない。
-        // clip でなければ、中身が描く範囲でレイヤーを作る。画面全体で作ると、
-        // 半透明の View が増えたときに GPU の混色用の領域が尽きて、フレームが丸ごと消える
-        let (bw, bh) = view_box(view)?;
-        let area = match clip {
-            true => transform.transform_rect_bbox(Rect::new(0.0, 0.0, bw, bh)),
-            // 文字の縁など、囲む四角の計算がわずかに小さいことがあるので少し広げる
-            false => drawn_bounds(view, transform, cache)?.inflate(2.0, 2.0).intersect(frame.picture),
-        };
+        // 中身が描く範囲でレイヤーを作る。画面全体で作ると、
+        // 半透明のものが増えたときに GPU の混色用の領域が尽きて、フレームが丸ごと消える。
+        // 文字の縁など、囲む四角の計算がわずかに小さいことがあるので少し広げる
+        let area = children_bounds(&v.children, transform, cache)?.inflate(2.0, 2.0).intersect(frame.picture);
         // 混色用の領域は、レイヤーの面積ぶん GPU に要る
         cache.layer_bytes += (area.width().max(0.0) * area.height().max(0.0) * 4.0) as u64;
         scene.push_layer(Fill::NonZero, blend, opacity as f32, Affine::IDENTITY, &area.to_path(0.01));
     }
-    // カメラは枠を動かさず、中身だけ動かす。clip はカメラの前の枠で切る
-    let transform = match camera_of(&v.attrs)? {
-        Some((affine, _, _)) => transform * affine,
-        None => transform,
-    };
     draw_children(scene, &v.children, transform, frame, cache)?;
     if grouped {
         scene.pop_layer();
@@ -162,14 +155,9 @@ fn draw_view(scene: &mut Scene, view: &ObjRef, transform: Affine, frame: &Frame,
     Ok(())
 }
 
-/// 置かれたものを順に描く。View と Group は自分の座標系を作ってから中へ降りる
+/// 置かれたものを順に描く。Group は自分の座標系を作ってから中へ降りる
 fn draw_children(scene: &mut Scene, children: &[ObjRef], transform: Affine, frame: &Frame, cache: &mut RenderCache) -> Result<()> {
-    for child in &order(children) {
-        if child.borrow().kind == "View" {
-            let sub = sub_transform(child, transform)?;
-            draw_view(scene, child, sub, frame, cache)?;
-            continue;
-        }
+    for child in children {
         if child.borrow().kind == "Group" {
             draw_group(scene, child, transform, frame, cache)?;
             continue;
@@ -199,28 +187,42 @@ fn draw_children(scene: &mut Scene, children: &[ObjRef], transform: Affine, fram
     Ok(())
 }
 
-/// Group の中の座標から、親の座標へ。position が原点で、回転と拡大は pivot (中の座標。既定は原点) を中心に掛かる
-fn group_transform(group: &crate::lang::value::Object, parent: Affine) -> Result<Affine> {
-    let origin = match group.attrs.get("position") {
-        Some(Value::Apos(_, x, y)) => (*x, *y),
-        _ => (0.0, 0.0),
-    };
-    let pivot = match group.attrs.get("pivot") {
-        Some(v) => point_of(v, "Group.pivot")?,
+/// Node の中の座標から、親の座標へ。position に anchor を置き、回転と拡大は anchor を中心に掛かる。
+/// 回転はラジアンで、時計回りが正
+fn node_transform(attrs: &Attrs, parent: Affine, default_anchor: Point) -> Result<Affine> {
+    let position = match attrs.get("position") {
+        Some(v) => point_of(v, "position")?,
         None => Point::ZERO,
     };
-    let spin = match group.attrs.get("rotation") {
-        Some(Value::Number(deg, _)) => Affine::rotate_about(deg.to_radians(), pivot),
+    let anchor = match attrs.get("anchor") {
+        Some(v) => point_of(v, "anchor")?,
+        None => default_anchor,
+    };
+    let spin = match attrs.get("rotation") {
+        Some(Value::Number(r, _)) => Affine::rotate(*r),
         _ => Affine::IDENTITY,
     };
-    let zoom = match group.attrs.get("scale") {
-        Some(Value::Number(k, _)) => Affine::scale_about(*k, pivot),
+    let zoom = match attrs.get("scale") {
+        Some(Value::Number(k, _)) => Affine::scale(*k),
         _ => Affine::IDENTITY,
     };
-    Ok(parent * Affine::translate(origin) * spin * zoom)
+    Ok(parent * Affine::translate(position.to_vec2()) * spin * zoom * Affine::translate(-anchor.to_vec2()))
 }
 
-/// Group の中身を描く。opacity と blend は中身をまとめて 1 枚として掛ける
+/// Group の中の座標から、親の座標へ。Group の原点が anchor の既定
+fn group_transform(group: &crate::lang::value::Object, parent: Affine) -> Result<Affine> {
+    node_transform(&group.attrs, parent, Point::ZERO)
+}
+
+/// 入れ子の Composition を表す Group は box を持つ。中の Length は、その箱が基準になる
+fn nested_basis(group: &crate::lang::value::Object, transform: Affine) -> Option<crate::lang::length::Basis> {
+    let Some(Value::Vector(w, h)) = group.attrs.get("box") else { return None };
+    let scale = transform.as_coeffs()[0].hypot(transform.as_coeffs()[1]);
+    Some(crate::lang::length::Basis { width: *w, height: *h, pixel: 1.0 / scale })
+}
+
+/// Group の中身を描く。opacity と blend は中身をまとめて 1 枚として掛ける。
+/// camera は枠を動かさず、中身だけを動かす
 fn draw_group(scene: &mut Scene, group: &ObjRef, parent: Affine, frame: &Frame, cache: &mut RenderCache) -> Result<()> {
     let g = group.borrow();
     let opacity = match g.attrs.get("opacity") {
@@ -230,13 +232,50 @@ fn draw_group(scene: &mut Scene, group: &ObjRef, parent: Affine, frame: &Frame, 
     if opacity <= 0.0 {
         return Ok(());
     }
-    let transform = group_transform(&g, parent)?;
+    let frame_transform = group_transform(&g, parent)?;
+    let transform = match camera_of(&g.attrs)? {
+        Some((affine, _, _)) => frame_transform * affine,
+        None => frame_transform,
+    };
+    // 中の座標は、入れ子の Composition なら自分の箱を基準にする
+    let outer = nested_basis(&g, frame_transform).map(crate::lang::length::set_basis);
+    let drawn = draw_group_body(scene, &g, frame_transform, transform, opacity, frame, cache);
+    if let Some(outer) = outer {
+        crate::lang::length::set_basis(outer);
+    }
+    drawn
+}
+
+/// Group.clip の輪郭と、それを Group の座標から出力へ移す変換。clip に渡した図形の position などは Group の座標で効く
+fn clip_of(attrs: &Attrs, transform: Affine) -> Result<Option<(BezPath, Affine)>> {
+    let Some(value) = attrs.get("clip") else { return Ok(None) };
+    let Value::Object(shape) = value else {
+        return err(Kind::AttributeType, format!("Group.clip expects a shape, found {}", value.type_name()));
+    };
+    let s = shape.borrow();
+    let (path, anchor) = outline(&s)?;
+    Ok(Some((path, node_transform(&s.attrs, transform, anchor)?)))
+}
+
+/// frame_transform は Group の枠 (clip が切る所)、transform は camera を掛けた中身の変換
+fn draw_group_body(scene: &mut Scene, g: &crate::lang::value::Object, frame_transform: Affine, transform: Affine, opacity: f64, frame: &Frame, cache: &mut RenderCache) -> Result<()> {
     let blend = blend_mode(&g.attrs)?.unwrap_or(BlendMode::new(Mix::Normal, Compose::SrcOver));
-    let layered = opacity < 1.0 || blend.mix != Mix::Normal || blend.compose != Compose::SrcOver;
+    let clip = clip_of(&g.attrs, frame_transform)?;
+    let layered = clip.is_some() || opacity < 1.0 || blend.mix != Mix::Normal || blend.compose != Compose::SrcOver;
     if layered {
-        let area = children_bounds(&g.children, transform, cache)?.inflate(2.0, 2.0).intersect(frame.picture);
-        cache.layer_bytes += (area.width().max(0.0) * area.height().max(0.0) * 4.0) as u64;
-        scene.push_layer(Fill::NonZero, blend, opacity as f32, Affine::IDENTITY, &area.to_path(0.01));
+        match &clip {
+            // 切り口の図形でレイヤーを作る。外へはみ出した中身は描かれない
+            Some((path, placed)) => {
+                let area = placed.transform_rect_bbox(path.bounding_box()).intersect(frame.picture);
+                cache.layer_bytes += (area.width().max(0.0) * area.height().max(0.0) * 4.0) as u64;
+                scene.push_layer(Fill::NonZero, blend, opacity as f32, *placed, path);
+            }
+            None => {
+                let area = children_bounds(&g.children, transform, cache)?.inflate(2.0, 2.0).intersect(frame.picture);
+                cache.layer_bytes += (area.width().max(0.0) * area.height().max(0.0) * 4.0) as u64;
+                scene.push_layer(Fill::NonZero, blend, opacity as f32, Affine::IDENTITY, &area.to_path(0.01));
+            }
+        }
     }
     draw_children(scene, &g.children, transform, frame, cache)?;
     if layered {
@@ -245,32 +284,19 @@ fn draw_group(scene: &mut Scene, group: &ObjRef, parent: Affine, frame: &Frame, 
     Ok(())
 }
 
-/// View の中身が描く範囲 (出力座標)。draw_view と同じ順でたどるので、置き方も回転も線の太さも入る。
-/// 中身が無ければ大きさの無い四角
-fn drawn_bounds(view: &ObjRef, transform: Affine, cache: &mut RenderCache) -> Result<Rect> {
-    let v = view.borrow();
-    // clip した View は箱から出ない
-    let (bw, bh) = view_box(view)?;
-    if matches!(v.attrs.get("clip"), Some(Value::Bool(true))) {
-        return Ok(transform.transform_rect_bbox(Rect::new(0.0, 0.0, bw, bh)));
-    }
-    let transform = match camera_of(&v.attrs)? {
-        Some((affine, _, _)) => transform * affine,
-        None => transform,
-    };
-    children_bounds(&v.children, transform, cache)
-}
-
 /// 置かれたものが描く範囲 (出力座標)。中身が無ければ大きさの無い四角
 fn children_bounds(children: &[ObjRef], transform: Affine, cache: &mut RenderCache) -> Result<Rect> {
     let mut out: Option<Rect> = None;
     for child in children {
         let kind = child.borrow().kind.clone();
         let bounds = match kind.as_str() {
-            "View" => drawn_bounds(child, sub_transform(child, transform)?, cache)?,
             "Group" => {
                 let g = child.borrow();
-                children_bounds(&g.children, group_transform(&g, transform)?, cache)?
+                let inner = match camera_of(&g.attrs)? {
+                    Some((affine, _, _)) => group_transform(&g, transform)? * affine,
+                    None => group_transform(&g, transform)?,
+                };
+                children_bounds(&g.children, inner, cache)?
             }
             _ => object_bounds(&child.borrow(), transform, cache)?,
         };
@@ -284,15 +310,13 @@ fn children_bounds(children: &[ObjRef], transform: Affine, cache: &mut RenderCac
 
 /// 図形 1 つが描く範囲 (出力座標)。draw_object と同じ置き方で囲む四角を出す
 fn object_bounds(c: &crate::lang::value::Object, transform: Affine, cache: &mut RenderCache) -> Result<Rect> {
-    let scale = transform.as_coeffs()[0].hypot(transform.as_coeffs()[1]);
     if c.kind == "TextArea" {
-        let (w, h, cx, cy) = text_box(&c.attrs, scale, cache)?;
-        let top_left = transform * Point::new(cx - w / 2.0, cy - h / 2.0);
-        let placed = spin_of(c, transform, Point::new(cx, cy))? * Affine::translate(top_left.to_vec2());
+        let (placed, scale, w, h) = text_placement(&c.attrs, transform, cache)?;
         return Ok(placed.transform_rect_bbox(Rect::from_origin_size(Point::ZERO, (w * scale, h * scale))));
     }
-    let (path, origin) = outline(c)?;
-    let placed = spin_of(c, transform, origin)? * transform;
+    let (path, anchor) = outline(c)?;
+    let placed = node_transform(&c.attrs, transform, anchor)?;
+    let scale = placed.as_coeffs()[0].hypot(placed.as_coeffs()[1]);
     let bounds = placed.transform_rect_bbox(path.bounding_box());
     // 線は輪郭の外へ半分はみ出す
     match color(&c.attrs, "stroke", &c.kind)? {
@@ -304,64 +328,15 @@ fn object_bounds(c: &crate::lang::value::Object, transform: Affine, cache: &mut 
     }
 }
 
-/// 描く順。zIndex の小さいものから。同じ値なら place した順のまま。
-/// zIndex を 1 つも書いていなければ並べ替えない (ほとんどの View がこちら)
-fn order(children: &[ObjRef]) -> Vec<ObjRef> {
-    let z = |c: &ObjRef| match c.borrow().attrs.get("zIndex") {
-        Some(Value::Number(n, _)) => *n,
-        _ => 0.0,
-    };
-    if !children.iter().any(|c| z(c) != 0.0) {
-        return children.to_vec();
-    }
-    let mut out = children.to_vec();
-    out.sort_by(|a, b| z(a).partial_cmp(&z(b)).unwrap_or(std::cmp::Ordering::Equal));
-    out
-}
-
-/// 親に置かれた View の変換。position と w / h で決まる矩形に、比率を保って収める
-fn sub_transform(child: &ObjRef, parent: Affine) -> Result<Affine> {
-    let (bw, bh) = view_box(child)?;
-    let c = child.borrow();
-    let w = match c.attrs.get("w") { Some(Value::Number(w, _)) => Some(*w), _ => None };
-    let h = match c.attrs.get("h") { Some(Value::Number(h, _)) => Some(*h), _ => None };
-    let (w, h) = match (w, h) {
-        (Some(w), Some(h)) => (w, h),
-        (Some(w), None) => (w, w * bh / bw),
-        (None, Some(h)) => (h * bw / bh, h),
-        (None, None) => return err(Kind::ArityMismatch, "a placed View needs w or h"),
-    };
-    let (cx, cy) = anchored_center(&c.attrs, w, h, "View")?;
-    let fit = (w / bw).min(h / bh);
-    let local = Affine::translate((cx - bw * fit / 2.0, cy - bh * fit / 2.0)) * Affine::scale(fit);
-    let placed = parent * local;
-    // 中身の座標はそのままに、置いたものを 1 枚として回して寄る。
-    // 中心は pivot (子の箱の座標)。書いていなければ箱の真ん中
-    let center = match c.attrs.get("pivot") {
-        Some(v) => point_of(v, "View.pivot")?,
-        None => Point::new(bw / 2.0, bh / 2.0),
-    };
-    let about = placed * center;
-    let spin = match c.attrs.get("rotation") {
-        Some(Value::Number(deg, _)) if *deg != 0.0 => Affine::rotate_about(deg.to_radians(), about),
-        _ => Affine::IDENTITY,
-    };
-    let zoom = match c.attrs.get("scale") {
-        Some(Value::Number(k, _)) if *k != 1.0 => Affine::scale_about(*k, about),
-        _ => Affine::IDENTITY,
-    };
-    Ok(spin * zoom * placed)
-}
-
-/// View.camera の変換。中身の from が to の位置に来るように置いて scale 倍する
+/// Group.camera の変換。中身の from が to の位置に来るように置いて scale 倍する
 fn camera_of(attrs: &Attrs) -> Result<Option<(Affine, Point, f64)>> {
     let Some(value) = attrs.get("camera") else { return Ok(None) };
     let Value::Object(o) = value else {
-        return err(Kind::AttributeType, format!("View.camera expects Camera, found {}", value.type_name()));
+        return err(Kind::AttributeType, format!("camera expects Camera, found {}", value.type_name()));
     };
     let c = o.borrow();
     if c.kind != "Camera" {
-        return err(Kind::AttributeType, format!("View.camera expects Camera, found {}", c.kind));
+        return err(Kind::AttributeType, format!("camera expects Camera, found {}", c.kind));
     }
     let from = vector(&c.attrs, "from", "Camera")?;
     // to を書かなければ、中身は動かさずに拡大だけする
@@ -386,33 +361,31 @@ fn gpu_fill(c: &crate::lang::value::Object) -> Option<ObjRef> {
     }
 }
 
-/// 図形の輪郭と、回転の中心 (囲む四角形の中心)。描くときと、長さを測るときに使う
+/// 図形の輪郭 (図形自身の座標) と、anchor の既定。描くときと、長さを測るときに使う。
+/// Rect は左上が原点で anchor の既定は中心、Circle と Ellipse は中心が原点。Line / Polygon / Path は点の座標のまま
 pub fn outline(c: &crate::lang::value::Object) -> Result<(BezPath, Point)> {
     let kind = c.kind.as_str();
     Ok(match kind {
         "Circle" => {
             let r = number(&c.attrs, "radius", kind)?;
-            let (x, y) = anchored_center(&c.attrs, 2.0 * r, 2.0 * r, kind)?;
-            (Circle::new((x, y), r).to_path(0.01), Point::new(x, y))
+            (Circle::new((0.0, 0.0), r).to_path(0.01), Point::ZERO)
         }
         "Ellipse" => {
             let (rx, ry) = (number(&c.attrs, "rx", kind)?, number(&c.attrs, "ry", kind)?);
-            let (x, y) = anchored_center(&c.attrs, 2.0 * rx, 2.0 * ry, kind)?;
-            (Ellipse::new((x, y), (rx, ry), 0.0).to_path(0.01), Point::new(x, y))
+            (Ellipse::new((0.0, 0.0), (rx, ry), 0.0).to_path(0.01), Point::ZERO)
         }
         "Rect" => {
             let (w, h) = (number(&c.attrs, "w", kind)?, number(&c.attrs, "h", kind)?);
-            let (x, y) = anchored_center(&c.attrs, w, h, kind)?;
-            let rect = Rect::from_center_size((x, y), (w, h));
-            let path = match c.attrs.get("radius") {
-                Some(Value::Number(r, _)) if *r > 0.0 => RoundedRect::from_rect(rect, *r).to_path(0.01),
+            let rect = Rect::new(0.0, 0.0, w, h);
+            let path = match c.attrs.get("radius").and_then(length) {
+                Some(r) if r > 0.0 => RoundedRect::from_rect(rect, r).to_path(0.01),
                 _ => rect.to_path(0.01),
             };
-            (path, Point::new(x, y))
+            (path, Point::new(w / 2.0, h / 2.0))
         }
         "Line" => {
             let (from, to) = (vector(&c.attrs, "from", kind)?, vector(&c.attrs, "to", kind)?);
-            (Line::new(from, to).to_path(0.01), Point::new((from.x + to.x) / 2.0, (from.y + to.y) / 2.0))
+            (Line::new(from, to).to_path(0.01), Point::ZERO)
         }
         "Polygon" => {
             let Some(Value::List(points)) = c.attrs.get("points") else {
@@ -424,8 +397,7 @@ pub fn outline(c: &crate::lang::value::Object) -> Result<(BezPath, Point)> {
                 if i == 0 { path.move_to(p) } else { path.line_to(p) }
             }
             path.close_path();
-            let center = path.bounding_box().center();
-            (path, center)
+            (path, Point::ZERO)
         }
         "Path" => {
             let Some(Value::List(segments)) = c.attrs.get("segments") else {
@@ -473,8 +445,7 @@ pub fn outline(c: &crate::lang::value::Object) -> Result<(BezPath, Point)> {
             if upto >= 1.0 && matches!(c.attrs.get("closed"), Some(Value::Bool(true))) {
                 path.close_path();
             }
-            let center = path.bounding_box().center();
-            (path, center)
+            (path, Point::ZERO)
         }
         kind => return err(Kind::NotPlaceable, format!("cannot draw {kind}")),
 
@@ -484,17 +455,15 @@ pub fn outline(c: &crate::lang::value::Object) -> Result<(BezPath, Point)> {
 /// 図形 1 つを描く。transform は箱の座標から出力座標への変換。shader は fill が Shader のときその実体
 fn draw_object(scene: &mut Scene, c: &crate::lang::value::Object, transform: Affine, frame: &Frame, key: u64, shader: Option<&ObjRef>, cache: &mut RenderCache) -> Result<()> {
     let kind = c.kind.as_str();
-    let scale = transform.as_coeffs()[0].hypot(transform.as_coeffs()[1]);
     let opacity = match c.attrs.get("opacity") {
         Some(Value::Number(o, _)) => o.clamp(0.0, 1.0) as f32,
         _ => 1.0,
     };
-    let spin = |bbox: Point| -> Result<Affine> { spin_of(c, transform, bbox) };
     if kind == "TextArea" {
-        return draw_text(scene, &c.attrs, transform, &spin, scale, opacity, cache);
+        return draw_text(scene, &c.attrs, transform, opacity, cache);
     }
-    let (path, origin) = outline(c)?;
-    let placed = spin(origin)? * transform;
+    let (path, anchor) = outline(c)?;
+    let placed = node_transform(&c.attrs, transform, anchor)?;
     // blend が付いていたら、その図形の描画だけを 1 枚のレイヤーにして重ね方を変える
     let blend = blend_mode(&c.attrs)?;
     if let Some(mode) = blend {
@@ -519,20 +488,6 @@ fn draw_object(scene: &mut Scene, c: &crate::lang::value::Object, transform: Aff
     Ok(())
 }
 
-/// 回転の変換。中心は pivot、書いていなければ渡した点 (囲む四角形の中心)。
-/// 描く座標で回すので、置く変換の後から掛ける
-fn spin_of(c: &crate::lang::value::Object, transform: Affine, bbox: Point) -> Result<Affine> {
-    let Some(Value::Number(deg, _)) = c.attrs.get("rotation") else { return Ok(Affine::IDENTITY) };
-    if *deg == 0.0 {
-        return Ok(Affine::IDENTITY);
-    }
-    let origin = match c.attrs.get("pivot") {
-        Some(v) => point_of(v, &format!("{}.pivot", c.kind))?,
-        None => bbox,
-    };
-    Ok(Affine::rotate_about(deg.to_radians(), transform * origin))
-}
-
 /// 描画に関わる属性の指紋。変換と親の不透明度も含める
 fn fingerprint(c: &crate::lang::value::Object, transform: Affine) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -555,7 +510,9 @@ fn hash_value(v: &Value, h: &mut impl Hasher) {
         Value::Duration(d) => d.to_bits().hash(h),
         Value::Color(c) => c.iter().for_each(|x| x.to_bits().hash(h)),
         Value::Vector(x, y) => (x.to_bits(), y.to_bits()).hash(h),
-        Value::Apos(a, x, y) => (a, x.to_bits(), y.to_bits()).hash(h),
+        // 単位つきの長さは、解決した数で指紋にする (同じ箱の中では数が同じなら絵も同じ)
+        Value::Length(l) => l.value().to_bits().hash(h),
+        Value::LVec(x, y) => (x.value().to_bits(), y.value().to_bits()).hash(h),
         Value::Tuple(items) => items.iter().for_each(|i| hash_value(i, h)),
         Value::List(items) => items.borrow().iter().for_each(|i| hash_value(i, h)),
         other => other.type_name().hash(h),
@@ -563,16 +520,14 @@ fn hash_value(v: &Value, h: &mut impl Hasher) {
 }
 
 /// TextArea。fontSize と w は箱の単位なので、ピクセルに直してレイアウトする
-fn draw_text(scene: &mut Scene, attrs: &Attrs, transform: Affine, spin: &dyn Fn(Point) -> Result<Affine>, scale: f64, opacity: f32, cache: &mut RenderCache) -> Result<()> {
+fn draw_text(scene: &mut Scene, attrs: &Attrs, transform: Affine, opacity: f32, cache: &mut RenderCache) -> Result<()> {
     let kind = "TextArea";
     let Some(Value::Str(content)) = attrs.get("text") else {
         return err(Kind::UndefinedAttribute, "TextArea.text is not set");
     };
-    let (w, h, cx, cy) = text_box(attrs, scale, cache)?;
+    let (placed, scale, w, h) = text_placement(attrs, transform, cache)?;
     let (family, max_width, align) = text_style(attrs, scale, cache);
     let layout = cache.layout(content, family.as_deref(), (number(attrs, "fontSize", kind)? * scale) as f32, max_width, align);
-    let top_left = transform * Point::new(cx - w / 2.0, cy - h / 2.0);
-    let placed = spin(Point::new(cx, cy))? * Affine::translate(top_left.to_vec2());
     let fill = color(attrs, "fill", kind)?.unwrap_or(Color::BLACK);
     let outline = color(attrs, "stroke", kind)?;
     let style = stroke_style(attrs, None)?;
@@ -590,28 +545,33 @@ fn draw_text(scene: &mut Scene, attrs: &Attrs, transform: Affine, spin: &dyn Fn(
     Ok(())
 }
 
-/// TextArea が占める箱 (幅, 高さ, 中心の x, 中心の y)。幅と高さは箱の座標。
+/// TextArea が占める箱 (幅, 高さ)。文字自身の座標で、左上が原点。
 /// w を書いていれば その幅で折り返し、書いていなければ 1 行の幅
-fn text_box(attrs: &Attrs, scale: f64, cache: &mut RenderCache) -> Result<(f64, f64, f64, f64)> {
+fn text_box(attrs: &Attrs, scale: f64, cache: &mut RenderCache) -> Result<(f64, f64)> {
     let kind = "TextArea";
     let Some(Value::Str(content)) = attrs.get("text") else {
         return err(Kind::UndefinedAttribute, "TextArea.text is not set");
     };
     let (family, max_width, align) = text_style(attrs, scale, cache);
     let layout = cache.layout(content, family.as_deref(), (number(attrs, "fontSize", kind)? * scale) as f32, max_width, align);
-    let (w, h) = (max_width.unwrap_or(layout.width()) as f64 / scale, f64::from(layout.height()) / scale);
-    let (cx, cy) = anchored_center(attrs, w, h, kind)?;
-    Ok((w, h, cx, cy))
+    Ok((max_width.unwrap_or(layout.width()) as f64 / scale, f64::from(layout.height()) / scale))
+}
+
+/// TextArea の置き方。(組んだ文字のピクセルから出力への変換, 組むときの倍率, 幅, 高さ)。
+/// 文字は出力のピクセルの大きさで組むので、node の拡大はその倍率に入れ、変換には掛けない
+fn text_placement(attrs: &Attrs, transform: Affine, cache: &mut RenderCache) -> Result<(Affine, f64, f64, f64)> {
+    let parent_scale = transform.as_coeffs()[0].hypot(transform.as_coeffs()[1]);
+    let (w, h) = text_box(attrs, parent_scale, cache)?;
+    let node = node_transform(attrs, transform, Point::new(w / 2.0, h / 2.0))?;
+    let scale = node.as_coeffs()[0].hypot(node.as_coeffs()[1]);
+    Ok((node * Affine::scale(1.0 / scale), scale, w, h))
 }
 
 /// 文字の組み方 (書体, 折り返す幅, 寄せ)。書体は候補のうち、この機械にある最初のもの
 fn text_style(attrs: &Attrs, scale: f64, cache: &mut RenderCache) -> (Option<String>, Option<f32>, text::Alignment) {
     let names = attrs.get("font").map(crate::lang::eval::font_names).unwrap_or_default();
     let family = cache.first_family(&names);
-    let max_width = match attrs.get("w") {
-        Some(Value::Number(w, _)) => Some((*w * scale) as f32),
-        _ => None,
-    };
+    let max_width = attrs.get("w").and_then(length).map(|w| (w * scale) as f32);
     let align = match attrs.get("align") {
         Some(Value::Symbol(a)) => text::alignment(Some(a)),
         _ => text::alignment(None),
@@ -619,20 +579,29 @@ fn text_style(attrs: &Attrs, scale: f64, cache: &mut RenderCache) -> (Option<Str
     (family, max_width, align)
 }
 
+/// 長さの属性。Number は箱の単位、Length は描いている箱に対する数にする
+fn length(v: &Value) -> Option<f64> {
+    v.as_length().map(crate::lang::length::Length::value)
+}
+
 fn number(attrs: &Attrs, name: &str, kind: &str) -> Result<f64> {
     match attrs.get(name) {
-        Some(Value::Number(v, _)) => Ok(*v),
-        Some(v) => err(Kind::AttributeType, format!("{kind}.{name} expects Number, found {}", v.type_name())),
+        Some(v) if length(v).is_some() => Ok(length(v).expect("length")),
+        Some(v) => err(Kind::AttributeType, format!("{kind}.{name} expects Number or Length, found {}", v.type_name())),
         None => err(Kind::UndefinedAttribute, format!("{kind}.{name} is not set")),
     }
 }
 
 /// Vector か、数値 2 つの Tuple を点として読む
 fn point_of(v: &Value, whose: &str) -> Result<Point> {
+    let point = |x: &Value, y: &Value| length(x).zip(length(y)).map(|(x, y)| Point::new(x, y));
     match v {
-        Value::Vector(x, y) => Ok(Point::new(*x, *y)),
+        Value::Vector(..) | Value::LVec(..) => {
+            let (x, y) = v.as_lvec().expect("vector");
+            Ok(Point::new(x.value(), y.value()))
+        }
         Value::Tuple(items) => match items.as_slice() {
-            [Value::Number(x, _), Value::Number(y, _)] => Ok(Point::new(*x, *y)),
+            [x, y] if point(x, y).is_some() => Ok(point(x, y).expect("point")),
             _ => err(Kind::AttributeType, format!("{whose} expects Vector, found {}", v.type_name())),
         },
         other => err(Kind::AttributeType, format!("{whose} expects Vector, found {}", other.type_name())),
@@ -641,7 +610,7 @@ fn point_of(v: &Value, whose: &str) -> Result<Point> {
 
 fn vector(attrs: &Attrs, name: &str, kind: &str) -> Result<Point> {
     match attrs.get(name) {
-        Some(Value::Vector(x, y)) => Ok(Point::new(*x, *y)),
+        Some(v @ (Value::Vector(..) | Value::LVec(..))) => point_of(v, &format!("{kind}.{name}")),
         Some(v) => err(Kind::AttributeType, format!("{kind}.{name} expects Vector, found {}", v.type_name())),
         None => err(Kind::UndefinedAttribute, format!("{kind}.{name} is not set")),
     }
@@ -737,10 +706,7 @@ fn dash_covers(pattern: &[f64], offset: f64, length: f64) -> bool {
 /// 線の描き方。端の形、角の形、破線。
 /// length は輪郭の長さ。分かるときだけ渡す (文字の輪郭では分からない)
 fn stroke_style(attrs: &Attrs, length: Option<f64>) -> Result<Stroke> {
-    let width = match attrs.get("strokeWidth") {
-        Some(Value::Number(w, _)) => *w,
-        _ => 0.01,
-    };
+    let width = attrs.get("strokeWidth").and_then(self::length).unwrap_or(0.01);
     let mut stroke = Stroke::new(width);
     if let Some(Value::Symbol(cap)) = attrs.get("strokeCap") {
         stroke = stroke.with_caps(match cap.as_str() {
@@ -809,27 +775,6 @@ fn color(attrs: &Attrs, name: &str, kind: &str) -> Result<Option<Color>> {
         Some(v) => err(Kind::AttributeType, format!("{kind}.{name} expects Color, found {}", v.type_name())),
         None => Ok(None),
     }
-}
-
-/// position (Pos) と大きさから中心座標を求める
-
-fn anchored_center(attrs: &Attrs, w: f64, h: f64, kind: &str) -> Result<(f64, f64)> {
-    let Some(Value::Apos(anchor, x, y)) = attrs.get("position") else {
-        return err(Kind::AttributeType, format!("{kind}.position must be a Pos"));
-    };
-    let (dx, dy) = match anchor.as_str() {
-        "center" => (0.0, 0.0),
-        "topLeft" => (w / 2.0, h / 2.0),
-        "topRight" => (-w / 2.0, h / 2.0),
-        "bottomLeft" => (w / 2.0, -h / 2.0),
-        "bottomRight" => (-w / 2.0, -h / 2.0),
-        "top" => (0.0, h / 2.0),
-        "bottom" => (0.0, -h / 2.0),
-        "left" => (w / 2.0, 0.0),
-        "right" => (-w / 2.0, 0.0),
-        other => return err(Kind::OutOfRange, format!("unknown anchor :{other}")),
-    };
-    Ok((x + dx, y + dy))
 }
 
 /// preview と sheet で、その時刻に出ている字幕を画面の下に重ねる (プレイヤーの表示に似せる)。動画には入らない

@@ -12,8 +12,8 @@ import { HOUSE } from ..palette.house
 ## @param width 線の太さ (箱の座標)
 ## @param samples 1 ピクセルあたりの評価点
 ## @example
-## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,
-##              fill = grid(#f6f4ee, #dedbd4, 0.5, 0.02)))
+## Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9,
+##      fill = grid(#f6f4ee, #dedbd4, 0.5, 0.02))
 export func grid(back: Color, line: Color, pitch: Number = 0.5, width: Number = 0.02, samples: Number = 4) -> Shader {
   Shader(
     color = func (x, y, t) {

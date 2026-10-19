@@ -10,8 +10,8 @@ import { HOUSE } from ..palette.house
 ## @param size 菱形の対角線の長さ (箱の座標)
 ## @param samples 1 ピクセルあたりの評価点
 ## @example
-## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,
-##              fill = diamonds(#fff7fa, #fae3ec, 0.6)))
+## Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9,
+##      fill = diamonds(#fff7fa, #fae3ec, 0.6))
 export func diamonds(a: Color, b: Color, size: Number = 0.6, samples: Number = 4) -> Shader {
   Shader(
     color = func (x, y, t) {

@@ -1,4 +1,4 @@
-# shape.moph — Polygon の points と、円周上の点を作る。角度は度で、0 が真上、時計回り
+# shape.moph — Polygon の points と、円周上の点を作る。角度はラジアンで、0 が真上、時計回り
 
 import math
 
@@ -6,17 +6,17 @@ import math
 let ROUND_SCALE = 10000000000
 func tidy(x: Number) -> Number { math.floor(x * ROUND_SCALE + 0.5) / ROUND_SCALE }
 
-## 中心から距離 r、角度 degrees の点。0 が真上で、時計回り
+## 中心から距離 r、角度 angle の点。0 が真上で、時計回り
 ## @category 位置
 ## @param cx 中心の x
 ## @param cy 中心の y
 ## @param r 中心からの距離
-## @param degrees 角度 (度)
+## @param angle 角度 (ラジアン)
 ## @example
-## # 中心 (8, 4.5) から半径 3、真上から時計回りに 30 度の点
-## let p = polar(8, 4.5, 3, 30)
-export func polar(cx: Number, cy: Number, r: Number, degrees: Number) -> Vector {
-  let a = (degrees - 90) * math.PI / 180
+## # 中心 (8, 4.5) から半径 3、真上から時計回りに tau / 12 の点
+## let p = polar(8, 4.5, 3, math.tau / 12)
+export func polar(cx: Number, cy: Number, r: Number, angle: Number) -> Vector {
+  let a = angle - math.pi / 2
   Vector(tidy(cx + r * math.cos(a)), tidy(cy + r * math.sin(a)))
 }
 
@@ -26,13 +26,13 @@ export func polar(cx: Number, cy: Number, r: Number, degrees: Number) -> Vector 
 ## @param cy 中心の y
 ## @param r 中心から頂点までの距離
 ## @param n 頂点の数 (3 以上)
-## @param rotation 時計回りの回転 (度。既定 0 で最初の頂点が真上)
+## @param rotation 時計回りの回転 (ラジアン。既定 0 で最初の頂点が真上)
 ## @returns Polygon(points = ...) に入れる
 ## @example
 ## # 正六角形
 ## Polygon(points = regular_polygon(8, 4.5, 2, 6), fill = #3f9b6d)
 export func regular_polygon(cx: Number, cy: Number, r: Number, n: Number, rotation: Number = 0) -> List<Vector> {
-  (0..n).to_list().map(func (i) { polar(cx, cy, r, rotation + i * 360 / n) })
+  (0..n).to_list().map(func (i) { polar(cx, cy, r, rotation + i * math.tau / n) })
 }
 
 ## 星の頂点。外側と内側の半径を交互に
@@ -42,14 +42,14 @@ export func regular_polygon(cx: Number, cy: Number, r: Number, n: Number, rotati
 ## @param outer 外側の半径 (とがった先)
 ## @param inner 内側の半径 (くぼみ)
 ## @param n とがった先の数 (既定 5)
-## @param rotation 時計回りの回転 (度。既定 0 で最初の先が真上)
+## @param rotation 時計回りの回転 (ラジアン。既定 0 で最初の先が真上)
 ## @example
 ## # 5 つの先を持つ星
 ## Polygon(points = star(8, 4.5, 2, 0.9), fill = #e0a53a)
 export func star(cx: Number, cy: Number, outer: Number, inner: Number, n: Number = 5, rotation: Number = 0) -> List<Vector> {
   (0..(n * 2)).to_list().map(func (i) {
     let r = if i % 2 == 0 { outer } else { inner }
-    polar(cx, cy, r, rotation + i * 180 / n)
+    polar(cx, cy, r, rotation + i * math.pi / n)
   })
 }
 
@@ -85,11 +85,11 @@ export func arrow_points(from: Vector, to: Vector, width: Number, head: Number, 
 ## @param cx 中心の x
 ## @param cy 中心の y
 ## @param r 半径
-## @param from 始まりの角度 (度。0 が真上、時計回り)
+## @param from 始まりの角度 (ラジアン。0 が真上、時計回り)
 ## @param to 終わりの角度
 ## @param steps 分割数 (既定 32)
 ## @example
-## Path(from = arc(4, 2, 1.5, 0, 90)[0], segments = arc(4, 2, 1.5, 0, 90).map(func (p) { (:line, p) }))
+## Path(from = arc(4, 2, 1.5, 0, math.tau / 4)[0], segments = arc(4, 2, 1.5, 0, math.tau / 4).map(func (p) { (:line, p) }))
 export func arc(cx: Number, cy: Number, r: Number, from: Number, to: Number, steps: Number = 32) -> List<Vector> {
   (0..=1).steps(steps).map(func (k) { polar(cx, cy, r, from + (to - from) * k) })
 }
@@ -100,12 +100,12 @@ export func arc(cx: Number, cy: Number, r: Number, from: Number, to: Number, ste
 ## @param cy 中心の y
 ## @param r_in 内側の半径 (0 なら扇形)
 ## @param r_out 外側の半径
-## @param from 始まりの角度 (度。0 が真上、時計回り)
+## @param from 始まりの角度 (ラジアン。0 が真上、時計回り)
 ## @param to 終わりの角度
 ## @param steps 分割数 (既定 32)
 ## @returns Polygon(points = ...) に入れる
 ## @example
-## Polygon(points = ring_segment(4, 2, 0.8, 1.5, 0, 120), fill = #e04040)
+## Polygon(points = ring_segment(4, 2, 0.8, 1.5, 0, math.tau / 3), fill = #e04040)
 export func ring_segment(cx: Number, cy: Number, r_in: Number, r_out: Number, from: Number, to: Number, steps: Number = 32) -> List<Vector> {
   let outer = arc(cx, cy, r_out, from, to, steps)
   let inner = arc(cx, cy, r_in, to, from, steps)
@@ -129,7 +129,7 @@ export func wave(from: Vector, to: Vector, amplitude: Number, cycles: Number, st
   let nx = -d.y / len
   let ny = d.x / len
   (0..=1).steps(steps).map(func (k) {
-    let s = math.sin(k * cycles * math.TAU) * amplitude
+    let s = math.sin(k * cycles * math.tau) * amplitude
     from + d * k + Vector(nx * s, ny * s)
   })
 }
@@ -143,12 +143,11 @@ export func wave(from: Vector, to: Vector, amplitude: Number, cycles: Number, st
 ## @param step 目の間隔
 ## @returns (始点, 終点) の List
 ## @example
-## for (a, b) in grid_lines(0, 0, 16, 9, 1) {
-##   v.place(Line(from = a, to = b, stroke = #e0e0e0, strokeWidth = 0.02))
-## }
+## Group(...grid_lines(0, 0, 16, 9, 1).map(func (ab) {
+##   Line(from = ab[0], to = ab[1], stroke = #e0e0e0, strokeWidth = 0.02)
+## }))
 export func grid_lines(x: Number, y: Number, w: Number, h: Number, step: Number) -> List<Tuple> {
   let lines = []
-  let at = x
   for i in 0..=math.floor(w / step) {
     let gx = x + i * step
     lines.push((Vector(gx, y), Vector(gx, y + h)))

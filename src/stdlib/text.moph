@@ -1,14 +1,19 @@
 # text.moph — 文字の出し方と数の書式
 #
 # 書式の関数は String を返すだけなので、TextArea の text にそのまま入れられる。
-# 見出しの部品は View を返す。
+# 見出しの部品は Group を返す。中の座標は、部品の左上を (0, 0) とした相対。
 #
-#   t.text = thousands(count)
-#   t.text = typewriter("こんにちは", shown)
+#   TextArea(text = thousands(count))
+#   TextArea(text = typewriter("こんにちは", shown))
 
 import math
 import { contrast, alpha, mix } from color
-import { reveal_x } from animation
+
+# TextArea の anchor を、文字の左端・右端・上端・下端の真ん中に動かした複製。position はその点を置く場所
+func at_left(t: TextArea) -> TextArea { t.copy(anchor = Vector(0, t.size().y / 2)) }
+func at_right(t: TextArea) -> TextArea { t.copy(anchor = Vector(t.size().x, t.size().y / 2)) }
+func at_top(t: TextArea) -> TextArea { t.copy(anchor = Vector(t.size().x / 2, 0)) }
+func at_bottom(t: TextArea) -> TextArea { t.copy(anchor = Vector(t.size().x / 2, t.size().y)) }
 
 ## 幅を揃える。足りない分を fill で埋める
 ## @category 書式
@@ -130,36 +135,28 @@ export func clock_text(d: Duration, format: String = "mm:ss") -> String {
 ## @param style :marker か :underline (既定 :marker)
 ## @param color 文字の色 (既定 ほぼ黒)
 ## @param accent 目立たせる色 (既定 黄)
-## @param start 動き出す時刻 (既定 0s)
-## @param duration 0s より長ければ、その長さで左から引かれる (既定 0s = 引かれたまま)
-## @returns 箱が文字全体の大きさの View。中は左上から始まる
+## @param progress 引かれた割合 0..1 (既定 1 = 引かれたまま)。左から伸びる
+## @returns 文字全体の大きさの Group。中は左上が (0, 0)
 ## @example
-## v.place(highlight("ここが大事", 2, 4, 0.6, duration = 0.4s), at = Pos(1, 1, anchor = :topLeft), w = 5)
-export func highlight(s: String, from: Number, to: Number, fontSize: Number, style: Symbol = :marker, color: Color = #1a1d23, accent: Color = #ffd34d, duration: Duration = 0s, start: Duration = 0s) -> View {
-  let whole = TextArea(position = Pos(0, 0), text = s, fontSize = fontSize)
-  let size = whole.size()
-  let v = View(box = size)
+## comp.place("mark", highlight("ここが大事", 2, 4, 0.6).copy(position = Vector(1, 1)), in = 0s, out = comp.duration)
+export func highlight(s: String, from: Number, to: Number, fontSize: Number, style: Symbol = :marker, color: Color = #1a1d23, accent: Color = #ffd34d, progress: Number = 1) -> Group {
+  let size = TextArea(text = s, fontSize = fontSize).size()
   let a = math.clamp(math.floor(from), 0, s.len())
   let b = math.clamp(math.floor(to), a, s.len())
-  let x0 = TextArea(position = Pos(0, 0), text = s[0..a], fontSize = fontSize).size().x
-  let x1 = TextArea(position = Pos(0, 0), text = s[0..b], fontSize = fontSize).size().x
-  if b > a {
-    let mark = if style == :underline {
-      Rect(position = Pos(x0, size.y * 0.92, anchor = :topLeft), w = x1 - x0, h = fontSize * 0.08, fill = accent)
+  let x0 = TextArea(text = s[0..a], fontSize = fontSize).size().x
+  let x1 = TextArea(text = s[0..b], fontSize = fontSize).size().x
+  let k = math.clamp(progress, 0, 1)
+  let items = []
+  if b > a and k > 0 {
+    let mw = (x1 - x0) * k
+    items.push(if style == :underline {
+      Rect(position = Vector(x0, size.y * 0.92), anchor = Vector(0, 0), w = mw, h = fontSize * 0.08, fill = accent)
     } else {
-      Rect(position = Pos(x0, size.y * 0.15, anchor = :topLeft), w = x1 - x0, h = size.y * 0.75, radius = fontSize * 0.06, fill = alpha(accent, 0.6))
-    }
-    v.place(mark)
-    if duration > 0s {
-      mark.w = 0
-      v.addTrack(motion {
-        0s: mark.w = 0
-        duration: mark.w = x1 - x0
-      }, at = start)
-    }
+      Rect(position = Vector(x0, size.y * 0.15), anchor = Vector(0, 0), w = mw, h = size.y * 0.75, radius = fontSize * 0.06, fill = alpha(accent, 0.6))
+    })
   }
-  v.place(TextArea(position = Pos(0, 0, anchor = :topLeft), text = s, fontSize = fontSize, fill = color))
-  v
+  items.push(TextArea(position = Vector(0, 0), anchor = Vector(0, 0), text = s, fontSize = fontSize, fill = color))
+  Group(...items)
 }
 
 ## 引用のカード。本文と、その下に書いた人の名前
@@ -170,22 +167,23 @@ export func highlight(s: String, from: Number, to: Number, fontSize: Number, sty
 ## @param h 高さ
 ## @param fill 背の色 (既定 白)
 ## @param accent 左の縦線の色 (既定 赤)
-## @returns 箱が w x h の View
+## @returns w x h の Group。中は左上が (0, 0)
 ## @example
-## v.place(quote_card("速いほうがいい", "誰か", 6, 3), at = Pos(1, 1, anchor = :topLeft), w = 6)
-export func quote_card(s: String, author: String, w: Number, h: Number, fill: Color = #ffffff, accent: Color = #e04040) -> View {
-  let v = View(box = Vector(w, h))
+## comp.place("quote", quote_card("速いほうがいい", "誰か", 6, 3).copy(position = Vector(1, 1)), in = 0s, out = comp.duration)
+export func quote_card(s: String, author: String, w: Number, h: Number, fill: Color = #ffffff, accent: Color = #e04040) -> Group {
   let pad_x = h * 0.18
-  v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h, radius = h * 0.06, fill = fill))
-  v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = pad_x * 0.25, h = h, fill = accent))
   let ink = contrast(fill)
   let has_author = author != ""
   let body_h = if has_author { h * 0.7 } else { h }
-  v.place(TextArea(position = Pos(pad_x * 1.2, body_h / 2, anchor = :left), text = s, fontSize = h * 0.16, w = w - pad_x * 2.4, fill = ink))
+  let items = [
+    Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = w, h = h, radius = h * 0.06, fill = fill),
+    Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = pad_x * 0.25, h = h, fill = accent),
+    at_left(TextArea(position = Vector(pad_x * 1.2, body_h / 2), text = s, fontSize = h * 0.16, w = w - pad_x * 2.4, fill = ink)),
+  ]
   if has_author {
-    v.place(TextArea(position = Pos(w - pad_x, h * 0.82, anchor = :right), text = "— " + author, fontSize = h * 0.1, fill = alpha(ink, 0.6)))
+    items.push(at_right(TextArea(position = Vector(w - pad_x, h * 0.82), text = "— " + author, fontSize = h * 0.1, fill = alpha(ink, 0.6))))
   }
-  v
+  Group(...items)
 }
 
 ## 画面下の帯タイトル。progress で左から出てくる
@@ -197,35 +195,25 @@ export func quote_card(s: String, author: String, w: Number, h: Number, fill: Co
 ## @param progress 出ている割合 0..1 (既定 1)
 ## @param fill 帯の色 (既定 ほぼ黒)
 ## @param accent 先頭の縦線の色 (既定 赤)
-## @param start 動き出す時刻 (既定 0s)
-## @param duration 0s より長ければ、その長さで 0 から progress まで出てくる (既定 0s = 止まったまま)
-## @returns 箱が w x h の View。duration があれば Timeline を持つので、置けば動く
+## @returns w x h の Group。中は左上が (0, 0)。progress が 0 なら空
 ## @example
-## v.place(lower_third("名前", "肩書き", 8, 1.6, duration = 0.5s), at = Pos(1, 6, anchor = :topLeft), w = 8)
-export func lower_third(title: String, subtitle: String, w: Number, h: Number, progress: Number = 1, fill: Color = #1a1d23, accent: Color = #e04040, duration: Duration = 0s, start: Duration = 0s) -> View {
-  let v = View(box = Vector(w, h))
+## comp.place("name", lower_third("名前", "肩書き", 8, 1.6).copy(position = Vector(1, 6)), in = 0s, out = comp.duration)
+export func lower_third(title: String, subtitle: String, w: Number, h: Number, progress: Number = 1, fill: Color = #1a1d23, accent: Color = #e04040) -> Group {
   let k = math.clamp(progress, 0, 1)
-  if k <= 0 and duration <= 0s { return v }
-  let inner = View(box = Vector(w, h))
-  inner.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h, fill = fill))
-  inner.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = h * 0.1, h = h, fill = accent))
+  if k <= 0 { return Group() }
   let ink = contrast(fill)
   let has_sub = subtitle != ""
   let ty = if has_sub { h * 0.36 } else { h / 2 }
-  inner.place(TextArea(position = Pos(h * 0.4, ty, anchor = :left), text = title, fontSize = h * 0.4, fill = ink))
+  let items = [
+    Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = w, h = h, fill = fill),
+    Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = h * 0.1, h = h, fill = accent),
+    at_left(TextArea(position = Vector(h * 0.4, ty), text = title, fontSize = h * 0.4, fill = ink)),
+  ]
   if has_sub {
-    inner.place(TextArea(position = Pos(h * 0.4, h * 0.72, anchor = :left), text = subtitle, fontSize = h * 0.22, fill = alpha(ink, 0.7)))
+    items.push(at_left(TextArea(position = Vector(h * 0.4, h * 0.72), text = subtitle, fontSize = h * 0.22, fill = alpha(ink, 0.7))))
   }
-  # k のぶんだけ左から見せる。中身は動かさず、窓の方を狭める
-  let window = View(box = Vector(w * k, h), clip = true)
-  window.place(inner, at = Pos(0, 0, anchor = :topLeft), w = w)
-  v.place(window, at = Pos(0, 0, anchor = :topLeft), w = w * k)
-  if duration > 0s {
-    window.box.x = 0.0001
-    window.w = 0.0001
-    v.addTrack(reveal_x(window, 0, w * k, duration), at = start)
-  }
-  v
+  # k のぶんだけ左から見せる。中身は動かさず、切る枠の方を狭める
+  Group(...items, clip = Rect(w = w * k, h = h, anchor = Vector(0, 0)))
 }
 
 ## 章の中割り。番号と題を真ん中に置く
@@ -236,20 +224,19 @@ export func lower_third(title: String, subtitle: String, w: Number, h: Number, p
 ## @param no 章番号 (0 以下なら出さない。既定 0)
 ## @param fill 背の色 (既定 ほぼ黒)
 ## @param accent 番号と線の色 (既定 赤)
-## @returns 箱が w x h の View
+## @returns w x h の Group。中は左上が (0, 0)
 ## @example
-## v.place(chapter_card("はじめに", 16, 9, 1), at = Pos(0, 0, anchor = :topLeft), w = 16)
-export func chapter_card(title: String, w: Number, h: Number, no: Number = 0, fill: Color = #1a1d23, accent: Color = #e04040) -> View {
-  let v = View(box = Vector(w, h))
-  v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h, fill = fill))
+## comp.place("chapter", chapter_card("はじめに", 16, 9, 1), in = 0s, out = comp.duration)
+export func chapter_card(title: String, w: Number, h: Number, no: Number = 0, fill: Color = #1a1d23, accent: Color = #e04040) -> Group {
   let ink = contrast(fill)
   let mid = h / 2
+  let items = [Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = w, h = h, fill = fill)]
   if no > 0 {
-    v.place(TextArea(position = Pos(w / 2, mid - h * 0.16, anchor = :bottom), text = "{no}".format(math.floor(no)), fontSize = h * 0.16, fill = accent, align = :center))
+    items.push(at_bottom(TextArea(position = Vector(w / 2, mid - h * 0.16), text = "{no}".format(math.floor(no)), fontSize = h * 0.16, fill = accent, align = :center)))
   }
-  v.place(Line(from = Vector(w / 2 - h * 0.1, mid - h * 0.1), to = Vector(w / 2 + h * 0.1, mid - h * 0.1), stroke = accent, strokeWidth = h * 0.006))
-  v.place(TextArea(position = Pos(w / 2, mid + h * 0.02, anchor = :top), text = title, fontSize = h * 0.11, w = w * 0.8, fill = ink, align = :center))
-  v
+  items.push(Line(from = Vector(w / 2 - h * 0.1, mid - h * 0.1), to = Vector(w / 2 + h * 0.1, mid - h * 0.1), stroke = accent, strokeWidth = h * 0.006))
+  items.push(at_top(TextArea(position = Vector(w / 2, mid + h * 0.02), text = title, fontSize = h * 0.11, w = w * 0.8, fill = ink, align = :center)))
+  Group(...items)
 }
 
 ## 重みつきの単語を並べる。重いものほど大きく、上に来る
@@ -259,14 +246,13 @@ export func chapter_card(title: String, w: Number, h: Number, no: Number = 0, fi
 ## @param h 高さ
 ## @param color 一番重い単語の色 (既定 赤)
 ## @param base 一番軽い単語の色 (既定 灰)
-## @returns 箱が w x h の View
+## @returns w x h の Group。中は左上が (0, 0)
 ## @example
-## v.place(word_cloud({ "速い": 3, "軽い": 2, "小さい": 1 }, 8, 4), at = Pos(1, 1, anchor = :topLeft), w = 8)
-export func word_cloud(words: Dict, w: Number, h: Number, color: Color = #e04040, base: Color = #8a8f98) -> View {
-  let v = View(box = Vector(w, h))
+## comp.place("cloud", word_cloud({ "速い": 3, "軽い": 2, "小さい": 1 }, 8, 4).copy(position = Vector(1, 1)), in = 0s, out = comp.duration)
+export func word_cloud(words: Dict, w: Number, h: Number, color: Color = #e04040, base: Color = #8a8f98) -> Group {
   let pairs = []
   for (word, weight) in words { pairs.push((weight, word)) }
-  if pairs.len() == 0 { return v }
+  if pairs.len() == 0 { return Group() }
   let sorted = pairs.sort().reverse()
   let top = sorted[0][0]
   let low = sorted[sorted.len() - 1][0]
@@ -280,7 +266,7 @@ export func word_cloud(words: Dict, w: Number, h: Number, color: Color = #e04040
   for (weight, word) in sorted {
     let k = if top == low { 1 } else { math.unlerp(low, top, weight) }
     let size = math.lerp(small, big, k)
-    let tw = TextArea(position = Pos(0, 0), text = word, fontSize = size).size().x
+    let tw = TextArea(text = word, fontSize = size).size().x
     if row.len() > 0 and row_w + gap + tw > w {
       rows.push((row_w, row))
       row = []
@@ -291,13 +277,14 @@ export func word_cloud(words: Dict, w: Number, h: Number, color: Color = #e04040
   }
   if row.len() > 0 { rows.push((row_w, row)) }
   let row_h = h / rows.len()
+  let placed = []
   for (r, (width, items)) in rows.enumerate() {
     let x = (w - width) / 2
     let y = row_h * (r + 0.5)
     for (word, size, k) in items {
-      v.place(TextArea(position = Pos(x, y, anchor = :left), text = word, fontSize = size, fill = mix(base, color, k)))
-      x = x + TextArea(position = Pos(0, 0), text = word, fontSize = size).size().x + gap
+      placed.push(at_left(TextArea(position = Vector(x, y), text = word, fontSize = size, fill = mix(base, color, k))))
+      x = x + TextArea(text = word, fontSize = size).size().x + gap
     }
   }
-  v
+  Group(...placed)
 }

@@ -1,6 +1,6 @@
 //! フレームの組み立てを別スレッドに分ける。
 //!
-//! 1 フレームの状態は「スクリプト直後の状態 + その時刻までに始まった Timeline を置いた順に適用」で決まり、
+//! 1 フレームの状態は「その時刻に存在する Layer の Node」で決まり、
 //! 前のフレームに依存しない。なのでフレームごとに独立して組める。
 //! スレッドは自分のインタプリタとオブジェクトの木を持ち (`Rc` を跨がせない)、描画命令だけを返す。
 //!
@@ -78,12 +78,10 @@ fn build(job: &Job, mine: &[(usize, f64)], tx: &SyncSender<Frame>) {
             return;
         }
     };
-    let tracks = crate::lang::eval::all_tracks(&view);
     for &(i, t) in mine {
         let frame = (|| -> Result<(Scene, crate::render::text::Bytes), Box<dyn Error>> {
-            interp.begin_frame(t);
-            interp.apply_tracks(&tracks, t)?;
-            let scene = crate::render::scene::build(&view, job.shot, t, interp.cache_mut())?;
+            let tree = interp.frame(&view, t)?;
+            let scene = crate::render::scene::build(&tree, job.shot, t, interp.cache_mut())?;
             Ok((scene, interp.cache_mut().bytes()))
         })();
         let message = match frame {
@@ -110,6 +108,5 @@ fn prepare(job: &Job) -> Result<(crate::lang::eval::Interp, ObjRef), Box<dyn Err
     }
     interp.run(&stmts)?;
     let view = interp.output.clone().ok_or("no output")?;
-    interp.snapshot(&view);
     Ok((interp, view))
 }

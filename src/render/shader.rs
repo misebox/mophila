@@ -336,10 +336,10 @@ impl Gen {
                 (format!("({})", parts.join(" && ")), Ty::Bool)
             }
             Expr::Attr(target, attr) => match target.as_ref() {
-                Expr::Ident(m) if m == "math" && matches!(attr.as_str(), "PI" | "TAU" | "E") => {
+                Expr::Ident(m) if m == "math" && matches!(attr.as_str(), "pi" | "tau" | "e") => {
                     let v = match attr.as_str() {
-                        "PI" => std::f64::consts::PI,
-                        "TAU" => std::f64::consts::TAU,
+                        "pi" => std::f64::consts::PI,
+                        "tau" => std::f64::consts::TAU,
                         _ => std::f64::consts::E,
                     };
                     (lit(v), Ty::Num)

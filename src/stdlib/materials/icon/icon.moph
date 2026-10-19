@@ -9,15 +9,14 @@ import math
 ## @param icon 記号の形
 ## @param center 置く場所の中心 (箱の座標)
 ## @param size 一辺の長さ (箱の座標)
-## @param rotation 時計回りの回転 (度)
+## @param rotation 時計回りの回転 (ラジアン)
 ## @returns 箱の座標に移した輪郭の並び
 ## @example
 ## # 輪郭が 1 つの記号を Polygon で描く
 ## Polygon(points = at(CHECK, Vector(8, 4.5), 1)[0], fill = #4aa863)
 export func at(icon: List<List<Vector>>, center: Vector, size: Number, rotation: Number = 0) -> List<List<Vector>> {
-  let rad = rotation * math.PI / 180
-  let cos = math.cos(rad)
-  let sin = math.sin(rad)
+  let cos = math.cos(rotation)
+  let sin = math.sin(rotation)
   icon.map(func (part) {
     part.map(func (p) {
       let dx = (p.x - 0.5) * size
@@ -33,14 +32,13 @@ export func at(icon: List<List<Vector>>, center: Vector, size: Number, rotation:
 ## @param center 置く場所の中心 (箱の座標)
 ## @param size 一辺の長さ (箱の座標)
 ## @param fill 色
-## @param rotation 時計回りの回転 (度)
+## @param rotation 時計回りの回転 (ラジアン)
+## @returns 輪郭を塗った Path
 ## @example
-## v.place(mark(CHECK, Vector(8, 4.5), 1.2, #4aa863))
+## comp.place("check", mark(CHECK, Vector(8, 4.5), 1.2, #4aa863), in = 0s, out = comp.duration)
 ##
-## # 返ってくるのは Path なので、後から線も付けられる
-## let m = mark(HEART, Vector(4, 4), 1, #e04040)
-## m.stroke = #ffffff
-## m.strokeWidth = 0.04
+## # 返ってくるのは Path なので、copy で線も付けられる
+## let m = mark(HEART, Vector(4, 4), 1, #e04040).copy(stroke = #ffffff, strokeWidth = 0.04)
 export func mark(icon: List<List<Vector>>, center: Vector, size: Number, fill: Color, rotation: Number = 0) -> Path {
   let parts = at(icon, center, size, rotation)
   let segments = []

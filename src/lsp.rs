@@ -22,11 +22,11 @@ use crate::lang::lexer::{Tok, Token, lex};
 use crate::lang::value::Value;
 
 const KEYWORDS: &[&str] = &[
-    "let", "func", "if", "else", "for", "while", "in", "and", "or", "not", "true", "false", "return", "context", "as", "motion", "output",
+    "let", "func", "if", "else", "for", "while", "in", "and", "or", "not", "true", "false", "return", "as", "output",
     "import", "export", "from", "type", "record", "struct", "method", "private", "alias",
 ];
 const SYMBOLS: &[&str] = &[
-    "center", "topLeft", "topRight", "bottomLeft", "bottomRight", "top", "bottom", "left", "right", "linear", "ease", "ease_in", "ease_out",
+    "center", "left", "right", "linear", "ease", "ease_in", "ease_out", "normal", "butt", "round", "square", "miter", "bevel",
 ];
 
 /// 開いている文書と、最後に保存時に実行したときのトップレベルの値
@@ -409,7 +409,7 @@ fn exports_of(uri: &Uri, path: &str) -> Option<Vec<CompletionItem>> {
         }
     }
     if tokens.iter().any(|t| t.tok == Tok::Output) {
-        out.push(item("output", CompletionItemKind::VARIABLE, "output した View"));
+        out.push(item("output", CompletionItemKind::VARIABLE, "output した Composition"));
     }
     Some(out)
 }
@@ -1005,7 +1005,7 @@ mod tests {
         let items: Vec<CompletionItem> = attrs.iter().map(|a| attr_item(a, "")).collect();
         let radius = items.iter().find(|i| i.label == "radius").unwrap();
         let fill = items.iter().find(|i| i.label == "fill").unwrap();
-        assert_eq!(radius.detail.as_deref(), Some("Number (必須)"));
+        assert_eq!(radius.detail.as_deref(), Some("Length (必須)"));
         assert_eq!(fill.detail.as_deref(), Some("Paint"));
         assert!(radius.sort_text < fill.sort_text);
     }

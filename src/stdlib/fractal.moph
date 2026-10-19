@@ -74,7 +74,7 @@ type MaybeCamera = Camera | Symbol
 ##   center = Vector(-0.743, 0.126),
 ##   span = 0.02,
 ## )
-## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = set))
+## comp.place("set", Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9, fill = set), in = 0s, out = comp.duration)
 export func escape_time(formula: Dict, coloring: (Number, Vector) -> Color, center: Center, span: Number, zoom: (Number) -> Number = func (t) { 1 }, duration: Duration = 0s, camera: MaybeCamera = :none, max_steps: (Number) -> Number = func (depth) { 200 }, samples: Number = 1, top_left: Vector = Vector(0, 0), size: Vector = Vector(16, 9), y_up: Bool = false, escape_at: Number = 256, reference_steps: Number = 0, digits: Number = 0) -> Shader {
   let seed = formula["seed"]
   let step = formula["step"]

@@ -1,15 +1,15 @@
 # chart.moph — 数の並びを絵にする
 #
-# どれも「その時点の値」を受け取って View を返す。軸と目盛りは axes が引く。
+# どれも「その時点の値」を受け取って Group を返す。Group の左上が (0, 0) で、軸と目盛りは axes が引く。
+# 動かしたいときは progress (0..1) を渡す。時間の流れ方は呼ぶ側が ease などで決める。
 #
-# duration を書くと、その長さで 0 から今の値まで動く Timeline が付いてくるので、置けばそのまま動く。
-# duration が 0s なら渡した値のまま止まる。
-#
-#   v.place(bar([3, 7, 5], ["A", "B", "C"], 6, 4, duration = 0.8s), at = Pos(1, 1, anchor = :topLeft), w = 6)
+#   func grow(t) { bar([3, 7, 5], ["A", "B", "C"], 6, 4, progress = ease_out(t, 0s, 0.8s, 0, 1)).copy(position = Vector(1, 1)) }
+#   comp.place("bar", grow, in = 0s, out = 4s)
 
 import math
-import { to_segments, ring_segment, regular_polygon, polar } from shape
+import { ring_segment, regular_polygon, polar } from shape
 import { gray, categorical, alpha } from color
+import { text_at } from diagram
 
 ## 軸と目盛り。他のグラフの下に敷く
 ## @category 軸
@@ -22,36 +22,34 @@ import { gray, categorical, alpha } from color
 ## @param x_name 横軸の名前 (既定 無し)
 ## @param y_name 縦軸の名前 (既定 無し)
 ## @param ticks 目盛りのおおよその数 (既定 5)
-## @returns 箱が w x h の View。原点は左下
+## @returns Group。左上が (0, 0) で w x h。原点は左下
 ## @example
-## v.place(axes(6, 4, 0, 10, 0, 100, "時間 (秒)", "強さ"), at = Pos(1, 1, anchor = :topLeft), w = 6)
+## comp.place("axes", axes(6, 4, 0, 10, 0, 100, "時間 (秒)", "強さ").copy(position = Vector(1, 1)), in = 0s, out = comp.duration)
 export func axes(w: Number, h: Number, x_lo: Number, x_hi: Number, y_lo: Number, y_hi: Number,
-                 x_name: String = "", y_name: String = "", ticks: Number = 5) -> View {
-  let v = View(box = Vector(w, h))
+                 x_name: String = "", y_name: String = "", ticks: Number = 5) -> Group {
   let size = math.min(w, h) * 0.06
   let line = gray(150)
+  let items = []
   # 目盛りは切りの良い間隔で
-  let xs = tick_values(x_lo, x_hi, ticks)
-  let ys = tick_values(y_lo, y_hi, ticks)
-  for x in xs {
+  for x in tick_values(x_lo, x_hi, ticks) {
     let px = math.map_range(x, x_lo, x_hi, 0, w)
-    v.place(Line(from = Vector(px, 0), to = Vector(px, h), stroke = gray(225), strokeWidth = size * 0.06))
-    v.place(TextArea(position = Pos(px, h + size * 0.3, anchor = :top), text = label(x), fontSize = size, fill = line, align = :center))
+    items.push(Line(from = Vector(px, 0), to = Vector(px, h), stroke = gray(225), strokeWidth = size * 0.06))
+    items.push(text_at(TextArea(text = label(x), fontSize = size, fill = line, align = :center), px, h + size * 0.3, 0.5, 0))
   }
-  for y in ys {
+  for y in tick_values(y_lo, y_hi, ticks) {
     let py = math.map_range(y, y_lo, y_hi, h, 0)
-    v.place(Line(from = Vector(0, py), to = Vector(w, py), stroke = gray(225), strokeWidth = size * 0.06))
-    v.place(TextArea(position = Pos(-size * 0.3, py, anchor = :right), text = label(y), fontSize = size, fill = line))
+    items.push(Line(from = Vector(0, py), to = Vector(w, py), stroke = gray(225), strokeWidth = size * 0.06))
+    items.push(text_at(TextArea(text = label(y), fontSize = size, fill = line), -size * 0.3, py, 1, 0.5))
   }
-  v.place(Line(from = Vector(0, h), to = Vector(w, h), stroke = line, strokeWidth = size * 0.1))
-  v.place(Line(from = Vector(0, 0), to = Vector(0, h), stroke = line, strokeWidth = size * 0.1))
+  items.push(Line(from = Vector(0, h), to = Vector(w, h), stroke = line, strokeWidth = size * 0.1))
+  items.push(Line(from = Vector(0, 0), to = Vector(0, h), stroke = line, strokeWidth = size * 0.1))
   if x_name != "" {
-    v.place(TextArea(position = Pos(w / 2, h + size * 1.8, anchor = :top), text = x_name, fontSize = size * 1.1, fill = line, align = :center))
+    items.push(text_at(TextArea(text = x_name, fontSize = size * 1.1, fill = line, align = :center), w / 2, h + size * 1.8, 0.5, 0))
   }
   if y_name != "" {
-    v.place(TextArea(position = Pos(0, -size * 0.8, anchor = :bottomLeft), text = y_name, fontSize = size * 1.1, fill = line))
+    items.push(text_at(TextArea(text = y_name, fontSize = size * 1.1, fill = line), 0, -size * 0.8, 0, 1))
   }
-  v
+  Group(...items)
 }
 
 ## 目盛りに使う値。切りの良い間隔で lo..hi を刻む
@@ -65,12 +63,11 @@ export func tick_values(lo: Number, hi: Number, count: Number = 5) -> List<Numbe
   if hi <= lo { return [lo] }
   let step = math.nice_step(hi - lo, count)
   let first = math.ceil(lo / step) * step
-  let out = []
-  let at = first
+  let values = []
   for i in 0..=math.floor((hi - first) / step) {
-    out.push(math.round(first + i * step, 6))
+    values.push(math.round(first + i * step, 6))
   }
-  out
+  values
 }
 
 ## 目盛りの数字。整数なら小数点を出さない
@@ -87,41 +84,32 @@ func label(x: Number) -> String {
 ## @param colors 棒の色 (足りなければ繰り返す)
 ## @param lo 縦軸の下端 (既定 0)
 ## @param hi 縦軸の上端 (既定 値の最大)
-## @param start 動き出す時刻 (既定 0s)
-## @param duration 0s より長ければ、その長さで 0 から値まで伸びる (既定 0s = 止まったまま)
-## @param stagger 隣の棒が伸び始めるまでの間 (既定 0s)
-## @returns 箱が w x h の View。duration があれば Timeline を持つので、置けば動く
+## @param progress 伸びた割合 0..1 (既定 1)
+## @param stagger 隣の棒が伸び始めるのを遅らせる割合 (既定 0。棒 1 本が伸びきるまでを 1 とする)
+## @returns Group。左上が (0, 0) で w x h
 ## @example
-## v.place(bar([3, 7, 5], ["A", "B", "C"], 6, 4, duration = 0.8s, stagger = 0.1s), at = Pos(1, 1, anchor = :topLeft), w = 6)
+## comp.place("bar", bar([3, 7, 5], ["A", "B", "C"], 6, 4, progress = 0.5, stagger = 0.2).copy(position = Vector(1, 1)), in = 0s, out = comp.duration)
 export func bar(values: List<Number>, labels: List<String>, w: Number, h: Number,
                 colors: List<Color> = [#e04040], lo: Number = 0, hi: Number = 0,
-                duration: Duration = 0s, start: Duration = 0s, stagger: Duration = 0s) -> View {
-  let v = View(box = Vector(w, h))
+                progress: Number = 1, stagger: Number = 0) -> Group {
   let n = values.len()
-  if n == 0 { return v }
+  if n == 0 { return Group() }
   let top = if hi > lo { hi } else { math.max(...values) }
   let gap = w / n * 0.25
   let bw = (w - gap * (n - 1)) / n
   let size = math.min(w, h) * 0.06
+  let items = []
   for (i, value) in values.enumerate() {
-    let bh = math.map_range(value, lo, top, 0, h)
+    # i 本目は stagger * i だけ遅れて動き出し、1 の長さで伸びきる
+    let k = math.clamp(progress * (1 + stagger * (n - 1)) - stagger * i, 0, 1)
+    let bh = math.max(math.map_range(value, lo, top, 0, h), 0) * k
     let x = i * (bw + gap)
-    let rect = Rect(position = Pos(x, h, anchor = :bottomLeft), w = bw, h = math.max(bh, 0), fill = colors[i % colors.len()])
-    v.place(rect)
-    if duration > 0s {
-      # 動き出すまでは伸びる前の姿で待つ
-      rect.h = 0
-      let at = stagger * i
-      v.addTrack(motion {
-        at: rect.h = 0
-        at + duration: rect.h = math.max(bh, 0) :ease_out
-      }, at = start)
-    }
+    items.push(Rect(position = Vector(x, h - bh), anchor = Vector(0, 0), w = bw, h = bh, fill = colors[i % colors.len()]))
     if i < labels.len() {
-      v.place(TextArea(position = Pos(x + bw / 2, h + size * 0.3, anchor = :top), text = labels[i], fontSize = size, fill = gray(110), align = :center))
+      items.push(text_at(TextArea(text = labels[i], fontSize = size, fill = gray(110), align = :center), x + bw / 2, h + size * 0.3, 0.5, 0))
     }
   }
-  v
+  Group(...items)
 }
 
 ## 折れ線。progress で左から描く範囲を決める
@@ -135,33 +123,14 @@ export func bar(values: List<Number>, labels: List<String>, w: Number, h: Number
 ## @param y_hi 縦軸の上端
 ## @param color 線の色 (既定 #e04040)
 ## @param progress 描く割合 0..1 (既定 1)
-## @param start 動き出す時刻 (既定 0s)
-## @param duration 0s より長ければ、その長さで 0 から progress まで描き進む (既定 0s = 止まったまま)
-## @returns 箱が w x h の View。duration があれば Timeline を持つので、置けば動く
+## @returns Group。左上が (0, 0) で w x h
 ## @example
-## v.place(line_chart(pts, 6, 4, 0, 10, 0, 100, duration = 1s), at = Pos(1, 1, anchor = :topLeft), w = 6)
+## comp.place("line", line_chart(pts, 6, 4, 0, 10, 0, 100, progress = 0.5).copy(position = Vector(1, 1)), in = 0s, out = comp.duration)
 export func line_chart(points: List<Vector>, w: Number, h: Number, x_lo: Number, x_hi: Number, y_lo: Number, y_hi: Number,
-                 color: Color = #e04040, progress: Number = 1, duration: Duration = 0s, start: Duration = 0s) -> View {
-  let v = View(box = Vector(w, h))
-  if points.len() < 2 { return v }
+                 color: Color = #e04040, progress: Number = 1) -> Group {
+  if points.len() < 2 { return Group() }
   let pts = points.map(func (p) { Vector(math.map_range(p.x, x_lo, x_hi, 0, w), math.map_range(p.y, y_lo, y_hi, h, 0)) })
-  let path = Path(from = pts[0], segments = to_segments(pts), stroke = color, strokeWidth = math.min(w, h) * 0.012)
-  # progress の分だけ dash で見せる
-  let k = math.clamp(progress, 0, 1)
-  let total = path.length()
-  if k < 1 or duration > 0s {
-    path.dash = [total, total]
-    path.dashOffset = total * (1 - k)
-  }
-  v.place(path)
-  if duration > 0s {
-    path.dashOffset = total
-    v.addTrack(motion {
-      0s: path.dashOffset = total
-      duration: path.dashOffset = total * (1 - k)
-    }, at = start)
-  }
-  v
+  Group(Path.through(pts).copy(stroke = color, strokeWidth = math.min(w, h) * 0.012, upto = math.clamp(progress, 0, 1)))
 }
 
 ## 円グラフ。values の割合で切り分ける
@@ -170,36 +139,28 @@ export func line_chart(points: List<Vector>, w: Number, h: Number, x_lo: Number,
 ## @param size 直径
 ## @param colors 切れ端の色 (既定 categorical)
 ## @param hole 中央の穴の割合 0..1 (既定 0。0.5 ならドーナツ)
-## @param start 動き出す時刻 (既定 0s)
-## @param duration 0s より長ければ、その長さで真上から時計回りに開いていく (既定 0s = 止まったまま)
-## @returns 箱が size x size の View。duration があれば Timeline を持つので、置けば動く
+## @param progress 開いた割合 0..1 (既定 1)。真上から時計回りに、全体の progress の分だけ開く
+## @returns Group。左上が (0, 0) で size x size
 ## @example
-## v.place(pie([3, 2, 1], 3, duration = 1s), at = Pos(1, 1, anchor = :topLeft), w = 3)
-export func pie(values: List<Number>, size: Number, colors: List<Color> = [], hole: Number = 0, duration: Duration = 0s, start: Duration = 0s) -> View {
-  let v = View(box = Vector(size, size))
+## comp.place("pie", pie([3, 2, 1], 3, progress = 0.5).copy(position = Vector(1, 1)), in = 0s, out = comp.duration)
+export func pie(values: List<Number>, size: Number, colors: List<Color> = [], hole: Number = 0, progress: Number = 1) -> Group {
   let total = values.sum()
-  if total <= 0 { return v }
+  if total <= 0 { return Group() }
   let palette = if colors.len() > 0 { colors } else { categorical(values.len()) }
   let r = size / 2
-  let at = 0
   let r_in = r * math.clamp(hole, 0, 0.95)
+  let opened = math.clamp(progress, 0, 1) * math.tau
+  let items = []
+  let at = 0
   for (i, value) in values.enumerate() {
-    let sweep = value / total * 360
-    let wedge = Polygon(points = ring_segment(r, r, r_in, r, at, at + sweep), fill = palette[i % palette.len()])
-    v.place(wedge)
-    if duration > 0s {
-      # 開き終わった角度までを、その切れ端の持ち分の長さで開く
-      let from_at = duration * (at / 360)
-      let to_at = duration * ((at + sweep) / 360)
-      wedge.points = ring_segment(r, r, r_in, r, at, at, 32)
-      v.addTrack(motion {
-        from_at: wedge.points = ring_segment(r, r, r_in, r, at, at, 32)
-        to_at: wedge.points = ring_segment(r, r, r_in, r, at, at + sweep, 32)
-      }, at = start)
+    let sweep = value / total * math.tau
+    let end = math.min(at + sweep, opened)
+    if end > at {
+      items.push(Polygon(points = ring_segment(r, r, r_in, r, at, end), fill = palette[i % palette.len()]))
     }
     at = at + sweep
   }
-  v
+  Group(...items)
 }
 
 ## 散布図
@@ -213,19 +174,15 @@ export func pie(values: List<Number>, size: Number, colors: List<Color> = [], ho
 ## @param y_hi 縦軸の上端
 ## @param color 点の色 (既定 #4080e0)
 ## @param radius 点の大きさ (既定 幅の 1.5%)
-## @returns 箱が w x h の View
+## @returns Group。左上が (0, 0) で w x h
 ## @example
-## v.place(scatter(pts, 6, 4, 0, 10, 0, 10), at = Pos(1, 1, anchor = :topLeft), w = 6)
+## comp.place("scatter", scatter(pts, 6, 4, 0, 10, 0, 10).copy(position = Vector(1, 1)), in = 0s, out = comp.duration)
 export func scatter(points: List<Vector>, w: Number, h: Number, x_lo: Number, x_hi: Number, y_lo: Number, y_hi: Number,
-                    color: Color = #4080e0, radius: Number = 0) -> View {
-  let v = View(box = Vector(w, h))
+                    color: Color = #4080e0, radius: Number = 0) -> Group {
   let r = if radius > 0 { radius } else { math.min(w, h) * 0.015 }
-  for p in points {
-    let x = math.map_range(p.x, x_lo, x_hi, 0, w)
-    let y = math.map_range(p.y, y_lo, y_hi, h, 0)
-    v.place(Circle(position = Pos(x, y), radius = r, fill = alpha(color, 0.8)))
-  }
-  v
+  Group(...points.map(func (p) {
+    Circle(position = Vector(math.map_range(p.x, x_lo, x_hi, 0, w), math.map_range(p.y, y_lo, y_hi, h, 0)), radius = r, fill = alpha(color, 0.8))
+  }))
 }
 
 ## 小さい折れ線。軸も目盛りも出さない
@@ -234,21 +191,19 @@ export func scatter(points: List<Vector>, w: Number, h: Number, x_lo: Number, x_
 ## @param w 幅
 ## @param h 高さ
 ## @param color 線の色 (既定 #e04040)
-## @returns 箱が w x h の View
+## @returns Group。左上が (0, 0) で w x h
 ## @example
-## v.place(sparkline([3, 5, 4, 8], 2, 0.6), at = Pos(1, 1, anchor = :topLeft), w = 2)
-export func sparkline(values: List<Number>, w: Number, h: Number, color: Color = #e04040) -> View {
-  let v = View(box = Vector(w, h))
+## comp.place("spark", sparkline([3, 5, 4, 8], 2, 0.6).copy(position = Vector(1, 1)), in = 0s, out = comp.duration)
+export func sparkline(values: List<Number>, w: Number, h: Number, color: Color = #e04040) -> Group {
   let n = values.len()
-  if n < 2 { return v }
+  if n < 2 { return Group() }
   let lo = math.min(...values)
   let hi = math.max(...values)
   let pts = values.enumerate().map(func (pair) {
     let (i, value) = pair
     Vector(w * i / (n - 1), if hi == lo { h / 2 } else { math.map_range(value, lo, hi, h, 0) })
   })
-  v.place(Path(from = pts[0], segments = to_segments(pts), stroke = color, strokeWidth = h * 0.08))
-  v
+  Group(Path.through(pts).copy(stroke = color, strokeWidth = h * 0.08))
 }
 
 ## 色の凡例
@@ -257,21 +212,21 @@ export func sparkline(values: List<Number>, w: Number, h: Number, color: Color =
 ## @param colors 色の並び
 ## @param w 幅
 ## @param h 高さ
-## @returns 箱が w x h の View。上から順に並ぶ
+## @returns Group。左上が (0, 0) で w x h。上から順に並ぶ
 ## @example
-## v.place(legend(["A", "B"], categorical(2), 2, 1), at = Pos(1, 1, anchor = :topLeft), w = 2)
-export func legend(labels: List<String>, colors: List<Color>, w: Number, h: Number) -> View {
-  let v = View(box = Vector(w, h))
+## comp.place("legend", legend(["A", "B"], categorical(2), 2, 1).copy(position = Vector(1, 1)), in = 0s, out = comp.duration)
+export func legend(labels: List<String>, colors: List<Color>, w: Number, h: Number) -> Group {
   let n = labels.len()
-  if n == 0 { return v }
+  if n == 0 { return Group() }
   let row = h / n
   let size = row * 0.6
+  let items = []
   for (i, name) in labels.enumerate() {
     let cy = row * (i + 0.5)
-    v.place(Rect(position = Pos(0, cy, anchor = :left), w = size, h = size, radius = size * 0.2, fill = colors[i % colors.len()]))
-    v.place(TextArea(position = Pos(size * 1.4, cy, anchor = :left), text = name, fontSize = size, fill = gray(60)))
+    items.push(Rect(position = Vector(0, cy), anchor = Vector(0, size / 2), w = size, h = size, radius = size * 0.2, fill = colors[i % colors.len()]))
+    items.push(text_at(TextArea(text = name, fontSize = size, fill = gray(60)), size * 1.4, cy, 0, 0.5))
   }
-  v
+  Group(...items)
 }
 
 ## レーダーチャート。軸の数だけ角がある
@@ -281,31 +236,30 @@ export func legend(labels: List<String>, colors: List<Color>, w: Number, h: Numb
 ## @param size 直径
 ## @param max 外周の値 (既定 values の最大)
 ## @param color 面の色 (既定 #4080e0)
-## @returns 箱が size x size の View
+## @returns Group。左上が (0, 0) で size x size
 ## @example
-## v.place(radar(["速さ", "軽さ", "強さ"], [3, 4, 2], 4), at = Pos(1, 1, anchor = :topLeft), w = 4)
-export func radar(labels: List<String>, values: List<Number>, size: Number, max: Number = 0, color: Color = #4080e0) -> View {
-  let v = View(box = Vector(size, size))
+## comp.place("radar", radar(["速さ", "軽さ", "強さ"], [3, 4, 2], 4).copy(position = Vector(1, 1)), in = 0s, out = comp.duration)
+export func radar(labels: List<String>, values: List<Number>, size: Number, max: Number = 0, color: Color = #4080e0) -> Group {
   let n = values.len()
-  if n < 3 { return v }
+  if n < 3 { return Group() }
   let hi = if max > 0 { max } else { math.max(...values) }
-  if hi <= 0 { return v }
+  if hi <= 0 { return Group() }
   let c = size / 2
   let r = size * 0.36
   let line = gray(190)
+  let items = []
   for step in 1..=4 {
-    v.place(Polygon(points = regular_polygon(c, c, r * step / 4, n), stroke = line, strokeWidth = size * 0.004))
+    items.push(Polygon(points = regular_polygon(c, c, r * step / 4, n), stroke = line, strokeWidth = size * 0.004))
   }
   let points = []
   for (i, value) in values.enumerate() {
-    let deg = i * 360 / n
-    v.place(Line(from = Vector(c, c), to = polar(c, c, r, deg), stroke = line, strokeWidth = size * 0.004))
-    points.push(polar(c, c, r * math.clamp(value / hi, 0, 1), deg))
-    let at = polar(c, c, r * 1.16, deg)
-    v.place(TextArea(position = Pos(at.x, at.y), text = labels[i], fontSize = size * 0.055, fill = gray(70), align = :center))
+    let angle = i * math.tau / n
+    items.push(Line(from = Vector(c, c), to = polar(c, c, r, angle), stroke = line, strokeWidth = size * 0.004))
+    points.push(polar(c, c, r * math.clamp(value / hi, 0, 1), angle))
+    items.push(TextArea(position = polar(c, c, r * 1.16, angle), text = labels[i], fontSize = size * 0.055, fill = gray(70), align = :center))
   }
-  v.place(Polygon(points = points, fill = alpha(color, 0.35), stroke = color, strokeWidth = size * 0.008))
-  v
+  items.push(Polygon(points = points, fill = alpha(color, 0.35), stroke = color, strokeWidth = size * 0.008))
+  Group(...items)
 }
 
 ## 格子の濃淡
@@ -316,13 +270,12 @@ export func radar(labels: List<String>, values: List<Number>, size: Number, max:
 ## @param lo 一番薄い値 (既定 cells の最小)
 ## @param hi 一番濃い値 (既定 cells の最大)
 ## @param color 一番濃いところの色 (既定 #4080e0)
-## @returns 箱が w x h の View
+## @returns Group。左上が (0, 0) で w x h
 ## @example
-## v.place(heatmap([[1, 2], [3, 4]], 4, 4), at = Pos(1, 1, anchor = :topLeft), w = 4)
-export func heatmap(cells: List<List<Number>>, w: Number, h: Number, lo: Number = 0, hi: Number = 0, color: Color = #4080e0) -> View {
-  let v = View(box = Vector(w, h))
+## comp.place("heat", heatmap([[1, 2], [3, 4]], 4, 4).copy(position = Vector(1, 1)), in = 0s, out = comp.duration)
+export func heatmap(cells: List<List<Number>>, w: Number, h: Number, lo: Number = 0, hi: Number = 0, color: Color = #4080e0) -> Group {
   let rows = cells.len()
-  if rows == 0 or cells[0].len() == 0 { return v }
+  if rows == 0 or cells[0].len() == 0 { return Group() }
   let cols = cells[0].len()
   let flat = []
   for row in cells {
@@ -332,13 +285,14 @@ export func heatmap(cells: List<List<Number>>, w: Number, h: Number, lo: Number 
   let high = if lo == 0 and hi == 0 { math.max(...flat) } else { hi }
   let cw = w / cols
   let ch = h / rows
+  let items = []
   for (r, row) in cells.enumerate() {
     for (c, value) in row.enumerate() {
       let k = if high == low { 1 } else { math.clamp(math.unlerp(low, high, value), 0, 1) }
-      v.place(Rect(position = Pos(c * cw, r * ch, anchor = :topLeft), w = cw, h = ch, fill = alpha(color, 0.1 + k * 0.9)))
+      items.push(Rect(position = Vector(c * cw, r * ch), anchor = Vector(0, 0), w = cw, h = ch, fill = alpha(color, 0.1 + k * 0.9)))
     }
   }
-  v
+  Group(...items)
 }
 
 ## ヒストグラム。値を bins 個の区間に分けて数える
@@ -350,13 +304,12 @@ export func heatmap(cells: List<List<Number>>, w: Number, h: Number, lo: Number 
 ## @param lo 一番左の値 (既定 values の最小)
 ## @param hi 一番右の値 (既定 values の最大)
 ## @param color 棒の色 (既定 #4080e0)
-## @returns 箱が w x h の View
+## @returns Group。左上が (0, 0) で w x h
 ## @example
-## v.place(histogram([1, 2, 2, 3, 5], 5, 6, 3), at = Pos(1, 1, anchor = :topLeft), w = 6)
-export func histogram(values: List<Number>, bins: Number, w: Number, h: Number, lo: Number = 0, hi: Number = 0, color: Color = #4080e0) -> View {
-  let v = View(box = Vector(w, h))
+## comp.place("hist", histogram([1, 2, 2, 3, 5], 5, 6, 3).copy(position = Vector(1, 1)), in = 0s, out = comp.duration)
+export func histogram(values: List<Number>, bins: Number, w: Number, h: Number, lo: Number = 0, hi: Number = 0, color: Color = #4080e0) -> Group {
   let n = math.max(math.floor(bins), 1)
-  if values.len() == 0 { return v }
+  if values.len() == 0 { return Group() }
   let low = if lo == 0 and hi == 0 { math.min(...values) } else { lo }
   let high = if lo == 0 and hi == 0 { math.max(...values) } else { hi }
   let counts = []
@@ -368,13 +321,13 @@ export func histogram(values: List<Number>, bins: Number, w: Number, h: Number, 
     }
   }
   let peak = math.max(...counts)
-  if peak <= 0 { return v }
+  if peak <= 0 { return Group() }
   let bw = w / n
-  for (i, count) in counts.enumerate() {
+  Group(...counts.enumerate().map(func (pair) {
+    let (i, count) = pair
     let bh = h * count / peak
-    v.place(Rect(position = Pos(i * bw + bw * 0.06, h - bh, anchor = :topLeft), w = bw * 0.88, h = bh, fill = color))
-  }
-  v
+    Rect(position = Vector(i * bw + bw * 0.06, h - bh), anchor = Vector(0, 0), w = bw * 0.88, h = bh, fill = color)
+  }))
 }
 
 ## 順位の入れ替わる横棒。値の大きい順に並べ替えて上から出す
@@ -384,35 +337,35 @@ export func histogram(values: List<Number>, bins: Number, w: Number, h: Number, 
 ## @param h 高さ
 ## @param top 出す本数 (既定 全部)
 ## @param colors 棒の色 (既定 categorical)
-## @returns 箱が w x h の View
+## @returns Group。左上が (0, 0) で w x h
 ## @example
-## v.place(bar_race({ "A": 30, "B": 12 }, 8, 4), at = Pos(1, 1, anchor = :topLeft), w = 8)
-export func bar_race(values: Dict, w: Number, h: Number, top: Number = 0, colors: List<Color> = []) -> View {
-  let v = View(box = Vector(w, h))
+## comp.place("race", bar_race({ "A": 30, "B": 12 }, 8, 4).copy(position = Vector(1, 1)), in = 0s, out = comp.duration)
+export func bar_race(values: Dict, w: Number, h: Number, top: Number = 0, colors: List<Color> = []) -> Group {
   let pairs = []
   for (name, value) in values { pairs.push((value, name)) }
-  if pairs.len() == 0 { return v }
+  if pairs.len() == 0 { return Group() }
   let ranked = pairs.sort().reverse()
   let n = if top > 0 { math.min(math.floor(top), ranked.len()) } else { ranked.len() }
   let peak = ranked[0][0]
-  if peak <= 0 { return v }
+  if peak <= 0 { return Group() }
   let palette = if colors.len() > 0 { colors } else { categorical(ranked.len()) }
   let row = h / n
   let size = row * 0.4
   # 名前の幅を揃えて、棒の左端を合わせる
   let label_w = 0
   for i in 0..n {
-    let tw = TextArea(position = Pos(0, 0), text = ranked[i][1], fontSize = size).size().x
+    let tw = TextArea(text = ranked[i][1], fontSize = size).size().x
     if tw > label_w { label_w = tw }
   }
   let left = label_w + size * 0.6
+  let items = []
   for i in 0..n {
     let (value, name) = ranked[i]
     let y = row * (i + 0.5)
     let bw = (w - left - size * 2.4) * value / peak
-    v.place(TextArea(position = Pos(label_w, y, anchor = :right), text = name, fontSize = size, fill = gray(60)))
-    v.place(Rect(position = Pos(left, y - row * 0.3, anchor = :topLeft), w = bw, h = row * 0.6, radius = row * 0.1, fill = palette[i % palette.len()]))
-    v.place(TextArea(position = Pos(left + bw + size * 0.3, y, anchor = :left), text = "{v}".format(value), fontSize = size * 0.9, fill = gray(90)))
+    items.push(text_at(TextArea(text = name, fontSize = size, fill = gray(60)), label_w, y, 1, 0.5))
+    items.push(Rect(position = Vector(left, y - row * 0.3), anchor = Vector(0, 0), w = bw, h = row * 0.6, radius = row * 0.1, fill = palette[i % palette.len()]))
+    items.push(text_at(TextArea(text = "{}".format(value), fontSize = size * 0.9, fill = gray(90)), left + bw + size * 0.3, y, 0, 0.5))
   }
-  v
+  Group(...items)
 }

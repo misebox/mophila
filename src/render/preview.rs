@@ -421,9 +421,7 @@ impl Player<'_> {
         let began = Instant::now();
         self.timing.at(t);
         let step = Instant::now();
-        self.interp.begin_frame(t);
-        let tracks = crate::lang::eval::all_tracks(&self.view);
-        self.interp.apply_tracks(&tracks, t)?;
+        let tree = self.interp.frame(&self.view, t)?;
         self.timing.add("eval", step.elapsed());
 
         let status = self.status.then(|| self.status_line(t));
@@ -437,7 +435,7 @@ impl Player<'_> {
             false => 0.0,
         };
         let shot = scene::Shot { width: f64::from(width), height: f64::from(height) - bar, ..self.shot };
-        let mut scene = scene::build(&self.view, shot, t, self.interp.cache_mut())?;
+        let mut scene = scene::build(&tree, shot, t, self.interp.cache_mut())?;
         // 字幕は絵の中に出す。ウィンドウの縦横比が違うと、絵の上下左右に帯が空いている
         let area = scene::picture(&self.view, shot)?;
         scene::overlay_subtitles(&mut scene, self.interp.cache_mut(), &self.cues, t, area);

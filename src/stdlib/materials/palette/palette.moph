@@ -13,8 +13,8 @@
 ## @example
 ## import palette
 ## let p = palette.NIGHT
-## v.place(Rect(w = 16, h = 9, fill = p.back), at = Pos(0, 0, anchor = :topLeft))
-## v.place(TextArea(text = "売上", fontSize = 0.8, fill = p.ink, position = Pos(1, 1)))
+## comp.place("bg", Rect(w = 16, h = 9, fill = p.back, position = Vector(0, 0), anchor = Vector(0, 0)), in = 0s, out = comp.duration)
+## comp.place("title", TextArea(text = "売上", fontSize = 0.8, fill = p.ink, position = Vector(1, 1)), in = 0s, out = comp.duration)
 ##
 ## # 1 色だけ変える
 ## let mine = palette.NIGHT.copy(accent = #4aa863)

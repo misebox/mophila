@@ -1,10 +1,11 @@
 # search.moph — 虫眼鏡
 
+import math
 import { arc } from shape
 
 # 輪。外は時計回り、内は逆回りにすると内側が抜ける
-let outer = arc(0.40, 0.40, 0.34, 0, 360, 24)
-let inner = arc(0.40, 0.40, 0.22, 0, 360, 24).reverse()
+let outer = arc(0.40, 0.40, 0.34, 0, math.tau, 24)
+let inner = arc(0.40, 0.40, 0.22, 0, math.tau, 24).reverse()
 
 ## 虫眼鏡。探すこと、詳しく見ることに。輪の内側が抜けている
 ## @category しるし

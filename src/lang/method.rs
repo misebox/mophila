@@ -9,7 +9,7 @@ use std::rc::Rc;
 
 use crate::lang::error::{Kind, Result, err};
 use crate::lang::eval::{Interp, cmp, equals, format, whole};
-use crate::lang::value::{Motion, Timeline, Value};
+use crate::lang::value::Value;
 
 type Args = Vec<(Option<String>, Value)>;
 type Call = fn(&mut Interp, Value, Args) -> Result<Value>;
@@ -86,61 +86,28 @@ pub const METHODS: &[Method] = &[
     Method { receivers: &["Dict"], name: "has", signature: "d.has(key: String)", returns: "Bool", doc: "そのキーがあるか", call: dict_has },
     Method { receivers: &["Dict"], name: "len", signature: "d.len()", returns: "Number", doc: "要素数", call: dict_len },
     Method {
-        receivers: &["Timeline"],
+        receivers: &["Composition"],
         name: "place",
-        signature: "tl.place(x: Timeline | View | Audio | Narration, at: Duration, fadeIn: Duration, fadeOut: Duration, duration: Duration, volume: Number, loop: Bool)",
+        signature: "comp.place(name: String, node: Node | (Duration) -> Node, in: Duration, out: Duration)",
         returns: "Nothing",
-        doc: "中に 1 本置く。at はこの Timeline の中での開始時刻",
-        call: tl_place,
-    },
-    Method { receivers: &["Timeline", "Motion"], name: "reverse", signature: "tl.reverse()", returns: "Timeline", doc: "時間の向きを逆にしたもの。ease の in と out も入れ替わる", call: reverse },
-    Method {
-        receivers: &["Timeline", "Motion"],
-        name: "scale",
-        signature: "tl.scale(k: Number)",
-        returns: "Timeline",
-        doc: "時間の軸を k 倍したもの。時刻も長さも k 倍になる",
-        call: scale,
+        doc: "Layer を 1 つ置く。後に置いたものが手前。node は不変の Node か、Layer の中の時刻 (in が 0) から Node を返す func。in <= t < out の外では存在しない。名前は Composition の中で一意",
+        call: composition_place,
     },
     Method {
-        receivers: &["Timeline", "Motion"],
-        name: "fit",
-        signature: "tl.fit(d: Duration)",
-        returns: "Timeline",
-        doc: "長さが d になるように時間の軸を伸縮したもの",
-        call: fit,
-    },
-    Method {
-        receivers: &["Timeline", "Motion"],
-        name: "trim",
-        signature: "tl.trim(from: Duration, to: Duration)",
-        returns: "Timeline",
-        doc: "from から to までを取り出し、0 から始まるものにする。その区間の外にあるキーフレームと、置いたものは入らない",
-        call: trim,
-    },
-    Method {
-        receivers: &["View"],
-        name: "place",
-        signature: "v.place(o: Placeable, at: Pos, w: Number, h: Number)",
-        returns: "Nothing",
-        doc: "View に置く。別の View を置くときは at と、w か h が要る (比率を保って収める)",
-        call: view_place,
-    },
-    Method {
-        receivers: &["View"],
+        receivers: &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "Group", "Camera", "Gradient"],
         name: "copy",
-        signature: "v.copy()",
-        returns: "View",
-        doc: "同じ中身の新しい View。同じ View は 2 か所に置けないので、2 か所目にはこれを置く。中の図形は元と共通で、動かすと両方が動く",
-        call: view_copy,
+        signature: "node.copy(属性 = 値, ...)",
+        returns: "T",
+        doc: "書いた属性だけを変えた、新しい値。元は変わらない",
+        call: builtin_copy,
     },
     Method {
-        receivers: &["View"],
-        name: "addTrack",
-        signature: "v.addTrack(x: Timeline | View | Audio | Narration, at: Duration, fadeIn: Duration, fadeOut: Duration, duration: Duration, volume: Number, loop: Bool)",
-        returns: "Nothing",
-        doc: "その View の動きとして付ける。output した View に付いたものが動画になる",
-        call: view_add_track,
+        receivers: &["Audio"],
+        name: "copy",
+        signature: "audio.copy(volume: Number, loop: Bool)",
+        returns: "Audio",
+        doc: "音量と繰り返しを変えた Audio。書いた分だけ変わる",
+        call: audio_copy,
     },
     Method {
         receivers: &["Path", "Polygon", "Line", "Circle", "Ellipse", "Rect"],
@@ -231,14 +198,6 @@ pub const METHODS: &[Method] = &[
         returns: "Bool",
         doc: "視点より前にあるか。project する前にこれで選り分ける。IsometricCamera は視点を持たないので必ず true",
         call: cam_in_front,
-    },
-    Method {
-        receivers: &["Motion"],
-        name: "apply",
-        signature: "m.apply(target: Placeable, f: (Placeable, Duration, List<Number>) -> Nothing)",
-        returns: "Timeline",
-        doc: "各行で f(対象, 時刻, [列...]) を呼び、その中で対象の属性に代入された値をキーフレームにする",
-        call: motion_apply,
     },
 ];
 
@@ -571,6 +530,12 @@ fn seq_sort(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
 
 /// Tuple 1 つを、その型の値にする
 pub(crate) fn value_from(kind: &str, row: &[Value]) -> Result<Value> {
+    // Vector だけは、成分に単位つきの長さを取れる
+    if let ("Vector", [x, y], true) = (kind, row, row.iter().any(|v| matches!(v, Value::Length(_)))) {
+        if let (Some(x), Some(y)) = (x.as_length(), y.as_length()) {
+            return Ok(Value::LVec(x, y));
+        }
+    }
     let ns = row
         .iter()
         .map(|v| match v {
@@ -582,7 +547,6 @@ pub(crate) fn value_from(kind: &str, row: &[Value]) -> Result<Value> {
     match (kind, ns.as_slice()) {
         ("Vector", [x, y]) => Ok(Value::Vector(*x, *y)),
         ("Vector3", [x, y, z]) => Ok(Value::Vector3(*x, *y, *z)),
-        ("Pos", [x, y]) => Ok(Value::Apos("center".to_string(), *x, *y)),
         ("Color", [r, g, b]) => Ok(Value::Color([(r / 255.0) as f32, (g / 255.0) as f32, (b / 255.0) as f32, 1.0])),
         ("Color", [r, g, b, a]) => Ok(Value::Color([(r / 255.0) as f32, (g / 255.0) as f32, (b / 255.0) as f32, *a as f32])),
         ("Color", _) => wrong("3 numbers (r, g, b) or 4 (r, g, b, a)"),
@@ -593,8 +557,8 @@ pub(crate) fn value_from(kind: &str, row: &[Value]) -> Result<Value> {
 
 fn type_from(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
     let Value::BuiltinType(kind) = &r else { return err(Kind::ArgumentType, "from is a method of a builtin type") };
-    if !["Vector", "Vector3", "Pos", "Color"].contains(&kind.as_str()) {
-        return err(Kind::UndefinedAttribute, format!("{kind} has no method \"from\"; it is for Vector, Vector3, Pos and Color"));
+    if !["Vector", "Vector3", "Color"].contains(&kind.as_str()) {
+        return err(Kind::UndefinedAttribute, format!("{kind} has no method \"from\"; it is for Vector, Vector3 and Color"));
     }
     let rows = match one(&args) {
         Some(Value::List(xs)) => xs.borrow().clone(),
@@ -706,77 +670,6 @@ fn dict_len(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
     Ok(Value::num(entries_of(&r).len() as f64))
 }
 
-fn tl_place(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
-    let Value::Timeline(t) = &r else { return err(Kind::ArgumentType, "place is a method of Timeline") };
-    let placed = it.make_placed("Timeline.place", &args)?;
-    t.tracks.borrow_mut().push(placed);
-    Ok(Value::Nothing)
-}
-
-fn reverse(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
-    if !args.is_empty() {
-        return arity("reverse", "no arguments", args.len());
-    }
-    match &r {
-        Value::Timeline(t) => Ok(Value::Timeline(Rc::new(t.reverse()))),
-        Value::Motion(m) => Ok(Value::Motion(Rc::new(m.reverse()))),
-        v => err(Kind::ArgumentType, format!("reverse is a method of Timeline and Motion, found {}", v.type_name())),
-    }
-}
-
-/// Timeline と Motion で同じ形の変換を書く
-fn convert(r: &Value, tl: impl Fn(&Timeline) -> Timeline, mo: impl Fn(&Motion) -> Motion, whose: &str) -> Result<Value> {
-    match r {
-        Value::Timeline(t) => Ok(Value::Timeline(Rc::new(tl(t)))),
-        Value::Motion(m) => Ok(Value::Motion(Rc::new(mo(m)))),
-        v => err(Kind::ArgumentType, format!("{whose} is a method of Timeline and Motion, found {}", v.type_name())),
-    }
-}
-
-fn scale(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
-    let [(None, Value::Number(k, _))] = args.as_slice() else {
-        return err(Kind::ArgumentType, "scale takes one Number");
-    };
-    if *k <= 0.0 {
-        return err(Kind::OutOfRange, format!("scale expects a positive Number, found {k}"));
-    }
-    convert(&r, |t| t.scaled(*k), |m| m.scaled(*k), "scale")
-}
-
-fn fit(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
-    let [(None, Value::Duration(d))] = args.as_slice() else {
-        return err(Kind::ArgumentType, "fit takes one Duration");
-    };
-    convert(&r, |t| t.fit(*d), |m| m.fit(*d), "fit")
-}
-
-fn trim(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
-    let mut span = [None, None];
-    for (i, (name, v)) in args.iter().enumerate() {
-        let slot = match name.as_deref() {
-            Some("from") => 0,
-            Some("to") => 1,
-            Some(n) => return err(Kind::ArgumentType, format!("trim has no argument \"{n}\"; it takes from and to")),
-            None if i < 2 => i,
-            None => return arity("trim", "at most 2 arguments", args.len()),
-        };
-        let Value::Duration(d) = v else {
-            return err(Kind::ArgumentType, format!("trim expects Duration, found {}", v.type_name()));
-        };
-        span[slot] = Some(*d);
-    }
-    let whole_length = match &r {
-        Value::Timeline(t) => t.duration(),
-        Value::Motion(m) => m.duration(),
-        v => return err(Kind::ArgumentType, format!("trim is a method of Timeline and Motion, found {}", v.type_name())),
-    };
-    let (from, to) = (span[0].unwrap_or(0.0), span[1].unwrap_or(whole_length));
-    if to < from {
-        return err(Kind::OutOfRange, format!("trim: from is {from}s but to is {to}s"));
-    }
-    convert(&r, |t| t.trim(from, to), |m| m.trim(from, to), "trim")
-}
-
 /// Object の kind ごとのメソッドは Interp::method が持っている。表からはそこへ渡す
 fn on_object(it: &mut Interp, r: Value, name: &str, args: Args) -> Result<Value> {
     let Value::Object(obj) = &r else {
@@ -786,16 +679,12 @@ fn on_object(it: &mut Interp, r: Value, name: &str, args: Args) -> Result<Value>
     it.method(&obj, name, args)
 }
 
-fn view_copy(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
+fn builtin_copy(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
     on_object(it, r, "copy", args)
 }
 
-fn view_place(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
+fn composition_place(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
     on_object(it, r, "place", args)
-}
-
-fn view_add_track(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
-    on_object(it, r, "addTrack", args)
 }
 
 fn shape_length(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
@@ -895,10 +784,19 @@ fn cam_in_front(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
     on_camera(r, "in_front", args)
 }
 
-fn motion_apply(it: &mut Interp, r: Value, args: Args) -> Result<Value> {
-    let Value::Motion(m) = &r else { return err(Kind::ArgumentType, "apply is a method of Motion") };
-    let m = m.clone();
-    it.apply_motion(&m, args)
+fn audio_copy(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
+    let Value::Audio(a) = &r else { return err(Kind::ArgumentType, "copy is a method of Audio") };
+    let (mut volume, mut looping) = (a.volume, a.looping);
+    for (name, v) in &args {
+        match (name.as_deref(), v) {
+            (Some("volume"), Value::Number(n, _)) if *n >= 0.0 => volume = *n,
+            (Some("volume"), v) => return err(Kind::ArgumentType, format!("Audio.copy volume expects a Number from 0, found {v}")),
+            (Some("loop"), Value::Bool(b)) => looping = *b,
+            (Some("loop"), v) => return err(Kind::ArgumentType, format!("Audio.copy loop expects Bool, found {}", v.type_name())),
+            _ => return err(Kind::ArgumentType, "Audio.copy takes volume and loop, as named arguments"),
+        }
+    }
+    Ok(Value::Audio(Rc::new(crate::lang::value::Audio { name: a.name.clone(), path: a.path.clone(), length: a.length, volume, looping })))
 }
 
 #[cfg(test)]

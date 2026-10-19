@@ -63,7 +63,7 @@ export func hsl(h: Number, s: Number, l: Number) -> Color {
 ## @category 作る
 ## @param v 明るさ 0..255
 ## @example
-## Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = gray(240))
+## Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9, fill = gray(240))
 export func gray(v: Number) -> Color { Color(v, v, v) }
 
 ## 色相・彩度・明度を取り出す

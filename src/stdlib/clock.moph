@@ -1,13 +1,16 @@
 # clock.moph — 時計と日付の絵
 #
 # 時刻は 0 時からの Duration で受け取る。日付を持つ型は無いので、日付は文字と数で渡す。
+# どれも静的な Group を返す。針を動かすのは、呼ぶ側の func (t) が時刻を渡す。
 #
-#   v.place(analog(10h8m, 3, 3), at = Pos(1, 1, anchor = :topLeft), w = 3)
+#   func face(t) { analog(10h8m + t, 3, 3).copy(position = Vector(1, 1)) }
+#   comp.place("clock", face, in = 0s, out = 4s)
 
 import math
 import { gray, alpha, contrast } from color
 import shape
 import text
+import { text_at } from diagram
 
 ## 針の時計
 ## @category 時計
@@ -17,28 +20,27 @@ import text
 ## @param face 文字盤の色 (既定 白)
 ## @param hand 針の色 (既定 ほぼ黒)
 ## @param second 秒針の色 (既定 赤)
-## @returns 箱が w x h の View
+## @returns Group。左上が (0, 0) で w x h
 ## @example
-## v.place(analog(10h8m, 3, 3), at = Pos(1, 1, anchor = :topLeft), w = 3)
-export func analog(time: Duration, w: Number, h: Number, face: Color = #ffffff, hand: Color = #1a1d23, second: Color = #e04040) -> View {
-  let v = View(box = Vector(w, h))
+## comp.place("clock", analog(10h8m, 3, 3).copy(position = Vector(1, 1)), in = 0s, out = comp.duration)
+export func analog(time: Duration, w: Number, h: Number, face: Color = #ffffff, hand: Color = #1a1d23, second: Color = #e04040) -> Group {
   let cx = w / 2
   let cy = h / 2
   let r = math.min(w, h) / 2
-  v.place(Circle(position = Pos(cx, cy), radius = r, fill = face, stroke = alpha(hand, 0.25), strokeWidth = r * 0.03))
+  let items = [Circle(position = Vector(cx, cy), radius = r, fill = face, stroke = alpha(hand, 0.25), strokeWidth = r * 0.03)]
   for i in 0..12 {
-    let outer = shape.polar(cx, cy, r * 0.92, i * 30)
-    let inner = shape.polar(cx, cy, r * (if i % 3 == 0 { 0.78 } else { 0.85 }), i * 30)
-    v.place(Line(from = inner, to = outer, stroke = alpha(hand, 0.7), strokeWidth = r * (if i % 3 == 0 { 0.05 } else { 0.025 })))
+    let outer = shape.polar(cx, cy, r * 0.92, i * math.tau / 12)
+    let inner = shape.polar(cx, cy, r * (if i % 3 == 0 { 0.78 } else { 0.85 }), i * math.tau / 12)
+    items.push(Line(from = inner, to = outer, stroke = alpha(hand, 0.7), strokeWidth = r * (if i % 3 == 0 { 0.05 } else { 0.025 })))
   }
   let secs = time / 1s
   let hours = (secs / 3600) % 12
   let minutes = (secs / 60) % 60
-  v.place(Line(from = Pos(cx, cy).vector, to = shape.polar(cx, cy, r * 0.5, hours * 30), stroke = hand, strokeWidth = r * 0.07, strokeCap = :round))
-  v.place(Line(from = Pos(cx, cy).vector, to = shape.polar(cx, cy, r * 0.72, minutes * 6), stroke = hand, strokeWidth = r * 0.05, strokeCap = :round))
-  v.place(Line(from = shape.polar(cx, cy, r * 0.18, (secs % 60) * 6 + 180), to = shape.polar(cx, cy, r * 0.8, (secs % 60) * 6), stroke = second, strokeWidth = r * 0.02, strokeCap = :round))
-  v.place(Circle(position = Pos(cx, cy), radius = r * 0.05, fill = hand))
-  v
+  items.push(Line(from = Vector(cx, cy), to = shape.polar(cx, cy, r * 0.5, hours * math.tau / 12), stroke = hand, strokeWidth = r * 0.07, strokeCap = :round))
+  items.push(Line(from = Vector(cx, cy), to = shape.polar(cx, cy, r * 0.72, minutes * math.tau / 60), stroke = hand, strokeWidth = r * 0.05, strokeCap = :round))
+  items.push(Line(from = shape.polar(cx, cy, r * 0.18, (secs % 60) * math.tau / 60 + math.pi), to = shape.polar(cx, cy, r * 0.8, (secs % 60) * math.tau / 60), stroke = second, strokeWidth = r * 0.02, strokeCap = :round))
+  items.push(Circle(position = Vector(cx, cy), radius = r * 0.05, fill = hand))
+  Group(...items)
 }
 
 ## 数字の時計
@@ -49,14 +51,14 @@ export func analog(time: Duration, w: Number, h: Number, face: Color = #ffffff, 
 ## @param format text.duration の書き方 (既定 "hh:mm")
 ## @param back 背の色 (既定 ほぼ黒)
 ## @param ink 数字の色 (既定 薄い緑)
-## @returns 箱が w x h の View
+## @returns Group。左上が (0, 0) で w x h
 ## @example
-## v.place(digital(10h8m, 3, 1.2), at = Pos(1, 1, anchor = :topLeft), w = 3)
-export func digital(time: Duration, w: Number, h: Number, format: String = "hh:mm", back: Color = #14161a, ink: Color = #9fe0a0) -> View {
-  let v = View(box = Vector(w, h))
-  v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h, radius = h * 0.12, fill = back))
-  v.place(TextArea(position = Pos(w / 2, h / 2), text = text.clock_text(time, format), fontSize = h * 0.5, fill = ink, align = :center))
-  v
+## comp.place("digital", digital(10h8m, 3, 1.2).copy(position = Vector(1, 1)), in = 0s, out = comp.duration)
+export func digital(time: Duration, w: Number, h: Number, format: String = "hh:mm", back: Color = #14161a, ink: Color = #9fe0a0) -> Group {
+  Group(
+    Rect(anchor = Vector(0, 0), w = w, h = h, radius = h * 0.12, fill = back),
+    TextArea(position = Vector(w / 2, h / 2), text = text.clock_text(time, format), fontSize = h * 0.5, fill = ink, align = :center)
+  )
 }
 
 ## 残り時間。輪が減っていく
@@ -68,22 +70,21 @@ export func digital(time: Duration, w: Number, h: Number, format: String = "hh:m
 ## @param format text.duration の書き方 (既定 "mm:ss")
 ## @param color 残りの色 (既定 赤)
 ## @param track 減った分の色 (既定 薄い灰)
-## @returns 箱が w x h の View
+## @returns Group。左上が (0, 0) で w x h
 ## @example
-## v.place(countdown(25s, 60s, 2, 2), at = Pos(1, 1, anchor = :topLeft), w = 2)
-export func countdown(remaining: Duration, total: Duration, w: Number, h: Number, format: String = "mm:ss", color: Color = #e04040, track: Color = #e6e2da) -> View {
-  let v = View(box = Vector(w, h))
+## comp.place("countdown", countdown(25s, 60s, 2, 2).copy(position = Vector(1, 1)), in = 0s, out = comp.duration)
+export func countdown(remaining: Duration, total: Duration, w: Number, h: Number, format: String = "mm:ss", color: Color = #e04040, track: Color = #e6e2da) -> Group {
   let cx = w / 2
   let cy = h / 2
   let r_out = math.min(w, h) / 2
   let r_in = r_out * 0.86
   let k = if total / 1s == 0 { 0 } else { math.clamp(remaining / total, 0, 1) }
-  v.place(Polygon(points = shape.ring_segment(cx, cy, r_in, r_out, 0, 360, 48), fill = track))
+  let items = [Polygon(points = shape.ring_segment(cx, cy, r_in, r_out, 0, math.tau, 48), fill = track)]
   if k > 0 {
-    v.place(Polygon(points = shape.ring_segment(cx, cy, r_in, r_out, 0, 360 * k, 48), fill = color))
+    items.push(Polygon(points = shape.ring_segment(cx, cy, r_in, r_out, 0, math.tau * k, 48), fill = color))
   }
-  v.place(TextArea(position = Pos(cx, cy), text = text.clock_text(remaining, format), fontSize = r_out * 0.42, fill = #1a1d23, align = :center))
-  v
+  items.push(TextArea(position = Vector(cx, cy), text = text.clock_text(remaining, format), fontSize = r_out * 0.42, fill = #1a1d23, align = :center))
+  Group(...items)
 }
 
 ## 経過時間。秒針代わりの点が回る
@@ -94,18 +95,18 @@ export func countdown(remaining: Duration, total: Duration, w: Number, h: Number
 ## @param format text.duration の書き方 (既定 "mm:ss.S")
 ## @param color 点と文字の色 (既定 ほぼ黒)
 ## @param track 輪の色 (既定 薄い灰)
-## @returns 箱が w x h の View
+## @returns Group。左上が (0, 0) で w x h
 ## @example
-## v.place(stopwatch(83.4s, 2, 2), at = Pos(1, 1, anchor = :topLeft), w = 2)
-export func stopwatch(elapsed: Duration, w: Number, h: Number, format: String = "mm:ss.S", color: Color = #1a1d23, track: Color = #e6e2da) -> View {
-  let v = View(box = Vector(w, h))
+## comp.place("stopwatch", stopwatch(83.4s, 2, 2).copy(position = Vector(1, 1)), in = 0s, out = comp.duration)
+export func stopwatch(elapsed: Duration, w: Number, h: Number, format: String = "mm:ss.S", color: Color = #1a1d23, track: Color = #e6e2da) -> Group {
   let cx = w / 2
   let cy = h / 2
   let r = math.min(w, h) / 2
-  v.place(Circle(position = Pos(cx, cy), radius = r * 0.94, stroke = track, strokeWidth = r * 0.08))
-  v.place(Circle(position = Pos(shape.polar(cx, cy, r * 0.94, (elapsed / 1s % 60) * 6)), radius = r * 0.08, fill = color))
-  v.place(TextArea(position = Pos(cx, cy), text = text.clock_text(elapsed, format), fontSize = r * 0.4, fill = color, align = :center))
-  v
+  Group(
+    Circle(position = Vector(cx, cy), radius = r * 0.94, stroke = track, strokeWidth = r * 0.08),
+    Circle(position = shape.polar(cx, cy, r * 0.94, (elapsed / 1s % 60) * math.tau / 60), radius = r * 0.08, fill = color),
+    TextArea(position = Vector(cx, cy), text = text.clock_text(elapsed, format), fontSize = r * 0.4, fill = color, align = :center)
+  )
 }
 
 ## カレンダーの 1 枚
@@ -117,23 +118,24 @@ export func stopwatch(elapsed: Duration, w: Number, h: Number, format: String = 
 ## @param h 高さ
 ## @param accent 上の帯の色 (既定 赤)
 ## @param face 紙の色 (既定 白)
-## @returns 箱が w x h の View
+## @returns Group。左上が (0, 0) で w x h
 ## @example
-## v.place(calendar_page("9月", 16, "火", 2.4, 2.6), at = Pos(1, 1, anchor = :topLeft), w = 2.4)
-export func calendar_page(month: String, day: Number, weekday: String, w: Number, h: Number, accent: Color = #e04040, face: Color = #ffffff) -> View {
-  let v = View(box = Vector(w, h))
+## comp.place("calendar", calendar_page("9月", 16, "火", 2.4, 2.6).copy(position = Vector(1, 1)), in = 0s, out = comp.duration)
+export func calendar_page(month: String, day: Number, weekday: String, w: Number, h: Number, accent: Color = #e04040, face: Color = #ffffff) -> Group {
   let head = h * 0.26
-  v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h, radius = w * 0.06, fill = face))
-  v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = head, radius = w * 0.06, fill = accent))
-  v.place(Rect(position = Pos(0, head * 0.6, anchor = :topLeft), w = w, h = head * 0.4, fill = accent))
-  v.place(TextArea(position = Pos(w / 2, head / 2), text = month, fontSize = head * 0.55, fill = contrast(accent), align = :center))
   let has_week = weekday != ""
   let day_y = if has_week { h * 0.58 } else { h * 0.64 }
-  v.place(TextArea(position = Pos(w / 2, day_y), text = "{day}".format(math.floor(day)), fontSize = h * 0.42, fill = gray(35), align = :center))
+  let items = [
+    Rect(anchor = Vector(0, 0), w = w, h = h, radius = w * 0.06, fill = face),
+    Rect(anchor = Vector(0, 0), w = w, h = head, radius = w * 0.06, fill = accent),
+    Rect(position = Vector(0, head * 0.6), anchor = Vector(0, 0), w = w, h = head * 0.4, fill = accent),
+    TextArea(position = Vector(w / 2, head / 2), text = month, fontSize = head * 0.55, fill = contrast(accent), align = :center),
+    TextArea(position = Vector(w / 2, day_y), text = "{}".format(math.floor(day)), fontSize = h * 0.42, fill = gray(35), align = :center),
+  ]
   if has_week {
-    v.place(TextArea(position = Pos(w / 2, h * 0.86, anchor = :bottom), text = weekday, fontSize = h * 0.12, fill = gray(120), align = :center))
+    items.push(text_at(TextArea(text = weekday, fontSize = h * 0.12, fill = gray(120), align = :center), w / 2, h * 0.86, 0.5, 1))
   }
-  v
+  Group(...items)
 }
 
 ## 再生バー。印の付いた所が章の切れ目
@@ -144,31 +146,20 @@ export func calendar_page(month: String, day: Number, weekday: String, w: Number
 ## @param h 高さ
 ## @param color 進んだ分の色 (既定 赤)
 ## @param track 残りの色 (既定 薄い灰)
-## @param start 動き出す時刻 (既定 0s)
-## @param duration 0s より長ければ、その長さで 0 から position まで進む (既定 0s = 止まったまま)
-## @returns 箱が w x h の View。duration があれば Timeline を持つので、置けば動く
+## @returns Group。左上が (0, 0) で w x h
 ## @example
-## v.place(timeline_bar([0.25, 0.6], 1, 8, 0.4, duration = 6s), at = Pos(1, 1, anchor = :topLeft), w = 8)
-export func timeline_bar(markers: List<Number>, position: Number, w: Number, h: Number, color: Color = #e04040, track: Color = #e6e2da, duration: Duration = 0s, start: Duration = 0s) -> View {
-  let v = View(box = Vector(w, h))
+## comp.place("timeline", timeline_bar([0.25, 0.6], 0.4, 8, 0.4).copy(position = Vector(1, 1)), in = 0s, out = comp.duration)
+export func timeline_bar(markers: List<Number>, position: Number, w: Number, h: Number, color: Color = #e04040, track: Color = #e6e2da) -> Group {
   let k = math.clamp(position, 0, 1)
   let bar = h * 0.34
   let cy = h / 2
-  v.place(Rect(position = Pos(0, cy - bar / 2, anchor = :topLeft), w = w, h = bar, radius = bar / 2, fill = track))
-  let done = Rect(position = Pos(0, cy - bar / 2, anchor = :topLeft), w = w * k, h = bar, radius = bar / 2, fill = color)
-  if k > 0 or duration > 0s { v.place(done) }
+  let items = [Rect(position = Vector(0, cy - bar / 2), anchor = Vector(0, 0), w = w, h = bar, radius = bar / 2, fill = track)]
+  if k > 0 {
+    items.push(Rect(position = Vector(0, cy - bar / 2), anchor = Vector(0, 0), w = w * k, h = bar, radius = bar / 2, fill = color))
+  }
   for m in markers {
-    v.place(Rect(position = Pos(w * math.clamp(m, 0, 1), cy, anchor = :center), w = bar * 0.28, h = bar * 1.6, fill = gray(120)))
+    items.push(Rect(position = Vector(w * math.clamp(m, 0, 1), cy), w = bar * 0.28, h = bar * 1.6, fill = gray(120)))
   }
-  let knob = Circle(position = Pos(w * k, cy), radius = h * 0.32, fill = color)
-  v.place(knob)
-  if duration > 0s {
-    done.w = 0
-    knob.position = Pos(0, cy)
-    v.addTrack(motion {
-      0s: done.w = 0, knob.position = Pos(0, cy)
-      duration: done.w = w * k, knob.position = Pos(w * k, cy)
-    }, at = start)
-  }
-  v
+  items.push(Circle(position = Vector(w * k, cy), radius = h * 0.32, fill = color))
+  Group(...items)
 }

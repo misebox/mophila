@@ -26,7 +26,6 @@ pub const FILES: &[(&str, &str, &str)] = &[
     ("shape", "shape.moph", include_str!("shape.moph")),
     ("layout", "layout.moph", include_str!("layout.moph")),
     ("easing", "easing.moph", include_str!("easing.moph")),
-    ("animation", "animation.moph", include_str!("animation.moph")),
     ("chart", "chart.moph", include_str!("chart.moph")),
     ("diagram", "diagram.moph", include_str!("diagram.moph")),
     ("text", "text.moph", include_str!("text.moph")),

@@ -24,10 +24,9 @@ pub enum Kind {
     ArityMismatch,
     /// place できない型
     NotPlaceable,
-    /// 時刻の単位が混在、相対時刻なのに duration が無い
-    DurationRequired,
     /// 型は合うが値が範囲外
     OutOfRange,
+    /// 同じ名前の Layer を 2 度置いた
     AlreadyPlaced,
     DivisionByZero,
     FontNotFound,
@@ -53,7 +52,6 @@ pub const KINDS: &[Kind] = &[
     Kind::ArgumentType,
     Kind::ArityMismatch,
     Kind::NotPlaceable,
-    Kind::DurationRequired,
     Kind::OutOfRange,
     Kind::AlreadyPlaced,
     Kind::DivisionByZero,
@@ -81,9 +79,8 @@ impl Kind {
             Kind::ArgumentType => "引数の型が合わない",
             Kind::ArityMismatch => "引数や列の数が合わない",
             Kind::NotPlaceable => "place できない型を置いた",
-            Kind::DurationRequired => "時刻の単位が混ざっている、または 0..1 で書いたのに duration が無い",
             Kind::OutOfRange => "型は合うが値が範囲外",
-            Kind::AlreadyPlaced => "同じ View を 2 か所に置いた",
+            Kind::AlreadyPlaced => "同じ名前の Layer を 2 度置いた",
             Kind::DivisionByZero => "0 で割った",
             Kind::FontNotFound => "その名前のフォントが見つからない",
             Kind::AudioUnreadable => "音声ファイルを読めない",
@@ -108,7 +105,6 @@ impl Kind {
             Kind::ArgumentType => "TypeError.ArgumentType",
             Kind::ArityMismatch => "TypeError.ArityMismatch",
             Kind::NotPlaceable => "TypeError.NotPlaceable",
-            Kind::DurationRequired => "ValueError.DurationRequired",
             Kind::OutOfRange => "ValueError.OutOfRange",
             Kind::AlreadyPlaced => "ValueError.AlreadyPlaced",
             Kind::DivisionByZero => "RuntimeError.DivisionByZero",

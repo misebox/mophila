@@ -3,11 +3,9 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use std::cell::Cell;
-
-use crate::lang::ast::{Arg, BinOp, DictKey, Expr, ImportKind, ImportSource, MotionDef, Pattern, RowItem, Stmt, StmtKind, TypeAnn};
+use crate::lang::ast::{Arg, BinOp, DictKey, Expr, ImportKind, ImportSource, Pattern, ProgressDef, Stmt, StmtKind, TypeAnn};
 use crate::lang::error::{Kind, MophError, Result, err};
-use crate::lang::value::{Audio, Clip, Closure, Module, Motion, MotionRowVal, ObjRef, Object, Placed, Ratio, Record, Scopes, Timeline, TlAssign, TlKeyframe, TlTarget, Track, UserType, Value, next_object_id, new_scope};
+use crate::lang::value::{Audio, Closure, Layer, Module, ObjRef, Object, ProgressTable, Ratio, Record, Scopes, UserType, Value, next_object_id, new_scope};
 use crate::stdlib;
 
 /// 文の実行結果。return で関数を抜けるときに伝える
@@ -34,10 +32,6 @@ pub struct Interp {
     types: HashMap<String, Vec<TypeAnn>>,
     /// フォント検索、テキストレイアウト、描画命令のキャッシュ。初回に必要になったときに作る
     cache: Option<crate::render::text::RenderCache>,
-    /// 終わった Timeline の最後の値。キーは (Timeline のポインタ, 絶対開始時刻のビット)
-    finished: HashMap<(usize, u64), Vec<(TlTarget, Vec<String>, Value)>>,
-    /// 前回描いた時刻。戻ったら finished を捨てる
-    last_t: f64,
     /// 実行中のファイルのディレクトリ。import "file" の相対パスの基準
     pub base_dir: PathBuf,
     /// 実行中のファイルが export した名前
@@ -46,8 +40,6 @@ pub struct Interp {
     pub sources: HashMap<String, String>,
     /// 埋め込みバイナリのとき、音声などのファイルの取り出し先 (正規化したパス → 実際のファイル)
     pub assets: HashMap<String, PathBuf>,
-    /// スクリプト実行直後の全オブジェクトの属性。毎フレームここに戻してから Timeline を適用する
-    initial: Vec<(ObjRef, HashMap<String, Value>)>,
     /// 読み込み済みのモジュールと音声 (正規化したパス → 実体)。同じファイルは 1 度しか読まない
     modules: HashMap<String, Value>,
     /// 読み込み中のパス。循環 import の検出用
@@ -60,16 +52,10 @@ pub struct Interp {
     constructing: Vec<String>,
     /// @deprecated の警告を出した型。1 つにつき 1 度だけ出す
     warned: std::collections::HashSet<String>,
-    /// 今の Timeline より後に place した Timeline が、この時刻で書く先。
-    /// 読む側が先に走ると、書かれる前の値を読んでしまうので、そのときだけ知らせる
-    later_writes: std::collections::HashSet<(usize, String)>,
     /// いま本体を実行している型。private が見えるのはこの中だけ
     inside: Vec<String>,
     /// 次の apply がどの型のメンバーか。apply がこれを inside に積む
     calling: Option<String>,
-    /// Motion.apply の実行中だけ Some。属性への代入を書かれた順に記録する
-    /// 代入を記録する枠。(対象, 属性, 書く前の値)。Motion.apply と report の試し走らせで使う
-    assigned: RefCell<Option<Vec<(ObjRef, String, Option<Value>)>>>,
     /// mophila.yaml。@ で始まる import と `import config` に使う
     project: Option<Rc<crate::project::Project>>,
 }
@@ -85,7 +71,7 @@ impl Interp {
                 types.insert(t.name.to_string(), t.values.iter().map(|(v, _)| TypeAnn::plain(v)).collect());
             }
         }
-        Self { scopes: vec![root_scope()], output: None, types, cache: None, finished: HashMap::new(), last_t: f64::NEG_INFINITY, base_dir: PathBuf::from("."), exports: Vec::new(), sources: HashMap::new(), assets: HashMap::new(), initial: Vec::new(), modules: HashMap::new(), loading: Vec::new(), returning: None, breaking: false, constructing: Vec::new(), warned: std::collections::HashSet::new(), later_writes: std::collections::HashSet::new(), inside: Vec::new(), calling: None, assigned: RefCell::new(None), project: None }
+        Self { scopes: vec![root_scope()], output: None, types, cache: None, base_dir: PathBuf::from("."), exports: Vec::new(), sources: HashMap::new(), assets: HashMap::new(), modules: HashMap::new(), loading: Vec::new(), returning: None, breaking: false, constructing: Vec::new(), warned: std::collections::HashSet::new(), inside: Vec::new(), calling: None, project: None }
     }
 
     /// mophila.yaml を渡す。@ の解決と `import config` がこれを見る
@@ -251,11 +237,11 @@ impl Interp {
                 err(Kind::UnexpectedToken, "a file can have only one output")
             }
             StmtKind::Output(e) => {
-                let view = self.eval_object(e)?;
-                if view.borrow().kind != "View" {
-                    return err(Kind::ArgumentType, format!("output takes a View, found {}", view.borrow().kind));
+                let comp = self.eval_object(e)?;
+                if comp.borrow().kind != "Composition" {
+                    return err(Kind::ArgumentType, format!("output takes a Composition, found {}", comp.borrow().kind));
                 }
-                self.output = Some(view);
+                self.output = Some(comp);
                 Ok(Flow::Next(Value::Nothing))
             }
             StmtKind::For(pat, iter, body) => {
@@ -440,11 +426,6 @@ impl Interp {
         }
     }
 
-    /// 型名だけで確かめる (builtin の中から呼ぶもの)
-    fn check_type(&self, v: &Value, name: &str) -> Result<()> {
-        self.check_ann(v, &TypeAnn::plain(name), "value")
-    }
-
     /// 型が合わないときのエラー。決まった値しか取らない型なら、取れる値を並べる
     fn wrong_type(&self, kind: Kind, what: &str, expected: &str, v: &Value) -> MophError {
         // 名前は同じでも宣言が違うとき
@@ -460,106 +441,30 @@ impl Interp {
         }
     }
 
-    /// Group に名前を付けて入れた中身。属性の名前なら None
-    fn group_member(obj: &ObjRef, name: &str) -> Option<Value> {
-        let o = obj.borrow();
-        if o.kind != "Group" || schema("Group").is_some_and(|s| s.iter().any(|a| a.name == name)) {
-            return None;
-        }
-        o.attrs.get(name).cloned()
-    }
-
-    /// 属性に値を書く。型は宣言 (struct / record) か schema から引く
+    /// struct の属性に値を書く。型は宣言から引く。図形などの組み込みの値は不変で、書けない
     pub(crate) fn set_attr(&self, obj: &ObjRef, attr: &str, value: Value) -> Result<()> {
-        // Group の名前付きの中身。中の属性を書いた後、同じ実体が書き戻されてくる。入れ替えはできない
-        if let Some(Value::Object(member)) = Self::group_member(obj, attr) {
-            return match &value {
-                Value::Object(v) if Rc::ptr_eq(v, &member) => Ok(()),
-                _ => err(Kind::AttributeType, format!("Group.{attr} is a member and cannot be replaced; change its attributes instead")),
-            };
-        }
         let mut o = obj.borrow_mut();
-        // 期待する型の名前。schema は 'static、宣言は借りたまま使う
+        let Some(ty) = &o.decl else {
+            return err(Kind::AttributeType, format!("{} is immutable; make a changed one with copy({attr} = ...)", o.kind));
+        };
+        let Some(f) = ty.decl.fields.iter().find(|f| f.name == attr) else {
+            return err(Kind::UndefinedAttribute, format!("{} has no attribute \"{attr}\"", o.kind));
+        };
         // 型に合わせて Tuple を作り直してから確かめる。合わなければ、どこが合わないかを出す
-        let fitted = match &o.decl {
-            Some(ty) => match ty.decl.fields.iter().find(|f| f.name == attr) {
-                Some(f) => {
-                    let value = self.coerced(value, &f.ann);
-                    match self.matches_ann(&value, &f.ann) {
-                        true => Ok(value),
-                        false => Err((f.ann.text.clone(), value)),
-                    }
-                }
-                None => return err(Kind::UndefinedAttribute, format!("{} has no attribute \"{attr}\"", o.kind)),
-            },
-            None => match schema(&o.kind).and_then(|s| s.iter().find(|a| a.name == attr)) {
-                Some(a) => {
-                    let value = self.fitted_attr(a.ty, value);
-                    match self.attr_ok(a.ty, &value) {
-                        true => Ok(value),
-                        false => Err((a.ty.to_string(), value)),
-                    }
-                }
-                None => return err(Kind::UndefinedAttribute, format!("{} has no attribute \"{attr}\"", o.kind)),
-            },
-        };
-        let value = match fitted {
-            Ok(v) => v,
-            Err((expected, bad)) => {
-                let kind = o.kind.clone();
-                drop(o);
-                return Err(self.wrong_type(Kind::AttributeType, &format!("{kind}.{attr}"), &expected, &bad));
-            }
-        };
+        let value = self.coerced(value, &f.ann);
+        if !self.matches_ann(&value, &f.ann) {
+            let (kind, expected) = (o.kind.clone(), f.ann.text.clone());
+            drop(o);
+            return Err(self.wrong_type(Kind::AttributeType, &format!("{kind}.{attr}"), &expected, &value));
+        }
         // 既にある属性は入れ替えるだけ。名前を作り直さない
-        let before = match o.attrs.get_mut(attr) {
-            Some(slot) => Some(std::mem::replace(slot, value)),
+        match o.attrs.get_mut(attr) {
+            Some(slot) => *slot = value,
             None => {
                 o.attrs.insert(attr.to_string(), value);
-                None
-            }
-        };
-        drop(o);
-        // Motion.apply は「代入が書かれたか」で拾うので、値が変わらない代入も記録する
-        if self.assigned.borrow().is_some() {
-            if let Some(log) = self.assigned.borrow_mut().as_mut() {
-                log.push((obj.clone(), attr.to_string(), before));
             }
         }
         Ok(())
-    }
-
-    /// 属性パスに値を書く。[position, x] なら position (Pos) の x だけを変える
-    /// キーフレームの値を書く。図形なら属性、変数ならそのスコープへ
-    fn write_target(&self, target: &TlTarget, path: &[String], value: Value) -> Result<()> {
-        match target {
-            TlTarget::Object(o) => self.set_path(o, path, value),
-            TlTarget::Var(scope, name) => {
-                let value = match path {
-                    [] => value,
-                    path => {
-                        let Some(current) = scope.borrow().get(name).cloned() else {
-                            return err(Kind::UndefinedVariable, format!("\"{name}\" is not defined"));
-                        };
-                        self.write_path(current, path, value)?
-                    }
-                };
-                scope.borrow_mut().insert(name.clone(), value);
-                Ok(())
-            }
-        }
-    }
-
-    fn set_path(&self, obj: &ObjRef, path: &[String], value: Value) -> Result<()> {
-        match path {
-            [] => err(Kind::UndefinedAttribute, "empty attribute path"),
-            // 属性 1 つはいちばん多い形。表を引かずに直接書く (毎フレーム何千回も通る)
-            [attr] => {
-                self.field_ok(&obj.borrow().decl, attr)?;
-                self.set_attr(obj, attr, value)
-            }
-            path => self.write_path(Value::Object(obj.clone()), path, value).map(|_| ()),
-        }
     }
 
     fn matches_type(&self, v: &Value, name: &str) -> bool {
@@ -570,6 +475,10 @@ impl Interp {
         // 関数の型。中身までは見ない
         if name.contains("->") {
             return matches!(v, Value::Func(_) | Value::Builtin(_));
+        }
+        // 長さの属性は、単位なしの数 (箱の単位) も取る
+        if name == "Length" {
+            return matches!(v, Value::Number(..) | Value::Length(_));
         }
         // 型の名前を作らずに比べる。Object と Record だけは実体に名前が入っている
         let actual: std::borrow::Cow<str> = match v.type_name_ref() {
@@ -829,6 +738,11 @@ impl Interp {
             .iter()
             .rev()
             .find_map(|s| s.borrow().get(name).cloned())
+            // center は描く先の箱の中心。箱が決まるまで数にならない長さの Vector
+            .or_else(|| {
+                use crate::lang::length::Length;
+                (name == "center").then(|| Value::LVec(Length::with_unit("vx", 50.0).expect("unit"), Length::with_unit("vy", 50.0).expect("unit")))
+            })
             // builtin の型は名前だけで値として引ける (alias 用)。module の中にだけある型は、module から取る
             .or_else(|| {
                 (Self::is_builtin_type(name) && !crate::docs::MODULE_ONLY.contains(&name)).then(|| Value::BuiltinType(name.to_string()))
@@ -837,25 +751,6 @@ impl Interp {
                 let hint = if stdlib::find(name).is_some() { format!("; add \"import {name}\"") } else { String::new() };
                 MophError::new(Kind::UndefinedVariable, format!("\"{name}\" is not defined{hint}"))
             })
-    }
-
-    /// キーフレームの書き込み先。図形なら属性、素の名前なら変数そのもの
-    fn keyframe_target(&mut self, base: &Expr, path: &[String]) -> Result<TlTarget> {
-        // 素の名前で、指しているのが図形でなければ変数として動かす
-        if let Expr::Ident(name) = base {
-            let scope = self.scopes.iter().rev().find(|s| s.borrow().contains_key(name));
-            let Some(scope) = scope else {
-                return err(Kind::UndefinedVariable, format!("\"{name}\" is not defined"));
-            };
-            let is_object = matches!(scope.borrow().get(name), Some(Value::Object(_)));
-            if !is_object {
-                return Ok(TlTarget::Var(scope.clone(), name.clone()));
-            }
-        }
-        if path.is_empty() {
-            return err(Kind::UnexpectedToken, "a keyframe writes to a variable or to an attribute of a shape");
-        }
-        Ok(TlTarget::Object(self.eval_object(base)?))
     }
 
     fn eval_object(&mut self, e: &Expr) -> Result<ObjRef> {
@@ -867,9 +762,9 @@ impl Interp {
 
     pub fn eval(&mut self, e: &Expr) -> Result<Value> {
         match e {
-            Expr::Value(v) => Ok((**v).clone()),
             Expr::Number(v) => Ok(Value::num(*v)),
             Expr::Duration(v) => Ok(Value::Duration(*v)),
+            Expr::Length(l) => Ok(Value::Length(*l)),
             Expr::Color(c) => Ok(Value::Color(*c)),
             Expr::Str(s) => Ok(Value::Str(s.clone())),
             Expr::Symbol(s) => Ok(Value::Symbol(s.clone())),
@@ -881,6 +776,8 @@ impl Interp {
                     None => Value::num(-v),
                 }),
                 Value::Duration(v) => Ok(Value::Duration(-v)),
+                Value::Length(l) => Ok(Value::Length(l.scaled(-1.0))),
+                Value::LVec(x, y) => Ok(Value::LVec(x.scaled(-1.0), y.scaled(-1.0))),
                 Value::Vector(x, y) => Ok(Value::Vector(-x, -y)),
                 Value::Vector3(x, y, z) => Ok(Value::Vector3(-x, -y, -z)),
                 v => err(Kind::OperandType, format!("cannot negate {}", v.type_name())),
@@ -936,31 +833,12 @@ impl Interp {
             }
             Expr::Attr(target, attr) => {
                 let target = self.eval(target)?;
-                self.warn_if_written_later(&target, attr);
                 match self.attr(&target, attr) {
                     Some(found) => found.get(),
                     None => err(Kind::UndefinedAttribute, no_attr(&target, attr)),
                 }
             }
             Expr::Call(callee, args) => self.call(callee, args),
-            Expr::Context(bindings, body) => {
-                let scope = new_scope();
-                for (target, alias) in bindings {
-                    let v = self.eval(target)?;
-                    scope.borrow_mut().insert(alias.clone(), v);
-                }
-                self.scopes.push(scope);
-                let result = self.run_block(body);
-                self.scopes.pop();
-                // return は関数を抜ける。context で止めない
-                match result? {
-                    Flow::Return(v) => {
-                        self.returning = Some(v.clone());
-                        Ok(v)
-                    }
-                    flow => Ok(flow.value()),
-                }
-            }
             Expr::Dict(entries) => {
                 let mut out: Vec<(String, Value)> = Vec::new();
                 for (key, e) in entries {
@@ -977,8 +855,36 @@ impl Interp {
                 Ok(Value::Dict(Rc::new(RefCell::new(out))))
             }
             Expr::Func(def) => Ok(Value::Func(Rc::new(Closure { def: def.clone(), scopes: self.scopes.clone() }))),
-            Expr::Motion(def) => self.eval_motion(def),
+            Expr::Progress(def) => self.eval_progress(def),
         }
+    }
+
+    /// progress の表。行の位置と値はここで評価する。列ごとの `_` は飛ばす
+    fn eval_progress(&mut self, def: &ProgressDef) -> Result<Value> {
+        let mut tracks: Vec<Vec<(f64, Value, Option<String>)>> = vec![Vec::new(); def.columns.len()];
+        let mut previous = f64::NEG_INFINITY;
+        for row in &def.rows {
+            let at = match self.eval(&row.at)? {
+                Value::Number(n, _) if (0.0..=1.0).contains(&n) => n,
+                v => return err(Kind::OutOfRange, format!("a progress row is at a Number within 0..1, found {v}")),
+            };
+            if at <= previous {
+                return err(Kind::OutOfRange, format!("progress rows go forward, found {at} after {previous}"));
+            }
+            previous = at;
+            for (track, cell) in tracks.iter_mut().zip(&row.cells) {
+                if let Some((e, curve)) = cell {
+                    track.push((at, self.eval(e)?, curve.clone()));
+                }
+            }
+        }
+        for (name, track) in def.columns.iter().zip(&tracks) {
+            let ends = (track.first().map(|k| k.0), track.last().map(|k| k.0));
+            if ends != (Some(0.0), Some(1.0)) {
+                return err(Kind::OutOfRange, format!("progress column :{name} needs values at 0 and 1"));
+            }
+        }
+        Ok(Value::Progress(Rc::new(ProgressTable { columns: def.columns.clone(), tracks })))
     }
 
     /// 引数を、宣言の順に並んだフィールド名へ割り当てる。位置と名前を混ぜられる
@@ -987,6 +893,7 @@ impl Interp {
         match f {
             Value::Func(c) => self.apply(c, args.into_iter().map(|v| (None, v)).collect()),
             Value::Builtin(name) => call_native(name, &args),
+            Value::Progress(table) => progress_at(table, &args),
             v => err(Kind::ArgumentType, format!("{} is not a function", v.type_name())),
         }
     }
@@ -1051,93 +958,6 @@ impl Interp {
         Ok(map)
     }
 
-    /// place / addTrack の引数から、置くものを組み立てる
-    pub(crate) fn make_placed(&mut self, who: &str, args: &[(Option<String>, Value)]) -> Result<Placed> {
-                
-                let track = match args.first() {
-                    Some((None, Value::Timeline(tl))) if tl.needs_duration() => {
-                        return err(Kind::DurationRequired, "a timeline with relative (0..1) keyframes needs duration; set tl.duration = 8s");
-                    }
-                    Some((None, Value::Timeline(tl))) => Track::Timeline(tl.clone()),
-                    Some((None, Value::Object(o))) if o.borrow().kind == "View" => Track::Container(o.clone()),
-                    Some((None, Value::Object(o))) if o.borrow().kind == "Narration" => {
-                        if !o.borrow().attrs.contains_key("duration") {
-                            return err(Kind::DurationRequired, "a Narration needs duration before it is placed");
-                        }
-                        Track::Narration(o.clone(), None)
-                    }
-                    Some((None, Value::Audio(a))) => Track::Audio(a.clone(), Clip { cut: None, volume: 1.0, looping: false }),
-                    Some((None, Value::Motion(_))) => return err(Kind::NotPlaceable, "Motion cannot be placed; apply it to make a Timeline"),
-                    Some((None, v)) => return err(Kind::ArgumentType, format!("{who} expects Timeline, View, Audio or Narration, found {}", v.type_name())),
-                    _ => return err(Kind::ArgumentType, format!("{who} expects a Timeline, View, Audio or Narration as the first argument")),
-                };
-                let mut placed = Placed { track, at: 0.0, fade_in: 0.0, fade_out: 0.0 };
-                for (name, v) in &args[1..] {
-                    let arg = name.as_deref().ok_or_else(|| MophError::new(Kind::ArgumentType, format!("{who} takes one positional argument")))?;
-                    // 音声だけの引数
-                    if let Track::Audio(_, clip) = &mut placed.track {
-                        match (arg, v) {
-                            ("duration", Value::Duration(d)) => {
-                                clip.cut = Some(*d);
-                                continue;
-                            }
-                            ("volume", Value::Number(n, _)) => {
-                                clip.volume = *n;
-                                continue;
-                            }
-                            ("loop", Value::Bool(b)) => {
-                                clip.looping = *b;
-                                continue;
-                            }
-                            ("duration" | "volume" | "loop", v) => {
-                                let expected = match arg {
-                                    "volume" => "Number",
-                                    "loop" => "Bool",
-                                    _ => "Duration",
-                                };
-                                return err(Kind::ArgumentType, format!("{who} {arg} expects {expected}, found {}", v.type_name()));
-                            }
-                            _ => {}
-                        }
-                    }
-                    // 読み上げだけの引数。どう喋らせるかは置くときに渡す (Narration は文と長さだけ)
-                    if let Track::Narration(narration, engine) = &mut placed.track {
-                        match (arg, v) {
-                            ("voice", Value::Object(o)) if crate::render::voice::by_name(&o.borrow().kind).is_some() => {
-                                *engine = Some(o.clone());
-                                continue;
-                            }
-                            ("voice", v) => {
-                                let names = crate::render::voice::names().join(" ");
-                                return err(Kind::ArgumentType, format!("{who} voice expects one of {names}, found {}", v.type_name()));
-                            }
-                            ("volume", Value::Number(n, _)) => {
-                                narration.borrow_mut().attrs.insert("volume".to_string(), Value::num(*n));
-                                continue;
-                            }
-                            ("volume", v) => {
-                                return err(Kind::ArgumentType, format!("{who} volume expects Number, found {}", v.type_name()));
-                            }
-                            _ => {}
-                        }
-                    }
-                    let slot = match arg {
-                        "at" => &mut placed.at,
-                        "fadeIn" | "fadeOut" if matches!(placed.track, Track::Narration(..)) => {
-                            return err(Kind::ArgumentType, format!("{who}: a Narration has no {arg}; set its duration"));
-                        }
-                        "fadeIn" => &mut placed.fade_in,
-                        "fadeOut" => &mut placed.fade_out,
-                        other => return err(Kind::ArgumentType, format!("{who} has no argument \"{other}\"")),
-                    };
-                    let Value::Duration(d) = v else {
-                        return err(Kind::ArgumentType, format!("{who} {arg} expects Duration, found {}", v.type_name()));
-                    };
-                    *slot = *d;
-                }
-        Ok(placed)
-    }
-
     /// 呼んでは作れない名前。builtin の型なら書き方を示す
     fn cannot_construct(&self, kind: &str) -> Result<Value> {
         let Some(t) = crate::docs::types().iter().find(|t| t.name == kind) else {
@@ -1156,30 +976,20 @@ impl Interp {
         }
     }
 
-    /// Pos の anchor。書かなければ :center
-    fn anchor_of(&self, v: Option<&Value>) -> Result<String> {
-        let Some(v) = v else { return Ok("center".to_string()) };
-        self.check_type(v, "Anchor")?;
-        match v {
-            Value::Symbol(a) => Ok(a.clone()),
-            v => Err(self.wrong_type(Kind::ArgumentType, "Pos.anchor", "Anchor", v)),
-        }
-    }
-
-    /// Group(...) の名前の無い引数。図形か Group だけを受ける
-    fn group_items(&mut self, args: &[Arg]) -> Result<Vec<(Option<String>, ObjRef)>> {
+    /// Group(...) の名前の無い引数。Node だけを受ける。`...xs` で並びを広げられる
+    fn group_items(&mut self, args: &[Arg]) -> Result<Vec<ObjRef>> {
+        let unnamed: Vec<Arg> = args.iter().filter(|a| a.name.is_none()).cloned().collect();
         let mut items = Vec::new();
-        for a in args.iter().filter(|a| !is_group_attr(a)) {
-            let v = self.eval(&a.value)?;
-            items.push((a.name.clone(), self.group_item(v)?));
+        for (_, v) in self.eval_args(&unnamed)? {
+            items.push(self.group_item(v)?);
         }
         Ok(items)
     }
 
-    /// View は自分の箱と伸縮を持つので、Group の中身にはしない
+    /// Group の中身は図形と Group
     fn group_item(&self, v: Value) -> Result<ObjRef> {
         match v {
-            Value::Object(o) if o.borrow().kind != "View" && self.matches_type(&Value::Object(o.clone()), "Shape") => Ok(o),
+            Value::Object(o) if self.matches_type(&Value::Object(o.clone()), "Shape") => Ok(o),
             v => err(Kind::ArgumentType, format!("Group holds shapes and Groups, found {}", v.type_name())),
         }
     }
@@ -1200,7 +1010,10 @@ impl Interp {
                 let map = self.resolve_args(kind, &["x", "y"], args)?;
                 match (map.get("x"), map.get("y")) {
                     (Some(Value::Number(x, _)), Some(Value::Number(y, _))) => Ok(Value::Vector(*x, *y)),
-                    _ => err(Kind::ArgumentType, "Vector needs x and y (Number)"),
+                    (Some(x), Some(y)) if x.as_length().is_some() && y.as_length().is_some() => {
+                        Ok(Value::LVec(x.as_length().expect("length"), y.as_length().expect("length")))
+                    }
+                    _ => err(Kind::ArgumentType, "Vector needs x and y (Number or Length)"),
                 }
             }
             "Vector3" => {
@@ -1208,22 +1021,6 @@ impl Interp {
                 match (map.get("x"), map.get("y"), map.get("z")) {
                     (Some(Value::Number(x, _)), Some(Value::Number(y, _)), Some(Value::Number(z, _))) => Ok(Value::Vector3(*x, *y, *z)),
                     _ => err(Kind::ArgumentType, "Vector3 needs x, y and z (Number)"),
-                }
-            }
-            "Pos" => {
-                // Pos(x, y, anchor = :center) と Pos(v: Vector, anchor = :center)
-                if let Some(Arg { name: None, value, spread: false }) = args.first() {
-                    if let Value::Vector(x, y) = self.eval(value)? {
-                        let rest = self.resolve_args(kind, &["anchor"], &args[1..])?;
-                        let anchor = self.anchor_of(rest.get("anchor"))?;
-                        return Ok(Value::Apos(anchor, x, y));
-                    }
-                }
-                let map = self.resolve_args(kind, &["x", "y", "anchor"], args)?;
-                let anchor = self.anchor_of(map.get("anchor"))?;
-                match (map.get("x"), map.get("y")) {
-                    (Some(Value::Number(x, _)), Some(Value::Number(y, _))) => Ok(Value::Apos(anchor, *x, *y)),
-                    _ => err(Kind::ArgumentType, "Pos needs x and y (Number)"),
                 }
             }
             "Color" => {
@@ -1282,17 +1079,8 @@ impl Interp {
                     _ => err(Kind::ArgumentType, "Range needs start and end (Number)"),
                 }
             }
-            "Timeline" => {
-                let map = self.resolve_args(kind, &["duration"], args)?;
-                let duration = match map.get("duration") {
-                    Some(Value::Duration(d)) => Some(*d),
-                    None => None,
-                    Some(v) => return Err(self.wrong_type(Kind::ArgumentType, "Timeline.duration", "Duration", v)),
-                };
-                Ok(Value::Timeline(Rc::new(Timeline::empty(duration))))
-            }
             _ => {
-                // Group は属性の名前でない引数が中身。名前を付けた中身は、その名前で読める
+                // Group は名前の無い引数が中身で、名前のある引数が属性
                 let items = match kind {
                     "Group" => self.group_items(args)?,
                     _ => Vec::new(),
@@ -1300,7 +1088,7 @@ impl Interp {
                 let named: Vec<Arg>;
                 let args = match kind {
                     "Group" => {
-                        named = args.iter().filter(|a| is_group_attr(a)).cloned().collect();
+                        named = args.iter().filter(|a| a.name.is_some()).cloned().collect();
                         &named[..]
                     }
                     _ => args,
@@ -1339,13 +1127,7 @@ impl Interp {
                     if kind == "ZoomPath" {
                         attrs.insert("scale".into(), self.zoom_table(&attrs)?);
                     }
-                    for (name, item) in &items {
-                        if let Some(name) = name {
-                            attrs.insert(name.clone(), Value::Object(item.clone()));
-                        }
-                    }
-                    let children = items.into_iter().map(|(_, item)| item).collect();
-                    return Ok(Value::Object(Rc::new(RefCell::new(Object { id: next_object_id(), kind: kind.to_string(), decl: None, attrs, children, placed: false, tracks: vec![] }))));
+                    return Ok(Value::Object(Rc::new(RefCell::new(Object { id: next_object_id(), kind: kind.to_string(), decl: None, attrs, children: items, layers: vec![] }))));
                 }
                 let Some(ty) = self.lookup_type(kind) else {
                     return self.cannot_construct(kind);
@@ -1452,9 +1234,7 @@ impl Interp {
                     decl: src.decl.clone(),
                     attrs,
                     children: src.children.clone(),
-                    // 複製はまだどこにも置かれていない
-                    placed: false,
-                    tracks: src.tracks.clone(),
+                    layers: src.layers.clone(),
                 })))))
             }
             _ => Ok(None),
@@ -1520,8 +1300,7 @@ impl Interp {
                 decl: Some(ty.clone()),
                 attrs: fields.into_iter().collect(),
                 children: vec![],
-                placed: false,
-                tracks: vec![],
+                layers: vec![],
             })))
         })
     }
@@ -1593,10 +1372,11 @@ impl Interp {
                         let name = name.clone();
                         return self.construct_kind(&name, args);
                     }
-                    let values = self.eval_args(args)?.into_iter().map(|(_, v)| v).collect::<Vec<_>>();
+                    let given = self.eval_args(args)?;
                     return match item {
-                        Value::Builtin(name) => call_builtin(name, values),
-                        Value::Func(closure) => self.apply(&closure, values.into_iter().map(|v| (None, v)).collect()),
+                        Value::Builtin(name) => call_builtin(name, given.into_iter().map(|(_, v)| v).collect()),
+                        Value::Func(closure) => self.apply(&closure, given),
+                        Value::Progress(table) => progress_at(&table, &given.into_iter().map(|(_, v)| v).collect::<Vec<_>>()),
                         v => err(Kind::ArgumentType, format!("{} is not callable", v.type_name())),
                     };
                 }
@@ -1622,169 +1402,13 @@ impl Interp {
                     let values = self.eval_args(args)?.into_iter().map(|(_, v)| v).collect::<Vec<_>>();
                     call_builtin(name, values)
                 }
+                Value::Progress(table) => {
+                    let values = self.eval_args(args)?.into_iter().map(|(_, v)| v).collect::<Vec<_>>();
+                    progress_at(&table, &values)
+                }
                 v => err(Kind::ArgumentType, format!("{} is not callable", v.type_name())),
             },
         }
-    }
-
-    fn eval_motion(&mut self, def: &MotionDef) -> Result<Value> {
-        let is_assign = def.rows.iter().flat_map(|r| &r.items).any(|i| matches!(i, RowItem::Assign(..) | RowItem::Block(_)));
-        let is_value = def.rows.iter().flat_map(|r| &r.items).any(|i| matches!(i, RowItem::Value(_)));
-        if is_assign && is_value {
-            return err(Kind::UnexpectedToken, "a motion cannot mix assignments and values");
-        }
-        // 時刻は式なので、ここで評価して秒か割合かを決める
-        let mut times: Vec<(f64, Option<f64>)> = Vec::new();
-        let mut relative = None;
-        for row in &def.rows {
-            let (time, rel) = self.keyframe_time(&row.time)?;
-            let end = match &row.end {
-                Some(e) => {
-                    let (end, end_rel) = self.keyframe_time(e)?;
-                    if end_rel != rel {
-                        return err(Kind::DurationRequired, "both ends of a keyframe range must be the same kind");
-                    }
-                    if end <= time {
-                        return err(Kind::OutOfRange, format!("keyframe range must go forward, found {time} to {end}"));
-                    }
-                    Some(end)
-                }
-                None => None,
-            };
-            match relative {
-                None => relative = Some(rel),
-                Some(first) if first != rel => return err(Kind::DurationRequired, "keyframe times must be all Duration or all Number (0..1)"),
-                Some(_) => {}
-            }
-            if rel && !(0.0..=1.0).contains(&time) {
-                return err(Kind::OutOfRange, format!("relative keyframe time must be within 0..1, found {time}"));
-            }
-            times.push((time, end));
-        }
-        let relative = relative.unwrap_or(false);
-        // 対象と属性パスを列挙した形 → Timeline
-        if let Some((target_expr, paths)) = &def.target {
-            let target = self.eval_object(target_expr)?;
-            let mut keyframes = Vec::new();
-            for (row, &(time, end)) in def.rows.iter().zip(&times) {
-                if row.items.len() > paths.len() {
-                    return err(Kind::ArityMismatch, format!("keyframe at {time}s has {} values but {} attributes are listed", row.items.len(), paths.len()));
-                }
-                let assigns = row
-                    .items
-                    .iter()
-                    .zip(paths)
-                    .map(|(item, path)| {
-                        let RowItem::Value(e) = item else { unreachable!() };
-                        TlAssign { target: TlTarget::Object(target.clone()), path: path.clone(), expr: e.clone(), scopes: self.scopes.clone() }
-                    })
-                    .collect();
-                keyframes.push(TlKeyframe { time, end, assigns, block: None, ease: row.ease.clone() });
-            }
-            return Ok(Value::Timeline(Rc::new(Timeline { param: "t".into(), secs: None, keyframes, relative, duration: Cell::new(None), tracks: RefCell::new(Vec::new()), groups: RefCell::new(None) }.normalize())));
-        }
-        // 属性への割り当て → Timeline
-        if is_assign {
-            if def.params.len() > 2 {
-                return err(Kind::ArityMismatch, "a motion that assigns takes (書かれた時刻) か (書かれた時刻, 経過秒)");
-            }
-            let param = def.params.first().cloned().unwrap_or_else(|| "t".into());
-            // 2 つ目は経過秒。0..1 の割合で書いた行から、秒で決まる動きを書ける
-            let secs = def.params.get(1).cloned();
-            let mut keyframes = Vec::new();
-            for (row, &(time, end)) in def.rows.iter().zip(&times) {
-                // ブロックの行は、区間の間まるごと毎フレーム走らせる
-                if let [RowItem::Block(body)] = row.items.as_slice() {
-                    if end.is_none() {
-                        return err(Kind::UnexpectedToken, "a block keyframe needs a range, like 0..1: { ... }");
-                    }
-                    let block = Some(Rc::new(crate::lang::value::TlBlock { body: body.clone(), scopes: self.scopes.clone() }));
-                    keyframes.push(TlKeyframe { time, end, assigns: Vec::new(), block, ease: row.ease.clone() });
-                    continue;
-                }
-                let mut assigns = Vec::new();
-                for item in &row.items {
-                    let RowItem::Assign(obj, path, e) = item else { unreachable!() };
-                    let target = self.keyframe_target(obj, path)?;
-                    assigns.push(TlAssign { target, path: path.clone(), expr: e.clone(), scopes: self.scopes.clone() });
-                }
-                keyframes.push(TlKeyframe { time, end, assigns, block: None, ease: row.ease.clone() });
-            }
-            return Ok(Value::Timeline(Rc::new(Timeline { param, secs, keyframes, relative, duration: Cell::new(None), tracks: RefCell::new(Vec::new()), groups: RefCell::new(None) }.normalize())));
-        }
-        // 値の表 → Motion。params[0] は行の時刻、以降は左の列
-        if times.iter().any(|(_, end)| end.is_some()) {
-            return err(Kind::UnexpectedToken, "a keyframe range (0..1:) needs a target; use it with assignments or motion target [...]");
-        }
-        let mut rows = Vec::new();
-        for (row, &(time, _)) in def.rows.iter().zip(&times) {
-            self.scopes.push(new_scope());
-            let result = (|| {
-                if let Some(t) = def.params.first() {
-                    self.scopes.last().expect("scope").borrow_mut().insert(t.clone(), Value::num(time));
-                }
-                let mut values = Vec::new();
-                for (i, item) in row.items.iter().enumerate() {
-                    let RowItem::Value(e) = item else { unreachable!() };
-                    let v = self.eval(e)?;
-                    if let Some(name) = def.params.get(i + 1) {
-                        self.scopes.last().expect("scope").borrow_mut().insert(name.clone(), v.clone());
-                    }
-                    values.push(v);
-                }
-                Ok(values)
-            })();
-            self.scopes.pop();
-            rows.push(MotionRowVal { time, values: result?, ease: row.ease.clone() });
-        }
-        Ok(Value::Motion(Rc::new(Motion { rows, relative, duration: Cell::new(None) }.normalize())))
-    }
-
-    /// キーフレームの時刻の式。Duration なら秒、Number なら 0..1 の割合
-    fn keyframe_time(&mut self, e: &Expr) -> Result<(f64, bool)> {
-        match self.eval(e)? {
-            Value::Duration(d) => Ok((d, false)),
-            Value::Number(n, _) => Ok((n, true)),
-            v => err(Kind::DurationRequired, format!("a keyframe time is a Duration (2s) or a Number (0..1), found {}", v.type_name())),
-        }
-    }
-
-    /// Motion の各行で f(target, t, [列...]) を呼び、その中で target の属性に代入された値をキーフレームとして記録する
-    pub(crate) fn apply_motion(&mut self, motion: &Motion, args: Vec<(Option<String>, Value)>) -> Result<Value> {
-        let [(None, Value::Object(target)), (None, Value::Func(f))] = args.as_slice() else {
-            // 中で属性に代入する必要があるので、math の関数は渡せない
-            return err(Kind::ArgumentType, "Motion.apply expects a target and a func written in the script");
-        };
-        let mut keyframes = Vec::new();
-        for row in &motion.rows {
-            let before = target.borrow().attrs.clone();
-            let cols_value = Value::List(Rc::new(RefCell::new(row.values.clone())));
-            // 値が変わったかではなく、代入が書かれたかで拾う。今と同じ値を書いた行も残す
-            *self.assigned.borrow_mut() = Some(Vec::new());
-            let result = self.apply(f, vec![(None, Value::Object(target.clone())), (None, Value::Duration(row.time)), (None, cols_value)]);
-            let written = self.assigned.borrow_mut().take().unwrap_or_default();
-            result?;
-            let mut attrs: Vec<String> = Vec::new();
-            for (obj, attr, _) in written {
-                if Rc::ptr_eq(&obj, target) && !attrs.contains(&attr) {
-                    attrs.push(attr);
-                }
-            }
-            let assigns = attrs
-                .into_iter()
-                .filter_map(|attr| {
-                    target.borrow().attrs.get(&attr).map(|v| TlAssign {
-                        target: TlTarget::Object(target.clone()),
-                        path: vec![attr.clone()],
-                        expr: Expr::from_value(v),
-                        scopes: vec![],
-                    })
-                })
-                .collect();
-            target.borrow_mut().attrs = before;
-            keyframes.push(TlKeyframe { time: row.time, end: None, assigns, block: None, ease: row.ease.clone() });
-        }
-        Ok(Value::Timeline(Rc::new(Timeline { param: "t".into(), secs: None, keyframes, relative: motion.relative, duration: Cell::new(motion.duration.get()), tracks: RefCell::new(Vec::new()), groups: RefCell::new(None) }.normalize())))
     }
 
     /// ZoomPath の表。倍率 1 のときの 1 箱単位あたりの長さ (unit) を zoom(t) で割り、
@@ -1839,7 +1463,122 @@ impl Interp {
         for (name, value) in defaults("Path") {
             attrs.entry((*name).to_string()).or_insert_with(|| value.clone());
         }
-        Ok(Value::Object(Rc::new(RefCell::new(Object { id: next_object_id(), kind: "Path".into(), decl: None, attrs, children: vec![], placed: false, tracks: vec![] }))))
+        Ok(Value::Object(Rc::new(RefCell::new(Object { id: next_object_id(), kind: "Path".into(), decl: None, attrs, children: vec![], layers: vec![] }))))
+    }
+
+    /// `comp.place(name, content, in = , out = )`。置いた順が積み重ねの順
+    fn place_layer(&mut self, comp: &ObjRef, args: &[(Option<String>, Value)]) -> Result<Value> {
+        if let Some((Some(other), _)) = args.iter().find(|(n, _)| n.as_deref().is_some_and(|n| n != "in" && n != "out")) {
+            return err(Kind::ArgumentType, format!("Composition.place has no argument \"{other}\""));
+        }
+        let mut positional = args.iter().filter(|(n, _)| n.is_none()).map(|(_, v)| v);
+        let (Some(Value::Str(name)), Some(content), None) = (positional.next(), positional.next(), positional.next()) else {
+            return err(Kind::ArityMismatch, "Composition.place takes a name, what to place, and in = and out =");
+        };
+        let time = |key: &str| match args.iter().find(|(n, _)| n.as_deref() == Some(key)) {
+            Some((_, Value::Duration(d))) => Ok(*d),
+            Some((_, v)) => err(Kind::ArgumentType, format!("Composition.place {key} expects Duration, found {}", v.type_name())),
+            None => err(Kind::ArityMismatch, format!("Composition.place needs {key} =")),
+        };
+        let (at, out) = (time("in")?, time("out")?);
+        if !(at < out) {
+            return err(Kind::OutOfRange, format!("Composition.place: out must be after in, found in = {at}s and out = {out}s"));
+        }
+        match content {
+            Value::Func(_) | Value::Audio(_) => {}
+            Value::Object(o) if Rc::ptr_eq(o, comp) => return err(Kind::OutOfRange, "a Composition cannot be placed in itself"),
+            Value::Object(o) if o.borrow().kind == "Composition" || o.borrow().kind == "Narration" || self.matches_type(content, "Shape") => {}
+            v => return err(Kind::NotPlaceable, format!("Composition.place expects a Node or func (t), found {}", v.type_name())),
+        }
+        if comp.borrow().layers.iter().any(|l| l.name == *name) {
+            return err(Kind::AlreadyPlaced, format!("a layer named \"{name}\" is already placed"));
+        }
+        comp.borrow_mut().layers.push(Layer { name: name.clone(), content: content.clone(), at, out });
+        Ok(Value::Nothing)
+    }
+
+    /// 組み込みの値の複製。名前付きの引数で書いた属性だけが変わる
+    fn copy_builtin(&mut self, obj: &ObjRef, args: Vec<(Option<String>, Value)>) -> Result<Value> {
+        let kind = obj.borrow().kind.clone();
+        let sch = schema(&kind).expect("a builtin kind has a schema");
+        let mut attrs = obj.borrow().attrs.clone();
+        for (name, v) in args {
+            let Some(name) = name else {
+                return err(Kind::ArityMismatch, format!("{kind}.copy takes named arguments, like copy(radius = 2)"));
+            };
+            let Some(a) = sch.iter().find(|a| a.name == name) else {
+                return err(Kind::UndefinedAttribute, format!("{kind} has no attribute \"{name}\""));
+            };
+            let v = self.fitted_attr(a.ty, v);
+            if !self.attr_ok(a.ty, &v) {
+                return Err(self.wrong_type(Kind::ArgumentType, &format!("{kind}.{name}"), a.ty, &v));
+            }
+            attrs.insert(name, v);
+        }
+        let src = obj.borrow();
+        Ok(Value::Object(Rc::new(RefCell::new(Object { id: next_object_id(), kind, decl: None, attrs, children: src.children.clone(), layers: src.layers.clone() }))))
+    }
+
+    /// 動画の長さ。output した Composition の duration
+    pub fn duration_of(comp: &ObjRef) -> Result<f64> {
+        match comp.borrow().attrs.get("duration") {
+            Some(Value::Duration(d)) => Ok(*d),
+            _ => err(Kind::AttributeType, "Composition.duration is not set"),
+        }
+    }
+
+    /// 描くのに GPU が要る塗りが、どこかの時刻にあるか。Layer の始まりと真ん中の時刻で調べる
+    pub fn uses_gpu_fill(&mut self, comp: &ObjRef) -> Result<bool> {
+        let mut times: Vec<f64> = comp.borrow().layers.iter().flat_map(|l| [l.at, (l.at + l.out) / 2.0]).collect();
+        times.sort_by(f64::total_cmp);
+        times.dedup();
+        for t in times {
+            let frame = self.frame(comp, t)?;
+            if crate::render::scene::uses_gpu_fill(&frame) {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    /// 時刻 t の Composition を、その時刻に存在する Node だけを集めた木にする。
+    /// 描くのは、返した木。Layer の関数は `t - in` で呼ぶ。同じ t には同じ木が返る
+    pub fn frame(&mut self, comp: &ObjRef, t: f64) -> Result<ObjRef> {
+        let nodes = self.nodes_at(comp, t)?;
+        let attrs = comp.borrow().attrs.clone();
+        Ok(Rc::new(RefCell::new(Object { id: next_object_id(), kind: "View".into(), decl: None, attrs, children: nodes, layers: vec![] })))
+    }
+
+    /// Composition の Layer のうち、t に存在するものの Node。積み重ねの順
+    fn nodes_at(&mut self, comp: &ObjRef, t: f64) -> Result<Vec<ObjRef>> {
+        let layers: Vec<Layer> = comp.borrow().layers.iter().filter(|l| l.exists_at(t)).cloned().collect();
+        let mut out = Vec::new();
+        for layer in layers {
+            let local = t - layer.at;
+            let node = match &layer.content {
+                Value::Func(f) => match self.apply(f, vec![(None, Value::Duration(local))])? {
+                    Value::Object(o) => o,
+                    v => return err(Kind::ArgumentType, format!("layer \"{}\": the function must return a Node, found {}", layer.name, v.type_name())),
+                },
+                Value::Object(o) => o.clone(),
+                // 音と読み上げは描かない
+                _ => continue,
+            };
+            let kind = node.borrow().kind.clone();
+            match kind.as_str() {
+                "Narration" => {}
+                "Composition" => out.push(self.nested(&node, local)?),
+                _ => out.push(node),
+            }
+        }
+        Ok(out)
+    }
+
+    /// 入れ子の Composition。自分の箱を基準にした Group として描く
+    fn nested(&mut self, comp: &ObjRef, t: f64) -> Result<ObjRef> {
+        let children = self.nodes_at(comp, t)?;
+        let attrs = comp.borrow().attrs.clone();
+        Ok(Rc::new(RefCell::new(Object { id: next_object_id(), kind: "Group".into(), decl: None, attrs, children, layers: vec![] })))
     }
 
     pub(crate) fn method(&mut self, obj: &ObjRef, method: &str, args: Vec<(Option<String>, Value)>) -> Result<Value> {
@@ -1894,77 +1633,9 @@ impl Interp {
                 let (w, h) = (f64::from(layout.width()), f64::from(layout.height()));
                 Ok(Value::Vector(wrap.map_or(w, f64::from), h))
             }
-            // 後から足す。ループで中身を作るとき用
-            ("Group", "place") => match args.as_slice() {
-                [(None, v)] => {
-                    let item = self.group_item(v.clone())?;
-                    obj.borrow_mut().children.push(item);
-                    Ok(Value::Nothing)
-                }
-                _ => err(Kind::ArityMismatch, "Group.place takes one shape"),
-            },
-            ("View", "place") => match args.first() {
-                Some((None, Value::Object(child))) if child.borrow().kind == "View" => {
-                    if Rc::ptr_eq(child, obj) {
-                        return err(Kind::OutOfRange, "a View cannot be placed in itself");
-                    }
-                    // 置き先での位置と大きさは子の属性なので、二度置くと後の置き方が前を上書きしてしまう
-                    if child.borrow().placed {
-                        return err(Kind::AlreadyPlaced, "this View is already placed; place a copy() of it instead");
-                    }
-                    // 置き先での位置と大きさは子 View の属性として持つ
-                    for (name, v) in &args[1..] {
-                        match name.as_deref() {
-                            Some("at") => self.set_attr(child, "position", v.clone())?,
-                            Some("w") => self.set_attr(child, "w", v.clone())?,
-                            Some("h") => self.set_attr(child, "h", v.clone())?,
-                            Some(other) => return err(Kind::ArgumentType, format!("View.place has no argument \"{other}\"")),
-                            None => return err(Kind::ArgumentType, "View.place takes one positional argument"),
-                        }
-                    }
-                    let c = child.borrow();
-                    if !c.attrs.contains_key("position") || !(c.attrs.contains_key("w") || c.attrs.contains_key("h")) {
-                        return err(Kind::ArityMismatch, "placing a View needs at: and w: or h:");
-                    }
-                    drop(c);
-                    child.borrow_mut().placed = true;
-                    obj.borrow_mut().children.push(child.clone());
-                    Ok(Value::Nothing)
-                }
-                Some((None, Value::Object(child))) if self.matches_type(&Value::Object(child.clone()), "Placeable") => {
-                    // 図形は自分の position で置くので、at / w / h は受け取らない
-                    if let Some((name, _)) = args.get(1) {
-                        let what = name.clone().unwrap_or_else(|| "a second value".to_string());
-                        let kind = child.borrow().kind.clone();
-                        return err(Kind::ArgumentType, format!("View.place has no argument \"{what}\" for a {kind}; set its position"));
-                    }
-                    obj.borrow_mut().children.push(child.clone());
-                    Ok(Value::Nothing)
-                }
-                Some((None, Value::Motion(_))) => err(Kind::NotPlaceable, "Motion cannot be placed; apply it to make a Timeline"),
-                Some((None, v)) => err(Kind::ArgumentType, format!("View.place expects Placeable, found {}", v.type_name())),
-                _ => err(Kind::ArgumentType, "View.place expects a Shape as the first argument"),
-            },
-            ("View", "copy") => {
-                if !args.is_empty() {
-                    return err(Kind::ArityMismatch, "View.copy takes no arguments");
-                }
-                let src = obj.borrow();
-                Ok(Value::Object(Rc::new(RefCell::new(Object {
-                    id: next_object_id(),
-                    kind: src.kind.clone(),
-                    decl: src.decl.clone(),
-                    attrs: src.attrs.clone(),
-                    children: src.children.clone(),
-                    placed: false,
-                    tracks: src.tracks.clone(),
-                }))))
-            }
-            ("View", "addTrack") => {
-                let placed = self.make_placed(&format!("{kind}.{method}"), &args)?;
-                obj.borrow_mut().tracks.push(placed);
-                Ok(Value::Nothing)
-            }
+            ("Composition", "place") => self.place_layer(obj, &args),
+            // 組み込みの値は不変。変えたものは copy で作る
+            (_, "copy") if obj.borrow().decl.is_none() && schema(&kind).is_some() => self.copy_builtin(obj, args),
             // カメラは投影の計算だけで、インタプリタの状態に触らない
             ("PerspectiveCamera" | "OrthographicCamera" | "IsometricCamera", _) => stdlib::space3d::camera_method(&obj.borrow(), method, &args),
             ("Transform3", _) => stdlib::space3d::transform_method(&obj.borrow(), method, &args),
@@ -2061,286 +1732,6 @@ impl Interp {
         result
     }
 
-    /// 出力する View から辿れる全オブジェクトの属性を覚える。描画を始める前に 1 度呼ぶ
-    pub fn snapshot(&mut self, view: &ObjRef) {
-        let mut seen: Vec<ObjRef> = Vec::new();
-        collect_objects(view, &mut seen);
-        self.initial = seen.into_iter().map(|o| { let attrs = o.borrow().attrs.clone(); (o, attrs) }).collect();
-    }
-
-    /// 描画の前に呼ぶ。全オブジェクトを初期状態に戻す (状態を時刻の関数にする)。時刻が戻っていたら、終わった Timeline の記憶を捨てる
-    pub fn begin_frame(&mut self, t: f64) {
-        for (obj, attrs) in &self.initial {
-            obj.borrow_mut().attrs = attrs.clone();
-        }
-        if t < self.last_t {
-            self.finished.clear();
-        }
-        self.last_t = t;
-    }
-
-    /// 1 フレームぶん、置かれた Timeline を順に適用する。
-    /// 後に置いた Timeline が書く先を先に集めておき、先に走る側がそれを読んだら知らせる
-    pub fn apply_tracks(&mut self, tracks: &[Placed], t: f64) -> Result<()> {
-        self.later_writes.clear();
-        self.apply_siblings(tracks, t, 0.0)
-    }
-
-    /// 同じ場所に置かれた Timeline を順に。1 本走らせる間は、後ろの兄弟が書く先を控えておく
-    fn apply_siblings(&mut self, tracks: &[Placed], t: f64, origin: f64) -> Result<()> {
-        // 読む側がいなければ、控える意味も無い
-        if !tracks.iter().any(Self::reads_anything) {
-            for placed in tracks {
-                self.apply_track_from(placed, t, origin)?;
-            }
-            return Ok(());
-        }
-        for (i, placed) in tracks.iter().enumerate() {
-            let outer = self.later_writes.clone();
-            for later in &tracks[i + 1..] {
-                Self::writes_at(later, t, &mut self.later_writes);
-            }
-            let result = self.apply_track_from(placed, t, origin);
-            self.later_writes = outer;
-            result?;
-        }
-        Ok(())
-    }
-
-    /// 後に place した Timeline が書く属性を、先に走る側が読んだときに知らせる。
-    /// 読めるのは書かれる前の値なので、黙っていると気づかないまま間違う
-    fn warn_if_written_later(&mut self, target: &Value, attr: &str) {
-        if self.later_writes.is_empty() {
-            return;
-        }
-        let Value::Object(obj) = target else { return };
-        if !self.later_writes.contains(&(Rc::as_ptr(obj) as usize, attr.to_string())) {
-            return;
-        }
-        let kind = obj.borrow().kind.clone();
-        if self.warned.insert(format!("later-write {:p}.{attr}", Rc::as_ptr(obj))) {
-            eprintln!(
-                "warning: reading {kind}.{attr}, which a Timeline placed later writes at this time. \
-                 The value read is the one from before it wrote; place that Timeline first"
-            );
-        }
-    }
-
-    /// 置かれた Timeline を、親の時間軸の時刻 t で対象に書き込む。
-    /// 開始前は何もしない。終了後は最後の状態を保つ (duration で切る)。
-    /// origin は親の絶対開始時刻で、終わった Timeline を区別する鍵に使う
-    fn apply_track_from(&mut self, placed: &Placed, t: f64, origin: f64) -> Result<()> {
-        let duration = placed.track.duration();
-        let elapsed = t - placed.at;
-        let local = elapsed.min(duration);
-        if local < 0.0 {
-            return Ok(());
-        }
-        let origin = origin + placed.at;
-        match &placed.track {
-            // 音声と字幕は描画には関わらない (render が動画に付ける)
-            Track::Audio(..) | Track::Narration(..) => {}
-            Track::Container(obj) => {
-                let children = obj.borrow().tracks.clone();
-                self.apply_siblings(&children, local, origin)?;
-                // View は中身をまとめて 1 枚にできるので、その opacity を動かす
-                if let Some(factor) = fade_factor(placed, elapsed, local, duration) {
-                    let obj = obj.clone();
-                    self.set_attr(&obj, "opacity", Value::num(factor))?;
-                }
-            }
-            Track::Timeline(tl) if tl.keyframes.is_empty() => {
-                let children = tl.tracks.borrow().clone();
-                self.apply_siblings(&children, local, origin)?;
-            }
-            Track::Timeline(tl) if local >= duration && placed.fade_out <= 0.0 => {
-                // 終わった Timeline。最後の値を 1 度だけ評価し、以後は書き込みだけにする (書き込み順は保つ)
-                let key = (Rc::as_ptr(tl) as usize, origin.to_bits());
-                if let Some(values) = self.finished.get(&key) {
-                    // 借りたまま回す。毎フレーム通るので (対象, パス, 値) を作り直さない
-                    for (target, path, value) in values {
-                        self.write_target(target, path, value.clone())?;
-                    }
-                    return Ok(());
-                }
-                self.apply_timeline(tl, local)?;
-                let mut values = Vec::new();
-                for a in tl.keyframes.iter().flat_map(|k| &k.assigns) {
-                    if values.iter().any(|(o, p, _): &(TlTarget, Vec<String>, Value)| o.same(&a.target) && *p == a.path) {
-                        continue;
-                    }
-                    if let Some(v) = a.target.get(&a.path) {
-                        values.push((a.target.clone(), a.path.clone(), v));
-                    }
-                }
-                self.finished.insert(key, values);
-            }
-            Track::Timeline(tl) => {
-                let children = tl.tracks.borrow().clone();
-                self.apply_siblings(&children, local, origin)?;
-                self.apply_timeline(tl, local)?;
-                if let Some(factor) = fade_factor(placed, elapsed, local, duration) {
-                    // フェードが掛かるのは図形だけ。変数には不透明度が無い
-                    for target in timeline_targets(tl) {
-                        if let Some(o) = target.object() {
-                            self.set_attr(o, "opacity", Value::num(factor))?;
-                        }
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
-
-    /// 中に範囲の行 (毎フレーム走るブロック) があるか。無ければ順の食い違いは起きようがない
-fn reads_anything(placed: &Placed) -> bool {
-    match &placed.track {
-        Track::Container(obj) => obj.borrow().tracks.iter().any(Self::reads_anything),
-        Track::Timeline(tl) => {
-            tl.keyframes.iter().any(|k| k.block.is_some()) || tl.tracks.borrow().iter().any(Self::reads_anything)
-        }
-        Track::Audio(..) | Track::Narration(..) => false,
-    }
-}
-
-/// その Placed が時刻 t で書く先 (図形のアドレス, 属性)。まだ始まっていないものは何も書かない
-fn writes_at(placed: &Placed, t: f64, out: &mut std::collections::HashSet<(usize, String)>) {
-    if t < placed.at {
-        return;
-    }
-    let local = (t - placed.at).min(placed.track.duration());
-    match &placed.track {
-        Track::Container(obj) => {
-            for child in obj.borrow().tracks.iter() {
-                Self::writes_at(child, local, out);
-            }
-        }
-        Track::Timeline(tl) => {
-            for assign in tl.keyframes.iter().flat_map(|k| &k.assigns) {
-                if let (Some(obj), Some(name)) = (assign.target.object(), assign.path.first()) {
-                    out.insert((Rc::as_ptr(obj) as usize, name.clone()));
-                }
-            }
-            for child in tl.tracks.borrow().iter() {
-                Self::writes_at(child, local, out);
-            }
-        }
-        Track::Audio(..) | Track::Narration(..) => {}
-    }
-}
-
-/// 時刻 t における Timeline の値を対象に書き込む
-    pub fn apply_timeline(&mut self, tl: &Timeline, t: f64) -> Result<()> {
-        // (対象, 属性パス) ごとのキーフレームの並び。キーフレームから決まるので 1 度だけ作る
-        let groups = tl.groups();
-        // 書かれた時刻 × scale が実際の時刻。t は実際の時刻なので、書かれた時刻の軸に戻して比べる
-        let t = t / tl.time_scale();
-        for (target, path, indices) in groups.iter() {
-            let at = |&(k, a): &(usize, usize)| (&tl.keyframes[k], &tl.keyframes[k].assigns[a]);
-            let path = path.as_slice();
-            // 範囲の行の中なら、その時刻で式を評価するだけ
-            if let Some((_, a)) = indices.iter().map(at).find(|(kf, _)| kf.end.is_some_and(|e| kf.time <= t && t <= e)) {
-                let value = self.eval_assign(tl, a, t)?;
-                self.write_target(target, path, value)?;
-                continue;
-            }
-            // 点の列。範囲の行は始点と終点の 2 点になる
-            let points: Vec<(f64, &TlKeyframe, &TlAssign)> = indices
-                .iter()
-                .map(at)
-                .flat_map(|(kf, a)| match kf.end {
-                    Some(e) => vec![(kf.time, kf, a), (e, kf, a)],
-                    None => vec![(kf.time, kf, a)],
-                })
-                .collect();
-            let prev = points.iter().rev().find(|(time, ..)| *time <= t).or(points.first());
-            let next = points.iter().find(|(time, ..)| *time > t);
-            let Some(&(t0, _, a0)) = prev else { continue };
-            let v0 = self.eval_assign(tl, a0, t0)?;
-            // 修飾子は区間 (kf0, kf1) のもので、kf1 に付いている
-            let value = match next {
-                Some(&(t1, kf1, a1)) if t0 < t => {
-                    let v1 = self.eval_assign(tl, a1, t1)?;
-                    interpolate(&v0, &v1, ease(kf1.ease.as_deref(), (t - t0) / (t1 - t0)))
-                }
-                _ => v0,
-            };
-            self.write_target(target, path, value)?;
-        }
-        // ブロックの行。属性ごとに分けられないので、区間の間まるごと走らせる。
-        // 同じ属性を書いていたら、上の行より後に書いたこちらが残る
-        for kf in &tl.keyframes {
-            let (Some(block), Some(end)) = (&kf.block, kf.end) else { continue };
-            if kf.time <= t && t <= end {
-                self.run_tl_block(tl, block, t)?;
-            }
-        }
-        Ok(())
-    }
-
-    /// 範囲の行に書いたブロックを、その時刻で走らせる
-    pub(crate) fn run_tl_block(&mut self, tl: &Timeline, block: &Rc<crate::lang::value::TlBlock>, time: f64) -> Result<()> {
-        let saved = std::mem::replace(&mut self.scopes, block.scopes.clone());
-        let scope = new_scope();
-        scope.borrow_mut().insert(tl.param.clone(), Value::num(time));
-        if let Some(name) = &tl.secs {
-            scope.borrow_mut().insert(name.clone(), Value::Duration(time * tl.time_scale()));
-        }
-        self.scopes.push(scope);
-        let result = self.run_block(&block.body);
-        self.scopes = saved;
-        result.map(|_| ())
-    }
-
-    /// report 用。ブロックの行を走らせて、何の属性を書いたかと、そのときの値を返す。
-    /// 何を書くかは走らせてみないと分からないので、対象の属性は元に戻す
-    pub fn probe_tl_block(&mut self, tl: &Timeline, block: &Rc<crate::lang::value::TlBlock>, time: f64) -> Vec<(ObjRef, String, Value)> {
-        *self.assigned.borrow_mut() = Some(Vec::new());
-        let ran = self.run_tl_block(tl, block, time);
-        let written = self.assigned.borrow_mut().take().unwrap_or_default();
-        if ran.is_err() {
-            return Vec::new();
-        }
-        let mut out: Vec<(ObjRef, String, Value)> = Vec::new();
-        for (obj, attr, before) in written.iter().rev() {
-            if !out.iter().any(|(o, a, _)| Rc::ptr_eq(o, obj) && a == attr) {
-                if let Some(value) = obj.borrow().attrs.get(attr).cloned() {
-                    out.push((obj.clone(), attr.clone(), value));
-                }
-            }
-            // 何を書くか見るためだけに走らせたので、書いた分は戻す
-            let mut o = obj.borrow_mut();
-            match before {
-                Some(v) => {
-                    o.attrs.insert(attr.clone(), v.clone());
-                }
-                None => {
-                    o.attrs.remove(attr);
-                }
-            }
-        }
-        out.reverse();
-        out
-    }
-
-    /// report 用。キーフレームの式をその行の時刻で評価する
-    pub fn eval_assign_pub(&mut self, tl: &Timeline, a: &TlAssign, time: f64) -> Result<Value> {
-        self.eval_assign(tl, a, time)
-    }
-
-    fn eval_assign(&mut self, tl: &Timeline, a: &TlAssign, time: f64) -> Result<Value> {
-        let saved = std::mem::replace(&mut self.scopes, a.scopes.clone());
-        let scope = new_scope();
-        scope.borrow_mut().insert(tl.param.clone(), Value::num(time));
-        if let Some(name) = &tl.secs {
-            // 書かれた時刻の軸から実際の秒へ。割合で書いた Timeline なら長さを掛ける
-            scope.borrow_mut().insert(name.clone(), Value::Duration(time * tl.time_scale()));
-        }
-        self.scopes.push(scope);
-        let result = self.eval(&a.expr);
-        self.scopes = saved;
-        result
-    }
 }
 
 /// "{name}" を順に引数で置き換える。名前は説明用で、対応は位置で決まる
@@ -2418,7 +1809,7 @@ fn load_audio(name: &str, path: std::path::PathBuf) -> Result<Audio> {
     let Some(length) = length else {
         return err(Kind::AudioUnreadable, format!("\"{name}\" has no audio stream ffprobe can read {}", String::from_utf8_lossy(&output.stderr).trim()));
     };
-    Ok(Audio { name: name.to_string(), path, length })
+    Ok(Audio { name: name.to_string(), path, length, volume: 1.0, looping: false })
 }
 
 fn index_value(target: &Value, index: &Value) -> Result<Value> {
@@ -2501,7 +1892,8 @@ pub(crate) fn equals(a: &Value, b: &Value) -> bool {
         (Value::Str(x), Value::Str(y)) | (Value::Symbol(x), Value::Symbol(y)) => x == y,
         (Value::Tuple(x), Value::Tuple(y)) => x.len() == y.len() && x.iter().zip(y).all(|(a, b)| equals(a, b)),
         (Value::Vector(x0, y0), Value::Vector(x1, y1)) => x0 == x1 && y0 == y1,
-        (Value::Apos(a0, x0, y0), Value::Apos(a1, x1, y1)) => a0 == a1 && x0 == x1 && y0 == y1,
+        (Value::Length(x), Value::Length(y)) => x == y,
+        (Value::LVec(x0, y0), Value::LVec(x1, y1)) => x0 == x1 && y0 == y1,
         // record は名前とフィールドが同じなら等しい
         (Value::Record(x), Value::Record(y)) => {
             x.name == y.name && x.fields.len() == y.fields.len() && x.fields.iter().zip(&y.fields).all(|((f0, v0), (f1, v1))| f0 == f1 && equals(v0, v1))
@@ -2522,117 +1914,14 @@ pub(crate) fn equals(a: &Value, b: &Value) -> bool {
         (Value::Type(x), Value::Type(y)) => Rc::ptr_eq(x, y),
         (Value::BuiltinType(x), Value::BuiltinType(y)) => x == y,
         (Value::Nothing, Value::Nothing) => true,
-        // オブジェクトや Timeline は同一性 (同じ実体か)
+        // オブジェクトは同一性 (同じ実体か)
         (Value::Object(x), Value::Object(y)) => Rc::ptr_eq(x, y),
-        (Value::Timeline(x), Value::Timeline(y)) => Rc::ptr_eq(x, y),
-        (Value::Motion(x), Value::Motion(y)) => Rc::ptr_eq(x, y),
         (Value::Func(x), Value::Func(y)) => Rc::ptr_eq(x, y),
         (Value::Builtin(x), Value::Builtin(y)) => x == y,
         (Value::Audio(x), Value::Audio(y)) => Rc::ptr_eq(x, y),
         (Value::Module(x), Value::Module(y)) => Rc::ptr_eq(x, y),
         _ => false,
     }
-}
-
-/// Timeline が書き込む対象の一覧 (重複なし)
-fn timeline_targets(tl: &Timeline) -> Vec<TlTarget> {
-    let mut out: Vec<TlTarget> = Vec::new();
-    for a in tl.keyframes.iter().flat_map(|k| &k.assigns) {
-        if !out.iter().any(|o| o.same(&a.target)) {
-            out.push(a.target.clone());
-        }
-    }
-    out
-}
-
-fn ease(name: Option<&str>, k: f64) -> f64 {
-    match name {
-        Some("ease_in") => k * k,
-        Some("ease_out") => 1.0 - (1.0 - k) * (1.0 - k),
-        Some("ease") => {
-            if k < 0.5 { 2.0 * k * k } else { 1.0 - 2.0 * (1.0 - k) * (1.0 - k) }
-        }
-        _ => k,
-    }
-}
-
-/// View とその子の View が持つ track を、この順に集める。
-/// 子として置いた View の track も、親と同じ時間軸で動く
-pub fn all_tracks(view: &ObjRef) -> Vec<Placed> {
-    let mut out = Vec::new();
-    let mut seen: Vec<ObjRef> = Vec::new();
-    gather_tracks(view, &mut out, &mut seen);
-    out
-}
-
-fn gather_tracks(view: &ObjRef, out: &mut Vec<Placed>, seen: &mut Vec<ObjRef>) {
-    if seen.iter().any(|o| Rc::ptr_eq(o, view)) {
-        return;
-    }
-    seen.push(view.clone());
-    let v = view.borrow();
-    out.extend(v.tracks.iter().cloned());
-    // addTrack した View は、その 1 本が中身も動かす。子として辿ると二重になる
-    for placed in &v.tracks {
-        if let Track::Container(c) = &placed.track {
-            if !seen.iter().any(|o| Rc::ptr_eq(o, c)) {
-                seen.push(c.clone());
-            }
-        }
-    }
-    for child in &v.children {
-        if child.borrow().kind == "View" {
-            gather_tracks(child, out, seen);
-        }
-    }
-}
-
-/// View から辿れるオブジェクト (子、入れ子の View、Timeline の対象) を重複なく集める
-fn collect_objects(obj: &ObjRef, out: &mut Vec<ObjRef>) {
-    if out.iter().any(|o| Rc::ptr_eq(o, obj)) {
-        return;
-    }
-    out.push(obj.clone());
-    let o = obj.borrow();
-    for child in &o.children {
-        collect_objects(child, out);
-    }
-    for placed in &o.tracks {
-        collect_from_track(&placed.track, out);
-    }
-}
-
-/// 置いたものからたどれるオブジェクトを集める
-fn collect_from_track(track: &Track, out: &mut Vec<ObjRef>) {
-    {
-        match track {
-            Track::Audio(..) => {}
-            Track::Container(c) | Track::Narration(c, _) => collect_objects(c, out),
-            Track::Timeline(tl) => {
-                for child in tl.tracks.borrow().iter() {
-                    collect_from_track(&child.track, out);
-                }
-                for a in tl.keyframes.iter().flat_map(|k| &k.assigns) {
-                    if let Some(o) = a.target.object() {
-                        collect_objects(o, out);
-                    }
-                }
-            }
-        }
-    }
-}
-
-
-/// fadeIn / fadeOut の途中なら、掛ける不透明度。
-/// fadeIn は置いた時刻からの経過だけで決まる。fadeOut は終わりが要るので、長さのあるものだけ
-fn fade_factor(placed: &Placed, elapsed: f64, local: f64, duration: f64) -> Option<f64> {
-    if placed.fade_in > 0.0 && elapsed < placed.fade_in {
-        return Some(elapsed / placed.fade_in);
-    }
-    if placed.fade_out > 0.0 && duration > 0.0 && local > duration - placed.fade_out {
-        return Some((duration - local) / placed.fade_out);
-    }
-    None
 }
 
 /// 整数が要る所。切り捨てずにエラーにする
@@ -2654,8 +1943,7 @@ fn deep_copy(v: &Value) -> Value {
                 decl: src.decl.clone(),
                 attrs: src.attrs.iter().map(|(k, v)| (k.clone(), deep_copy(v))).collect(),
                 children: src.children.clone(),
-                placed: false,
-                tracks: src.tracks.clone(),
+                layers: src.layers.clone(),
             })))
         }
         Value::List(items) => Value::List(Rc::new(RefCell::new(items.borrow().iter().map(deep_copy).collect()))),
@@ -2681,6 +1969,15 @@ fn root_scope() -> Rc<RefCell<HashMap<String, Value>>> {
     scope
 }
 
+/// progress の表を、位置 1 つで引く
+fn progress_at(table: &ProgressTable, values: &[Value]) -> Result<Value> {
+    match values {
+        [Value::Number(p, _)] => Ok(table.at(*p)),
+        [v] => err(Kind::ArgumentType, format!("a progress table is called with a Number (0..1), found {}", v.type_name())),
+        _ => err(Kind::ArityMismatch, format!("a progress table takes 1 argument, {} given", values.len())),
+    }
+}
+
 /// builtin 関数。log と type_of は本体、ほかは math
 fn call_builtin(name: &'static str, values: Vec<Value>) -> Result<Value> {
     match name {
@@ -2692,6 +1989,7 @@ fn call_builtin(name: &'static str, values: Vec<Value>) -> Result<Value> {
             [v] => Ok(Value::Str(v.type_name())),
             _ => err(Kind::ArityMismatch, format!("type_of takes 1 argument, {} given", values.len())),
         },
+        "linear" | "ease_in" | "ease_out" | "ease" => crate::lang::curve::call(name, &values),
         name => call_native(name, &values),
     }
 }
@@ -2718,8 +2016,6 @@ fn no_attr(target: &Value, attr: &str) -> String {
 fn same_place(before: &Value, after: &Value) -> bool {
     match (before, after) {
         (Value::Object(a), Value::Object(b)) => Rc::ptr_eq(a, b),
-        (Value::Timeline(a), Value::Timeline(b)) => Rc::ptr_eq(a, b),
-        (Value::Motion(a), Value::Motion(b)) => Rc::ptr_eq(a, b),
         _ => false,
     }
 }
@@ -2743,13 +2039,8 @@ pub fn font_names(v: &Value) -> Vec<String> {
 const LOOP_LIMIT: usize = 1_000_000;
 
 /// Group(...) の引数が、Group 自身の属性か。そうでなければ中身
-fn is_group_attr(a: &Arg) -> bool {
-    let attrs = schema("Group").unwrap_or(&[]);
-    a.name.as_deref().is_some_and(|name| attrs.iter().any(|attr| attr.name == name))
-}
-
 pub const KINDS: &[&str] =
-    &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "View", "Timeline", "Narration", "SayVoiceEngine", "EspeakVoiceEngine", "Shader", "ZoomPath", "Camera", "Gradient", "Color", "PerspectiveCamera", "OrthographicCamera", "IsometricCamera", "Transform3", "Mesh", "Face", "Solid", "World", "Group"];
+    &["Circle", "Ellipse", "Rect", "Line", "Polygon", "Path", "TextArea", "Composition", "Narration", "SayVoiceEngine", "EspeakVoiceEngine", "Shader", "ZoomPath", "Camera", "Gradient", "Color", "PerspectiveCamera", "OrthographicCamera", "IsometricCamera", "Transform3", "Mesh", "Face", "Solid", "World", "Group"];
 
 /// builtin 型の属性と型
 /// 型の名前は大文字で始まり、builtin の型と union の名前は使えない
@@ -2792,12 +2083,11 @@ pub fn defaults(kind: &str) -> Vec<(&'static str, Value)> {
     let num = |n: f64| Value::num(n);
     // 3D のカメラ。up は y が上、fov は度
     match kind {
-        "PerspectiveCamera" => return vec![("up", Value::Vector3(0.0, 1.0, 0.0)), ("fov", num(45.0))],
+        "PerspectiveCamera" => return vec![("up", Value::Vector3(0.0, 1.0, 0.0)), ("fov", num(std::f64::consts::FRAC_PI_4))],
         "OrthographicCamera" => return vec![("up", Value::Vector3(0.0, 1.0, 0.0)), ("height", num(8.0))],
         "IsometricCamera" => return vec![("unit", num(1.0))],
         "Transform3" => return vec![("m", stdlib::space3d::identity())],
         "Solid" => return vec![("fill", Value::Color([0.5, 0.5, 0.5, 1.0]))],
-        "Group" => return vec![("position", Value::Apos("center".to_string(), 0.0, 0.0))],
         "World" => return vec![("light", Value::Vector3(0.4, 0.8, 0.5)), ("ambient", num(0.25))],
         _ => {}
     }
@@ -2809,6 +2099,12 @@ pub fn defaults(kind: &str) -> Vec<(&'static str, Value)> {
     let has = |name: &str| schema(kind).is_some_and(|s| s.iter().any(|a| a.name == name));
     if has("rotation") {
         out.push(("rotation", num(0.0)));
+    }
+    if has("scale") {
+        out.push(("scale", num(1.0)));
+    }
+    if has("position") {
+        out.push(("position", Value::Vector(0.0, 0.0)));
     }
     if has("blend") {
         out.push(("blend", sym("normal")));
@@ -2826,7 +2122,6 @@ pub fn defaults(kind: &str) -> Vec<(&'static str, Value)> {
         out.push(("dashOffset", num(0.0)));
     }
     match kind {
-        "View" => out.push(("clip", Value::Bool(false))),
         "Rect" => out.push(("radius", num(0.0))),
         "Path" => out.push(("closed", Value::Bool(false))),
         "TextArea" => out.push(("align", sym("left"))),
@@ -2875,25 +2170,26 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
     //   fill        — 面のある図形だけ (Line には面が無い)
     //   strokeCap / dash / dashOffset — 字の輪郭は破線にできないので TextArea は持たない
     const PAINT: Attr = opt("fill", "Paint");
-    const LINE: [Attr; 5] = [opt("stroke", "Color"), opt("strokeWidth", "Number"), opt("strokeCap", "StrokeCap"), opt("dash", "List<Number>"), opt("dashOffset", "Number")];
+    const LINE: [Attr; 5] = [opt("stroke", "Color"), opt("strokeWidth", "Length"), opt("strokeCap", "StrokeCap"), opt("dash", "List<Number>"), opt("dashOffset", "Number")];
     const JOIN: Attr = opt("strokeJoin", "StrokeJoin");
-    const COMMON: [Attr; 5] = [opt("opacity", "Number"), opt("rotation", "Number"), opt("pivot", "Vector"), opt("blend", "Blend"), opt("zIndex", "Number")];
+    // すべての Node が持つ transform 一式と blend。anchor は Node 自身の座標の基準点、position はそれを置く場所
+    const COMMON: [Attr; 6] = [opt("opacity", "Number"), opt("rotation", "Number"), opt("scale", "Number"), opt("anchor", "Vector"), opt("position", "Vector"), opt("blend", "Blend")];
     macro_rules! shape {
         (fill: $fill:literal, join: $join:literal, $($extra:expr),*) => {{
             const ATTRS: &[Attr] = &[
                 $($extra,)*
                 PAINT, LINE[0], LINE[1], LINE[2], LINE[3], LINE[4], JOIN,
-                COMMON[0], COMMON[1], COMMON[2], COMMON[3], COMMON[4],
+                COMMON[0], COMMON[1], COMMON[2], COMMON[3], COMMON[4], COMMON[5],
             ];
             const NO_FILL: &[Attr] = &[
                 $($extra,)*
                 LINE[0], LINE[1], LINE[2], LINE[3], LINE[4],
-                COMMON[0], COMMON[1], COMMON[2], COMMON[3], COMMON[4],
+                COMMON[0], COMMON[1], COMMON[2], COMMON[3], COMMON[4], COMMON[5],
             ];
             const NO_JOIN: &[Attr] = &[
                 $($extra,)*
                 PAINT, LINE[0], LINE[1], LINE[2], LINE[3], LINE[4],
-                COMMON[0], COMMON[1], COMMON[2], COMMON[3], COMMON[4],
+                COMMON[0], COMMON[1], COMMON[2], COMMON[3], COMMON[4], COMMON[5],
             ];
             match ($fill, $join) {
                 (true, true) => ATTRS,
@@ -2904,10 +2200,9 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
     }
     // 関数呼び出しは 'static に上げてもらえないので、それぞれ const にする
     const TEXT_AREA: &[Attr] = &[
-        req("position", "Pos"),
         req("text", "String"),
-        req("fontSize", "Number"),
-        opt("w", "Number"),
+        req("fontSize", "Length"),
+        opt("w", "Length"),
         opt("font", "Font"),
         opt("align", "Align"),
         PAINT,
@@ -2919,23 +2214,20 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
         COMMON[2],
         COMMON[3],
         COMMON[4],
+        COMMON[5],
     ];
-    const VIEW: &[Attr] = &[
+    const COMPOSITION: &[Attr] = &[
         req("box", "Vector"),
-        opt("position", "Pos"),
-        opt("w", "Number"),
-        opt("h", "Number"),
-        opt("opacity", "Number"),
-        opt("blend", "Blend"),
-        opt("clip", "Bool"),
-        opt("zIndex", "Number"),
-        opt("rotation", "Number"),
-        opt("scale", "Number"),
-        opt("pivot", "Vector"),
-        opt("camera", "Camera"),
+        req("duration", "Duration"),
+        COMMON[0],
+        COMMON[1],
+        COMMON[2],
+        COMMON[3],
+        COMMON[4],
+        COMMON[5],
     ];
     // 読み上げ。voice は engine に渡す声の名前、volume は混ぜるときの音量
-    const NARRATION: &[Attr] = &[req("text", "String"), req("duration", "Duration"), opt("volume", "Number")];
+    const NARRATION: &[Attr] = &[req("text", "String"), opt("voice", "Voice"), opt("volume", "Number")];
     const SHADER: &[Attr] = &[req("color", "Func"), opt("args", "Numbers"), opt("samples", "Number"), opt("zoom", "ZoomPath"), opt("camera", "Camera")];
     // 倍率の表は zoom と duration と unit から作る (作るのは construct)。scale は作った結果
     const ZOOM_MAP: &[Attr] =
@@ -2950,7 +2242,7 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
     const ISOMETRIC: &[Attr] = &[opt("unit", "Number"), req("box", "Vector")];
     const TRANSFORM3: &[Attr] = &[opt("m", "List<Number>")];
     const MESH: &[Attr] = &[req("points", "List<Vector3>"), opt("edges", "List<Tuple>"), opt("faces", "List<List<Number>>")];
-    const GROUP: &[Attr] = &[opt("position", "Pos"), opt("scale", "Number"), COMMON[0], COMMON[1], COMMON[2], COMMON[3], COMMON[4]];
+    const GROUP: &[Attr] = &[COMMON[0], COMMON[1], COMMON[2], COMMON[3], COMMON[4], COMMON[5], opt("camera", "Camera"), opt("clip", "Shape")];
     const SOLID: &[Attr] = &[req("mesh", "Mesh"), opt("fill", "Color"), opt("transform", "Transform3")];
     const WORLD: &[Attr] =
         &[req("camera", "Projection"), req("parts", "List<Solid>"), opt("light", "Vector3"), opt("ambient", "Number"), opt("background", "Color")];
@@ -2964,14 +2256,14 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
         opt("radius", "Number"),
     ];
     Some(match kind {
-        "Circle" => shape!(fill: true, join: false, req("position", "Pos"), req("radius", "Number")),
-        "Ellipse" => shape!(fill: true, join: false, req("position", "Pos"), req("rx", "Number"), req("ry", "Number")),
-        "Rect" => shape!(fill: true, join: true, req("position", "Pos"), req("w", "Number"), req("h", "Number"), opt("radius", "Number")),
+        "Circle" => shape!(fill: true, join: false, req("radius", "Length")),
+        "Ellipse" => shape!(fill: true, join: false, req("rx", "Length"), req("ry", "Length")),
+        "Rect" => shape!(fill: true, join: true, req("w", "Length"), req("h", "Length"), opt("radius", "Length")),
         "Line" => shape!(fill: false, join: false, req("from", "Vector"), req("to", "Vector")),
         "Polygon" => shape!(fill: true, join: true, req("points", "List<Vector>")),
         "Path" => shape!(fill: true, join: true, req("from", "Vector"), req("segments", "List<Tuple>"), opt("closed", "Bool"), opt("upto", "Number")),
         "TextArea" => TEXT_AREA,
-        "View" => VIEW,
+        "Composition" => COMPOSITION,
         "Narration" => NARRATION,
         // engine の型。属性はその engine が持っている
         name if crate::render::voice::by_name(name).is_some() => crate::render::voice::by_name(name).expect("just checked").attrs(),
@@ -2995,12 +2287,20 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
 /// 2 つの値の間。k は 0..1
 /// 途中の数は分数で持たない。書いた値の間を取ったものなので分数で表せることはまずなく、
 /// 毎フレーム何千回も作るところなので、分数を求める手間を掛けない
-fn interpolate(a: &Value, b: &Value, k: f64) -> Value {
+pub(crate) fn interpolate(a: &Value, b: &Value, k: f64) -> Value {
     match (a, b) {
         (Value::Number(x, _), Value::Number(y, _)) => Value::Number(x + (y - x) * k, None),
         (Value::Duration(x), Value::Duration(y)) => Value::Duration(x + (y - x) * k),
+        // 単位つきの長さは、単位ごとの係数を補間する
+        (Value::Length(_), Value::Length(_) | Value::Number(..)) | (Value::Number(..), Value::Length(_)) => {
+            let (x, y) = (a.as_length().expect("length"), b.as_length().expect("length"));
+            Value::Length(x.plus(y.minus(x).scaled(k)))
+        }
+        (Value::LVec(..), Value::LVec(..) | Value::Vector(..)) | (Value::Vector(..), Value::LVec(..)) => {
+            let ((x0, y0), (x1, y1)) = (a.as_lvec().expect("vector"), b.as_lvec().expect("vector"));
+            Value::LVec(x0.plus(x1.minus(x0).scaled(k)), y0.plus(y1.minus(y0).scaled(k)))
+        }
         (Value::Vector(x0, y0), Value::Vector(x1, y1)) => Value::Vector(x0 + (x1 - x0) * k, y0 + (y1 - y0) * k),
-        (Value::Apos(an, x0, y0), Value::Apos(_, x1, y1)) => Value::Apos(an.clone(), x0 + (x1 - x0) * k, y0 + (y1 - y0) * k),
         (Value::Color(c0), Value::Color(c1)) => {
             let k = k as f32;
             Value::Color(std::array::from_fn(|i| c0[i] + (c1[i] - c0[i]) * k))
@@ -3017,8 +2317,47 @@ fn interpolate(a: &Value, b: &Value, k: f64) -> Value {
 }
 
 
+/// 単位つきの長さが絡む四則。長さは係数の和なので、箱が決まる前に計算できる
+fn length_arith(op: BinOp, l: &Value, r: &Value) -> Result<Option<Value>> {
+    let involved = |v: &Value| matches!(v, Value::Length(_) | Value::LVec(..));
+    if !(involved(l) || involved(r)) || !matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div) {
+        return Ok(None);
+    }
+    let bad = || MophError::new(Kind::OperandType, format!("cannot {} {} and {}", verb(op), l.type_name(), r.type_name()));
+    let number = |v: &Value| match v {
+        Value::Number(k, _) => Some(*k),
+        _ => None,
+    };
+    // 数との掛け割り。(掛けられる側, 倍率) に直す
+    let scale = match (op, number(l), number(r)) {
+        (BinOp::Mul, Some(k), None) => Some((r, k)),
+        (BinOp::Mul, None, Some(k)) => Some((l, k)),
+        (BinOp::Div, _, Some(k)) if k == 0.0 => return err(Kind::DivisionByZero, "division by zero"),
+        (BinOp::Div, None, Some(k)) => Some((l, 1.0 / k)),
+        _ => None,
+    };
+    if let Some((target, k)) = scale {
+        return match (target.as_length(), target.as_lvec()) {
+            (Some(len), _) => Ok(Some(Value::Length(len.scaled(k)))),
+            (_, Some((x, y))) => Ok(Some(Value::vector_of(x.scaled(k), y.scaled(k)))),
+            _ => Err(bad()),
+        };
+    }
+    // 足し引き。Number は単位なしの長さ
+    match (op, l.as_length(), r.as_length(), l.as_lvec(), r.as_lvec()) {
+        (BinOp::Add, Some(a), Some(b), ..) => Ok(Some(Value::Length(a.plus(b)))),
+        (BinOp::Sub, Some(a), Some(b), ..) => Ok(Some(Value::Length(a.minus(b)))),
+        (BinOp::Add, _, _, Some((ax, ay)), Some((bx, by))) => Ok(Some(Value::vector_of(ax.plus(bx), ay.plus(by)))),
+        (BinOp::Sub, _, _, Some((ax, ay)), Some((bx, by))) => Ok(Some(Value::vector_of(ax.minus(bx), ay.minus(by)))),
+        _ => Err(bad()),
+    }
+}
+
 fn binary(op: BinOp, l: Value, r: Value) -> Result<Value> {
     use Value::{Bool, Duration, Number};
+    if let Some(v) = length_arith(op, &l, &r)? {
+        return Ok(v);
+    }
     // Vector は実数 2 つの Tuple と同じに計算し、結果を Vector に戻す (Vector ± Vector / (x, y)、Vector × ÷ Number)
     let is_vector = |v: &Value| matches!(v, Value::Vector(..) | Value::Vector3(..));
     if (is_vector(&l) || is_vector(&r)) && matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div) {
@@ -3227,6 +2566,112 @@ mod tests {
         let stmts = crate::lang::parser::parse(src).expect("parses");
         let err = Interp::new().run(&stmts).expect_err("the loop never ends");
         assert_eq!(err.kind, Kind::EndlessLoop, "got {err}");
+    }
+
+    /// スクリプトを実行し、output した Composition と一緒に返す
+    fn composition(src: &str) -> (Interp, ObjRef) {
+        let stmts = crate::lang::parser::parse(src).expect("parses");
+        let mut interp = Interp::new();
+        interp.run(&stmts).expect("runs");
+        let comp = interp.output.clone().expect("output");
+        (interp, comp)
+    }
+
+    fn attr_of(node: &ObjRef, name: &str) -> Value {
+        node.borrow().attrs.get(name).cloned().unwrap_or_else(|| panic!("no attribute {name}"))
+    }
+
+    /// Layer は in <= t < out の間だけ存在する
+    #[test]
+    fn a_layer_exists_only_between_in_and_out() {
+        let (mut interp, comp) = composition(
+            "let comp = Composition(box = Vector(16, 9), duration = 6s)\n\
+             comp.place(\"a\", Circle(radius = 1), in = 1s, out = 3s)\n\
+             comp.place(\"b\", Circle(radius = 2), in = 2s, out = 5s)\n\
+             output comp\n",
+        );
+        let count = |interp: &mut Interp, t: f64| interp.frame(&comp, t).expect("frame").borrow().children.len();
+        assert_eq!([0.5, 1.0, 2.5, 3.0, 4.9, 5.0].map(|t| count(&mut interp, t)), [0, 1, 2, 1, 1, 0]);
+    }
+
+    /// 関数の Layer は、自分の in を 0 とした時刻で呼ばれる
+    #[test]
+    fn a_function_layer_gets_the_time_since_its_in() {
+        let (mut interp, comp) = composition(
+            "func grow(t) { Circle(radius = t / 1s) }\n\
+             let comp = Composition(box = Vector(16, 9), duration = 6s)\n\
+             comp.place(\"grow\", grow, in = 2s, out = 5s)\n\
+             output comp\n",
+        );
+        let frame = interp.frame(&comp, 3.5).expect("frame");
+        let circle = frame.borrow().children[0].clone();
+        assert!(matches!(attr_of(&circle, "radius"), Value::Number(r, _) if r == 1.5));
+    }
+
+    #[test]
+    fn placing_a_name_twice_is_an_error() {
+        let stmts = crate::lang::parser::parse(
+            "let comp = Composition(box = Vector(16, 9), duration = 6s)\n\
+             comp.place(\"a\", Circle(radius = 1), in = 0s, out = 1s)\n\
+             comp.place(\"a\", Circle(radius = 1), in = 0s, out = 1s)\n",
+        )
+        .expect("parses");
+        let err = Interp::new().run(&stmts).expect_err("a name is placed once");
+        assert_eq!(err.kind, Kind::AlreadyPlaced, "got {err}");
+    }
+
+    #[test]
+    fn a_layer_needs_in_and_out_and_a_span() {
+        for tail in ["", ", in = 1s", ", in = 2s, out = 1s", ", in = 1s, out = 1s"] {
+            let src = format!("let comp = Composition(box = Vector(16, 9), duration = 6s)\ncomp.place(\"a\", Circle(radius = 1){tail})\n");
+            let stmts = crate::lang::parser::parse(&src).expect("parses");
+            assert!(Interp::new().run(&stmts).is_err(), "accepted: {tail}");
+        }
+    }
+
+    /// 図形は不変。変えたものは copy で作り、元は変わらない
+    #[test]
+    fn shapes_are_immutable_and_copy_makes_a_changed_one() {
+        let stmts = crate::lang::parser::parse("let c = Circle(radius = 1)\nc.radius = 2\n").expect("parses");
+        let err = Interp::new().run(&stmts).expect_err("a shape cannot be assigned");
+        assert_eq!(err.kind, Kind::AttributeType, "got {err}");
+
+        let stmts = crate::lang::parser::parse("let c = Circle(radius = 1, opacity = 0.5)\nlet d = c.copy(radius = 3)\n").expect("parses");
+        let mut interp = Interp::new();
+        interp.run(&stmts).expect("runs");
+        let (Value::Object(c), Value::Object(d)) = (interp.lookup("c").expect("c"), interp.lookup("d").expect("d")) else { panic!("objects") };
+        assert!(matches!(attr_of(&c, "radius"), Value::Number(r, _) if r == 1.0));
+        assert!(matches!(attr_of(&d, "radius"), Value::Number(r, _) if r == 3.0));
+        assert!(matches!(attr_of(&d, "opacity"), Value::Number(o, _) if o == 0.5));
+    }
+
+    /// Group は名前の無い引数が中身
+    #[test]
+    fn a_group_holds_its_unnamed_arguments() {
+        let stmts = crate::lang::parser::parse("let g = Group(Circle(radius = 1), Rect(w = 1, h = 1), position = Vector(2, 3))\n").expect("parses");
+        let mut interp = Interp::new();
+        interp.run(&stmts).expect("runs");
+        let Value::Object(g) = interp.lookup("g").expect("g") else { panic!("object") };
+        assert_eq!(g.borrow().children.len(), 2);
+        assert!(matches!(attr_of(&g, "position"), Value::Vector(x, y) if x == 2.0 && y == 3.0));
+    }
+
+    /// 入れ子の Composition は、自分の Layer を同じ規則で並べる
+    #[test]
+    fn a_nested_composition_keeps_its_own_time() {
+        let (mut interp, comp) = composition(
+            "let inner = Composition(box = Vector(4, 4), duration = 2s)\n\
+             inner.place(\"dot\", Circle(radius = 1), in = 1s, out = 2s)\n\
+             let comp = Composition(box = Vector(16, 9), duration = 8s)\n\
+             comp.place(\"inner\", inner, in = 3s, out = 5s)\n\
+             output comp\n",
+        );
+        let count = |interp: &mut Interp, t: f64| {
+            let frame = interp.frame(&comp, t).expect("frame");
+            let group = frame.borrow().children.first().cloned();
+            group.map(|g| g.borrow().children.len())
+        };
+        assert_eq!([2.0, 3.5, 4.0, 5.5].map(|t| count(&mut interp, t)), [None, Some(0), Some(1), None]);
     }
 
     /// 標準ライブラリは実行ファイルに埋め込んであり、ディスクには無い。

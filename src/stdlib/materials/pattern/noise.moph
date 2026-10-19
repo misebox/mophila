@@ -10,8 +10,8 @@ import { HOUSE } from ..palette.house
 ## @param b 2 色目
 ## @param scale 箱の座標 1 単位あたりの粒の数。大きいほど細かい
 ## @example
-## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,
-##              fill = noise(#1a1d23, #2b3242, 120)))
+## Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9,
+##      fill = noise(#1a1d23, #2b3242, 120))
 export func noise(a: Color, b: Color, scale: Number = 80) -> Shader {
   let ar = a.r
   let ag = a.g

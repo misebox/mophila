@@ -11,8 +11,8 @@ import { HOUSE } from ..palette.house
 ## @param radius 円の半径 (箱の座標)
 ## @param samples 1 ピクセルあたりの評価点
 ## @example
-## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,
-##              fill = dots(#10131a, #4cc2ff, 0.6, 0.1)))
+## Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9,
+##      fill = dots(#10131a, #4cc2ff, 0.6, 0.1))
 export func dots(back: Color, dot: Color, pitch: Number = 0.6, radius: Number = 0.12, samples: Number = 4) -> Shader {
   let half = pitch / 2
   let r2 = radius * radius

@@ -9,13 +9,13 @@ import { HOUSE } from ..palette.house
 ## @param line 線の色
 ## @param pitch 線の間隔 (箱の座標)
 ## @param width 線の太さ (箱の座標)
-## @param angle 1 方向目の線の向き (度)。もう 1 方向はこれと直角
+## @param angle 1 方向目の線の向き (ラジアン)。もう 1 方向はこれと直角
 ## @param samples 1 ピクセルあたりの評価点
 ## @example
-## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,
-##              fill = cross_hatch(#faf7f0, #c9c0b2, 0.35, 0.03, 45)))
-export func cross_hatch(back: Color, line: Color, pitch: Number = 0.35, width: Number = 0.03, angle: Number = 45, samples: Number = 4) -> Shader {
-  let rad = (angle - 90) * math.PI / 180
+## Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9,
+##      fill = cross_hatch(#faf7f0, #c9c0b2, 0.35, 0.03, math.pi / 4))
+export func cross_hatch(back: Color, line: Color, pitch: Number = 0.35, width: Number = 0.03, angle: Number = math.pi / 4, samples: Number = 4) -> Shader {
+  let rad = angle - math.pi / 2
   let nx = 0 - math.sin(rad) / pitch
   let ny = math.cos(rad) / pitch
   let ratio = width / pitch

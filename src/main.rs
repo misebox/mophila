@@ -416,6 +416,13 @@ fn run() -> Result<(), Box<dyn Error>> {
                 interp.set_project(p.clone());
             }
             interp.run(&stmts)?;
+            // func (t) の Layer は描くまで呼ばれないので、始め・中ほど・終わりの 3 コマを組んで、中身の誤りを拾う
+            if let Some(comp) = interp.output.clone() {
+                let duration = lang::eval::Interp::duration_of(&comp)?;
+                for t in [0.0, duration / 2.0, duration * 0.999] {
+                    interp.frame(&comp, t)?;
+                }
+            }
             Ok(())
         }
         Command::Preview { script, size, r#loop, at, crop, align, pad } => {
@@ -438,10 +445,10 @@ fn run() -> Result<(), Box<dyn Error>> {
             let script = entry(script)?;
             let (mut interp, view, duration) = load(&read_script(&script)?, base_dir(&script), None, &project)?;
             let filter = report::Filter::parse(&filter)?;
-            let events = report::collect(&mut interp, &view);
+            let rows = report::collect(&mut interp, &view);
             println!("duration: {duration:.2}s\n");
-            println!("# events: start  length  object  attribute  change\n{}", report::format_events(&events, &filter));
-            println!("\n# text visibility: from – to  length  text\n{}", report::text_visibility(&events, &filter));
+            println!("# layers: from – to  length  name  content\n{}", report::format_layers(&rows, &filter));
+            println!("\n# text visibility: from – to  length  text\n{}", report::text_visibility(&rows, &filter));
             // 動画に入るのと同じものを出す (音声は作らない)
             let media = render::media::prepare(&view, duration, 0.0, duration, false, &render::voice::cache_dir())?;
             if !media.is_empty() {
@@ -573,10 +580,9 @@ fn load(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Source
         interp.assets = s.assets.clone();
     }
     interp.run(&stmts)?;
-    let view = interp.output.clone().ok_or("no output: add \"output <view>\" to the script")?;
-    let duration = lang::eval::all_tracks(&view).iter().map(|p| p.end()).fold(0.0, f64::max);
-    interp.snapshot(&view);
-    Ok((interp, view, duration))
+    let comp = interp.output.clone().ok_or("no output: add \"output <composition>\" to the script")?;
+    let duration = lang::eval::Interp::duration_of(&comp)?;
+    Ok((interp, comp, duration))
 }
 
 /// 置かれた読み上げを音声にして混ぜる。voice: を書いていなければ、書いてくれと言う
@@ -698,14 +704,13 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
     // GPU には 2 フレームまで投入しておき、次を投入する前に古い方を読み戻す。
     // 待ちの間に次のフレームが GPU に入っているので、読み戻しで止まらない。
     // ただし塗りに GPU を使う絵では、その仕事と描画が GPU を取り合って遅くなるので 1 枚ずつにする
-    let depth = if render::scene::uses_gpu_fill(&view) { 1 } else { 2 };
+    let gpu_fill = interp.uses_gpu_fill(&view)?;
+    let depth = if gpu_fill { 1 } else { 2 };
     let mut pending: std::collections::VecDeque<usize> = std::collections::VecDeque::new();
-    // 置いたものは描いている間に増えないので、1 度集めて使い回す
-    let tracks = lang::eval::all_tracks(&view);
     let mut progress = render::progress::Progress::new(&name, times.len());
     // Shader と World の塗りは描画命令を組む時点で GPU を使うので、別スレッドでは組めない
     let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
-    let workers = match (render::scene::uses_gpu_fill(&view), args.jobs) {
+    let workers = match (gpu_fill, args.jobs) {
         (true, _) => 1,
         (false, Some(n)) if n > 0 => n,
         // 測るぶんのコマも惜しい長さなら、分けない
@@ -717,9 +722,8 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
             let (mut build, mut draw) = (f64::INFINITY, f64::INFINITY);
             for round in 0..4 {
                 let began = std::time::Instant::now();
-                interp.begin_frame(t);
-                interp.apply_tracks(&tracks, t)?;
-                let scene = render::scene::build(&view, shot, t, interp.cache_mut())?;
+                let frame = interp.frame(&view, t)?;
+                let scene = render::scene::build(&frame, shot, t, interp.cache_mut())?;
                 let built = began.elapsed().as_secs_f64();
                 let began = std::time::Instant::now();
                 let frame = renderer.render(&scene, interp.cache_mut().shaders.as_mut())?;
@@ -762,12 +766,8 @@ fn render(src: &str, base_dir: std::path::PathBuf, sources: Option<&bundle::Sour
                 }
             })?,
             None => {
-                timing.measure("eval", || -> Result<(), Box<dyn Error>> {
-                    interp.begin_frame(t);
-                    interp.apply_tracks(&tracks, t)?;
-                    Ok(())
-                })?;
-                let scene = timing.measure("scene", || render::scene::build(&view, shot, t, interp.cache_mut()))?;
+                let frame = timing.measure("eval", || interp.frame(&view, t))?;
+                let scene = timing.measure("scene", || render::scene::build(&frame, shot, t, interp.cache_mut()))?;
                 (scene, interp.cache_mut().bytes())
             }
         };
@@ -815,11 +815,9 @@ fn sheet(src: &str, base_dir: std::path::PathBuf, project: &Option<Rc<project::P
     let mut canvas = vec![0u8; (width * height * 4) as usize];
     let mut progress = render::progress::Progress::new("sheet", times.len());
     for (i, &t) in times.iter().enumerate() {
-        interp.begin_frame(t);
-        let tracks = lang::eval::all_tracks(&view);
-        interp.apply_tracks(&tracks, t)?;
+        let frame = interp.frame(&view, t)?;
         let cell_shot = render::scene::Shot::whole(f64::from(cw), f64::from(ch));
-        let mut scene = render::scene::build(&view, cell_shot, t, interp.cache_mut())?;
+        let mut scene = render::scene::build(&frame, cell_shot, t, interp.cache_mut())?;
         let area = render::scene::picture(&view, cell_shot)?;
         render::scene::overlay_subtitles(&mut scene, interp.cache_mut(), &media.cues, t, area);
         // 時刻のラベル

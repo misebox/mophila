@@ -8,12 +8,12 @@ let r = 0.25
 let cy = 0.32
 let tip = 0.95
 let dy = tip - cy
-# 先から円へ引いた接線が円に触れる角度 (円の中央から時計回りの度)
-let touch = math.atan2(2 * dy * r, r * r - dy * dy) * 180 / math.PI
+# 先から円へ引いた接線が円に触れる角度 (円の中央から時計回りのラジアン)
+let touch = math.atan2(2 * dy * r, r * r - dy * dy)
 
-let outline = arc(0.5 - r, cy, r, 90, touch - 270, 14)
+let outline = arc(0.5 - r, cy, r, math.pi / 2, touch - 3 * math.pi / 2, 14)
 outline.push(Vector(0.5, tip))
-for p in arc(0.5 + r, cy, r, 270 - touch, -90, 14) {
+for p in arc(0.5 + r, cy, r, 3 * math.pi / 2 - touch, -math.pi / 2, 14) {
   outline.push(p)
 }
 

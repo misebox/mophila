@@ -11,9 +11,9 @@
 ## @returns cols * rows 個
 ## @example
 ## # 画面全体を 4 列 3 行に分け、各マスの中心に円を置く
-## for p in grid_centers(0, 0, 16, 9, 4, 3) {
-##   v.place(Circle(position = Pos(p), radius = 0.4, fill = #4080e0))
-## }
+## Group(...grid_centers(0, 0, 16, 9, 4, 3).map(func (p) {
+##   Circle(position = p, radius = 0.4, fill = #4080e0)
+## }))
 export func grid_centers(x: Number, y: Number, w: Number, h: Number, cols: Number, rows: Number) -> List<Vector> {
   let cw = w / cols
   let ch = h / rows
@@ -44,9 +44,9 @@ export func cell(w: Number, h: Number, cols: Number, rows: Number) -> Vector { V
 ## @param n 点の数 (2 以上)
 ## @example
 ## # 横一列に 5 個
-## for p in along(Vector(2, 4.5), Vector(14, 4.5), 5) {
-##   v.place(Circle(position = Pos(p), radius = 0.3, fill = #303030))
-## }
+## Group(...along(Vector(2, 4.5), Vector(14, 4.5), 5).map(func (p) {
+##   Circle(position = p, radius = 0.3, fill = #303030)
+## }))
 export func along(from: Vector, to: Vector, n: Number) -> List<Vector> {
   (0..=1).steps(n - 1).map(func (k) { from + (to - from) * k })
 }

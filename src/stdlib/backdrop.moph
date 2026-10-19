@@ -1,13 +1,21 @@
 # backdrop.moph — 背景と、上に重ねる幕
 #
-# 動くものは自分の Timeline を持っているので、置けばそのまま動く。duration がその 1 周。
+# どれも時間を知らない。動くものは progress (0..1) を受け取る。
+# 時間の流れ方は呼ぶ側が決める。
 # Shader を使うものは GPU で描くので run では出ず、render と preview で出る。
 #
-#   v.place(graph_paper(16, 9), at = Pos(0, 0, anchor = :topLeft), w = 16)
+#   comp.place("paper", graph_paper(16, 9), in = 0s, out = comp.duration)
 
 import math
 import { alpha, gray } from color
 import shape
+
+# 格子の 1 本が光る明るさ。0 が光り始め、1 が光り終わり
+let pulse = progress [:opacity] {
+  0:   0.15
+  0.4: 0.7
+  1:   0.15
+}
 
 ## 方眼紙。細い線と、太い線を step ごとに引く
 ## @category 静止
@@ -17,24 +25,23 @@ import shape
 ## @param major 太い線を引く本数の間隔 (既定 5)
 ## @param back 紙の色 (既定 生成り)
 ## @param line 線の色 (既定 薄い青灰)
-## @returns 箱が w x h の View
+## @returns 左上を (0, 0) とした w x h の Group
 ## @example
-## v.place(graph_paper(16, 9), at = Pos(0, 0, anchor = :topLeft), w = 16)
-export func graph_paper(w: Number, h: Number, step: Number = 1, major: Number = 5, back: Color = #f6f4ee, line: Color = #c9d4e0) -> View {
-  let v = View(box = Vector(w, h))
-  v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h, fill = back))
+## comp.place("paper", graph_paper(16, 9), in = 0s, out = comp.duration)
+export func graph_paper(w: Number, h: Number, step: Number = 1, major: Number = 5, back: Color = #f6f4ee, line: Color = #c9d4e0) -> Group {
+  let items = [Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = w, h = h, fill = back)]
   let thin = step * 0.02
   for i in 0..=math.floor(w / step) {
     let x = i * step
     let heavy = i % major == 0
-    v.place(Line(from = Vector(x, 0), to = Vector(x, h), stroke = alpha(line, if heavy { 0.9 } else { 0.45 }), strokeWidth = if heavy { thin * 2 } else { thin }))
+    items.push(Line(from = Vector(x, 0), to = Vector(x, h), stroke = alpha(line, if heavy { 0.9 } else { 0.45 }), strokeWidth = if heavy { thin * 2 } else { thin }))
   }
   for j in 0..=math.floor(h / step) {
     let y = j * step
     let heavy = j % major == 0
-    v.place(Line(from = Vector(0, y), to = Vector(w, y), stroke = alpha(line, if heavy { 0.9 } else { 0.45 }), strokeWidth = if heavy { thin * 2 } else { thin }))
+    items.push(Line(from = Vector(0, y), to = Vector(w, y), stroke = alpha(line, if heavy { 0.9 } else { 0.45 }), strokeWidth = if heavy { thin * 2 } else { thin }))
   }
-  v
+  Group(...items)
 }
 
 ## 周辺減光。真ん中は素通しで、縁だけ暗くする。一番上に重ねる
@@ -43,125 +50,102 @@ export func graph_paper(w: Number, h: Number, step: Number = 1, major: Number = 
 ## @param h 高さ
 ## @param amount 縁の暗さ 0..1 (既定 0.5)
 ## @param color 暗くする色 (既定 黒)
-## @returns 箱が w x h の View
+## @returns 左上を (0, 0) とした w x h の Group
 ## @example
-## v.place(vignette(16, 9, 0.6), at = Pos(0, 0, anchor = :topLeft), w = 16)
-export func vignette(w: Number, h: Number, amount: Number = 0.5, color: Color = #000000) -> View {
-  let v = View(box = Vector(w, h))
+## comp.place("vignette", vignette(16, 9, 0.6), in = 0s, out = comp.duration)
+export func vignette(w: Number, h: Number, amount: Number = 0.5, color: Color = #000000) -> Group {
   let r = math.hypot(w, h) / 2
-  v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h, fill = Gradient(
+  Group(Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = w, h = h, fill = Gradient(
     kind = :radial,
     from = Vector(w / 2, h / 2),
     radius = r,
     stops = [alpha(color, 0), alpha(color, amount * 0.25), alpha(color, amount)],
   )))
-  v
 }
 
-## 粒が下から上へ流れる。duration で 1 周する
+## 粒が下から上へ流れる。progress が 0 から 1 になる間に流れ切る
 ## @category 動く
 ## @param w 幅
 ## @param h 高さ
-## @param duration 流れ切るまでの長さ
-## @param start 動き出す時刻 (既定 0s)
+## @param progress 流れの進み 0..1
 ## @param count 粒の数 (既定 40)
 ## @param color 粒の色 (既定 白)
 ## @param size 粒の半径 (既定 高さの 1/120)
-## @returns 箱が w x h の View。Timeline を持っているので、置けば動く
+## @returns 左上を (0, 0) とした w x h の Group
 ## @example
-## v.place(particles(16, 9, 6s), at = Pos(0, 0, anchor = :topLeft), w = 16)
-export func particles(w: Number, h: Number, duration: Duration, start: Duration = 0s, count: Number = 40, color: Color = #ffffff, size: Number = 0) -> View {
-  let v = View(box = Vector(w, h))
+## comp.place("dust", func (t) { particles(16, 9, t / 6s) }, in = 0s, out = 6s)
+export func particles(w: Number, h: Number, progress: Number, count: Number = 40, color: Color = #ffffff, size: Number = 0) -> Group {
   let r = if size > 0 { size } else { h / 120 }
+  let items = []
   for i in 0..count {
     # 数式で散らす。同じ引数なら毎回同じ並びになる
     let x = w * ((i * 0.6180339887) % 1)
     let phase = (i * 0.7548776662) % 1
     let speed = 0.6 + ((i * 0.3247179572) % 1) * 0.8
     let drift = (((i * 0.5698402909) % 1) - 0.5) * w * 0.06
-    let dot = Circle(position = Pos(x, h * (1 - phase)), radius = r * (0.6 + ((i * 0.4142135623) % 1)), fill = alpha(color, 0.25 + ((i * 0.2360679774) % 1) * 0.5))
-    v.place(dot)
-    v.addTrack(motion {
-      0s: dot.position.y = h * (1 - phase) + r, dot.position.x = x
-      duration / speed: dot.position.y = h * (1 - phase) - h - r, dot.position.x = x + drift
-    })
+    let radius = r * (0.6 + ((i * 0.4142135623) % 1))
+    # 粒ごとに速さが違い、先に流れ切った粒は上で止まる
+    let k = math.clamp(progress * speed, 0, 1)
+    let y0 = h * (1 - phase) + r
+    let y1 = h * (1 - phase) - h - r
+    items.push(Circle(position = Vector(math.lerp(x, x + drift, k), math.lerp(y0, y1, k)), radius = radius, fill = alpha(color, 0.25 + ((i * 0.2360679774) % 1) * 0.5)))
   }
-  v
+  Group(...items)
 }
 
-## 格子が順に明るくなる。duration で 1 周する
+## 格子が順に明るくなる。progress が 0 から 1 になる間に端から端まで渡る
 ## @category 動く
 ## @param w 幅
 ## @param h 高さ
-## @param duration 端から端まで明るさが渡る長さ
-## @param start 動き出す時刻 (既定 0s)
+## @param progress 明るさの進み 0..1
 ## @param step 格子の間隔 (既定 1)
 ## @param color 線の色 (既定 青)
 ## @param back 背の色 (既定 ほぼ黒)
-## @returns 箱が w x h の View。Timeline を持っているので、置けば動く
+## @returns 左上を (0, 0) とした w x h の Group
 ## @example
-## v.place(grid_pulse(16, 9, 3s), at = Pos(0, 0, anchor = :topLeft), w = 16)
-export func grid_pulse(w: Number, h: Number, duration: Duration, start: Duration = 0s, step: Number = 1, color: Color = #4080e0, back: Color = #12151a) -> View {
-  let v = View(box = Vector(w, h))
-  v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h, fill = back))
+## comp.place("grid", func (t) { grid_pulse(16, 9, t / 3s) }, in = 0s, out = 3s)
+export func grid_pulse(w: Number, h: Number, progress: Number, step: Number = 1, color: Color = #4080e0, back: Color = #12151a) -> Group {
+  let items = [Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = w, h = h, fill = back)]
   let cols = math.floor(w / step)
   let rows = math.floor(h / step)
   let wide = step * 0.03
   for i in 0..=cols {
     let x = i * step
-    let line = Line(from = Vector(x, 0), to = Vector(x, h), stroke = color, strokeWidth = wide, opacity = 0.15)
-    v.place(line)
-    let at = duration * (i / (cols + 1))
-    v.addTrack(motion {
-      at: line.opacity = 0.15
-      at + duration * 0.12: line.opacity = 0.7
-      at + duration * 0.3: line.opacity = 0.15
-    })
+    let (lit) = pulse((progress - i / (cols + 1)) / 0.3)
+    items.push(Line(from = Vector(x, 0), to = Vector(x, h), stroke = color, strokeWidth = wide, opacity = lit))
   }
   for j in 0..=rows {
     let y = j * step
-    let line = Line(from = Vector(0, y), to = Vector(w, y), stroke = color, strokeWidth = wide, opacity = 0.15)
-    v.place(line)
-    let at = duration * (j / (rows + 1))
-    v.addTrack(motion {
-      at: line.opacity = 0.15
-      at + duration * 0.12: line.opacity = 0.7
-      at + duration * 0.3: line.opacity = 0.15
-    })
+    let (lit) = pulse((progress - j / (rows + 1)) / 0.3)
+    items.push(Line(from = Vector(0, y), to = Vector(w, y), stroke = color, strokeWidth = wide, opacity = lit))
   }
-  v
+  Group(...items)
 }
 
-## レーダーの掃引。duration で 1 回転する
+## レーダーの掃引。progress が 0 から 1 になる間に 1 回転する
 ## @category 動く
 ## @param w 幅
 ## @param h 高さ
-## @param duration 1 回転の長さ
-## @param start 動き出す時刻 (既定 0s)
+## @param progress 回転の進み 0..1
 ## @param rings 円の本数 (既定 3)
 ## @param color 線と扇の色 (既定 緑)
 ## @param back 背の色 (既定 ほぼ黒)
-## @returns 箱が w x h の View。Timeline を持っているので、置けば動く
+## @returns 左上を (0, 0) とした w x h の Group
 ## @example
-## v.place(radar_sweep(8, 8, 4s), at = Pos(0, 0, anchor = :topLeft), w = 8)
-export func radar_sweep(w: Number, h: Number, duration: Duration, start: Duration = 0s, rings: Number = 3, color: Color = #4aa863, back: Color = #0e1412) -> View {
-  let v = View(box = Vector(w, h))
+## comp.place("radar", func (t) { radar_sweep(8, 8, t / 4s) }, in = 0s, out = 4s)
+export func radar_sweep(w: Number, h: Number, progress: Number, rings: Number = 3, color: Color = #4aa863, back: Color = #0e1412) -> Group {
   let cx = w / 2
   let cy = h / 2
   let r = math.min(w, h) / 2
-  v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h, fill = back))
+  let items = [Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = w, h = h, fill = back)]
   for i in 1..=rings {
-    v.place(Circle(position = Pos(cx, cy), radius = r * i / rings, stroke = alpha(color, 0.35), strokeWidth = r * 0.006))
+    items.push(Circle(position = Vector(cx, cy), radius = r * i / rings, stroke = alpha(color, 0.35), strokeWidth = r * 0.006))
   }
-  v.place(Line(from = Vector(cx - r, cy), to = Vector(cx + r, cy), stroke = alpha(color, 0.35), strokeWidth = r * 0.006))
-  v.place(Line(from = Vector(cx, cy - r), to = Vector(cx, cy + r), stroke = alpha(color, 0.35), strokeWidth = r * 0.006))
-  let sweep = Polygon(points = shape.ring_segment(cx, cy, 0, r, -50, 0, 24), fill = alpha(color, 0.35), pivot = Vector(cx, cy))
-  v.place(sweep)
-  v.addTrack(motion {
-    0s: sweep.rotation = 0
-    duration: sweep.rotation = 360
-  })
-  v
+  items.push(Line(from = Vector(cx - r, cy), to = Vector(cx + r, cy), stroke = alpha(color, 0.35), strokeWidth = r * 0.006))
+  items.push(Line(from = Vector(cx, cy - r), to = Vector(cx, cy + r), stroke = alpha(color, 0.35), strokeWidth = r * 0.006))
+  # 扇の点は箱の座標のまま。円の中心を anchor にして、その場で回す
+  items.push(Polygon(points = shape.ring_segment(cx, cy, 0, r, -math.tau * 50 / 360, 0, 24), fill = alpha(color, 0.35), position = Vector(cx, cy), anchor = Vector(cx, cy), rotation = progress * math.tau))
+  Group(...items)
 }
 
 ## にじんだ塊が漂う背景 (Shader)
@@ -172,10 +156,10 @@ export func radar_sweep(w: Number, h: Number, duration: Duration, start: Duratio
 ## @param a 塊の色 その 1
 ## @param b 塊の色 その 2
 ## @param speed 漂う速さ (既定 1)
-## @returns 箱が w x h の View
+## @returns 左上を (0, 0) とした w x h の Group
 ## @example
-## v.place(blobs(16, 9, #10131a, #4080e0, #b04ae0), at = Pos(0, 0, anchor = :topLeft), w = 16)
-export func blobs(w: Number, h: Number, back: Color = #10131a, a: Color = #4080e0, b: Color = #b04ae0, speed: Number = 1) -> View {
+## comp.place("blobs", blobs(16, 9, #10131a, #4080e0, #b04ae0), in = 0s, out = comp.duration)
+export func blobs(w: Number, h: Number, back: Color = #10131a, a: Color = #4080e0, b: Color = #b04ae0, speed: Number = 1) -> Group {
   let ar = a.r
   let ag = a.g
   let ab = a.b
@@ -185,8 +169,7 @@ export func blobs(w: Number, h: Number, back: Color = #10131a, a: Color = #4080e
   let kr = back.r
   let kg = back.g
   let kb = back.b
-  let v = View(box = Vector(w, h))
-  v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h, fill = Shader(color = func (x, y, t) {
+  Group(Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = w, h = h, fill = Shader(color = func (x, y, t) {
     let u = x / w
     let v = y / h * (h / w)
     let s = t * speed * 0.6
@@ -203,7 +186,6 @@ export func blobs(w: Number, h: Number, back: Color = #10131a, a: Color = #4080e
     let kb2 = math.min(w2 + w3 * 0.4, 1)
     Color(kr + (ar - kr) * ka + (br - kr) * kb2, kg + (ag - kg) * ka + (bg - kg) * kb2, kb + (ab - kb) * ka + (bb - kb) * kb2)
   })))
-  v
 }
 
 ## フィルムのざらつき (Shader)。一番上に重ねる
@@ -212,12 +194,11 @@ export func blobs(w: Number, h: Number, back: Color = #10131a, a: Color = #4080e
 ## @param h 高さ
 ## @param amount ざらつきの強さ 0..1 (既定 0.12)
 ## @param grain_size 粒の粗さ。大きいほど粗い (既定 1)
-## @returns 箱が w x h の View
+## @returns 左上を (0, 0) とした w x h の Group
 ## @example
-## v.place(grain(16, 9, 0.15), at = Pos(0, 0, anchor = :topLeft), w = 16)
-export func grain(w: Number, h: Number, amount: Number = 0.12, grain_size: Number = 1) -> View {
-  let v = View(box = Vector(w, h))
-  v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = w, h = h, fill = Shader(color = func (x, y, t) {
+## comp.place("grain", grain(16, 9, 0.15), in = 0s, out = comp.duration)
+export func grain(w: Number, h: Number, amount: Number = 0.12, grain_size: Number = 1) -> Group {
+  Group(Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = w, h = h, fill = Shader(color = func (x, y, t) {
     let px = math.floor(x / (w / 640) / grain_size)
     let py = math.floor(y / (w / 640) / grain_size)
     let seed = px * 12.9898 + py * 78.233 + math.floor(t * 24) * 43.123
@@ -225,5 +206,4 @@ export func grain(w: Number, h: Number, amount: Number = 0.12, grain_size: Numbe
     let r = n - math.floor(n)
     Color(255 * r, 255 * r, 255 * r, amount)
   })))
-  v
 }

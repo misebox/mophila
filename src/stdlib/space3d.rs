@@ -260,10 +260,10 @@ impl Camera {
         let lens = match kind {
             "PerspectiveCamera" => {
                 let fov = num("fov")?;
-                if fov <= 0.0 || fov >= 180.0 {
-                    return err(Kind::OutOfRange, format!("PerspectiveCamera.fov must be between 0 and 180 degrees, found {fov}"));
+                if fov <= 0.0 || fov >= std::f64::consts::PI {
+                    return err(Kind::OutOfRange, format!("PerspectiveCamera.fov must be between 0 and pi radians, found {fov}"));
                 }
-                Lens::Perspective(center.1 / (fov.to_radians() / 2.0).tan())
+                Lens::Perspective(center.1 / (fov / 2.0).tan())
             }
             "OrthographicCamera" => {
                 let height = num("height")?;
@@ -380,8 +380,8 @@ fn applied(m: &M34, p: P3) -> P3 {
 }
 
 /// 軸まわりの回転。axis は 0 が x、1 が y、2 が z。右ねじの向き (軸の先から見て反時計回り)
-fn rotation(axis: usize, degrees: f64) -> M34 {
-    let (s, c) = degrees.to_radians().sin_cos();
+fn rotation(axis: usize, radians: f64) -> M34 {
+    let (s, c) = radians.sin_cos();
     let mut m = IDENTITY;
     // 回す平面の 2 軸。その 2 つだけが混ざる
     let (u, v) = [(1, 2), (2, 0), (0, 1)][axis];
@@ -528,18 +528,17 @@ fn transform(m: &M34) -> Value {
         decl: None,
         attrs,
         children: Vec::new(),
-        placed: false,
-        tracks: Vec::new(),
+        layers: Vec::new(),
     })))
 }
 
 /// Transform3 のメソッド。どれも新しい Transform3 か、効かせた点を返す
 pub fn transform_method(o: &Object, name: &str, args: &[(Option<String>, Value)]) -> Result<Value> {
     let m = matrix(o)?;
-    let degrees = || -> Result<f64> {
+    let number = || -> Result<f64> {
         match args {
             [(None, Value::Number(n, _))] => Ok(*n),
-            _ => err(Kind::ArgumentType, format!("Transform3.{name} takes one Number (degrees)")),
+            _ => err(Kind::ArgumentType, format!("Transform3.{name} takes one Number")),
         }
     };
     let here = || -> Result<P3> {
@@ -551,9 +550,9 @@ pub fn transform_method(o: &Object, name: &str, args: &[(Option<String>, Value)]
     // 後から足したものが、点には後に効く
     let add = |next: M34| Ok(transform(&compose(&next, &m)));
     match name {
-        "rotate_x" => add(rotation(0, degrees()?)),
-        "rotate_y" => add(rotation(1, degrees()?)),
-        "rotate_z" => add(rotation(2, degrees()?)),
+        "rotate_x" => add(rotation(0, number()?)),
+        "rotate_y" => add(rotation(1, number()?)),
+        "rotate_z" => add(rotation(2, number()?)),
         "translate" => {
             let (x, y, z) = here()?;
             let mut next = IDENTITY;
@@ -561,7 +560,7 @@ pub fn transform_method(o: &Object, name: &str, args: &[(Option<String>, Value)]
             add(next)
         }
         "scale" => {
-            let k = degrees()?;
+            let k = number()?;
             let mut next = IDENTITY;
             (next[0], next[5], next[10]) = (k, k, k);
             add(next)
@@ -649,8 +648,7 @@ fn object(kind: &str, attrs: HashMap<String, Value>) -> Value {
         decl: None,
         attrs,
         children: Vec::new(),
-        placed: false,
-        tracks: Vec::new(),
+        layers: Vec::new(),
     })))
 }
 

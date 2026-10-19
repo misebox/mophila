@@ -10,8 +10,8 @@ import { HOUSE } from ..palette.house
 ## @param size マス 1 つの辺 (箱の座標)
 ## @param samples 1 ピクセルあたりの評価点
 ## @example
-## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,
-##              fill = checker(#ffffff, #e6e2da, 0.5)))
+## Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9,
+##      fill = checker(#ffffff, #e6e2da, 0.5))
 export func checker(a: Color, b: Color, size: Number = 0.5, samples: Number = 4) -> Shader {
   Shader(
     color = func (x, y, t) {

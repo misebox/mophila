@@ -76,28 +76,20 @@ pub struct AttrDef {
 }
 
 pub const ATTRS: &[AttrDef] = &[
-    AttrDef { receivers: &["Vector", "Pos"], name: "x", ty: "Number", doc: "横の座標", get: get_x, set: Some(set_x) },
-    AttrDef { receivers: &["Vector", "Pos"], name: "y", ty: "Number", doc: "縦の座標", get: get_y, set: Some(set_y) },
+    AttrDef { receivers: &["Vector"], name: "x", ty: "Number", doc: "横の座標", get: get_x, set: Some(set_x) },
+    AttrDef { receivers: &["Vector"], name: "y", ty: "Number", doc: "縦の座標", get: get_y, set: Some(set_y) },
     AttrDef { receivers: &["Vector3"], name: "x", ty: "Number", doc: "3D の x", get: get_x3, set: Some(set_x3) },
     AttrDef { receivers: &["Vector3"], name: "y", ty: "Number", doc: "3D の y", get: get_y3, set: Some(set_y3) },
     AttrDef { receivers: &["Vector3"], name: "z", ty: "Number", doc: "3D の z", get: get_z3, set: Some(set_z3) },
-    AttrDef { receivers: &["Pos"], name: "anchor", ty: "Anchor", doc: "その座標が図形のどこを指すか", get: get_anchor, set: Some(set_anchor) },
-    AttrDef { receivers: &["Pos"], name: "vector", ty: "Vector", doc: "基準点を外した座標", get: get_vector, set: Some(set_vector) },
     AttrDef { receivers: &["Color"], name: "r", ty: "Number", doc: "赤 0..255", get: get_r, set: None },
     AttrDef { receivers: &["Color"], name: "g", ty: "Number", doc: "緑 0..255", get: get_g, set: None },
     AttrDef { receivers: &["Color"], name: "b", ty: "Number", doc: "青 0..255", get: get_b, set: None },
     AttrDef { receivers: &["Color"], name: "a", ty: "Number", doc: "不透明度 0..1", get: get_a, set: None },
     AttrDef { receivers: &["Tuple"], name: "x", ty: "T", doc: "2 要素の組の 1 つ目 (Vector と同じ書き方で読める)", get: get_tuple_x, set: None },
     AttrDef { receivers: &["Tuple"], name: "y", ty: "T", doc: "2 要素の組の 2 つ目", get: get_tuple_y, set: None },
-    AttrDef {
-        receivers: &["Timeline", "Motion"],
-        name: "duration",
-        ty: "Duration",
-        doc: "長さ。代入すると長さだけが変わる (行の時刻は動かない)。0..1 で書いた表では、これが実時間を決める。時刻ごと動かすなら scale / fit / trim",
-        get: get_duration,
-        set: Some(set_duration_attr),
-    },
     AttrDef { receivers: &["Audio"], name: "duration", ty: "Duration", doc: "音声ファイルの長さ", get: get_duration, set: None },
+    AttrDef { receivers: &["Audio"], name: "volume", ty: "Number", doc: "音量。1 がそのまま", get: get_volume, set: None },
+    AttrDef { receivers: &["Audio"], name: "loop", ty: "Bool", doc: "out まで繰り返すか", get: get_loop, set: None },
     AttrDef { receivers: &["Audio", "Image"], name: "file", ty: "String", doc: "import に書いたパス", get: get_file, set: None },
     AttrDef { receivers: &["Image"], name: "width", ty: "Number", doc: "画像の幅 (ピクセル)", get: get_width, set: None },
     AttrDef { receivers: &["Image"], name: "height", ty: "Number", doc: "画像の高さ (ピクセル)", get: get_height, set: None },
@@ -109,34 +101,45 @@ fn def_of(receiver: &str, name: &str) -> Option<&'static AttrDef> {
 
 fn nums(v: &Value) -> (f64, f64) {
     match v {
-        Value::Vector(x, y) | Value::Apos(_, x, y) => (*x, *y),
+        Value::Vector(x, y) => (*x, *y),
         _ => (0.0, 0.0),
     }
 }
 
-fn rebuilt(v: &Value, x: f64, y: f64) -> Value {
+fn get_x(v: &Value) -> Result<Value> {
     match v {
-        Value::Apos(a, ..) => Value::Apos(a.clone(), x, y),
-        _ => Value::Vector(x, y),
+        Value::LVec(x, _) => Ok(Value::Length(*x)),
+        _ => Ok(Value::num(nums(v).0)),
     }
 }
 
-fn get_x(v: &Value) -> Result<Value> {
-    Ok(Value::num(nums(v).0))
+fn get_y(v: &Value) -> Result<Value> {
+    match v {
+        Value::LVec(_, y) => Ok(Value::Length(*y)),
+        _ => Ok(Value::num(nums(v).1)),
+    }
 }
 
-fn get_y(v: &Value) -> Result<Value> {
-    Ok(Value::num(nums(v).1))
+/// 成分を長さとして書き換える。長さが絡むときは LVec、数だけなら元の姿のまま
+fn set_component(v: &Value, nv: Value, which: usize) -> Result<Written> {
+    let name = ["x", "y"][which];
+    if let Some((x, y)) = v.as_lvec().filter(|_| matches!(v, Value::LVec(..)) || matches!(nv, Value::Length(_))) {
+        let Some(len) = nv.as_length() else {
+            return err(Kind::AttributeType, format!("{name} expects Number or Length, found {}", nv.type_name()));
+        };
+        return wrote(if which == 0 { Value::vector_of(len, y) } else { Value::vector_of(x, len) });
+    }
+    let (x, y) = nums(v);
+    let n = number(name, nv)?;
+    wrote(if which == 0 { Value::Vector(n, y) } else { Value::Vector(x, n) })
 }
 
 fn set_x(v: &Value, nv: Value) -> Result<Written> {
-    let (_, y) = nums(v);
-    wrote(rebuilt(v, number("x", nv)?, y))
+    set_component(v, nv, 0)
 }
 
 fn set_y(v: &Value, nv: Value) -> Result<Written> {
-    let (x, _) = nums(v);
-    wrote(rebuilt(v, x, number("y", nv)?))
+    set_component(v, nv, 1)
 }
 
 fn nums3(v: &Value) -> (f64, f64, f64) {
@@ -171,33 +174,6 @@ fn set_y3(v: &Value, nv: Value) -> Result<Written> {
 fn set_z3(v: &Value, nv: Value) -> Result<Written> {
     let (x, y, _) = nums3(v);
     wrote(Value::Vector3(x, y, number("z", nv)?))
-}
-
-fn get_anchor(v: &Value) -> Result<Value> {
-    match v {
-        Value::Apos(a, ..) => Ok(Value::Symbol(a.clone())),
-        _ => Ok(Value::Symbol(String::new())),
-    }
-}
-
-fn set_anchor(v: &Value, nv: Value) -> Result<Written> {
-    let (x, y) = nums(v);
-    match nv {
-        Value::Symbol(s) => wrote(Value::Apos(s, x, y)),
-        v => err(Kind::AttributeType, format!("anchor expects Anchor, found {}", v.type_name())),
-    }
-}
-
-fn get_vector(v: &Value) -> Result<Value> {
-    let (x, y) = nums(v);
-    Ok(Value::Vector(x, y))
-}
-
-fn set_vector(v: &Value, nv: Value) -> Result<Written> {
-    match nv {
-        Value::Vector(x, y) => wrote(rebuilt(v, x, y)),
-        v => err(Kind::AttributeType, format!("vector expects Vector, found {}", v.type_name())),
-    }
 }
 
 /// 色の成分。r g b は 0..255、a は 0..1 (Color を作るときと同じ単位)
@@ -239,23 +215,23 @@ fn get_tuple_y(v: &Value) -> Result<Value> {
 
 fn get_duration(v: &Value) -> Result<Value> {
     Ok(Value::Duration(match v {
-        Value::Timeline(t) => t.duration(),
-        Value::Motion(m) => m.duration(),
         Value::Audio(a) => a.length,
         _ => 0.0,
     }))
 }
 
-fn set_duration_attr(v: &Value, nv: Value) -> Result<Written> {
-    let Value::Duration(d) = nv else {
-        return err(Kind::AttributeType, format!("duration expects Duration, found {}", nv.type_name()));
-    };
+fn get_volume(v: &Value) -> Result<Value> {
     match v {
-        Value::Timeline(t) => t.duration.set(Some(d)),
-        Value::Motion(m) => m.duration.set(Some(d)),
-        _ => return err(Kind::AttributeType, "duration cannot be assigned here"),
+        Value::Audio(a) => Ok(Value::num(a.volume)),
+        v => err(Kind::UndefinedAttribute, format!("{} has no volume", v.type_name())),
     }
-    Ok(Written::Done)
+}
+
+fn get_loop(v: &Value) -> Result<Value> {
+    match v {
+        Value::Audio(a) => Ok(Value::Bool(a.looping)),
+        v => err(Kind::UndefinedAttribute, format!("{} has no loop", v.type_name())),
+    }
 }
 
 fn get_file(v: &Value) -> Result<Value> {

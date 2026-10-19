@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::lang::ast::{Arg, BinOp, DictKey, Expr, FieldDecl, FuncDef, ImportKind, ImportSource, MemberDecl, MotionDef, MotionRow, Param, Pattern, RowItem, Stmt, StmtKind, TypeAnn, TypeDecl};
+use crate::lang::ast::{Arg, BinOp, DictKey, Expr, FieldDecl, FuncDef, ImportKind, ImportSource, MemberDecl, Param, Pattern, ProgressDef, ProgressRow, Stmt, StmtKind, TypeAnn, TypeDecl};
 use crate::lang::error::{Kind, Result, err};
 use crate::lang::lexer::{Tok, Token, lex};
 
@@ -17,18 +17,6 @@ pub fn parse_type(src: &str) -> Result<TypeAnn> {
     match p.peek() {
         Tok::Eof | Tok::Newline => Ok(ann),
         _ => p.unexpected("end of type"),
-    }
-}
-
-/// `o.position.x` を (o, [position, x]) に分ける
-fn split_path(e: Expr) -> Option<(Expr, Vec<String>)> {
-    match e {
-        Expr::Attr(inner, name) => {
-            let (obj, mut path) = split_path(*inner).unwrap_or_else(|| unreachable!());
-            path.push(name);
-            Some((obj, path))
-        }
-        other => Some((other, vec![])),
     }
 }
 
@@ -329,9 +317,12 @@ impl Parser {
             Tok::False => Expr::Bool(false),
             Tok::Number(v) => Expr::Number(v),
             Tok::Duration(v) => Expr::Duration(v),
+            Tok::Length(l) => Expr::Length(l),
             Tok::Color(c) => Expr::Color(c),
             Tok::Str(s) => Expr::Str(s),
             Tok::Symbol(s) => Expr::Symbol(s),
+            // progress [:x, :y] { ... }。progress は名前としても使えるので、"[" と Symbol が続くときだけ表
+            Tok::Ident(name) if name == "progress" && *self.peek() == Tok::LBracket && matches!(self.peek_at(1), Tok::Symbol(_)) => self.progress_expr()?,
             Tok::Ident(name) => Expr::Ident(name),
             Tok::LParen => {
                 // () は空の Tuple
@@ -380,8 +371,6 @@ impl Parser {
             Tok::If => self.if_expr()?,
             Tok::LBrace => self.dict_expr()?,
             Tok::Func => self.func_expr()?,
-            Tok::Context => self.context_expr()?,
-            Tok::Motion => self.motion_expr()?,
             _ => {
                 self.pos -= 1;
                 return self.unexpected("expression");
@@ -441,6 +430,12 @@ impl Parser {
                     self.next();
                     self.next();
                     Some(n)
+                }
+                // 引数の名前に限って、in も書ける (comp.place(..., in = 2s, out = 5s))
+                (Tok::In, Tok::Eq) => {
+                    self.next();
+                    self.next();
+                    Some("in".to_string())
                 }
                 _ => None,
             };
@@ -782,22 +777,6 @@ impl Parser {
         Ok(Expr::Func(Rc::new(FuncDef { params, returns, body: body? })))
     }
 
-    fn context_expr(&mut self) -> Result<Expr> {
-        let mut bindings = Vec::new();
-        loop {
-            let target = self.expr(0)?;
-            self.expect(Tok::As)?;
-            bindings.push((target, self.ident()?));
-            if *self.peek() != Tok::Comma {
-                break;
-            }
-            self.next();
-        }
-        self.expect(Tok::LBrace)?;
-        let body = self.stmts_until(&Tok::RBrace)?;
-        Ok(Expr::Context(bindings, body))
-    }
-
     /// `{` の直後から。{ "k": v, x, ... }
     fn dict_expr(&mut self) -> Result<Expr> {
         let mut entries = Vec::new();
@@ -830,68 +809,24 @@ impl Parser {
         }
     }
 
-    /// `motion` の直後から
-    fn motion_expr(&mut self) -> Result<Expr> {
-        let mut params = Vec::new();
-        let mut target = None;
-        match self.peek().clone() {
-            Tok::LParen => {
-                self.next();
-                loop {
-                    params.push(self.ident()?);
-                    if *self.peek() != Tok::Comma {
-                        break;
-                    }
-                    self.next();
+    /// `progress [:x, :y] { 0: 2, 4.5 ... }`。`progress` は読み終えている
+    fn progress_expr(&mut self) -> Result<Expr> {
+        self.expect(Tok::LBracket)?;
+        let mut columns = Vec::new();
+        loop {
+            let Tok::Symbol(name) = self.next() else {
+                self.pos -= 1;
+                return self.unexpected("column name like :x");
+            };
+            columns.push(name);
+            match self.next() {
+                Tok::Comma => {}
+                Tok::RBracket => break,
+                _ => {
+                    self.pos -= 1;
+                    return self.unexpected("\",\" or \"]\"");
                 }
-                self.expect(Tok::RParen)?;
             }
-            Tok::Ident(_) => {
-                // 対象は名前・属性・添字で書ける (g.ball、xs[0] など)。[ の前までを式として読む
-                let mut obj = Expr::Ident(self.ident()?);
-                loop {
-                    match self.peek() {
-                        Tok::Dot => {
-                            self.next();
-                            obj = Expr::Attr(Box::new(obj), self.ident()?);
-                        }
-                        // "[" は属性の並びの始まりでもある。中が Symbol でなければ添字
-                        Tok::LBracket if matches!(self.tokens.get(self.pos + 1).map(|t| &t.tok), Some(Tok::Symbol(_))) => break,
-                        Tok::LBracket => {
-                            self.next();
-                            let index = self.expr(0)?;
-                            self.expect(Tok::RBracket)?;
-                            obj = Expr::Index(Box::new(obj), Box::new(index));
-                        }
-                        _ => break,
-                    }
-                }
-                self.expect(Tok::LBracket)?;
-                let mut paths = Vec::new();
-                loop {
-                    let Tok::Symbol(first) = self.next() else {
-                        self.pos -= 1;
-                        return self.unexpected("attribute name like :radius");
-                    };
-                    let mut path = vec![first];
-                    while *self.peek() == Tok::Dot {
-                        self.next();
-                        path.push(self.ident()?);
-                    }
-                    paths.push(path);
-                    match self.next() {
-                        Tok::Comma => {}
-                        Tok::RBracket => break,
-                        _ => {
-                            self.pos -= 1;
-                            return self.unexpected("\",\" or \"]\"");
-                        }
-                    }
-                }
-                target = Some((obj, paths));
-            }
-            Tok::LBrace => {}
-            _ => return self.unexpected("\"(\", target, or \"{\""),
         }
         self.expect(Tok::LBrace)?;
         let mut rows = Vec::new();
@@ -899,82 +834,45 @@ impl Parser {
             self.skip_newlines();
             if *self.peek() == Tok::RBrace {
                 self.next();
-                return Ok(Expr::Motion(Box::new(MotionDef { params, target, rows })));
+                return Ok(Expr::Progress(Box::new(ProgressDef { columns, rows })));
             }
-            rows.push(self.motion_row()?);
+            let row = self.progress_row()?;
+            if row.cells.len() != columns.len() {
+                return err(Kind::ArityMismatch, format!("line {}:{}: a progress row has {} values but {} columns are listed", self.line(), self.col(), row.cells.len(), columns.len()));
+            }
+            rows.push(row);
         }
     }
 
-    /// `時刻: 項目, 項目 :ease_out :fade_in`
-    fn motion_row(&mut self) -> Result<MotionRow> {
-        let time = self.keyframe_time()?;
-        let end = match *self.peek() == Tok::DotDot {
-            true => {
-                self.next();
-                Some(self.keyframe_time()?)
-            }
-            false => None,
-        };
+    /// `0.4: _, 6 :ease`。値の隣の `:ease` は、その列のこの行へ向かう曲線
+    fn progress_row(&mut self) -> Result<ProgressRow> {
+        let at = self.expr(7)?;
         self.expect(Tok::Colon)?;
-        // 範囲の行だけ、値の代わりに文の列を書ける。let が書けるので
-        // 1 つの点から複数の属性を決めるときに 1 度しか計算しなくて済む。
-        // 範囲でない行の "{" は Dict なので、ここでしか見ない
-        if end.is_some() && *self.peek() == Tok::LBrace {
-            self.next();
-            let body = self.stmts_until(&Tok::RBrace)?;
-            return Ok(MotionRow { time, end, items: vec![RowItem::Block(body)], ease: None });
-        }
-        let mut items = Vec::new();
+        let mut cells = Vec::new();
         loop {
-            if matches!(self.peek(), Tok::Symbol(_) | Tok::Newline | Tok::RBrace) {
-                break;
-            }
-            let e = self.expr(0)?;
-            if *self.peek() == Tok::Eq {
+            if matches!(self.peek(), Tok::Ident(n) if n == "_") {
                 self.next();
-                let value = self.expr(0)?;
-                let (obj, path) = split_path(e).ok_or_else(|| {
-                    crate::lang::error::MophError::new(Kind::UnexpectedToken, format!("line {}:{}: keyframe must assign to an attribute", self.line(), self.col()))
-                })?;
-                items.push(RowItem::Assign(obj, path, value));
+                cells.push(None);
             } else {
-                items.push(RowItem::Value(e));
+                let value = self.expr(0)?;
+                let mut curve = None;
+                while let Tok::Symbol(name) = self.peek().clone() {
+                    self.next();
+                    if !crate::lang::curve::CURVES.contains(&name.as_str()) {
+                        return err(Kind::OutOfRange, format!("line {}:{}: unknown modifier :{name}", self.line(), self.col()));
+                    }
+                    curve = Some(name);
+                }
+                cells.push(Some((value, curve)));
             }
             if *self.peek() != Tok::Comma {
                 break;
             }
             self.next();
-            // "0s: 0, 1s: 1" のように 1 行に複数のキーフレームを書ける
-            if matches!(self.peek(), Tok::Duration(_) | Tok::Number(_) | Tok::Ident(_)) && *self.peek_at(1) == Tok::Colon {
-                break;
-            }
-        }
-        let mut ease = None;
-        while let Tok::Symbol(name) = self.peek().clone() {
-            self.next();
-            match name.as_str() {
-                "linear" | "ease" | "ease_in" | "ease_out" => ease = Some(name),
-                "ease_in_out" => return err(Kind::OutOfRange, format!("line {}:{}: use :ease instead of :ease_in_out", self.line(), self.col())),
-                "fade" | "fade_in" | "fade_out" => {
-                    return err(Kind::OutOfRange, format!("line {}:{}: write opacity values, or use fade_in / fade_out from the animation library", self.line(), self.col()))
-                }
-                _ => return err(Kind::OutOfRange, format!("line {}:{}: unknown modifier :{name}", self.line(), self.col())),
-            }
         }
         match self.peek() {
-            Tok::Newline | Tok::RBrace | Tok::Duration(_) | Tok::Number(_) | Tok::Ident(_) | Tok::LParen => Ok(MotionRow { time, end, items, ease }),
-            _ => self.unexpected("end of keyframe"),
-        }
-    }
-
-    /// キーフレームの時刻。`2s` のような値のほか、式も書ける (`dur` `start + 1s`)。
-    /// `..` は範囲の区切りなので、そこまでで止まる強さで読む
-    fn keyframe_time(&mut self) -> Result<Expr> {
-        match self.peek() {
-            Tok::Duration(_) | Tok::Number(_) | Tok::Ident(_) | Tok::LParen | Tok::Minus => self.expr(7),
-            _ => {
-                self.unexpected("keyframe time")
-            }
+            Tok::Newline | Tok::RBrace => Ok(ProgressRow { at, cells }),
+            _ => self.unexpected("end of row"),
         }
     }
 }

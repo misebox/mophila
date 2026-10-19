@@ -12,8 +12,8 @@ import { HOUSE } from ..palette.house
 ## @param wavelength 折れ 1 回ぶんの長さ (箱の座標)
 ## @param samples 1 ピクセルあたりの評価点
 ## @example
-## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,
-##              fill = zigzag(#1b1220, #33213a, 0.5, 0.4, 1.4)))
+## Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9,
+##      fill = zigzag(#1b1220, #33213a, 0.5, 0.4, 1.4))
 export func zigzag(a: Color, b: Color, pitch: Number = 0.5, amplitude: Number = 0.4, wavelength: Number = 1.4, samples: Number = 4) -> Shader {
   Shader(
     color = func (x, y, t) {

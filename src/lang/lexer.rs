@@ -4,6 +4,7 @@ use crate::lang::error::{Kind, Result, err};
 pub enum Tok {
     Number(f64),
     Duration(f64),
+    Length(crate::lang::length::Length),
     Color([f32; 4]),
     Str(String),
     Symbol(String),
@@ -31,9 +32,7 @@ pub enum Tok {
     At,
     Import,
     Export,
-    Context,
     As,
-    Motion,
     Output,
     LParen,
     RParen,
@@ -176,9 +175,7 @@ pub fn lex(src: &str) -> Result<Vec<Token>> {
                     "alias" => Tok::AliasKw,
                     "import" => Tok::Import,
                     "export" => Tok::Export,
-                    "context" => Tok::Context,
                     "as" => Tok::As,
-                    "motion" => Tok::Motion,
                     "output" => Tok::Output,
                     _ => Tok::Ident(name),
                 };
@@ -247,7 +244,7 @@ pub fn parse_color(hex: &str) -> [f32; 4] {
     [ch(0), ch(2), ch(4), a]
 }
 
-/// 数値リテラル。単位 (ms/s/m/h) が付けば Duration (`1m23s` のように連結可)、
+/// 数値リテラル。単位 (vx/vy/vmin/vmax/px) が付けば Length、単位 (ms/s/m/h) が付けば Duration (`1m23s` のように連結可)、
 /// `01:23` / `01:23:45.678` はコロン形式の Duration、% が付けば 1/100 の Number
 fn lex_number(chars: &[char], start: usize, line: usize, col: usize) -> Result<(Tok, usize)> {
     let invalid = |end: usize| {
@@ -269,6 +266,12 @@ fn lex_number(chars: &[char], start: usize, line: usize, col: usize) -> Result<(
         }
         let secs = parts.iter().fold(0.0, |acc, v| acc * 60.0 + v);
         return Ok((Tok::Duration(secs), i - start));
+    }
+
+    // 長さの単位 (vx vy vmin vmax px)。時間と違って連結しない
+    let unit: String = chars[i..].iter().take_while(|c| c.is_ascii_alphabetic()).collect();
+    if let Some(length) = crate::lang::length::Length::with_unit(&unit, value) {
+        return Ok((Tok::Length(length), i + unit.len() - start));
     }
 
     // 単位付き (連結可)

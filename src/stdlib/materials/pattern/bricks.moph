@@ -12,8 +12,8 @@ import { HOUSE } from ..palette.house
 ## @param width 目地の太さ (箱の座標)
 ## @param samples 1 ピクセルあたりの評価点
 ## @example
-## v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9,
-##              fill = bricks(#efe7d8, #b8a68a, 0.8, 0.32, 0.04)))
+## Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9,
+##      fill = bricks(#efe7d8, #b8a68a, 0.8, 0.32, 0.04))
 export func bricks(back: Color, line: Color, w: Number = 0.8, h: Number = 0.32, width: Number = 0.04, samples: Number = 4) -> Shader {
   let across = width / w
   let down = width / h

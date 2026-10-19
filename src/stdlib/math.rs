@@ -7,9 +7,9 @@ use crate::lang::error::{Kind, Result, err};
 use crate::lang::value::{Module, Value};
 
 pub const DOCS: &[Entry] = &[
-    Entry { name: "PI", signature: "math.PI", returns: "Number", doc: "円周率" },
-    Entry { name: "TAU", signature: "math.TAU", returns: "Number", doc: "2π" },
-    Entry { name: "E", signature: "math.E", returns: "Number", doc: "自然対数の底" },
+    Entry { name: "pi", signature: "math.pi", returns: "Number", doc: "円周率" },
+    Entry { name: "tau", signature: "math.tau", returns: "Number", doc: "2π。1 周のラジアン" },
+    Entry { name: "e", signature: "math.e", returns: "Number", doc: "自然対数の底" },
     Entry { name: "sin", signature: "math.sin(x: Number)", returns: "Number", doc: "正弦 (ラジアン)" },
     Entry { name: "cos", signature: "math.cos(x: Number)", returns: "Number", doc: "余弦 (ラジアン)" },
     Entry { name: "floor", signature: "math.floor(x: Number)", returns: "Number", doc: "切り捨て" },
@@ -42,9 +42,9 @@ pub const DOCS: &[Entry] = &[
 
 pub fn module() -> Module {
     let mut items = HashMap::new();
-    items.insert("PI".into(), Value::num(std::f64::consts::PI));
-    items.insert("TAU".into(), Value::num(std::f64::consts::TAU));
-    items.insert("E".into(), Value::num(std::f64::consts::E));
+    items.insert("pi".into(), Value::num(std::f64::consts::PI));
+    items.insert("tau".into(), Value::num(std::f64::consts::TAU));
+    items.insert("e".into(), Value::num(std::f64::consts::E));
     for f in [
         "sin", "cos", "tan", "asin", "acos", "atan", "floor", "ceil", "round", "abs", "sign", "sqrt", "pow", "ln", "log", "exp", "exp2", "log10", "log2", "atan2", "hypot", "max", "min", "clamp", "lerp",
         "unlerp", "map_range", "nice_step", "polar",
@@ -55,6 +55,10 @@ pub fn module() -> Module {
 }
 
 pub fn call(name: &str, values: &[Value]) -> Result<Value> {
+    // 半径が単位つきの長さなら、成分も長さのまま返す
+    if let ("polar", [Value::Length(r), Value::Number(a, _)]) = (name, values) {
+        return Ok(Value::LVec(r.scaled(a.cos()), r.scaled(-a.sin())));
+    }
     // 長さを比べるだけなら、秒に直して掛け直さなくて済む。単位が混ざるものは通さない
     if matches!(name, "max" | "min" | "clamp") && !values.is_empty() && values.iter().all(|v| matches!(v, Value::Duration(_))) {
         return duration_pick(name, values);

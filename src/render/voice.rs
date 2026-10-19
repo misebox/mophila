@@ -98,6 +98,7 @@ impl VoiceEngine for SayVoiceEngine {
         argv.push("--data-format=LEF32@22050".to_string());
         argv.push("-o".to_string());
         argv.push(out.to_string_lossy().to_string());
+        argv.push("--".to_string());
         argv.push(text.to_string());
         argv
     }

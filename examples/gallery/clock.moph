@@ -35,7 +35,7 @@ comp.place("face", Group(...face), in = 0s, out = total)
 func hand_of(length, width, color, turns) {
   func (t) {
     Line(from = Vector(cx, cy), to = Vector(cx, cy - length), stroke = color, strokeWidth = width,
-      anchor = Vector(cx, cy), rotation = math.tau * turns * t / total)
+      anchor = Vector(cx, cy), position = Vector(cx, cy), rotation = math.tau * turns * t / total)
   }
 }
 comp.place("hour", hand_of(2.0, 0.16, ink, 2/720), in = 0s, out = total)

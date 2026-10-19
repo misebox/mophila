@@ -104,9 +104,9 @@ pub const METHODS: &[Method] = &[
     Method {
         receivers: &["Audio"],
         name: "copy",
-        signature: "audio.copy(volume: Number, loop: Bool)",
+        signature: "audio.copy(volume: Number, loop: Bool, fadeIn: Duration, fadeOut: Duration)",
         returns: "Audio",
-        doc: "音量と繰り返しを変えた Audio。書いた分だけ変わる",
+        doc: "音量、繰り返し、頭と終わりのフェードを変えた Audio。書いた分だけ変わる",
         call: audio_copy,
     },
     Method {
@@ -786,17 +786,21 @@ fn cam_in_front(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
 
 fn audio_copy(_: &mut Interp, r: Value, args: Args) -> Result<Value> {
     let Value::Audio(a) = &r else { return err(Kind::ArgumentType, "copy is a method of Audio") };
-    let (mut volume, mut looping) = (a.volume, a.looping);
+    let (mut volume, mut looping, mut fade_in, mut fade_out) = (a.volume, a.looping, a.fade_in, a.fade_out);
     for (name, v) in &args {
         match (name.as_deref(), v) {
             (Some("volume"), Value::Number(n, _)) if *n >= 0.0 => volume = *n,
             (Some("volume"), v) => return err(Kind::ArgumentType, format!("Audio.copy volume expects a Number from 0, found {v}")),
             (Some("loop"), Value::Bool(b)) => looping = *b,
             (Some("loop"), v) => return err(Kind::ArgumentType, format!("Audio.copy loop expects Bool, found {}", v.type_name())),
-            _ => return err(Kind::ArgumentType, "Audio.copy takes volume and loop, as named arguments"),
+            (Some("fadeIn"), Value::Duration(d)) if *d >= 0.0 => fade_in = *d,
+            (Some("fadeIn"), v) => return err(Kind::ArgumentType, format!("Audio.copy fadeIn expects a Duration from 0s, found {v}")),
+            (Some("fadeOut"), Value::Duration(d)) if *d >= 0.0 => fade_out = *d,
+            (Some("fadeOut"), v) => return err(Kind::ArgumentType, format!("Audio.copy fadeOut expects a Duration from 0s, found {v}")),
+            _ => return err(Kind::ArgumentType, "Audio.copy takes volume, loop, fadeIn and fadeOut, as named arguments"),
         }
     }
-    Ok(Value::Audio(Rc::new(crate::lang::value::Audio { name: a.name.clone(), path: a.path.clone(), length: a.length, volume, looping })))
+    Ok(Value::Audio(Rc::new(crate::lang::value::Audio { name: a.name.clone(), path: a.path.clone(), length: a.length, volume, looping, fade_in, fade_out })))
 }
 
 #[cfg(test)]

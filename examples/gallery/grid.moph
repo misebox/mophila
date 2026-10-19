@@ -17,9 +17,9 @@ for sub in subs {
 let comp = Composition(box = Vector(16, 9), duration = len)
 comp.place("bg", Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9, fill = #202028), in = 0s, out = len)
 
-# 余白 0.3 を除いた領域を 2x2 に分け、各マスの中心に置く。幅 7.5 に縮める
+# 余白 0.3 を除いた領域を 2x2 に分け、各マスの中心に置く。幅 7.5 に縮める。入れ子の Composition は自分の duration で消えるので、out もそれに合わせる
 for (i, (sub, spot)) in subs.zip(grid_centers(0.3, 0.3, 15.4, 8.4, 2, 2)).enumerate() {
-  comp.place("cell-{i}".format(i), sub.copy(position = spot, anchor = Vector(8, 4.5), scale = 7.5 / 16), in = 0s, out = len)
+  comp.place("cell-{i}".format(i), sub.copy(position = spot, anchor = Vector(8, 4.5), scale = 7.5 / 16), in = 0s, out = sub.duration)
 }
 
 output comp

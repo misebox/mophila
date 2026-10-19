@@ -94,11 +94,11 @@ NOT_DRAWN = {("Composition", "duration")}
 
 
 # World と Solid は図形ではなく塗りなので別に書く。Rect の fill に入れて描く
-WORLD_BASE = {"camera": "space3d.PerspectiveCamera(from = (3, 2.5, 5), to = (0, 0, 0), fov = 40, box = (4, 4))", "parts": "[solid]"}
+WORLD_BASE = {"camera": "space3d.PerspectiveCamera(from = (3, 2.5, 5), to = (0, 0, 0), fov = 0.7, box = (4, 4))", "parts": "[solid]"}
 SOLID_BASE = {"mesh": "space3d.box((0, 0, 0), (2, 2, 2))"}
 # (型, 属性, 値 1, 値 2)
 PAINT_CASES = [
-    ("World", "camera", WORLD_BASE["camera"], "space3d.PerspectiveCamera(from = (3, 2.5, 5), to = (0, 0, 0), fov = 25, box = (4, 4))"),
+    ("World", "camera", WORLD_BASE["camera"], "space3d.PerspectiveCamera(from = (3, 2.5, 5), to = (0, 0, 0), fov = 0.45, box = (4, 4))"),
     ("World", "parts", "[solid]", "[]"),
     ("World", "light", "(0.4, 0.8, 0.5)", "(-0.7, 0.2, 0.5)"),
     ("World", "ambient", "0.1", "0.8"),

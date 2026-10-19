@@ -405,7 +405,7 @@ pub const TYPES: &[Type] = &[
         make: "import \"bgm.m4a\" as bgm",
         values: &[],
         members: &[],
-        doc: "読み込んだ音声ファイル。Composition に置くと動画の音になる。copy(volume =, loop =) で音量と繰り返しを変えられる",
+        doc: "読み込んだ音声ファイル。Composition に置くと動画の音になる。copy(volume =, loop =, fadeIn =, fadeOut =) で音量、繰り返し、頭と終わりのフェードを変えられる",
     },
     Type {
         name: "Narration",

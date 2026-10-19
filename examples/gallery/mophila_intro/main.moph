@@ -52,5 +52,5 @@ for (i, l) in layers.enumerate() {
   let (node, at, end) = l
   comp.place("layer-{i}".format(i), node, in = at, out = end)
 }
-comp.place("bgm", bgm.copy(volume = 0.5, loop = true), in = 0s, out = now)
+comp.place("bgm", bgm.copy(volume = 0.5, loop = true, fadeOut = 3s), in = 0s, out = now)
 output comp

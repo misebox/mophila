@@ -90,6 +90,8 @@ pub const ATTRS: &[AttrDef] = &[
     AttrDef { receivers: &["Audio"], name: "duration", ty: "Duration", doc: "音声ファイルの長さ", get: get_duration, set: None },
     AttrDef { receivers: &["Audio"], name: "volume", ty: "Number", doc: "音量。1 がそのまま", get: get_volume, set: None },
     AttrDef { receivers: &["Audio"], name: "loop", ty: "Bool", doc: "out まで繰り返すか", get: get_loop, set: None },
+    AttrDef { receivers: &["Audio"], name: "fadeIn", ty: "Duration", doc: "頭で音量を 0 から上げる長さ", get: get_fade_in, set: None },
+    AttrDef { receivers: &["Audio"], name: "fadeOut", ty: "Duration", doc: "終わりで音量を 0 へ下げる長さ", get: get_fade_out, set: None },
     AttrDef { receivers: &["Audio", "Image"], name: "file", ty: "String", doc: "import に書いたパス", get: get_file, set: None },
     AttrDef { receivers: &["Image"], name: "width", ty: "Number", doc: "画像の幅 (ピクセル)", get: get_width, set: None },
     AttrDef { receivers: &["Image"], name: "height", ty: "Number", doc: "画像の高さ (ピクセル)", get: get_height, set: None },
@@ -231,6 +233,20 @@ fn get_loop(v: &Value) -> Result<Value> {
     match v {
         Value::Audio(a) => Ok(Value::Bool(a.looping)),
         v => err(Kind::UndefinedAttribute, format!("{} has no loop", v.type_name())),
+    }
+}
+
+fn get_fade_in(v: &Value) -> Result<Value> {
+    match v {
+        Value::Audio(a) => Ok(Value::Duration(a.fade_in)),
+        v => err(Kind::UndefinedAttribute, format!("{} has no fadeIn", v.type_name())),
+    }
+}
+
+fn get_fade_out(v: &Value) -> Result<Value> {
+    match v {
+        Value::Audio(a) => Ok(Value::Duration(a.fade_out)),
+        v => err(Kind::UndefinedAttribute, format!("{} has no fadeOut", v.type_name())),
     }
 }
 

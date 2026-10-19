@@ -148,7 +148,11 @@ fn walk(comp: &ObjRef, origin: f64, limit: f64, out: &mut Media) {
         let start = origin + layer.at;
         let end = (origin + layer.out).min(limit);
         match &layer.content {
-            Value::Object(obj) if obj.borrow().kind == "Composition" => walk(obj, start, end, out),
+            // 入れ子の Composition は、自分の duration の外には存在しない
+            Value::Object(obj) if obj.borrow().kind == "Composition" => {
+                let own = crate::lang::eval::Interp::duration_of(obj).map_or(end, |d| end.min(start + d));
+                walk(obj, start, own, out)
+            }
             Value::Audio(audio) => {
                 let length = (start + audio.played(layer.out - layer.at)).min(end) - start;
                 if length > 0.0 {
@@ -158,8 +162,8 @@ fn walk(comp: &ObjRef, origin: f64, limit: f64, out: &mut Media) {
                         at: start,
                         offset: 0.0,
                         length,
-                        fade_in: 0.0,
-                        fade_out: 0.0,
+                        fade_in: audio.fade_in,
+                        fade_out: audio.fade_out,
                         volume: audio.volume,
                         looping: audio.looping,
                     });

@@ -1127,6 +1127,11 @@ impl Interp {
                     if kind == "ZoomPath" {
                         attrs.insert("scale".into(), self.zoom_table(&attrs)?);
                     }
+                    if let (true, Some(Value::Number(k, _))) = (kind == "Camera", attrs.get("scale")) {
+                        if *k <= 0.0 {
+                            return err(Kind::OutOfRange, format!("Camera.scale must be above 0, found {k}"));
+                        }
+                    }
                     return Ok(Value::Object(Rc::new(RefCell::new(Object { id: next_object_id(), kind: kind.to_string(), decl: None, attrs, children: items, layers: vec![] }))));
                 }
                 let Some(ty) = self.lookup_type(kind) else {
@@ -1567,7 +1572,9 @@ impl Interp {
             let kind = node.borrow().kind.clone();
             match kind.as_str() {
                 "Narration" => {}
-                "Composition" => out.push(self.nested(&node, local)?),
+                // 自分の duration の外には存在しない
+                "Composition" if (0.0..Self::duration_of(&node)?).contains(&local) => out.push(self.nested(&node, local)?),
+                "Composition" => {}
                 _ => out.push(node),
             }
         }
@@ -1576,6 +1583,9 @@ impl Interp {
 
     /// 入れ子の Composition。自分の箱を基準にした Group として描く
     fn nested(&mut self, comp: &ObjRef, t: f64) -> Result<ObjRef> {
+        if !matches!(comp.borrow().attrs.get("box"), Some(Value::Vector(..))) {
+            return err(Kind::AttributeType, "Composition.box must be a Vector");
+        }
         let children = self.nodes_at(comp, t)?;
         let attrs = comp.borrow().attrs.clone();
         Ok(Rc::new(RefCell::new(Object { id: next_object_id(), kind: "Group".into(), decl: None, attrs, children, layers: vec![] })))
@@ -1809,7 +1819,7 @@ fn load_audio(name: &str, path: std::path::PathBuf) -> Result<Audio> {
     let Some(length) = length else {
         return err(Kind::AudioUnreadable, format!("\"{name}\" has no audio stream ffprobe can read {}", String::from_utf8_lossy(&output.stderr).trim()));
     };
-    Ok(Audio { name: name.to_string(), path, length, volume: 1.0, looping: false })
+    Ok(Audio { name: name.to_string(), path, length, volume: 1.0, looping: false, fade_in: 0.0, fade_out: 0.0 })
 }
 
 fn index_value(target: &Value, index: &Value) -> Result<Value> {
@@ -2672,6 +2682,29 @@ mod tests {
             group.map(|g| g.borrow().children.len())
         };
         assert_eq!([2.0, 3.5, 4.0, 5.5].map(|t| count(&mut interp, t)), [None, Some(0), Some(1), None]);
+    }
+
+    /// 入れ子の Composition は、自分の duration を過ぎると消える
+    #[test]
+    fn a_nested_composition_vanishes_after_its_duration() {
+        let (mut interp, comp) = composition(
+            "let inner = Composition(box = Vector(4, 4), duration = 2s)\n\
+             inner.place(\"dot\", Circle(radius = 1), in = 0s, out = 2s)\n\
+             let comp = Composition(box = Vector(16, 9), duration = 8s)\n\
+             comp.place(\"inner\", inner, in = 0s, out = 8s)\n\
+             output comp\n",
+        );
+        let count = |interp: &mut Interp, t: f64| interp.frame(&comp, t).expect("frame").borrow().children.len();
+        assert_eq!([1.0, 1.9, 2.0, 5.0].map(|t| count(&mut interp, t)), [1, 1, 0, 0]);
+    }
+
+    /// 1 列の分解は `let (x) = ...` と書く
+    #[test]
+    fn a_one_column_destructure_is_written_with_parentheses() {
+        let stmts = crate::lang::parser::parse("let (x) = (3,)\n").expect("parses");
+        let mut interp = Interp::new();
+        interp.run(&stmts).expect("runs");
+        assert!(matches!(interp.lookup("x"), Ok(Value::Number(n, _)) if n == 3.0));
     }
 
     /// 標準ライブラリは実行ファイルに埋め込んであり、ディスクには無い。

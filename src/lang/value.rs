@@ -154,6 +154,10 @@ pub struct Audio {
     pub volume: f64,
     /// `out` まで繰り返すか
     pub looping: bool,
+    /// 頭で 0 から上げる秒数
+    pub fade_in: f64,
+    /// 終わりで 0 へ下げる秒数
+    pub fade_out: f64,
 }
 
 impl Audio {

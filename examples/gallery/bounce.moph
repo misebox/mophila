@@ -40,8 +40,8 @@ func ball_at(i, r, x, color) {
     let local = t - i * 0.3s
     let p = if local < back_at { local / fall_time } else { 1 - (local - back_at) / fall_time }
     let top = 1 + r
-    let down = drop(p)[0]
-    let opacity = pulse(p)[0]
+    let (down) = drop(p)
+    let (opacity) = pulse(p)
     Group(
       Rect(position = Vector(x, floor), w = r * 2.4, h = 0.12, fill = #000000, opacity = opacity),
       Circle(position = Vector(x, top + (floor - r - top) * down), radius = r, fill = color),

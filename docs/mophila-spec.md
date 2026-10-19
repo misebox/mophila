@@ -57,7 +57,7 @@ name_1             # 識別子は英字・数字・_。先頭は英字か _
 | Duration | `83s` `1m23s` `500ms` `01:23` `01:23:45.678` | 単位は ms / s / m / h。コロン形式は mm:ss と hh:mm:ss、小数秒可 |
 | Length | `20vy` `50vx` `3px` | `box` に対して描画時に解決する量。単位は vx / vy / vmin / vmax / px。3.15 を参照 |
 | Color | `#rgb` `#rgba` `#rrggbb` `#rrggbbaa` `Color(r, g, b)` `Color(r, g, b, a)` | r/g/b は 0..255、a は 0..1。3/4 桁は各桁を重ねて 6/8 桁に広げる |
-| String | `"hello"` `"say \"hi\""` | エスケープは `\"` `\\` `\n` `\t`。`+` で連結。埋め込みはしない。`"n = {n}".format(n)` が `{...}` を順に置き換える (中の名前は説明用)。Dict を渡すと `"{x} {y}".format({x, y})` のように名前で置き換える |
+| String | `"hello"` `"say \"hi\""` | エスケープは `\"` `\\` `\n` `\t`。`+` で連結。文字列の中に式は埋め込めず、値を入れる書き方は `.format` だけ。`"n = {n}".format(n)` が `{...}` を順に置き換える (中の名前は説明用)。Dict を渡すと `"{x} {y}".format({x, y})` のように名前で置き換える |
 | Bool | `true` `false` | |
 | Symbol | `:center` `:linear` | 名前そのものが値。同じ名前どうしだけが等しい |
 | Tuple | `(1, 1.5)` | 要素ごとに型が違ってよい。長さは書いたときに決まる。要素 1 つは `(1,)`、空は `()` |
@@ -66,6 +66,8 @@ name_1             # 識別子は英字・数字・_。先頭は英字か _
 | Dict | `{ "k": v }` `{ x, y }` | キーは String。挿入順を保つ。`{ x, y }` は `{ "x": x, "y": y }` の省略形 |
 | Range | `0..5` `0..=5` | 整数の範囲。`..` は末尾を含まない。両端が整数でなければ `ValueError.OutOfRange` |
 | Func | `func (x) { x }` | 型表記は `(引数) -> 戻り値` |
+| Progress | `progress [:x, :y] { ... }` | 0 から 1 の数で呼ぶと、その点の値を Tuple で返す名前付きの表。3.14 を参照 |
+| Progress | `progress [:x] { 0: 1  1: 2 }` | 0 から 1 の数で呼ぶと、その点の値を Tuple で返す名前付きの表。3.14 を参照 |
 | Type | `Circle` | 型そのもの。呼ぶとその型の値を作る |
 | Nothing | | 値を返さなかった関数の戻り値。書き方は無い |
 
@@ -236,7 +238,7 @@ type Mode = :fast | :slow
 - Vector: 2 つの成分。成分は Number か Length (`Vector(50vx, 40vy)`)。`.x` `.y`。`Vector ± Vector`、`Vector × Number`、`Vector ÷ Number`、`-Vector`
 - `position` と `anchor` は別の属性で、どちらも Vector。`position` は `anchor` を置く場所で、親の座標で書く。`anchor` は Node 自身の座標で見た基準点で、`rotation` と `scale` の中心になる。3.11 を参照
 - `(8, 4.5)` は Tuple。ただし**型の決まっている場所に書いた Tuple は、その型になる** (型注釈、属性、フィールド、引数、戻り値)。`Circle(position = (8, 4.5))`、`Polygon(points = [(0, 0), (1, 0)])`、`let ps: List<Vector3> = [(0, 0, 0)]` と書ける
-- 変換するのは Tuple から `Vector` `Vector3` `Color` へだけ。型どうしの変換は無く、数が合わなければ型エラー
+- 変換するのは Tuple から `Vector` `Vector3` `Color` へだけ。型どうしの変換は無く、数が合わなければ `TypeError.ArgumentType` (`Circle(position = (1, 1, 1))` は `Circle.position expects Vector, found Tuple`)。`copy(position = 1)` も同じ
 - 型の決まっていない場所では Tuple のまま。まとめて作るなら `Vector.from([(0, 0), (1, 0)])` (`Vector3` `Color` も同じ)
 
 ### 3.11 図形
@@ -429,6 +431,8 @@ Shader(color = func (x, y, t) { Color(x * 16, 0, 128) })
 
 大きな表は Array で渡す (List は毎フレーム写して送るが、Array は同じものである間は送らない)。`run` では走らず、`render` `preview` `sheet` で走る。GPU の実数は 32 bit。
 
+`Shader` と `World` は `func (t)` の中で毎フレーム新しく作ってよい。同じ大きさの GPU の描き先は、フレームをまたいで使い回す。`color` が外側から取り込んだ値がフレームごとに違うと、フレームごとに GPU のプログラムを作り直すので、毎フレーム変わる値は `args` で渡すほうが速い。ただし `ZoomPath` の帯は、塗られた図形に付いて前のフレームを引き継ぐ。`ZoomPath` の `zoom` は関数の外で 1 度だけ作って渡し、`ZoomPath` を使う `Shader` を塗る図形も、関数の外で 1 度だけ作る。
+
 **ZoomPath** — 1 点へ寄っていくだけのズーム動画は、(中心からの距離の対数, 角度) で見るとどのフレームも同じ絵の平行移動になる。`Shader.zoom` に `ZoomPath` を入れると、1 フレームずつ描かずに、その座標系の帯を伸ばしながら使い回す。帯は 1 フレームあたり数列しか伸びないので、1 枚ずつ描くより桁違いに速い。
 
 ```
@@ -490,6 +494,7 @@ Composition ─ box, duration
 - **Node** は描かれるものの総称。図形、Group、Composition、Audio、Narration
 - **Layer** は Composition に置かれたもの 1 つを指す言葉で、言語の型としては出てこない。名前と、置いたものと、`in` と `out` を持つ。`in` と `out` は親 Composition の時間軸で数える
 - `in <= t < out` の外では、その Layer は存在しない。描かれず、音も鳴らず、何も計算しない。残したければ `out` を伸ばす
+- 入れ子の Composition は `[0, duration)` の外では存在しない。自分の `duration` を過ぎると消え、最後の絵は残らない。残したければ `duration` を伸ばす
 - Layer は束ねられない。別々の時刻に出入りするものをまとめたいときは、Composition を作って 1 枚の Layer として置く
 
 **place**
@@ -532,6 +537,8 @@ let slide = progress [:x, :y] {
 }
 let (x, y) = slide(0.5)
 ```
+
+列が 1 つの表も Tuple を返す。分解は `let (x) = grow(0.5)` と、括弧を付けて書く。
 
 - 行の左は 0 から 1。0 と 1 の行は必須
 - 列の名前を先に並べ、行には値だけを書く
@@ -582,10 +589,10 @@ output comp
 
 動画の長さは、`output` した Composition の `duration`。
 
-**音声** — `import "bgm.m4a" as bgm` で得た Audio を Node として置く。`volume` は 1 がそのまま、`loop = true` は `out` まで繰り返す。音声は `out` で切る。繰り返さなければファイルより長くならない。同じ音声を何度でも置けて、重なれば混ざる。
+**音声** — `import "bgm.m4a" as bgm` で得た Audio を Node として置く。`volume` は 1 がそのまま、`loop = true` は `out` まで繰り返す。音声は `out` で切る。繰り返さなければファイルより長くならない。同じ音声を何度でも置けて、重なれば混ざる。`fadeIn` と `fadeOut` (Duration) は、置いた区間の頭と終わりで音量を 0 から、または 0 へ直線で変える。
 
 ```
-comp.place("bgm", bgm.copy(volume = 0.6, loop = true), in = 0s, out = 30s)
+comp.place("bgm", bgm.copy(volume = 0.6, loop = true, fadeOut = 3s), in = 0s, out = 30s)
 ```
 
 読み上げは `Narration`。文だけを持ち、画面には描かない。長さは Layer の `in` から `out`。**その文を読んだ音声が動画の音になり、同じ文が字幕になる**。**どう喋らせるか**は `voice` で渡す。
@@ -625,6 +632,16 @@ comp.place("line-2", Narration(text = "ここは速く", voice = SayVoiceEngine(
 
 `subs` は動画を描かずに字幕だけをファイルに出す (`-o subs.srt` / `-o subs.vtt`。省略すると標準出力)。中身は動画の字幕トラックと同じで、`--trim` も同じように効く。`preview` は音声を PCM にして鳴らし、字幕を画面の下に重ねる。`sheet` も重ねる。重ねる字幕は、箱を収めた絵の中に出す (ウィンドウの縦横比が箱と違えば、余った帯には出ない)。
 
+**timeline** — `mophila timeline a.moph` は、動画を描かずに、何がいつ存在するかを時刻順に出す。1 行目が `duration`、続いて 3 つの表。
+
+| 表 | 中身 |
+|---|---|
+| `layers` | Layer ごとの開始、終了、長さ、名前、中身の型。入れ子の中は `intro/title` のように道筋を付け、時刻は動画の時間軸の絶対時刻 |
+| `text visibility` | 文字が見えている区間。TextArea を直接置いた Layer (Group の中を含む) の文字だけが出る |
+| `subtitles and audio` | 字幕と音声の区間。動画に入るものと同じ |
+
+`func (t)` の中で作る文字は `text visibility` に出ない。その Layer が存在する区間は `layers` で読む。`--filter key=value` (繰り返せる) の `kind` `text` `from` `to` で絞れる。
+
 ### 3.15 Length
 
 Duration と同じ作りの、型つきの遅延量。単位は次の 5 つ。
@@ -647,7 +664,8 @@ Duration と同じ作りの、型つきの遅延量。単位は次の 5 つ。
 角度は Number のラジアン。`rotation` も `polar` も `sin` も同じ単位で、時計回りが正。
 
 - `rotation` の単位は度でなくラジアン
-- math の関数は、角度の向きを `rotation` と同じ時計回りに揃える。既存の関数への適用は未決 (10 章)
+- y が下向きの画面座標では、素の `sin` `cos` で時計回りが正になる。`(cos a, sin a)` は `a` が増えるにつれ右から下へ回る。`atan2(y, x)` も同じ向きの角度を返す
+- `polar(r, a)` は `(r cos a, r sin a)`。向きを変える補正はしない
 
 ### 3.17 名前
 
@@ -900,7 +918,7 @@ let comp = Composition(box = Vector(config.width, 9), duration = 6s)
 |---|---|
 | SyntaxError | `UnexpectedToken` 構文として読めない / `InvalidLiteral` 色の桁数、Duration の形式など |
 | NameError | `UndefinedVariable` / `UndefinedAttribute` / `AssignWithoutLet` let を書かずに初めて代入した / `Reserved` builtin の型の名前を宣言し直した |
-| TypeError | `OperandType` 演算子の左右 / `AttributeType` 属性に入れる値 / `ArgumentType` 引数 / `ArityMismatch` 引数や列の数 / `NotPlaceable` place できない型 |
+| TypeError | `OperandType` 演算子の左右 / `AttributeType` 描くとき、属性に入っていた値が使えない / `ArgumentType` 引数 (型を呼ぶとき、`copy` に名前付きで渡した属性の値を含む) / `ArityMismatch` 引数や列の数 / `NotPlaceable` place できない型 |
 | ValueError | `OutOfRange` 型は合うが値が範囲外 / `AlreadyPlaced` 同じ名前の Layer を 2 度置いた |
 | RuntimeError | `DivisionByZero` / `FontNotFound` / `AudioUnreadable` / `ImageUnreadable` / `ShaderCompile` / `ShaderUnavailable` / `EndlessLoop` / `OutOfMemory` |
 
@@ -928,8 +946,5 @@ repeat(n, node, rotation = tau / n, ...)
 
 ## 10. 未決
 
-- 入れ子の Composition が、自分の `duration` を超えた時間にどう振る舞うか
-- 文字列補間 `"dot-{i}"` を言語に入れるか、`.format` のままにするか
 - 属性名と、関数・メソッド名の camelCase と snake_case の統一
-- `fill` に入る Shader と World を、毎フレーム新しい図形を作る形でどう扱うか。関数の外で 1 度だけ作って渡す前提だが、仕様としては確定していない
-- y 軸の向きと、`atan2` など既存の math 関数の角度の向きを、時計回りが正の規約に揃える具体的な手順
+- TextArea の `anchor` の割合指定 (今は `diagram.text_at` が補う)

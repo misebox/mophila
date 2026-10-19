@@ -14,7 +14,7 @@ import { text_at } from diagram
 
 ## スマホの枠。content を画面の中に置く
 ## @category 枠
-## @param content 画面に映すもの。画面の左上が (0, 0)。画面は幅 w * 0.91、高さ h - w * 0.09
+## @param content 画面に映すもの。画面の左上が (0, 0)。画面は幅 w * 0.91、高さ h - w * 0.09。大きさが合わなければ Group(page, scale = k) で包んで合わせる
 ## @param w 枠の幅
 ## @param h 枠の高さ
 ## @param body 枠の色 (既定 ほぼ黒)
@@ -34,7 +34,7 @@ export func phone(content: Group, w: Number, h: Number, body: Color = #1a1d23, s
 
 ## ブラウザのウィンドウ。上に url の帯が付く
 ## @category 枠
-## @param content ウィンドウに映すもの。ページの左上が (0, 0)。ページは幅 w、高さ h - min(h * 0.12, w * 0.07)
+## @param content ウィンドウに映すもの。ページの左上が (0, 0)。ページは幅 w、高さ h - min(h * 0.12, w * 0.07)。大きさが合わなければ Group(page, scale = k) で包んで合わせる
 ## @param url 帯に出す文字
 ## @param w ウィンドウの幅
 ## @param h ウィンドウの高さ

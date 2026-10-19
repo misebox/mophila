@@ -69,7 +69,8 @@ fn walk(interp: &mut Interp, comp: &ObjRef, prefix: &str, origin: f64, limit: f6
         let name = format!("{prefix}{}", layer.name);
         let (kind, texts) = match &layer.content {
             Value::Object(o) if o.borrow().kind == "Composition" => {
-                walk(interp, o, &format!("{name}/"), from, to, out);
+                let own = crate::lang::eval::Interp::duration_of(o).map_or(to, |d| to.min(from + d));
+                walk(interp, o, &format!("{name}/"), from, own, out);
                 ("Composition".to_string(), Vec::new())
             }
             Value::Object(o) => (o.borrow().kind.clone(), texts_in(o)),
@@ -149,6 +150,12 @@ pub fn media_report(media: &Media, filter: &Filter) -> String {
             }
             if clip.volume != 1.0 {
                 notes.push(format!("volume {}", clip.volume));
+            }
+            if clip.fade_in > 0.0 {
+                notes.push(format!("fadeIn {}s", clip.fade_in));
+            }
+            if clip.fade_out > 0.0 {
+                notes.push(format!("fadeOut {}s", clip.fade_out));
             }
             rows.push((clip.at, format!("{:>8.2}s – {:>7.2}s  {:>6.1}s  Audio {:?}  {}", clip.at, to, clip.length, clip.name, notes.join(", "))));
         }

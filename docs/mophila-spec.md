@@ -257,7 +257,7 @@ let big = dot.copy(radius = 4vy)
 | Line | `from: Vector` `to: Vector` |
 | Polygon | `points: List<Vector>` |
 | Path | `from: Vector` `segments: List<Tuple>` `closed: Bool` `upto: Number` |
-| TextArea | `text: String` (`\n` で改行) `w: Length` (折り返す幅) `font: String` `fontSize: Length` `align: Align`。`size()` で置いたときの幅と高さ (Vector) を返す |
+| TextArea | `text: String` (`\n` で改行) `w: Length` (折り返す幅) `font: String` `fontSize: Length` `align: Align` `anchorRatio: Vector` (基準点を箱の割合で書く。3.11)。`size()` で置いたときの幅と高さ (Vector) を返す |
 
 長さを表す属性 (`radius` `w` `h` `strokeWidth` など) は Length を取る。単位なしの数は `box` 単位。
 
@@ -286,12 +286,15 @@ let pen = dot.copy(position = drawn.point_at(1))
 
 | 型 | 自身の原点 | `anchor` の既定 |
 |---|---|---|
-| Rect / TextArea | 左上。大きさは `w` × `h` | 自身の中心 `(w/2, h/2)` |
+| Rect | 左上。大きさは `w` × `h` | 自身の中心 `(w/2, h/2)` |
+| TextArea | 左上。大きさは組んだ文字の箱 | 箱の割合 `anchorRatio` で決まる。既定は `(0.5, 0.5)` で箱の中心 |
 | Circle / Ellipse | 中心 | `(0, 0)` |
 | Line / Polygon / Path | 点の座標がそのまま。原点は `(0, 0)` | `(0, 0)` |
 | Group | 子の座標系の `(0, 0)` | `(0, 0)` |
 
 `anchor` が既定なら `position` は Rect / TextArea の中心になる。Rect を左上に置くなら `anchor = Vector(0, 0)`。
+
+TextArea は `anchor` の代わりに `anchorRatio` (Vector) で基準点を割合で書ける。`(0, 0)` が箱の左上、`(1, 1)` が右下で、文字の大きさを測らずに「右端を `position` に合わせる」ような置き方ができる。`anchor` と `anchorRatio` を両方書くと `TypeError.ArgumentType`。`diagram.text_at` はこの属性を使う。
 
 図形はこれに加えて次の属性を持つ。効きようがないものは、その図形が持たない (書くと `NameError.UndefinedAttribute`)。既定のあるものは、書かなくてもその値で読める:
 
@@ -948,5 +951,4 @@ repeat(n, node, rotation = tau / n, ...)
 
 ## 10. 未決
 
-- 属性名と、関数・メソッド名の camelCase と snake_case の統一
-- TextArea の `anchor` の割合指定 (今は `diagram.text_at` が補う)
+現在、未決の項目はない。

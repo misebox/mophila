@@ -35,6 +35,7 @@ BASE = {
 TRY = {
     "position": ("Vector(1, 1)", "Vector(3, 3)", {}),
     "anchor": ("Vector(0, 0)", "Vector(1, 1)", {}),
+    "anchorRatio": ("Vector(0, 0)", "Vector(1, 1)", {}),
     "scale": ("1", "2", {}),
     "radius": ("0.4", "1.4", {}),
     "rx": ("0.4", "1.6", {}),

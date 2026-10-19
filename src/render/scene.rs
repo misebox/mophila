@@ -562,7 +562,12 @@ fn text_box(attrs: &Attrs, scale: f64, cache: &mut RenderCache) -> Result<(f64, 
 fn text_placement(attrs: &Attrs, transform: Affine, cache: &mut RenderCache) -> Result<(Affine, f64, f64, f64)> {
     let parent_scale = transform.as_coeffs()[0].hypot(transform.as_coeffs()[1]);
     let (w, h) = text_box(attrs, parent_scale, cache)?;
-    let node = node_transform(attrs, transform, Point::new(w / 2.0, h / 2.0))?;
+    // anchor を書かなければ、割合 (既定は中心) を箱の大きさに掛けたものが基準点
+    let ratio = match attrs.get("anchorRatio") {
+        Some(v) => point_of(v, "TextArea.anchorRatio")?,
+        None => Point::new(0.5, 0.5),
+    };
+    let node = node_transform(attrs, transform, Point::new(w * ratio.x, h * ratio.y))?;
     let scale = node.as_coeffs()[0].hypot(node.as_coeffs()[1]);
     Ok((node * Affine::scale(1.0 / scale), scale, w, h))
 }
@@ -981,6 +986,26 @@ mod tests {
         // 輪郭より短ければ破線のまま (終わりに隙間ができる)
         assert!(!dash_covers(&[len * 0.999, len], 0.0, len));
         assert!(!dash_covers(&[0.4, 0.3], 0.0, len));
+    }
+
+    /// anchorRatio は箱の割合で基準点を決める。(0, 0) なら position が左上、(1, 1) なら右下
+    #[test]
+    fn anchor_ratio_moves_the_box_against_position() {
+        let place = |ratio: &str| {
+            let src = format!("TextArea(text = \"abc\", fontSize = 1, position = Vector(2, 3){ratio})\n");
+            let stmts = crate::lang::parser::parse(&src).expect("parses");
+            let Value::Object(text) = crate::lang::eval::Interp::new().run(&stmts).expect("runs") else { panic!("not an object") };
+            let (placed, _, w, h) = text_placement(&text.borrow().attrs, Affine::IDENTITY, &mut RenderCache::new()).expect("placed");
+            let [.., x, y] = placed.as_coeffs();
+            (x, y, w, h)
+        };
+        let (x, y, ..) = place(", anchorRatio = Vector(0, 0)");
+        assert_eq!((x, y), (2.0, 3.0));
+        let (x, y, w, h) = place(", anchorRatio = Vector(1, 1)");
+        assert!((x - (2.0 - w)).abs() < 1e-9 && (y - (3.0 - h)).abs() < 1e-9, "got {x}, {y} for {w} x {h}");
+        // 書かなければ中心
+        let (x, y, w, h) = place("");
+        assert!((x - (2.0 - w / 2.0)).abs() < 1e-9 && (y - (3.0 - h / 2.0)).abs() < 1e-9);
     }
 
     /// dashOffset で位相をずらした分は、覆える長さから引かれる

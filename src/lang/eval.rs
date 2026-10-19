@@ -1124,6 +1124,7 @@ impl Interp {
                     for (name, value) in defaults(kind) {
                         attrs.entry((*name).to_string()).or_insert_with(|| value.clone());
                     }
+                    check_text_anchor(kind, &attrs)?;
                     if kind == "ZoomPath" {
                         attrs.insert("scale".into(), self.zoom_table(&attrs)?);
                     }
@@ -1520,6 +1521,7 @@ impl Interp {
             }
             attrs.insert(name, v);
         }
+        check_text_anchor(&kind, &attrs)?;
         let src = obj.borrow();
         Ok(Value::Object(Rc::new(RefCell::new(Object { id: next_object_id(), kind, decl: None, attrs, children: src.children.clone(), layers: src.layers.clone() }))))
     }
@@ -1626,10 +1628,7 @@ impl Interp {
                     };
                     // 候補が並んでいることもあるので、描くときと同じ選び方をする
                     let font = o.attrs.get("font").map(font_names).unwrap_or_default();
-                    let wrap = match o.attrs.get("w") {
-                        Some(Value::Number(w, _)) => Some(*w as f32),
-                        _ => None,
-                    };
+                    let wrap = o.attrs.get("w").and_then(Value::as_length).map(|w| w.value() as f32);
                     let align = match o.attrs.get("align") {
                         Some(Value::Symbol(a)) => Some(a.clone()),
                         _ => None,
@@ -1942,6 +1941,14 @@ pub(crate) fn whole(v: f64, what: &str) -> Result<i64> {
     Ok(v as i64)
 }
 
+/// TextArea の anchor は絶対値か割合のどちらか 1 つ
+fn check_text_anchor(kind: &str, attrs: &HashMap<String, Value>) -> Result<()> {
+    if kind == "TextArea" && attrs.contains_key("anchor") && attrs.contains_key("anchorRatio") {
+        return err(Kind::ArgumentType, "TextArea takes either anchor or anchorRatio, not both");
+    }
+    Ok(())
+}
+
 /// deep_copy 用。中の実体も新しく作る
 fn deep_copy(v: &Value) -> Value {
     match v {
@@ -2215,6 +2222,7 @@ pub fn schema(kind: &str) -> Option<&'static [Attr]> {
         opt("w", "Length"),
         opt("font", "Font"),
         opt("align", "Align"),
+        opt("anchorRatio", "Vector"),
         PAINT,
         LINE[0],
         LINE[1],
@@ -2576,6 +2584,17 @@ mod tests {
         let stmts = crate::lang::parser::parse(src).expect("parses");
         let err = Interp::new().run(&stmts).expect_err("the loop never ends");
         assert_eq!(err.kind, Kind::EndlessLoop, "got {err}");
+    }
+
+    /// TextArea の anchor は絶対値か割合のどちらかで、両方は書けない
+    #[test]
+    fn a_text_area_takes_anchor_or_anchor_ratio_not_both() {
+        let run = |src: &str| Interp::new().run(&crate::lang::parser::parse(src).expect("parses"));
+        assert!(run("TextArea(text = \"a\", fontSize = 1, anchorRatio = Vector(1, 0))").is_ok());
+        let err = run("TextArea(text = \"a\", fontSize = 1, anchor = Vector(0, 0), anchorRatio = Vector(1, 0))").expect_err("both");
+        assert_eq!(err.kind, Kind::ArgumentType, "got {err}");
+        let err = run("TextArea(text = \"a\", fontSize = 1, anchor = Vector(0, 0)).copy(anchorRatio = Vector(1, 0))").expect_err("both through copy");
+        assert_eq!(err.kind, Kind::ArgumentType, "got {err}");
     }
 
     /// スクリプトを実行し、output した Composition と一緒に返す

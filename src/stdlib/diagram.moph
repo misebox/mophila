@@ -9,20 +9,19 @@ import math
 import shape
 import { gray, contrast } from color
 
-## 文字を、基準点を指定して置く。TextArea の anchor は自身の座標なので、幅と高さを測って割合から求める
+## 文字を、基準点を割合で指定して置く。TextArea の anchorRatio を使う
 ## @category ラベル
 ## @param t 置く TextArea
 ## @param x 置く場所の x (親の座標)
 ## @param y 置く場所の y (親の座標)
 ## @param ax 文字の幅のどこを x に合わせるか 0..1 (既定 0.5 = 中央。0 なら左端、1 なら右端)
 ## @param ay 文字の高さのどこを y に合わせるか 0..1 (既定 0.5 = 中央。0 なら上端、1 なら下端)
-## @returns position と anchor を決めた TextArea
+## @returns position と anchorRatio を決めた TextArea
 ## @example
 ## # 左端を (1, 2) に合わせる
 ## text_at(TextArea(text = "名前", fontSize = 0.4), 1, 2, 0, 0.5)
 export func text_at(t: TextArea, x: Number, y: Number, ax: Number = 0.5, ay: Number = 0.5) -> TextArea {
-  let s = t.size()
-  t.copy(position = Vector(x, y), anchor = Vector(s.x * ax, s.y * ay))
+  t.copy(position = Vector(x, y), anchorRatio = Vector(ax, ay))
 }
 
 ## 2 点を結ぶ線。progress で from から伸びる

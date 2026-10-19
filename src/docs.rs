@@ -258,7 +258,7 @@ pub const TYPES: &[Type] = &[
         make: "TextArea(text = \"hello\", position = Vector(8, 4.5), fontSize = 1, fill = #303030)",
         values: &[],
         members: &[],
-        doc: "text を描く。自身の原点は左上で、anchor の既定は中心。w を付けるとその幅で折り返し、align で行の寄せ方を決める",
+        doc: "text を描く。自身の原点は左上で、基準点の既定は中心 (anchorRatio で割合を変える)。w を付けるとその幅で折り返し、align で行の寄せ方を決める",
     },
     Type {
         name: "Vector3",
@@ -637,6 +637,7 @@ pub const ATTRS: &[(&str, &str, &str)] = &[
     ("TextArea", "font", "書体の名前。候補を List で並べると、この機械にある最初のものを使う"),
     ("TextArea", "fontSize", "文字の大きさ (Length)"),
     ("TextArea", "align", ":left :center :right"),
+    ("TextArea", "anchorRatio", "基準点を文字の箱の割合で書く Vector。(0, 0) が左上、(1, 1) が右下。既定は (0.5, 0.5)。anchor とは同時に書けない"),
     ("Composition", "box", "座標系の幅と高さ。ピクセルは持たない。Length の基準"),
     ("Composition", "duration", "長さ。output した Composition の duration が動画の長さ"),
     ("Composition", "opacity", "中身をまとめて 1 枚として掛ける不透明度"),

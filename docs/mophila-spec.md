@@ -183,8 +183,8 @@ b.copy(w = 9)  # 入れ直さずに、w だけ違う Size を作る (func new �
 let c = Counter(0)
 let d = c
 c.next()          # 実体そのものが変わるので、d から見ても n は 1
-c.shallowCopy()   # 属性を写した別の実体。中の struct は元と同じものを指す
-c.deepCopy()      # 中の record と struct もたどって写した別の実体
+c.shallow_copy()  # 属性を写した別の実体。中の struct は元と同じものを指す
+c.deep_copy()     # 中の record と struct もたどって写した別の実体
 ```
 
 record のフィールドへの代入は、その値を変えるのではなく、変数や属性に新しい record を入れ直す。だから同じ record を持っている他の変数は変わらない。関数の引数に代入しても、呼んだ側には伝わらない。
@@ -198,8 +198,8 @@ record のフィールドへの代入は、その値を変えるのではなく�
 | 注釈 | 意味 |
 |---|---|
 | `@immutable` | `struct` をイミュータブルにする (record と同じ扱いになる) |
-| `@nocopy` | `copy` `shallowCopy` `deepCopy` をすべて禁止する |
-| `@nodeepcopy` | `deepCopy` だけ禁止する |
+| `@nocopy` | `copy` `shallow_copy` `deep_copy` をすべて禁止する |
+| `@nodeepcopy` | `deep_copy` だけ禁止する |
 | `@deprecated("説明")` | その型を最初に作ったときに stderr へ警告を出す |
 
 ```
@@ -834,6 +834,8 @@ output comp   # この Composition が動画になる。1 つのファイルに 
 - 角度はラジアンで、時計回りが正 (3.16)
 
 ## 6. builtin と標準ライブラリ
+
+名前の規則は種類で決まる。属性の名前は camelCase (`fontSize` `strokeWidth`)。関数とメソッドの名前は snake_case (`text_at` `point_at` `deep_copy`)。Symbol の値は、語が複数あれば snake_case (`:ease_in`)。モジュール名とファイル名は小文字で、この規則の対象外。
 
 `import` なしで使えるのは、builtin の型の名前と、次の名前だけ。関数は呼び出しの形でしか書けず、値として取り出すことはできない。
 

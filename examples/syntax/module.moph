@@ -26,7 +26,7 @@ record Vec2 {
   x: Number
   y: Number
 }
-# @immutable は struct をイミュータブルにする。@nodeepcopy は deepCopy だけ禁じる
+# @immutable は struct をイミュータブルにする。@nodeepcopy は deep_copy だけ禁じる
 
 let v = Vec2(1, 2)       # ここで「Vec2 は古い」と stderr に出る
 log(TITLE, area(2, 3), here, v)

@@ -1202,9 +1202,9 @@ impl Interp {
         }
     }
 
-    /// copy / shallowCopy / deepCopy
+    /// copy / shallow_copy / deep_copy
     fn copy_method(&mut self, ty: &Rc<UserType>, receiver: &Value, name: &str, args: &[Arg]) -> Result<Option<Value>> {
-        let wanted = matches!(name, "copy" | "shallowCopy" | "deepCopy");
+        let wanted = matches!(name, "copy" | "shallow_copy" | "deep_copy");
         if !wanted || ty.decl.members.iter().any(|m| m.name == name && m.receiver) {
             return Ok(None);
         }
@@ -1224,15 +1224,15 @@ impl Interp {
                 let fields = r.fields.iter().map(|(f, v)| (f.clone(), changed.get(f).cloned().unwrap_or_else(|| v.clone()))).collect();
                 Ok(Some(Value::Record(Rc::new(Record { name: r.name.clone(), decl: r.decl.clone(), fields }))))
             }
-            (Value::Object(o), "shallowCopy") | (Value::Object(o), "deepCopy") => {
-                if name == "deepCopy" && ty.decl.nodeepcopy {
-                    return err(Kind::UndefinedAttribute, format!("{} is @nodeepcopy, so it has no deepCopy", ty.decl.name));
+            (Value::Object(o), "shallow_copy") | (Value::Object(o), "deep_copy") => {
+                if name == "deep_copy" && ty.decl.nodeepcopy {
+                    return err(Kind::UndefinedAttribute, format!("{} is @nodeepcopy, so it has no deep_copy", ty.decl.name));
                 }
                 if !args.is_empty() {
                     return err(Kind::ArityMismatch, format!("{name} takes no arguments"));
                 }
                 let src = o.borrow();
-                let attrs = if name == "deepCopy" { src.attrs.iter().map(|(k, v)| (k.clone(), deep_copy(v))).collect() } else { src.attrs.clone() };
+                let attrs = if name == "deep_copy" { src.attrs.iter().map(|(k, v)| (k.clone(), deep_copy(v))).collect() } else { src.attrs.clone() };
                 Ok(Some(Value::Object(Rc::new(RefCell::new(Object {
                     id: next_object_id(),
                     kind: src.kind.clone(),
@@ -1942,7 +1942,7 @@ pub(crate) fn whole(v: f64, what: &str) -> Result<i64> {
     Ok(v as i64)
 }
 
-/// deepCopy 用。中の実体も新しく作る
+/// deep_copy 用。中の実体も新しく作る
 fn deep_copy(v: &Value) -> Value {
     match v {
         Value::Object(o) => {

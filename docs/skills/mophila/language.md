@@ -273,7 +273,7 @@ record Size {
 
 - `func` は受け手なしで型名から呼ぶ (`Counter.new(10)`)。`method` は第 1 引数が受け手 (使わないなら `_`)
 - `func new` が無ければ、`private` でないフィールドを宣言順に受け取る。位置で渡せるのは既定値の無いフィールドまで
-- 複製は record が `copy(field = 値)`、struct が `shallowCopy()` / `deepCopy()`
+- 複製は record が `copy(field = 値)`、struct が `shallow_copy()` / `deep_copy()`
 - 宣言の前の行に `@immutable` `@nocopy` `@nodeepcopy` `@deprecated("説明")` を並べられる
 - `alias V = Vector` はそのファイルの中だけの短い名前。`export` できない
 

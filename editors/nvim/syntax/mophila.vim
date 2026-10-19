@@ -7,22 +7,24 @@ endif
 
 syn case match
 
-syn keyword mophKeyword let func return break if else for while in import export as type record struct method private alias context motion output
+syn keyword mophKeyword let func return break if else for while in import export as type record struct method private alias output
 syn keyword mophOperatorWord and or not
 syn keyword mophBoolean true false
-syn keyword mophBuiltin log type_of
+syn keyword mophBuiltin log type_of linear ease ease_in ease_out
+syn keyword mophBuiltin center
 
-syn keyword mophType Number Duration Bool String Symbol Tuple List Dict Range Func Vector Pos
-syn keyword mophType Circle Ellipse Rect Line Polygon Path TextArea Color Gradient Shader View Timeline Motion
-syn keyword mophType Image Audio Subtitle Anchor Align Easing StrokeCap StrokeJoin Blend GradientKind
-syn keyword mophType Shape Placeable Paint Module Type Nothing
+syn keyword mophType Number Duration Length Bool String Symbol Tuple List Dict Range Func Vector Progress
+syn keyword mophType Circle Ellipse Rect Line Polygon Path TextArea Group Camera Color Gradient Shader Composition
+syn keyword mophType Image Audio Narration Align Easing StrokeCap StrokeJoin Blend GradientKind
+syn keyword mophType Shape Node Paint Module Type Nothing
 
 " import { a, b } from mod の from だけ。Line(from = ...) の from は属性なので色を変えない
 syn match mophFrom "\%(^\s*import\>.*\)\@200<=\<from\>"
 
-" 数 → Duration の順に書く。同じ位置で当たったときは後に書いた方が勝つ
+" 数 → Duration / Length の順に書く。同じ位置で当たったときは後に書いた方が勝つ
 syn match mophNumber "\<\d\+\%(\.\d\+\)\=\%([eE][-+]\=\d\+\)\=%\="
 syn match mophDuration "\<\d\+\%(\.\d\+\)\=\%(ms\|s\|m\|h\)\>"
+syn match mophDuration "\<\d\+\%(\.\d\+\)\=\%(vx\|vy\|vmin\|vmax\|px\)\>"
 syn match mophDuration "\<\d\+:\d\d\%(:\d\d\)\=\%(\.\d\+\)\=\>"
 
 syn match mophColor "#\x\{8}\>\|#\x\{6}\>\|#\x\{4}\>\|#\x\{3}\>"

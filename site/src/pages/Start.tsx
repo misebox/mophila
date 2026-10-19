@@ -80,17 +80,17 @@ export const Start: Component = () => {
         {(s) => (
           <section id="circle">
             <h2>丸を 1 つ置いて、大きくする</h2>
-            <p>1 秒後から 3 秒かけて、半径を 1 から 3 にします。時刻と値を表に書くだけで、間は補間されます。</p>
+            <p>0.3 秒から 3.3 秒にかけて、半径を 1 から 3 にします。区間の始めと終わりの時刻と値を <code>ease</code> に渡すと、間は補間されます。</p>
             <Show when={s().media}>
               <video class="sample" src={`media/${s().name}.mp4`} autoplay muted loop playsinline preload="metadata" />
             </Show>
             <p>次の内容を circle.moph という名前で保存します。</p>
             <Code text={s().code} />
             <ul class="plain">
-              <li>View は 16 x 9 の箱。座標はこの箱の中の値で、ピクセルは出力のときに決める</li>
-              <li>place で図形を箱に置く。Pos は座標と、その座標が図形のどこを指すか (anchor)</li>
-              <li>context ... motion で「何秒にどの属性がいくつになるか」を書く。行末の :ease は値の変わり方</li>
-              <li>Timeline に置いた時刻 (at) から、その動きが始まる</li>
+              <li>Composition は 16 x 9 の箱 (box) と長さ (duration) を持つ。座標はこの箱の中の値で、ピクセルは出力のときに決める</li>
+              <li>place は「名前, 中身, in, out」で置く。in から out の間だけ、その中身が存在する</li>
+              <li>中身は不変の図形か、時刻 t から図形を返す関数。t は in を 0 とした時刻で、同じ t には同じ図形が返る</li>
+              <li>ease(t, 0.3s, 3.3s, 1, 3) は、t が 0.3 秒から 3.3 秒の間に 1 から 3 へ変わる値を返す</li>
             </ul>
             <GitHubLink href={blob(`examples/gallery/${s().name}.moph`)} />
           </section>
@@ -101,16 +101,16 @@ export const Start: Component = () => {
         {(s) => (
           <section id="first">
             <h2>複数のオブジェクトを動かす</h2>
-            <p>丸が右へ動き、四角が横に広がり、文字が現れて、最後に消えます。4 つの motion が、それぞれ別の時刻に動きます。</p>
+            <p>丸が右へ動き、四角が横に広がり、文字が現れて、最後に消えます。3 つの動きが、それぞれ別の時刻に始まります。</p>
             <Show when={s().media}>
               <video class="sample" src={`media/${s().name}.mp4`} autoplay muted loop playsinline preload="metadata" />
             </Show>
             <p>次の内容を first.moph という名前で保存します。</p>
             <Code text={s().code} />
             <ul class="plain">
-              <li>Timeline に motion を置く時刻 (at) をずらすと、それぞれ別のタイミングで動き出す</li>
-              <li>動かす 3 つは 1 つの View にまとめてある。View の opacity は中身をまとめて 1 枚として掛かる</li>
-              <li>fade_out はその View を薄くする Timeline を返す。図形を 1 つずつ消さなくてよい</li>
+              <li>ease の t0 と t1 をずらすと、それぞれ別のタイミングで動き出す。ease_out は減速する補間</li>
+              <li>動かす 3 つは 1 つの Group にまとめてある。Group の opacity は中身をまとめて 1 枚として掛かる</li>
+              <li>最後の 1 秒で Group の opacity を 1 から 0 にするので、図形を 1 つずつ消さなくてよい</li>
             </ul>
             <GitHubLink href={blob(`examples/gallery/${s().name}.moph`)} />
           </section>

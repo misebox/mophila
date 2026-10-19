@@ -1,29 +1,226 @@
 # 言語の使い方
 
-正は言語仕様 <https://misebox.github.io/mophila/#/docs/spec>。ここは書くときに引っかかる所だけ。
+正は言語仕様 <https://misebox.github.io/mophila/#/docs/spec>。ここは考え方と、書くときに引っかかる所だけ。
+名前と引数は書かない。`mophila doc` かリファレンスで引く。
+
+## 見取り図
+
+木は 1 本で、場所と時間を同じ Node が持つ。
+
+```
+Composition ─ box, duration
+ ├── "bg"     in ─── out    Rect
+ ├── "badge"  in ─── out    func (t) -> Node
+ └── "intro"  in ─── out    Composition
+                              ├── "title" ...
+                              └── "logo"  ...
+```
+
+- **Composition** は大きさ (`box`) と長さ (`duration`) と、Layer の積み重ねを持つ。`output` するのは Composition
+- **Node** は描かれるものの総称。図形、Group、Composition、Audio、Narration。すべて不変
+- **Layer** は Composition に置いたもの 1 つ。名前と、置いたものと、`in` と `out` を持つ。`in` と `out` は親 Composition の時間軸で数える。Layer という型は無く、`place` が作る
+- 置けるものは 2 種類。Node そのものか、時刻 `t` を受けて Node を返す純粋関数 `func (t)`
+- `in <= t < out` の外では、その Layer は存在しない。描かれず、音も鳴らず、何も計算しない
+- 積み重ねの順は置いた順。後に置いたものが手前
+- 置いた Layer は取り除けず、置き換えも、`in` と `out` の変更もできない。消えることは `out` で表す
+- Layer は束ねられない。別々の時刻に出入りするものをまとめたいときは、Composition を作って 1 枚の Layer として置く
+
+```
+comp.place("badge", badge, in = 2s, out = 8s)
+```
+
+名前は String で、同じ Composition の中で一意。`in` と `out` は必須。
+
+## 不変の Node と純粋関数
+
+図形は不変の値。属性への代入は無い。変えたいときは `copy(...)` で別の値を作る。
+
+```
+let big = dot.copy(radius = 4vy)
+```
+
+動くものは関数で書く。`func (t)` は毎フレーム呼ばれ、その時刻の図形を新しく返す。状態を持たず、同じ `t` には同じ Node が返る。
+
+```
+func dot(t) {
+  Circle(position = Vector(ease(t, 0s, 3s, 3, 13), 4.5), radius = 1, fill = #e0604a)
+}
+```
+
+- **`t` は Layer の `in` を 0 とした時刻** (Duration)。同じ関数を 2 回置けば、どちらも自分の `in` から動き出す
+- 各フレームはその時刻だけで決まる。前のフレームに依存しないので、preview で時間を戻しても同じ絵になる
+- 動きは「`t` を式に入れる」ことで書く。「いつ何を変える」という命令の列は書かない
+- 時間に依らない図形は、Node のまま置く。毎フレーム再計算されない
+
+```
+comp.place("pop-a", pop, in = 1s, out = 3s)
+comp.place("pop-b", pop, in = 4s, out = 6s)     # 同じ関数。t はここでも自分の in が 0
+```
+
+## Group と transform
+
+すべての Node が同じ transform 一式を持つ。
+
+| 属性 | 意味 |
+|---|---|
+| `position` | `anchor` を置く場所。親の座標で書く |
+| `anchor` | Node 自身の座標で見た基準点。`rotation` と `scale` の中心 |
+| `rotation` | 回転。ラジアン、時計回りが正 |
+| `scale` | 拡大率 |
+| `opacity` | 不透明度 0..1 |
+
+`position` と `anchor` は別の属性で、どちらも Vector。`position` に `anchor` が来る。
+
+**自身の原点と `anchor` の既定は型で決まる。** 置き間違いの大半はここ。
+
+| 型 | 自身の原点 | `anchor` の既定 |
+|---|---|---|
+| Rect / TextArea | 左上 | 自身の中心 |
+| Circle / Ellipse | 中心 | `(0, 0)` |
+| Line / Polygon / Path | 点の座標そのまま | `(0, 0)` |
+| Group | 子の座標系の `(0, 0)` | `(0, 0)` |
+
+- `Rect` の `position` は既定では中心。左上に置くなら `anchor = Vector(0, 0)`
+- 背景は `Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9, fill = ...)`
+- 棒グラフの棒のように、足元を固定して伸ばすなら、`anchor` を足元に置く
+
+**Group** は Node をまとめた親。引数のうち属性でないものが中身で、書いた順に描く。Group も不変で、後から足せない。
+
+- 中の座標は Group の `position` からの相対
+- 子は親の `rotation` `scale` `opacity` を受ける。Group を動かせば中身ごと動き、`opacity` を下げれば中身を 1 枚として薄くできる
+- 中身が先に決まらないときは List に集めて広げる (`Group(...items)`)
+- `clip` に図形を渡すと、その輪郭の外を描かない。`camera` で中身の一点へ寄る
+
+**親子の連鎖は入れ子の深さで書く。** 順序に依存して親を決める記法は無い。外側の回転が内側を動かし、内側の回転は外側を動かさない。
+
+```
+func arm(t) {
+  let s = sin(tau * t / 2s)
+  Group(position = Vector(50vx, 40vy), rotation = 0.5 * s,
+    Rect(anchor = Vector(1vx, 0), w = 2vx, h = 20vy, fill = #3060c0),
+    Group(position = Vector(0, 20vy), rotation = 0.4 - 0.4 * s,
+      Rect(anchor = Vector(1vx, 0), w = 2vx, h = 20vy, fill = #3060c0)))
+}
+```
+
+腕の付け根、肘の順に Group を入れ子にし、各関節の `rotation` に式を入れる。関節の先端を次の起点にする代わりに、子を親の Group の中に書く。
+
+## 座標、Length、center、角度
+
+- 座標は `Composition` の `box` の単位。`box = Vector(16, 9)` なら 0..16 × 0..9。x は右、y は下に増える
+- **Length** は `box` に対して描画時に解決する量。`vx` は幅の 1/100、`vy` は高さの 1/100、`vmin` `vmax` はその小さい方と大きい方、`px` は出力のピクセル。`20vy` は箱の高さの 2 割
+- 単位なしの数は `box` 単位。`radius = 1` と `radius = 11.1vy` (高さ 9 の箱で) は同じ
+- Vector の成分は数でも Length でもよい。`Vector(50vx, 40vy)`。足し引き、数との掛け算割り算、`ease` の補間が Length に対応する
+- 入れ子の Composition では、それぞれの `box` が基準になる。子の中の `20vy` は子の高さの 2 割
+- `center` は描く先の Composition の中心。入れ子の中ではその Composition の中心。`center + polar(20vy, tau / 6)` のように式で位置を書く
+- 角度は Number のラジアンで、時計回りが正。`rotation` も `polar` も `sin` も同じ単位。`tau` は 1 周 (`import { tau, polar } from math`)
+
+構図を解像度に依らせないのが目的。ピクセルの数はどこにも書かず、出力の大きさは `render --size` が決める。箱と違う比で出すと余白が付き、同じ比ならぴったり収まる。
+
+## 時間
+
+- 時間の単位は Duration。`10s` `500ms` `1m23s` `01:23`。`25%` は Number (0.25) で Duration ではない
+- Layer の `in` と `out` は親の時間軸。`func (t)` の `t` は自分の `in` が 0
+- 時刻には式を書ける。長さを変数に取っておけば、テンポを変えるのは 1 か所で済む
+- 動画の長さは、`output` した Composition の `duration`
+
+**補間は `ease`。** 区間の外では端の値に止まる。
+
+```
+ease(t, t0, t1, v0, v1)     # t0 から t1 の間に v0 から v1 へ
+```
+
+`linear` `ease_in` (加速) `ease_out` (減速) も同じ形。`v0` と `v1` は Number、Vector、Length。`t` `t0` `t1` は Duration。区間の外で止まることを使えば、`if` を書かずに出入りが書ける。
+
+```
+opacity = ease(t, 0s, 0.4s, 0, 1) * ease(t, life - 0.4s, life, 1, 0)    # 出て、消える
+```
+
+**`progress` は名前付きの表。** 対象も長さも持たない。0 から 1 の数で呼ぶと、その点の値を Tuple で返す。
+
+```
+let slide = progress [:x, :y] {
+  0:   2, 4.5
+  0.4: _, 6 :ease
+  1:  14 :ease_out, 4.5
+}
+func ball(t) {
+  let (x, y) = slide(t / 3s)
+  Circle(position = Vector(x, y), radius = 0.5, fill = #e04040)
+}
+```
+
+- 行の左は 0 から 1。0 と 1 の行は必須。列の名前を先に並べ、行には値だけを書く
+- `_` はその列を飛ばす。列ごとに別々の位置でキーフレームを打てる
+- Easing は値の隣に書く (`:linear` 既定、`:ease_in` `:ease_out` `:ease`)
+- 範囲の外は端の行の値
+- 何秒かけるかは呼ぶ側が決める。`slide(t / 3s)` なら 3 秒で端から端まで。`t / 3s` は Number
+- 周期的な動きは `(t / 4s) % 1` を渡す。円運動や振動は `sin` `cos` を式で書く
+
+選び方: 2 点間の動きは `ease`、複数の値を同じ時間軸でまとめて動かすなら `progress`、周期や物理は式。
+
+## アニメーションの組み立て
+
+- **1 つの動きは 1 つの `func (t)` にまとめる。** 丸が動き、棒が伸び、文字が出て、最後に消える、までを 1 つの Group にして `opacity` で消せる
+- **出入りの時刻は `in` と `out` で決め、出方は式で決める。** `out` を過ぎると何も計算されないので、消えた後の値を気にしなくてよい
+- **順に出すのはずらしで書く。** `i * stagger` を `ease` の時刻に足す。個数が決まっていれば `for` で Layer を置く
+- **同じ動きは関数にして、値を引数で渡す。** 引数で受けた値を使って `func (t)` を返す関数が書ける
+
+```
+func bar_at(i, color) {
+  func (t) {
+    let h = ease_out(t, i * stagger, i * stagger + 0.6s, 0, 2 + i)
+    Rect(position = Vector(2 + i * 2, 8), anchor = Vector(0, h), w = 1.2, h = h, fill = color)
+  }
+}
+
+for (i, color) in [#e04040, #e0a020, #40a060, #4080e0].enumerate() {
+  comp.place("bar-{}".format(i), bar_at(i, color), in = 0s, out = len)
+}
+```
+
+- **部品の出入りは、部品を包む関数で書く。** 関数を受けて、フェードを足した関数を返す
+
+```
+func fade_in(f, d) {
+  func (t) { f(t).copy(opacity = ease(t, 0s, d, 0, 1)) }
+}
+comp.place("dot", fade_in(dot, 0.5s), in = 1s, out = 4s)
+```
+
+- 文字列の埋め込みは無い。名前は `"bar-{}".format(i)` で作る
+- 同じ絵を別の場所や大きさで使うなら、Composition を作って `copy(position = ..., scale = ...)` で置く。Composition は不変なので何度でも置ける。中の `t` は置いた Layer の `in` から始まる
+
+```
+let inner = Composition(box = Vector(4, 3), duration = 3s)
+comp.place("left", inner.copy(position = Vector(1, 1)), in = 0s, out = 3s)
+comp.place("right", inner.copy(position = Vector(9, 1), scale = 2), in = 1s, out = 4s)
+```
+
+- `func (t)` の中で毎フレーム高い計算をしない。時間に依らない値は関数の外で 1 度だけ作る。`Shader` や `World` を `fill` に入れるなら、関数の外で作って渡す
 
 ## 他の言語と違うところ
 
-- `(1, 2)` は Tuple。座標は `Vector(1, 2)`、位置は `Pos(1, 2)`。Vector や Pos が要る場所に素の Tuple は書けない。図形の位置は `position` 属性
-- 決まった値しか取らない型は `:center` `:topLeft` のような Symbol
-- `1/3` は演算だが、分数のまま持つので `1/3 * 3` は `1`。`10s` `500ms` `1m23s` `01:23` は Duration。`25%` は Number (0.25) で Duration ではない
+- `(1, 2)` は Tuple。座標は Vector。**型の決まっている場所に書いた Tuple は、その型になる**ので `Circle(position = (8, 4.5))` と書ける。型の決まらない場所では Tuple のまま
+- 決まった値しか取らない型は `:center` `:left` のような Symbol
+- `1/3` は演算だが、分数のまま持つので `1/3 * 3` は `1`
 - 文字列への埋め込みは無い。`"x = {}".format(x)` で位置に置き換える。`{name}` の名前は読む人向けで、置き換えには使わない (Dict を 1 つ渡したときだけ名前で引く)
 - コメントは `# ` (空白が要る)。`#e04040` は色
-- `if` と `context` は式。ブロックの最後の式が値になる
+- `if` は式。ブロックの最後の式が値になる。関数の戻り値も最後の式
 - `T(a = 1)` は属性を型で検査する。無い属性は `NameError.UndefinedAttribute`
 - 比較は続けて書ける。`0 <= x <= 1` は `(0 <= x) and (x <= 1)` で、真ん中は 1 度しか評価しない
 - `f(...xs)` で Tuple / List / Range を引数に広げる。Dict を広げると `名前 = 値` になる
-- import なしで呼べるのは `log` と `type_of` だけ。値は型名を呼んで作る (`Vector(8, 4.5)` `Pos(8, 4.5)` `Color(224, 96, 74)`)
-- リテラルは型名を呼ぶのと同じ。`[1, 2]` = `List(1, 2)`、`{ "k": v }` = `Dict(k = v)`、`(1, 2)` = `Tuple(1, 2)`、`0..5` = `Range(0, 5)`、`0..=5` = `Range(0, 6)`
+- import なしで呼べるのは `log` `type_of` `ease` 系 `center` と型名だけ。値は型名を呼んで作る (`Vector(8, 4.5)` `Color(224, 96, 74)`)
+- リテラルは型名を呼ぶのと同じ。`[1, 2]` = `List(1, 2)`、`{ "k": v }` = `Dict(k = v)`、`0..5` = `Range(0, 5)`、`0..=5` = `Range(0, 6)`
 - builtin の型と関数の名前は予約されている。`struct List { ... }` は `NameError.Reserved`
-- 文字列は `+` で連結。`\"` `\n` のエスケープがある
+- 範囲 `0..5` と添字の両端は整数。`xs[1.5]` は `ValueError.OutOfRange`
 
 ## import
 
 ```
 import math                        # 標準ライブラリ
+import { sin, tau } from math      # 名前だけ持ち込む
 import .other                      # 同じ場所の other.moph を other に束縛
-import .other as m                 # 別名
 import { a, b } from .other        # 名前を直接持ち込む
 import "bgm.m4a" as bgm            # 音声ファイル
 import "logo.png" as logo          # 画像 (png jpg gif webp bmp tiff)
@@ -33,7 +230,7 @@ import "@/media/bgm.m4a" as bgm    # 文字列の中では "/" 区切り
 import config                      # mophila.yaml の config: を読む
 ```
 
-見えるのは `export` した名前と、`other.output` (その中で `output` した View) だけ。同じファイルは 1 度しか実行されず、実体を共有する。`import` はトップレベルにしか書けない。
+見えるのは `export` した名前と、`other.output` (その中で `output` した Composition) だけ。同じファイルは 1 度しか実行されず、実体を共有する。`import` はトップレベルにしか書けない。
 
 ## プロジェクト設定
 
@@ -52,22 +249,19 @@ config:
 
 ```
 import config
-let v = View(box = Vector(config.width, 9))
+let comp = Composition(box = Vector(config.width, 9), duration = 6s)
 ```
 
 - 設定に書いたパスは**設定ファイルからの相対**。コマンドラインのパスは、いま居るディレクトリから
-- `config` に書けるのは数・文字列・真偽の 3 つ
+- `config` に書けるのは数・文字列・真偽の 3 つ。色は書けないので、色相を数で持って `color` module で作る
 - `MOPHILA_WIDTH=32` か `--set width=32` で上書きできる。型が合わなければエラー
 - `-f other/mophila.yaml` で別の設定を使える
-
-設定値を使うときに引っかかる所:
-
-- 色は設定に書けない (数・文字列・真偽だけ)。色相を数で持って `color` module で作る
+- `render:` に `fps` `size` `codec` などの既定を書ける。コマンドラインが勝つ
 - `import { a as b }` は書けない。名前がぶつかるなら片方を Module として読む
 
 ## 自分の型を作る
 
-トップレベルに `record` か `struct` を書く。違いはイミュータブルかどうかだけ。`record` は作った後に書き換えられず、型名とフィールドがすべて同じなら `==` で等しい。`struct` は属性を書き換えられ、`==` は同じ実体かを見る。
+トップレベルに `record` か `struct` を書く。違いはイミュータブルかどうかだけ。`record` は作った後に書き換えられず、型名とフィールドがすべて同じなら `==` で等しい。`struct` は属性を書き換えられ、`==` は同じ実体かを見る。図形や Group の部品は、型を作らず関数で返すほうが素直。
 
 ```
 record Size {
@@ -75,196 +269,107 @@ record Size {
   h: Number
   method area(self) -> Number { self.w * self.h }
 }
-
-struct Counter {
-  n: Number = 0
-  private step: Number = 1
-  func new(start: Number) -> Counter { Counter(n = start) }
-  method next(self) -> Number {
-    self.n = self.n + self.step
-    self.n
-  }
-}
 ```
 
 - `func` は受け手なしで型名から呼ぶ (`Counter.new(10)`)。`method` は第 1 引数が受け手 (使わないなら `_`)
-- `func new` が無ければ、`private` でないフィールドを宣言順に受け取る。位置で渡せるのは既定値の無いフィールドまでで、それ以外は `名前 = 値`
-- 複製は record が `copy(field = 値)`、struct が `shallowCopy()` / `deepCopy()`。`func new` を書いた型では、フィールドを変える `copy` はできない (`new` を通らないため)
+- `func new` が無ければ、`private` でないフィールドを宣言順に受け取る。位置で渡せるのは既定値の無いフィールドまで
+- 複製は record が `copy(field = 値)`、struct が `shallowCopy()` / `deepCopy()`
 - 宣言の前の行に `@immutable` `@nocopy` `@nodeepcopy` `@deprecated("説明")` を並べられる
-- `alias P = Pos` はそのファイルの中だけの短い名前。`export` できない
-
-## 時間
-
-```
-motion (t) { 0s: c.radius = 1
-             2s: c.radius = 3 :ease }     # Timeline
-motion (t, r) { 0s: 1
-                2s: 3 }                   # Motion (対象を持たない値の表)
-motion c [:position, :radius] { ... }      # 対象と属性を先に並べる形
-```
-
-- 時刻は Duration か 0..1 の実数 (`50%` も可)。1 つの motion で混ぜない。0..1 で書いたら `duration` が要る
-- 時刻には式を書ける (`dur:` `start + 0.4s:`)。長さを引数で受け取る部品が素直に書ける
-- `duration` は長さ。代入しても行の時刻は動かない (短くすればその先は使われない)。時刻そのものを伸縮したり切り出したりするメソッドが別にある。どれも新しい Timeline を返し、元は変わらない
-- `0..1: o.position = Pos(math.cos(math.TAU * t), ...)` のように範囲を書くと、その区間は補間せず毎フレーム式を評価する。円運動・振動はこれで書く。行を刻んで近似しない
-- 行末の修飾子はその行に入る区間に効く。`:ease` (加減速) `:ease_in` (加速) `:ease_out` (減速) `:linear` (既定)
-- 間を補間できるのは Number / Duration / Vector / Pos / Color と、それらを**同じ長さで**並べた Tuple / List。`Path.segments` や `Polygon.points` を動かすと形が変わる。長さが違うと補間せず、次の行の時刻で切り替わる
-
-```
-motion (t) {
-  0s: p.segments = [(:line, Vector(3, 3)), (:line, Vector(5, 3))]
-  2s: p.segments = [(:line, Vector(3, 1)), (:line, Vector(5, 3.5))]   # 形が変わる
-}
-```
-- 出し入れは `o.opacity` を自分で書くか、`animation` module の出し入れの関数を使う。逆再生も Timeline のメソッドにある
-- 入れ物: `let track = Timeline()` に `track.place(tl, at = 3s, fadeIn = 1s)`。`v.addTrack(track)`。Timeline は終わった後も最後の状態を保ち、始まる前は何もしない
-- 後から place した Timeline が同じ属性を書けば勝つ
-- 動画の長さは、View に置いたものの終わりの最大
+- `alias V = Vector` はそのファイルの中だけの短い名前。`export` できない
 
 ## 図形と塗り
 
-図形は `Circle` `Ellipse` `Rect` `Line` `Polygon` `Path` `TextArea`、入れ物は `View`。
-どの型がどの属性を持つかは変わるので、**書く前に `mophila doc` かリファレンスで引く**。
-必須の属性には印が付いている。
+図形は `Circle` `Ellipse` `Rect` `Line` `Polygon` `Path` `TextArea`。
+どの型がどの属性を持つかは変わるので、**書く前に `mophila doc` かリファレンスで引く**。必須の属性には印が付いている。
 
-覚えておくのはこの 3 つ。
-
-- 位置は属性で決まる。`place` は「この View の子にする」だけ (View を入れ子にするときだけ `at` と `w` を渡す)
 - 効きようがない属性は持たない。`Line` に塗りは無い。書けば `NameError.UndefinedAttribute` で止まる
-- 重なりは place した順。順を変えたくないときは、描く順を決める属性を使う
-
-線を少しずつ描き出す、文字が占める大きさを測る、といったことはメソッドでできる。
-何があるかは同じ一覧の「メソッド」に出る。線の長さを測って破線のずらしを動かすと、線が伸びて見える。
+- 長さを表す属性 (`radius` `w` `h` `strokeWidth` など) は Length を取る
+- 線を少しずつ描き出す、文字が占める大きさを測る、といったことはメソッドでできる。線の長さを測って `dashOffset` を動かすと、線が伸びて見える
 
 ```
-let total = p.length()
-p.dash = [total, total]                    # 線と間を全長にして、全部「間」にする
-motion (t) { 0s: p.dashOffset = total      # ずらしを戻していくと、線が伸びて見える
-             2s: p.dashOffset = 0 }
+func draw(t) {
+  let total = p.length()
+  p.copy(dash = [total, total], dashOffset = ease(t, 0s, 2s, total, 0))
+}
 ```
 
-塗りは色のほかに、グラデーション、読み込んだ画像、Shader を入れられる。
-画像は図形の形に切り抜かれる。
+塗りは色のほかに、グラデーション、読み込んだ画像、Shader、`World` (3D) を入れられる。画像は図形の形に切り抜かれる。
 
-```
-import "photo.jpg" as photo
-v.place(Circle(position = Pos(4, 2), radius = 1.5, fill = photo))   # 丸く切り抜く
-```
-
-Shader は `func (x, y, t)` を渡すと GPU で全ピクセル分走る。x, y は箱の座標、t は秒。
-書けるのは数値の計算だけ (文字列・図形・Dict は不可、再帰不可)。時間で変える値は t から計算するか、
-`args` を motion の行で変える。複素数は Vector で書ける。
+Shader は `func (x, y, t)` を渡すと GPU で全ピクセル分走る。x, y は箱の座標、t は秒。書けるのは数値の計算だけ (文字列・図形・Dict は不可、再帰不可)。`run` では走らず、`render` `preview` `sheet` で走る。
 
 ## 標準ライブラリ
 
-グラフ、図、文字の書式、画面の絵、背景、幕、時計、画像と地図、メーター、イージング、
-色、座標、並べ方 — よく要るものは module になっている。**自分で図形を並べる前に、
-そこに部品が無いか見る。**
+グラフ、図、文字の書式、画面の絵、背景、幕、時計、画像と地図、メーター、色、座標、並べ方 — よく要るものは module になっている。**自分で図形を並べる前に、そこに部品が無いか見る。**
 
-名前と引数はこの文書には書かない (写せば必ず古くなる)。引くのはこの 3 つ。
+- `mophila doc` — 型・属性・メソッド・エラー・math の一覧 (JSON)
+- <https://misebox.github.io/mophila/#/lib> (module の関数と引数) と <https://misebox.github.io/mophila/#/builtins> (型)。どちらもソースから生成している。`llms-full.txt` はその全部を 1 ファイルにしたもの
+- エディタを繋いでいれば、`.` の後や `(` の中の補完に署名と説明が出る
 
-- `mophila doc` — いま使っている実行ファイルの、型・属性・メソッド・エラー・math の一覧 (JSON)
-- <https://misebox.github.io/mophila/#/lib> (module の関数と引数) と <https://misebox.github.io/mophila/#/builtins> (型)。
-  どちらもソースから生成している。`llms-full.txt` はその全部を 1 ファイルにしたもの
-- エディタを繋いでいれば、`.` の後や `(` の中の補完に署名と説明が出る。必須の引数が先に並ぶ
+`import 名前` で module ごと、`import { 名前 } from module` で名前だけ持ち込む。組み合わせた例は <https://misebox.github.io/mophila/#/samples> の showcase と report。
 
-`import 名前` で module ごと、`import { 名前 } from module` で名前だけ持ち込む。
-組み合わせた例は <https://misebox.github.io/mophila/#/samples> の showcase と report。
-
-### 部品に動きを持たせる
-
-スクリプトはフレームごとには走らない。各フレームは「スクリプトを実行した直後の状態 + その時刻までに始まった Timeline」で決まるので、`progress` のような値を渡すだけでは止まった絵になる。
-
-動かすには `duration` を渡す。その部品が自分の Timeline を持って返るので、置けばそのまま動く。`start` はその動きが始まる時刻 (動画全体の時刻で書く)。
-
-```
-v.place(bar(sales, months, 6, 4, duration = 0.8s, start = 1.2s, stagger = 0.1s), at = Pos(1, 2, anchor = :topLeft), w = 6)
-v.place(wipe(16, 9, 1, :left, duration = 0.5s, start = 3s), at = Pos(0, 0, anchor = :topLeft), w = 16)
-```
-
-`duration` を書かなければ渡した値のまま止まる。1 枚の画像を作るときや、値そのものを自分の motion で動かすときはこちら。
+標準 module の部品は Node (多くは Group) を返す。時間で動かすには、`func (t)` の中で `t` から進み具合 (0..1 の Number) を `ease` で計算して部品に渡す。部品を包む Group の `opacity` で出し入れできる。引数の並びと意味は module ごとに違うので、毎回引く。
 
 ## 音声と字幕
 
 ```
 import "bgm.m4a" as bgm
-track.place(bgm, at = 0s, loop = true, volume = 0.6, fadeOut = 3s)
-track.place(Narration(text = "……です。", duration = 4s), at = 2s)
+comp.place("bgm", bgm.copy(volume = 0.6, loop = true), in = 0s, out = 30s)
+comp.place("line-1", Narration(text = "……です。"), in = 2s, out = 6s)
 ```
 
-`loop = true` は動画の終わりまで繰り返す (動画は延びない)。
-
-ナレーションは、その文を読んだ音声が動画の音になり、**同じ文がそのまま字幕になる**。字幕だけを置く型は無い。表示は読み始めから読み終わりまでで、長さは合成した音声から測るので、`duration` の見積もりがずれても声とずれない。画面には描かれないので、**字幕を TextArea で描かない**。
-
-## View の入れ子
-
-`v.place(sub, at = Pos(x, y, anchor = :topLeft), w = 7)` で別の View を比率を保って置く。中の Timeline は親と同じ時間軸で動く。`track.place(sub, at = 3s)` で置けば、その時刻から動き出す。`sub.opacity` で全体をまとめてフェードできる。
-
-`rotation` `scale` `pivot` は、置いたものを 1 枚として回して寄る。中の座標も `place` の書き方も変えなくてよいので、タイル 150 枚をまとめて回すなら、それを入れた View を 1 つ作ってその `rotation` を動かす。`pivot` は子の箱の座標で、書かなければ箱の真ん中。
-
-`clip = true` を付けると、箱からはみ出した中身を描かない。中身を動かして窓から覗かせる形が作れる。
-
-```
-let win = View(box = Vector(6, 2), clip = true)
-let strip = View(box = Vector(18, 2))       # 長い帯
-win.place(strip, at = Pos(0, 0, anchor = :topLeft), w = 18)
-win.addTrack(motion (t) { 0s: strip.position = Pos(0, 0, anchor = :topLeft)
-                          3s: strip.position = Pos(-12, 0, anchor = :topLeft) })
-```
+- 音声は `out` で切る。`loop = true` は `out` まで繰り返し、繰り返さなければファイルより長くならない。同じ音声を何度でも置け、重なれば混ざる
+- `Narration` は文だけを持ち、画面には描かない。**その文を読んだ音声が動画の音になり、同じ文が字幕になる**。字幕だけを置く型は無い。`voice` で音声合成の型を渡せる
+- 字幕の表示は読み始めから読み終わりまで。長さは合成した音声から測るので、`out` の見積もりがずれても声とずれない。合成した音声が `in` から `out` より長ければ、`out` で切って警告が出る
+- **字幕を TextArea で描かない**
+- `run` では合成しない。`render` と `preview` で鳴る
 
 ## 組み合わせて再利用する
 
 書いたものはそのまま部品になる。同じものを 2 度書かない。
 
-**ファイルを部品にする** — `output` した View は `import` 先から `名前.output` で取れる。
+**関数にする** — 同じ図形、同じ動きを何個も書かない。値は引数で渡す。
 
 ```
-import .dial                                   # dial.moph の output
-v.place(dial.output, at = Pos(1, 1, anchor = :topLeft), w = 6)
-track.place(dial.output, at = 2s)              # 2s からその中の Timeline が動く
+func dot(x, y, c) { Circle(position = Vector(x, y), radius = 0.3, fill = c) }
 ```
 
-同じファイルは 1 度しか実行されないので、`dial.output` はどこから読んでも**同じ実体**になる。置き先での位置と大きさは View 自身の属性なので、同じ View を 2 か所には置けない (`ValueError.AlreadyPlaced`)。2 か所目には `copy()` を置く。中の図形は元と共通なので、動かすと両方が動く。
+**ファイルを部品にする** — `output` した Composition は `import` 先から `名前.output` で取れる。Composition は不変なので、何度でも置ける。
 
 ```
-v.place(dial.output, at = Pos(1, 1, anchor = :topLeft), w = 6)
-v.place(dial.output.copy(), at = Pos(9, 1, anchor = :topLeft), w = 6)    # 2 か所目
+import .dial
+comp.place("dial-a", dial.output.copy(position = Vector(1, 1)), in = 0s, out = 4s)
+comp.place("dial-b", dial.output.copy(position = Vector(9, 1)), in = 2s, out = 6s)
 ```
 
-別々に動かしたいなら、View を返す関数を `export` して呼ぶたびに作る。
+別々の値で作りたいなら、Node を返す関数を `export` して呼ぶたびに作る。
+
+**場面を積む** — 長い動画は、章ごとにファイルを分け、`export func run(now)` が Layer を積んで次の開始時刻を返す形にする。共有のリストに `(Node か func, 始まり, 終わり)` を積み、全体の長さが決まってから、`main` が 1 つの Composition に置く。
 
 ```
-# walker.moph
-export func make(near, far, long) -> View { ... }
+# theme.moph
+export let layers = []
+export func put(node, at, end) { layers.push((node, at, end)) }
 
-# 使う側
-import { make } from .walker
-let a = make(1, 0, 8s)
-let b = make(0.6, 3, 8s)     # 別の実体
-```
-
-**Timeline を使い回す** — 1 つの Timeline を何度でも置ける。時刻をずらすだけで繰り返しになる。
-
-```
-let pop = motion (t) { 0s: c.radius = 0.5
-                       1s: c.radius = 1 }
-track.place(pop, at = 0s)
-track.place(pop, at = 3s)
-track.place(pop.reverse(), at = 5s)      # 逆再生
-track.place(pop.scale(2), at = 7s)       # 倍の時間をかけて
-track.place(pop.fit(0.4s), at = 11s)     # 0.4s に収めて
-```
-
-時刻を動かすメソッドはどれも新しい Timeline を返すので、元はそのまま残る。
-
-**形を関数にする** — 同じ図形を何個も書かない。
-
-```
-func dot(x, y, c) { Circle(position = Pos(x, y), radius = 0.3, fill = c) }
-for (i, c) in [#e04040, #40a040, #4040e0].enumerate() {
-  v.place(dot(1 + i * 2, 2, c))
+# scene.moph
+import { put } from .theme
+export func run(now) {
+  put(Circle(position = center, radius = 20vy, fill = #e04040), now, now + 3s)
+  now + 3s
 }
+
+# main.moph
+import { layers } from .theme
+import .scene
+let end = scene.run(0s)
+let comp = Composition(box = Vector(16, 9), duration = end)
+for (i, l) in layers.enumerate() {
+  let (node, at, out) = l
+  comp.place("layer-{}".format(i), node, in = at, out = out)
+}
+output comp
 ```
+
+実例は <https://misebox.github.io/mophila/#/samples> の mophila_intro。
 
 **決まりを 1 か所に置く** — 色・大きさ・時間の定数は 1 つのファイルに `export` してまとめ、全部の場面がそれを読む。テンポや配色を変えるときはそこだけ触る。
 
@@ -275,26 +380,21 @@ export let accent = #e04040
 export let pause = 1s
 ```
 
-### 気をつけること
+`import ..parent` は文法上は通るが、ディレクトリをまたぐ設計は避ける。
 
-- 同じ View を 2 つの場面で使うなら、先の場面は duration を付けた Timeline に入れて切る。切らないと、終わった Timeline が最後の値 (フェードアウト後の `opacity = 0` など) を書き続けて、あとの場面で見えなくなる
-- 後に置いた Timeline が同じ属性を書けば勝つ。重ねるときは置く順で決まる
-- `import ..parent` は文法上は通るが、ディレクトリをまたぐ設計は避ける
+## よくある間違い
 
-## 部品が互いに追従する動き
+- **属性に代入する** — `c.radius = 2` は `TypeError.AttributeType: Circle is immutable`。`c.copy(radius = 2)` で別の値を作る
+- **`Rect` が思った位置に出ない** — `position` は中心。左上を指すなら `anchor = Vector(0, 0)`。背景の `Rect` で忘れやすい
+- **`out` を書き忘れる** — `Composition.place needs out =`。`in` と `out` は必須
+- **同じ名前を 2 度置く** — `ValueError.AlreadyPlaced`。ループで置くときは `"bar-{}".format(i)` のように名前を変える
+- **`func (t)` の中の誤りが `run` で出ない** — `run` は Layer に置いた関数を呼ばない。スクリプトの末尾に `log(dot(1s))` と書けば `run` で中身が走る。絵は `render --at 1s` か `sheet --times 1s,3s` で見る
+- **`t` が Layer の `in` からの時刻だと忘れる** — 動画全体の時刻で `ease` を書くと、`in` が 0 でない Layer で区間がずれる。全体の時刻が要るなら、Layer の始まりの時刻を `t` に足す
+- **`ease` の時刻に単位が無い** — `ease(t, 0, 1, ...)` は `ease: t0 expects Duration, found Number`。`0s` `1s` と書く
+- **度で回転を書く** — `rotation` はラジアン。90 度は `tau / 4`
+- **Tuple を Vector が要る場所に入れて要素数が合わない** — `Circle.position expects Vector, found Tuple`。2 つの成分に揃える
+- **標準 module を import し忘れる** — `NameError.UndefinedVariable: "math" is not defined; add "import math"`
+- **属性名の綴り** — `NameError.UndefinedAttribute: Circle has no attribute "width"`。`mophila doc` で引く
+- **Layer を取り除こうとする** — できない。消したいなら `out` を早める。条件で出し分けるなら、Layer を分けて `in` と `out` を決める
 
-範囲行 `0..1: child.from = parent.to` は毎フレーム評価されるので、親の属性を読む行を書けば子が追従する。Timeline を置いた順に当たるので、親の行を先に置く。
-
-動く例は <https://misebox.github.io/mophila/#/samples> にある。`fractal` は枝が親の先端を読んで再帰で 2^n 本、`walker` は腰 → 腿 → 脛 → 足を親の先端でつなぐ、`crowd` は walker を奥行きを付けて並べる。
-
-## エラー
-
-`種別.細目: line N: message`。よくあるもの:
-
-- `TypeError.ArgumentType: Circle.position expects Pos, found Tuple` → 要素の数が Pos に合っていない
-- `ValueError.DurationRequired` → 0..1 で書いたのに duration が無い、または時刻の単位が混在
-- `NameError.UndefinedVariable: "math" is not defined; add "import math"`
-- `NameError.UndefinedAttribute: Circle has no attribute "width"` → 属性名の綴り
-- `ValueError.AlreadyPlaced` → 同じ View を 2 か所に置いた。2 か所目は `copy()` を置く
-
-全部の種別は <https://misebox.github.io/mophila/#/builtins/errors> にある。
+エラーは `種別.細目: line N: message`。全部の種別は <https://misebox.github.io/mophila/#/builtins/errors> にある。

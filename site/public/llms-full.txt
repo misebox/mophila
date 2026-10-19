@@ -17,7 +17,7 @@ description: Write or debug mophila (.moph) motion graphics scripts. Entry point
 
 | 読むもの | 中身 |
 |---|---|
-| [language.md](language.md) | 言語の使い方。他の言語と違うところ、型の作り方、時間の書き方、組み合わせて再利用する |
+| [language.md](language.md) | 言語の考え方と作法。Composition と Layer、不変の Node、`func (t)`、Group、Length、時間、部品化 |
 | [presentation.md](presentation.md) | 解説する動画の作り方。場面の組み立て、読める時間、確認の手順 |
 | [design.md](design.md) | 見た目。色、構図、文字、動きの質 |
 
@@ -45,15 +45,21 @@ description: Write or debug mophila (.moph) motion graphics scripts. Entry point
 ### 最小の形
 
 ```
-let v = View(box = Vector(16, 9))          # 座標系。ピクセルは持たない
-let c = Circle(position = Pos(8, 4.5), radius = 1, fill = #e04040)
-v.place(c)
-v.addTrack(motion (t) {
-  0s: c.radius = 1
-  2s: c.radius = 2 :ease
-})
-output v
+let len = 6s
+let comp = Composition(box = Vector(16, 9), duration = len)
+comp.place("bg", Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9, fill = #f4f1ea), in = 0s, out = len)
+
+func dot(t) {
+  Circle(position = Vector(ease(t, 0s, 3s, 3, 13), 4.5), radius = 1, fill = #e0604a)
+}
+comp.place("dot", dot, in = 0s, out = len)
+output comp
 ```
+
+- `Composition` が座標系 (`box`、ピクセルは持たない) と長さを持つ
+- `place(名前, 置くもの, in =, out =)` で Layer を積む。後に置いたものが手前
+- 動くものは `func (t)`。毎フレーム、その時刻の図形を返す
+- `output` した Composition が動画になる
 
 ### コマンド
 
@@ -62,10 +68,10 @@ mophila run a.moph                             # 描画せず実行。log と型
 mophila run                                    # mophila.yaml の entry を実行
 mophila render a.moph -o out.png --at 2.5s     # 1 フレーム。形式は拡張子で決まる
 mophila render a.moph -o out.mp4 --size 360p   # 動画 (fps 既定 10)
-mophila render a.moph -o out.mp4 --jobs 4      # 組み立てを 4 スレッドに分ける (重い絵だけ速くなる)
+mophila render a.moph -o out.mp4 --jobs 4      # フレームを組むスレッド数 (省略すると計測して決める)
 mophila render a.moph -o out.mp4 --trim 00:15..00:30   # 区間だけ
 mophila preview a.moph [--loop] [--at 1s]      # ウィンドウで再生
-mophila timeline a.moph [--filter k=v]         # 何がいつどう変わるかの一覧
+mophila timeline a.moph                        # Layer ごとの存在区間、字幕、音声の一覧
 mophila sheet a.moph -o sheet.png --times 3s,12s   # 場面の格子画像
 mophila subs a.moph -o subs.srt                # 字幕だけをファイルに (.vtt も)
 mophila fonts                                  # 使えるフォント名 (font に書ける名前)
@@ -79,37 +85,235 @@ preview は Space で一時停止、← → / h l で 10 秒 (停止中は 1 秒
 時間・割合・fps・一時停止は絵の下端のステータスバーに出る。
 コマは少し先まで描いておく。中身の時刻は実時間に貼り付くので音とずれない。重い場面では出す間隔が広がり、fps が落ちる。
 
-書いたら必ず `run` を通す。動きを確かめるときは小さいサイズと短い尺で。
+書いたら必ず `run` を通す。ただし `run` は Layer に置いた `func (t)` の中身を実行しない。
+中の綴りや型の誤りは、末尾に `log(dot(1s))` のように呼ぶ行を足すか、`render --at` / `sheet --times` で出す。動きを確かめるときは小さいサイズと短い尺で。
 
 
 # 言語の使い方
 
 ## 言語の使い方
 
-正は言語仕様 <https://misebox.github.io/mophila/#/docs/spec>。ここは書くときに引っかかる所だけ。
+正は言語仕様 <https://misebox.github.io/mophila/#/docs/spec>。ここは考え方と、書くときに引っかかる所だけ。
+名前と引数は書かない。`mophila doc` かリファレンスで引く。
+
+### 見取り図
+
+木は 1 本で、場所と時間を同じ Node が持つ。
+
+```
+Composition ─ box, duration
+ ├── "bg"     in ─── out    Rect
+ ├── "badge"  in ─── out    func (t) -> Node
+ └── "intro"  in ─── out    Composition
+                              ├── "title" ...
+                              └── "logo"  ...
+```
+
+- **Composition** は大きさ (`box`) と長さ (`duration`) と、Layer の積み重ねを持つ。`output` するのは Composition
+- **Node** は描かれるものの総称。図形、Group、Composition、Audio、Narration。すべて不変
+- **Layer** は Composition に置いたもの 1 つ。名前と、置いたものと、`in` と `out` を持つ。`in` と `out` は親 Composition の時間軸で数える。Layer という型は無く、`place` が作る
+- 置けるものは 2 種類。Node そのものか、時刻 `t` を受けて Node を返す純粋関数 `func (t)`
+- `in <= t < out` の外では、その Layer は存在しない。描かれず、音も鳴らず、何も計算しない
+- 積み重ねの順は置いた順。後に置いたものが手前
+- 置いた Layer は取り除けず、置き換えも、`in` と `out` の変更もできない。消えることは `out` で表す
+- Layer は束ねられない。別々の時刻に出入りするものをまとめたいときは、Composition を作って 1 枚の Layer として置く
+
+```
+comp.place("badge", badge, in = 2s, out = 8s)
+```
+
+名前は String で、同じ Composition の中で一意。`in` と `out` は必須。
+
+### 不変の Node と純粋関数
+
+図形は不変の値。属性への代入は無い。変えたいときは `copy(...)` で別の値を作る。
+
+```
+let big = dot.copy(radius = 4vy)
+```
+
+動くものは関数で書く。`func (t)` は毎フレーム呼ばれ、その時刻の図形を新しく返す。状態を持たず、同じ `t` には同じ Node が返る。
+
+```
+func dot(t) {
+  Circle(position = Vector(ease(t, 0s, 3s, 3, 13), 4.5), radius = 1, fill = #e0604a)
+}
+```
+
+- **`t` は Layer の `in` を 0 とした時刻** (Duration)。同じ関数を 2 回置けば、どちらも自分の `in` から動き出す
+- 各フレームはその時刻だけで決まる。前のフレームに依存しないので、preview で時間を戻しても同じ絵になる
+- 動きは「`t` を式に入れる」ことで書く。「いつ何を変える」という命令の列は書かない
+- 時間に依らない図形は、Node のまま置く。毎フレーム再計算されない
+
+```
+comp.place("pop-a", pop, in = 1s, out = 3s)
+comp.place("pop-b", pop, in = 4s, out = 6s)     # 同じ関数。t はここでも自分の in が 0
+```
+
+### Group と transform
+
+すべての Node が同じ transform 一式を持つ。
+
+| 属性 | 意味 |
+|---|---|
+| `position` | `anchor` を置く場所。親の座標で書く |
+| `anchor` | Node 自身の座標で見た基準点。`rotation` と `scale` の中心 |
+| `rotation` | 回転。ラジアン、時計回りが正 |
+| `scale` | 拡大率 |
+| `opacity` | 不透明度 0..1 |
+
+`position` と `anchor` は別の属性で、どちらも Vector。`position` に `anchor` が来る。
+
+**自身の原点と `anchor` の既定は型で決まる。** 置き間違いの大半はここ。
+
+| 型 | 自身の原点 | `anchor` の既定 |
+|---|---|---|
+| Rect / TextArea | 左上 | 自身の中心 |
+| Circle / Ellipse | 中心 | `(0, 0)` |
+| Line / Polygon / Path | 点の座標そのまま | `(0, 0)` |
+| Group | 子の座標系の `(0, 0)` | `(0, 0)` |
+
+- `Rect` の `position` は既定では中心。左上に置くなら `anchor = Vector(0, 0)`
+- 背景は `Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9, fill = ...)`
+- 棒グラフの棒のように、足元を固定して伸ばすなら、`anchor` を足元に置く
+
+**Group** は Node をまとめた親。引数のうち属性でないものが中身で、書いた順に描く。Group も不変で、後から足せない。
+
+- 中の座標は Group の `position` からの相対
+- 子は親の `rotation` `scale` `opacity` を受ける。Group を動かせば中身ごと動き、`opacity` を下げれば中身を 1 枚として薄くできる
+- 中身が先に決まらないときは List に集めて広げる (`Group(...items)`)
+- `clip` に図形を渡すと、その輪郭の外を描かない。`camera` で中身の一点へ寄る
+
+**親子の連鎖は入れ子の深さで書く。** 順序に依存して親を決める記法は無い。外側の回転が内側を動かし、内側の回転は外側を動かさない。
+
+```
+func arm(t) {
+  let s = sin(tau * t / 2s)
+  Group(position = Vector(50vx, 40vy), rotation = 0.5 * s,
+    Rect(anchor = Vector(1vx, 0), w = 2vx, h = 20vy, fill = #3060c0),
+    Group(position = Vector(0, 20vy), rotation = 0.4 - 0.4 * s,
+      Rect(anchor = Vector(1vx, 0), w = 2vx, h = 20vy, fill = #3060c0)))
+}
+```
+
+腕の付け根、肘の順に Group を入れ子にし、各関節の `rotation` に式を入れる。関節の先端を次の起点にする代わりに、子を親の Group の中に書く。
+
+### 座標、Length、center、角度
+
+- 座標は `Composition` の `box` の単位。`box = Vector(16, 9)` なら 0..16 × 0..9。x は右、y は下に増える
+- **Length** は `box` に対して描画時に解決する量。`vx` は幅の 1/100、`vy` は高さの 1/100、`vmin` `vmax` はその小さい方と大きい方、`px` は出力のピクセル。`20vy` は箱の高さの 2 割
+- 単位なしの数は `box` 単位。`radius = 1` と `radius = 11.1vy` (高さ 9 の箱で) は同じ
+- Vector の成分は数でも Length でもよい。`Vector(50vx, 40vy)`。足し引き、数との掛け算割り算、`ease` の補間が Length に対応する
+- 入れ子の Composition では、それぞれの `box` が基準になる。子の中の `20vy` は子の高さの 2 割
+- `center` は描く先の Composition の中心。入れ子の中ではその Composition の中心。`center + polar(20vy, tau / 6)` のように式で位置を書く
+- 角度は Number のラジアンで、時計回りが正。`rotation` も `polar` も `sin` も同じ単位。`tau` は 1 周 (`import { tau, polar } from math`)
+
+構図を解像度に依らせないのが目的。ピクセルの数はどこにも書かず、出力の大きさは `render --size` が決める。箱と違う比で出すと余白が付き、同じ比ならぴったり収まる。
+
+### 時間
+
+- 時間の単位は Duration。`10s` `500ms` `1m23s` `01:23`。`25%` は Number (0.25) で Duration ではない
+- Layer の `in` と `out` は親の時間軸。`func (t)` の `t` は自分の `in` が 0
+- 時刻には式を書ける。長さを変数に取っておけば、テンポを変えるのは 1 か所で済む
+- 動画の長さは、`output` した Composition の `duration`
+
+**補間は `ease`。** 区間の外では端の値に止まる。
+
+```
+ease(t, t0, t1, v0, v1)     # t0 から t1 の間に v0 から v1 へ
+```
+
+`linear` `ease_in` (加速) `ease_out` (減速) も同じ形。`v0` と `v1` は Number、Vector、Length。`t` `t0` `t1` は Duration。区間の外で止まることを使えば、`if` を書かずに出入りが書ける。
+
+```
+opacity = ease(t, 0s, 0.4s, 0, 1) * ease(t, life - 0.4s, life, 1, 0)    # 出て、消える
+```
+
+**`progress` は名前付きの表。** 対象も長さも持たない。0 から 1 の数で呼ぶと、その点の値を Tuple で返す。
+
+```
+let slide = progress [:x, :y] {
+  0:   2, 4.5
+  0.4: _, 6 :ease
+  1:  14 :ease_out, 4.5
+}
+func ball(t) {
+  let (x, y) = slide(t / 3s)
+  Circle(position = Vector(x, y), radius = 0.5, fill = #e04040)
+}
+```
+
+- 行の左は 0 から 1。0 と 1 の行は必須。列の名前を先に並べ、行には値だけを書く
+- `_` はその列を飛ばす。列ごとに別々の位置でキーフレームを打てる
+- Easing は値の隣に書く (`:linear` 既定、`:ease_in` `:ease_out` `:ease`)
+- 範囲の外は端の行の値
+- 何秒かけるかは呼ぶ側が決める。`slide(t / 3s)` なら 3 秒で端から端まで。`t / 3s` は Number
+- 周期的な動きは `(t / 4s) % 1` を渡す。円運動や振動は `sin` `cos` を式で書く
+
+選び方: 2 点間の動きは `ease`、複数の値を同じ時間軸でまとめて動かすなら `progress`、周期や物理は式。
+
+### アニメーションの組み立て
+
+- **1 つの動きは 1 つの `func (t)` にまとめる。** 丸が動き、棒が伸び、文字が出て、最後に消える、までを 1 つの Group にして `opacity` で消せる
+- **出入りの時刻は `in` と `out` で決め、出方は式で決める。** `out` を過ぎると何も計算されないので、消えた後の値を気にしなくてよい
+- **順に出すのはずらしで書く。** `i * stagger` を `ease` の時刻に足す。個数が決まっていれば `for` で Layer を置く
+- **同じ動きは関数にして、値を引数で渡す。** 引数で受けた値を使って `func (t)` を返す関数が書ける
+
+```
+func bar_at(i, color) {
+  func (t) {
+    let h = ease_out(t, i * stagger, i * stagger + 0.6s, 0, 2 + i)
+    Rect(position = Vector(2 + i * 2, 8), anchor = Vector(0, h), w = 1.2, h = h, fill = color)
+  }
+}
+
+for (i, color) in [#e04040, #e0a020, #40a060, #4080e0].enumerate() {
+  comp.place("bar-{}".format(i), bar_at(i, color), in = 0s, out = len)
+}
+```
+
+- **部品の出入りは、部品を包む関数で書く。** 関数を受けて、フェードを足した関数を返す
+
+```
+func fade_in(f, d) {
+  func (t) { f(t).copy(opacity = ease(t, 0s, d, 0, 1)) }
+}
+comp.place("dot", fade_in(dot, 0.5s), in = 1s, out = 4s)
+```
+
+- 文字列の埋め込みは無い。名前は `"bar-{}".format(i)` で作る
+- 同じ絵を別の場所や大きさで使うなら、Composition を作って `copy(position = ..., scale = ...)` で置く。Composition は不変なので何度でも置ける。中の `t` は置いた Layer の `in` から始まる
+
+```
+let inner = Composition(box = Vector(4, 3), duration = 3s)
+comp.place("left", inner.copy(position = Vector(1, 1)), in = 0s, out = 3s)
+comp.place("right", inner.copy(position = Vector(9, 1), scale = 2), in = 1s, out = 4s)
+```
+
+- `func (t)` の中で毎フレーム高い計算をしない。時間に依らない値は関数の外で 1 度だけ作る。`Shader` や `World` を `fill` に入れるなら、関数の外で作って渡す
 
 ### 他の言語と違うところ
 
-- `(1, 2)` は Tuple。座標は `Vector(1, 2)`、位置は `Pos(1, 2)`。Vector や Pos が要る場所に素の Tuple は書けない。図形の位置は `position` 属性
-- 決まった値しか取らない型は `:center` `:topLeft` のような Symbol
-- `1/3` は演算だが、分数のまま持つので `1/3 * 3` は `1`。`10s` `500ms` `1m23s` `01:23` は Duration。`25%` は Number (0.25) で Duration ではない
+- `(1, 2)` は Tuple。座標は Vector。**型の決まっている場所に書いた Tuple は、その型になる**ので `Circle(position = (8, 4.5))` と書ける。型の決まらない場所では Tuple のまま
+- 決まった値しか取らない型は `:center` `:left` のような Symbol
+- `1/3` は演算だが、分数のまま持つので `1/3 * 3` は `1`
 - 文字列への埋め込みは無い。`"x = {}".format(x)` で位置に置き換える。`{name}` の名前は読む人向けで、置き換えには使わない (Dict を 1 つ渡したときだけ名前で引く)
 - コメントは `# ` (空白が要る)。`#e04040` は色
-- `if` と `context` は式。ブロックの最後の式が値になる
+- `if` は式。ブロックの最後の式が値になる。関数の戻り値も最後の式
 - `T(a = 1)` は属性を型で検査する。無い属性は `NameError.UndefinedAttribute`
 - 比較は続けて書ける。`0 <= x <= 1` は `(0 <= x) and (x <= 1)` で、真ん中は 1 度しか評価しない
 - `f(...xs)` で Tuple / List / Range を引数に広げる。Dict を広げると `名前 = 値` になる
-- import なしで呼べるのは `log` と `type_of` だけ。値は型名を呼んで作る (`Vector(8, 4.5)` `Pos(8, 4.5)` `Color(224, 96, 74)`)
-- リテラルは型名を呼ぶのと同じ。`[1, 2]` = `List(1, 2)`、`{ "k": v }` = `Dict(k = v)`、`(1, 2)` = `Tuple(1, 2)`、`0..5` = `Range(0, 5)`、`0..=5` = `Range(0, 6)`
+- import なしで呼べるのは `log` `type_of` `ease` 系 `center` と型名だけ。値は型名を呼んで作る (`Vector(8, 4.5)` `Color(224, 96, 74)`)
+- リテラルは型名を呼ぶのと同じ。`[1, 2]` = `List(1, 2)`、`{ "k": v }` = `Dict(k = v)`、`0..5` = `Range(0, 5)`、`0..=5` = `Range(0, 6)`
 - builtin の型と関数の名前は予約されている。`struct List { ... }` は `NameError.Reserved`
-- 文字列は `+` で連結。`\"` `\n` のエスケープがある
+- 範囲 `0..5` と添字の両端は整数。`xs[1.5]` は `ValueError.OutOfRange`
 
 ### import
 
 ```
 import math                        # 標準ライブラリ
+import { sin, tau } from math      # 名前だけ持ち込む
 import .other                      # 同じ場所の other.moph を other に束縛
-import .other as m                 # 別名
 import { a, b } from .other        # 名前を直接持ち込む
 import "bgm.m4a" as bgm            # 音声ファイル
 import "logo.png" as logo          # 画像 (png jpg gif webp bmp tiff)
@@ -119,7 +323,7 @@ import "@/media/bgm.m4a" as bgm    # 文字列の中では "/" 区切り
 import config                      # mophila.yaml の config: を読む
 ```
 
-見えるのは `export` した名前と、`other.output` (その中で `output` した View) だけ。同じファイルは 1 度しか実行されず、実体を共有する。`import` はトップレベルにしか書けない。
+見えるのは `export` した名前と、`other.output` (その中で `output` した Composition) だけ。同じファイルは 1 度しか実行されず、実体を共有する。`import` はトップレベルにしか書けない。
 
 ### プロジェクト設定
 
@@ -138,22 +342,19 @@ config:
 
 ```
 import config
-let v = View(box = Vector(config.width, 9))
+let comp = Composition(box = Vector(config.width, 9), duration = 6s)
 ```
 
 - 設定に書いたパスは**設定ファイルからの相対**。コマンドラインのパスは、いま居るディレクトリから
-- `config` に書けるのは数・文字列・真偽の 3 つ
+- `config` に書けるのは数・文字列・真偽の 3 つ。色は書けないので、色相を数で持って `color` module で作る
 - `MOPHILA_WIDTH=32` か `--set width=32` で上書きできる。型が合わなければエラー
 - `-f other/mophila.yaml` で別の設定を使える
-
-設定値を使うときに引っかかる所:
-
-- 色は設定に書けない (数・文字列・真偽だけ)。色相を数で持って `color` module で作る
+- `render:` に `fps` `size` `codec` などの既定を書ける。コマンドラインが勝つ
 - `import { a as b }` は書けない。名前がぶつかるなら片方を Module として読む
 
 ### 自分の型を作る
 
-トップレベルに `record` か `struct` を書く。違いはイミュータブルかどうかだけ。`record` は作った後に書き換えられず、型名とフィールドがすべて同じなら `==` で等しい。`struct` は属性を書き換えられ、`==` は同じ実体かを見る。
+トップレベルに `record` か `struct` を書く。違いはイミュータブルかどうかだけ。`record` は作った後に書き換えられず、型名とフィールドがすべて同じなら `==` で等しい。`struct` は属性を書き換えられ、`==` は同じ実体かを見る。図形や Group の部品は、型を作らず関数で返すほうが素直。
 
 ```
 record Size {
@@ -161,196 +362,107 @@ record Size {
   h: Number
   method area(self) -> Number { self.w * self.h }
 }
-
-struct Counter {
-  n: Number = 0
-  private step: Number = 1
-  func new(start: Number) -> Counter { Counter(n = start) }
-  method next(self) -> Number {
-    self.n = self.n + self.step
-    self.n
-  }
-}
 ```
 
 - `func` は受け手なしで型名から呼ぶ (`Counter.new(10)`)。`method` は第 1 引数が受け手 (使わないなら `_`)
-- `func new` が無ければ、`private` でないフィールドを宣言順に受け取る。位置で渡せるのは既定値の無いフィールドまでで、それ以外は `名前 = 値`
-- 複製は record が `copy(field = 値)`、struct が `shallowCopy()` / `deepCopy()`。`func new` を書いた型では、フィールドを変える `copy` はできない (`new` を通らないため)
+- `func new` が無ければ、`private` でないフィールドを宣言順に受け取る。位置で渡せるのは既定値の無いフィールドまで
+- 複製は record が `copy(field = 値)`、struct が `shallowCopy()` / `deepCopy()`
 - 宣言の前の行に `@immutable` `@nocopy` `@nodeepcopy` `@deprecated("説明")` を並べられる
-- `alias P = Pos` はそのファイルの中だけの短い名前。`export` できない
-
-### 時間
-
-```
-motion (t) { 0s: c.radius = 1
-             2s: c.radius = 3 :ease }     # Timeline
-motion (t, r) { 0s: 1
-                2s: 3 }                   # Motion (対象を持たない値の表)
-motion c [:position, :radius] { ... }      # 対象と属性を先に並べる形
-```
-
-- 時刻は Duration か 0..1 の実数 (`50%` も可)。1 つの motion で混ぜない。0..1 で書いたら `duration` が要る
-- 時刻には式を書ける (`dur:` `start + 0.4s:`)。長さを引数で受け取る部品が素直に書ける
-- `duration` は長さ。代入しても行の時刻は動かない (短くすればその先は使われない)。時刻そのものを伸縮したり切り出したりするメソッドが別にある。どれも新しい Timeline を返し、元は変わらない
-- `0..1: o.position = Pos(math.cos(math.TAU * t), ...)` のように範囲を書くと、その区間は補間せず毎フレーム式を評価する。円運動・振動はこれで書く。行を刻んで近似しない
-- 行末の修飾子はその行に入る区間に効く。`:ease` (加減速) `:ease_in` (加速) `:ease_out` (減速) `:linear` (既定)
-- 間を補間できるのは Number / Duration / Vector / Pos / Color と、それらを**同じ長さで**並べた Tuple / List。`Path.segments` や `Polygon.points` を動かすと形が変わる。長さが違うと補間せず、次の行の時刻で切り替わる
-
-```
-motion (t) {
-  0s: p.segments = [(:line, Vector(3, 3)), (:line, Vector(5, 3))]
-  2s: p.segments = [(:line, Vector(3, 1)), (:line, Vector(5, 3.5))]   # 形が変わる
-}
-```
-- 出し入れは `o.opacity` を自分で書くか、`animation` module の出し入れの関数を使う。逆再生も Timeline のメソッドにある
-- 入れ物: `let track = Timeline()` に `track.place(tl, at = 3s, fadeIn = 1s)`。`v.addTrack(track)`。Timeline は終わった後も最後の状態を保ち、始まる前は何もしない
-- 後から place した Timeline が同じ属性を書けば勝つ
-- 動画の長さは、View に置いたものの終わりの最大
+- `alias V = Vector` はそのファイルの中だけの短い名前。`export` できない
 
 ### 図形と塗り
 
-図形は `Circle` `Ellipse` `Rect` `Line` `Polygon` `Path` `TextArea`、入れ物は `View`。
-どの型がどの属性を持つかは変わるので、**書く前に `mophila doc` かリファレンスで引く**。
-必須の属性には印が付いている。
+図形は `Circle` `Ellipse` `Rect` `Line` `Polygon` `Path` `TextArea`。
+どの型がどの属性を持つかは変わるので、**書く前に `mophila doc` かリファレンスで引く**。必須の属性には印が付いている。
 
-覚えておくのはこの 3 つ。
-
-- 位置は属性で決まる。`place` は「この View の子にする」だけ (View を入れ子にするときだけ `at` と `w` を渡す)
 - 効きようがない属性は持たない。`Line` に塗りは無い。書けば `NameError.UndefinedAttribute` で止まる
-- 重なりは place した順。順を変えたくないときは、描く順を決める属性を使う
-
-線を少しずつ描き出す、文字が占める大きさを測る、といったことはメソッドでできる。
-何があるかは同じ一覧の「メソッド」に出る。線の長さを測って破線のずらしを動かすと、線が伸びて見える。
+- 長さを表す属性 (`radius` `w` `h` `strokeWidth` など) は Length を取る
+- 線を少しずつ描き出す、文字が占める大きさを測る、といったことはメソッドでできる。線の長さを測って `dashOffset` を動かすと、線が伸びて見える
 
 ```
-let total = p.length()
-p.dash = [total, total]                    # 線と間を全長にして、全部「間」にする
-motion (t) { 0s: p.dashOffset = total      # ずらしを戻していくと、線が伸びて見える
-             2s: p.dashOffset = 0 }
+func draw(t) {
+  let total = p.length()
+  p.copy(dash = [total, total], dashOffset = ease(t, 0s, 2s, total, 0))
+}
 ```
 
-塗りは色のほかに、グラデーション、読み込んだ画像、Shader を入れられる。
-画像は図形の形に切り抜かれる。
+塗りは色のほかに、グラデーション、読み込んだ画像、Shader、`World` (3D) を入れられる。画像は図形の形に切り抜かれる。
 
-```
-import "photo.jpg" as photo
-v.place(Circle(position = Pos(4, 2), radius = 1.5, fill = photo))   # 丸く切り抜く
-```
-
-Shader は `func (x, y, t)` を渡すと GPU で全ピクセル分走る。x, y は箱の座標、t は秒。
-書けるのは数値の計算だけ (文字列・図形・Dict は不可、再帰不可)。時間で変える値は t から計算するか、
-`args` を motion の行で変える。複素数は Vector で書ける。
+Shader は `func (x, y, t)` を渡すと GPU で全ピクセル分走る。x, y は箱の座標、t は秒。書けるのは数値の計算だけ (文字列・図形・Dict は不可、再帰不可)。`run` では走らず、`render` `preview` `sheet` で走る。
 
 ### 標準ライブラリ
 
-グラフ、図、文字の書式、画面の絵、背景、幕、時計、画像と地図、メーター、イージング、
-色、座標、並べ方 — よく要るものは module になっている。**自分で図形を並べる前に、
-そこに部品が無いか見る。**
+グラフ、図、文字の書式、画面の絵、背景、幕、時計、画像と地図、メーター、色、座標、並べ方 — よく要るものは module になっている。**自分で図形を並べる前に、そこに部品が無いか見る。**
 
-名前と引数はこの文書には書かない (写せば必ず古くなる)。引くのはこの 3 つ。
+- `mophila doc` — 型・属性・メソッド・エラー・math の一覧 (JSON)
+- <https://misebox.github.io/mophila/#/lib> (module の関数と引数) と <https://misebox.github.io/mophila/#/builtins> (型)。どちらもソースから生成している。`llms-full.txt` はその全部を 1 ファイルにしたもの
+- エディタを繋いでいれば、`.` の後や `(` の中の補完に署名と説明が出る
 
-- `mophila doc` — いま使っている実行ファイルの、型・属性・メソッド・エラー・math の一覧 (JSON)
-- <https://misebox.github.io/mophila/#/lib> (module の関数と引数) と <https://misebox.github.io/mophila/#/builtins> (型)。
-  どちらもソースから生成している。`llms-full.txt` はその全部を 1 ファイルにしたもの
-- エディタを繋いでいれば、`.` の後や `(` の中の補完に署名と説明が出る。必須の引数が先に並ぶ
+`import 名前` で module ごと、`import { 名前 } from module` で名前だけ持ち込む。組み合わせた例は <https://misebox.github.io/mophila/#/samples> の showcase と report。
 
-`import 名前` で module ごと、`import { 名前 } from module` で名前だけ持ち込む。
-組み合わせた例は <https://misebox.github.io/mophila/#/samples> の showcase と report。
-
-#### 部品に動きを持たせる
-
-スクリプトはフレームごとには走らない。各フレームは「スクリプトを実行した直後の状態 + その時刻までに始まった Timeline」で決まるので、`progress` のような値を渡すだけでは止まった絵になる。
-
-動かすには `duration` を渡す。その部品が自分の Timeline を持って返るので、置けばそのまま動く。`start` はその動きが始まる時刻 (動画全体の時刻で書く)。
-
-```
-v.place(bar(sales, months, 6, 4, duration = 0.8s, start = 1.2s, stagger = 0.1s), at = Pos(1, 2, anchor = :topLeft), w = 6)
-v.place(wipe(16, 9, 1, :left, duration = 0.5s, start = 3s), at = Pos(0, 0, anchor = :topLeft), w = 16)
-```
-
-`duration` を書かなければ渡した値のまま止まる。1 枚の画像を作るときや、値そのものを自分の motion で動かすときはこちら。
+標準 module の部品は Node (多くは Group) を返す。時間で動かすには、`func (t)` の中で `t` から進み具合 (0..1 の Number) を `ease` で計算して部品に渡す。部品を包む Group の `opacity` で出し入れできる。引数の並びと意味は module ごとに違うので、毎回引く。
 
 ### 音声と字幕
 
 ```
 import "bgm.m4a" as bgm
-track.place(bgm, at = 0s, loop = true, volume = 0.6, fadeOut = 3s)
-track.place(Narration(text = "……です。", duration = 4s), at = 2s)
+comp.place("bgm", bgm.copy(volume = 0.6, loop = true), in = 0s, out = 30s)
+comp.place("line-1", Narration(text = "……です。"), in = 2s, out = 6s)
 ```
 
-`loop = true` は動画の終わりまで繰り返す (動画は延びない)。
-
-ナレーションは、その文を読んだ音声が動画の音になり、**同じ文がそのまま字幕になる**。字幕だけを置く型は無い。表示は読み始めから読み終わりまでで、長さは合成した音声から測るので、`duration` の見積もりがずれても声とずれない。画面には描かれないので、**字幕を TextArea で描かない**。
-
-### View の入れ子
-
-`v.place(sub, at = Pos(x, y, anchor = :topLeft), w = 7)` で別の View を比率を保って置く。中の Timeline は親と同じ時間軸で動く。`track.place(sub, at = 3s)` で置けば、その時刻から動き出す。`sub.opacity` で全体をまとめてフェードできる。
-
-`rotation` `scale` `pivot` は、置いたものを 1 枚として回して寄る。中の座標も `place` の書き方も変えなくてよいので、タイル 150 枚をまとめて回すなら、それを入れた View を 1 つ作ってその `rotation` を動かす。`pivot` は子の箱の座標で、書かなければ箱の真ん中。
-
-`clip = true` を付けると、箱からはみ出した中身を描かない。中身を動かして窓から覗かせる形が作れる。
-
-```
-let win = View(box = Vector(6, 2), clip = true)
-let strip = View(box = Vector(18, 2))       # 長い帯
-win.place(strip, at = Pos(0, 0, anchor = :topLeft), w = 18)
-win.addTrack(motion (t) { 0s: strip.position = Pos(0, 0, anchor = :topLeft)
-                          3s: strip.position = Pos(-12, 0, anchor = :topLeft) })
-```
+- 音声は `out` で切る。`loop = true` は `out` まで繰り返し、繰り返さなければファイルより長くならない。同じ音声を何度でも置け、重なれば混ざる
+- `Narration` は文だけを持ち、画面には描かない。**その文を読んだ音声が動画の音になり、同じ文が字幕になる**。字幕だけを置く型は無い。`voice` で音声合成の型を渡せる
+- 字幕の表示は読み始めから読み終わりまで。長さは合成した音声から測るので、`out` の見積もりがずれても声とずれない。合成した音声が `in` から `out` より長ければ、`out` で切って警告が出る
+- **字幕を TextArea で描かない**
+- `run` では合成しない。`render` と `preview` で鳴る
 
 ### 組み合わせて再利用する
 
 書いたものはそのまま部品になる。同じものを 2 度書かない。
 
-**ファイルを部品にする** — `output` した View は `import` 先から `名前.output` で取れる。
+**関数にする** — 同じ図形、同じ動きを何個も書かない。値は引数で渡す。
 
 ```
-import .dial                                   # dial.moph の output
-v.place(dial.output, at = Pos(1, 1, anchor = :topLeft), w = 6)
-track.place(dial.output, at = 2s)              # 2s からその中の Timeline が動く
+func dot(x, y, c) { Circle(position = Vector(x, y), radius = 0.3, fill = c) }
 ```
 
-同じファイルは 1 度しか実行されないので、`dial.output` はどこから読んでも**同じ実体**になる。置き先での位置と大きさは View 自身の属性なので、同じ View を 2 か所には置けない (`ValueError.AlreadyPlaced`)。2 か所目には `copy()` を置く。中の図形は元と共通なので、動かすと両方が動く。
+**ファイルを部品にする** — `output` した Composition は `import` 先から `名前.output` で取れる。Composition は不変なので、何度でも置ける。
 
 ```
-v.place(dial.output, at = Pos(1, 1, anchor = :topLeft), w = 6)
-v.place(dial.output.copy(), at = Pos(9, 1, anchor = :topLeft), w = 6)    # 2 か所目
+import .dial
+comp.place("dial-a", dial.output.copy(position = Vector(1, 1)), in = 0s, out = 4s)
+comp.place("dial-b", dial.output.copy(position = Vector(9, 1)), in = 2s, out = 6s)
 ```
 
-別々に動かしたいなら、View を返す関数を `export` して呼ぶたびに作る。
+別々の値で作りたいなら、Node を返す関数を `export` して呼ぶたびに作る。
+
+**場面を積む** — 長い動画は、章ごとにファイルを分け、`export func run(now)` が Layer を積んで次の開始時刻を返す形にする。共有のリストに `(Node か func, 始まり, 終わり)` を積み、全体の長さが決まってから、`main` が 1 つの Composition に置く。
 
 ```
-# walker.moph
-export func make(near, far, long) -> View { ... }
+# theme.moph
+export let layers = []
+export func put(node, at, end) { layers.push((node, at, end)) }
 
-# 使う側
-import { make } from .walker
-let a = make(1, 0, 8s)
-let b = make(0.6, 3, 8s)     # 別の実体
-```
-
-**Timeline を使い回す** — 1 つの Timeline を何度でも置ける。時刻をずらすだけで繰り返しになる。
-
-```
-let pop = motion (t) { 0s: c.radius = 0.5
-                       1s: c.radius = 1 }
-track.place(pop, at = 0s)
-track.place(pop, at = 3s)
-track.place(pop.reverse(), at = 5s)      # 逆再生
-track.place(pop.scale(2), at = 7s)       # 倍の時間をかけて
-track.place(pop.fit(0.4s), at = 11s)     # 0.4s に収めて
-```
-
-時刻を動かすメソッドはどれも新しい Timeline を返すので、元はそのまま残る。
-
-**形を関数にする** — 同じ図形を何個も書かない。
-
-```
-func dot(x, y, c) { Circle(position = Pos(x, y), radius = 0.3, fill = c) }
-for (i, c) in [#e04040, #40a040, #4040e0].enumerate() {
-  v.place(dot(1 + i * 2, 2, c))
+# scene.moph
+import { put } from .theme
+export func run(now) {
+  put(Circle(position = center, radius = 20vy, fill = #e04040), now, now + 3s)
+  now + 3s
 }
+
+# main.moph
+import { layers } from .theme
+import .scene
+let end = scene.run(0s)
+let comp = Composition(box = Vector(16, 9), duration = end)
+for (i, l) in layers.enumerate() {
+  let (node, at, out) = l
+  comp.place("layer-{}".format(i), node, in = at, out = out)
+}
+output comp
 ```
+
+実例は <https://misebox.github.io/mophila/#/samples> の mophila_intro。
 
 **決まりを 1 か所に置く** — 色・大きさ・時間の定数は 1 つのファイルに `export` してまとめ、全部の場面がそれを読む。テンポや配色を変えるときはそこだけ触る。
 
@@ -361,29 +473,24 @@ export let accent = #e04040
 export let pause = 1s
 ```
 
-#### 気をつけること
+`import ..parent` は文法上は通るが、ディレクトリをまたぐ設計は避ける。
 
-- 同じ View を 2 つの場面で使うなら、先の場面は duration を付けた Timeline に入れて切る。切らないと、終わった Timeline が最後の値 (フェードアウト後の `opacity = 0` など) を書き続けて、あとの場面で見えなくなる
-- 後に置いた Timeline が同じ属性を書けば勝つ。重ねるときは置く順で決まる
-- `import ..parent` は文法上は通るが、ディレクトリをまたぐ設計は避ける
+### よくある間違い
 
-### 部品が互いに追従する動き
+- **属性に代入する** — `c.radius = 2` は `TypeError.AttributeType: Circle is immutable`。`c.copy(radius = 2)` で別の値を作る
+- **`Rect` が思った位置に出ない** — `position` は中心。左上を指すなら `anchor = Vector(0, 0)`。背景の `Rect` で忘れやすい
+- **`out` を書き忘れる** — `Composition.place needs out =`。`in` と `out` は必須
+- **同じ名前を 2 度置く** — `ValueError.AlreadyPlaced`。ループで置くときは `"bar-{}".format(i)` のように名前を変える
+- **`func (t)` の中の誤りが `run` で出ない** — `run` は Layer に置いた関数を呼ばない。スクリプトの末尾に `log(dot(1s))` と書けば `run` で中身が走る。絵は `render --at 1s` か `sheet --times 1s,3s` で見る
+- **`t` が Layer の `in` からの時刻だと忘れる** — 動画全体の時刻で `ease` を書くと、`in` が 0 でない Layer で区間がずれる。全体の時刻が要るなら、Layer の始まりの時刻を `t` に足す
+- **`ease` の時刻に単位が無い** — `ease(t, 0, 1, ...)` は `ease: t0 expects Duration, found Number`。`0s` `1s` と書く
+- **度で回転を書く** — `rotation` はラジアン。90 度は `tau / 4`
+- **Tuple を Vector が要る場所に入れて要素数が合わない** — `Circle.position expects Vector, found Tuple`。2 つの成分に揃える
+- **標準 module を import し忘れる** — `NameError.UndefinedVariable: "math" is not defined; add "import math"`
+- **属性名の綴り** — `NameError.UndefinedAttribute: Circle has no attribute "width"`。`mophila doc` で引く
+- **Layer を取り除こうとする** — できない。消したいなら `out` を早める。条件で出し分けるなら、Layer を分けて `in` と `out` を決める
 
-範囲行 `0..1: child.from = parent.to` は毎フレーム評価されるので、親の属性を読む行を書けば子が追従する。Timeline を置いた順に当たるので、親の行を先に置く。
-
-動く例は <https://misebox.github.io/mophila/#/samples> にある。`fractal` は枝が親の先端を読んで再帰で 2^n 本、`walker` は腰 → 腿 → 脛 → 足を親の先端でつなぐ、`crowd` は walker を奥行きを付けて並べる。
-
-### エラー
-
-`種別.細目: line N: message`。よくあるもの:
-
-- `TypeError.ArgumentType: Circle.position expects Pos, found Tuple` → 要素の数が Pos に合っていない
-- `ValueError.DurationRequired` → 0..1 で書いたのに duration が無い、または時刻の単位が混在
-- `NameError.UndefinedVariable: "math" is not defined; add "import math"`
-- `NameError.UndefinedAttribute: Circle has no attribute "width"` → 属性名の綴り
-- `ValueError.AlreadyPlaced` → 同じ View を 2 か所に置いた。2 か所目は `copy()` を置く
-
-全部の種別は <https://misebox.github.io/mophila/#/builtins/errors> にある。
+エラーは `種別.細目: line N: message`。全部の種別は <https://misebox.github.io/mophila/#/builtins/errors> にある。
 
 
 # 解説する動画の作り方
@@ -406,7 +513,7 @@ export let pause = 1s
 - **順に出す**。一度に出すのは 1 つ。前のものは消さず、最後に全体を見返す時間を置く
 - **切り替えの意味を揃える**。話題が変わるときはフェード、同じものが変化するときは移動。章の見出しは「話題が変わる」の印
 - **画面に同時に出す項目は 3 つまで**。表なら行を順に出す
-- **文字は 1 行**。ナレーションが無いので字幕が全情報になる。長くなるなら場面を分ける
+- **文字は 1 行**。ナレーションが無ければ字幕が全情報になる。長くなるなら場面を分ける
 
 ### 読める時間
 
@@ -451,16 +558,19 @@ let review = 3s         # 見返し
 let pause = 1s          # 場面の切り替え
 ```
 
-数えるのは要素で、文字ではない。
+数えるのは要素で、文字ではない。出す時刻は `now` に積み上げ、各 Layer の `in` と `out` に使う。
 
 ```
-# 立ち上がり + 新しい要素の数 x 1 要素あたり。下限は min_dwell
-func dwell(elements, per) { (lead_in + elements * per) * 1s }
+import math
 
-let now = start
-for line in lines {
-  # ここでその行を出す
-  now = now + dwell(1, per_line)
+# 立ち上がり + 新しい要素の数 x 1 要素あたり。下限は min_dwell
+func dwell(elements, per) { math.max(min_dwell, lead_in + elements * per) }
+
+let now = 0s
+for (i, line) in lines.enumerate() {
+  let end = now + dwell(1, per_line)
+  comp.place("line-{}".format(i), line, in = now, out = end)
+  now = end
 }
 ```
 
@@ -470,24 +580,27 @@ for line in lines {
 背景、周辺減光、場面の切り替え、出し入れ — は標準 module にある。
 自分で図形を並べる前に `mophila doc` かリファレンスで探す。
 
-- 動く部品は、長さと始まる時刻を渡すと自分の Timeline を持って返る。場面をまたぐ時刻は動画全体の時刻で書く
-- 場面そのものは View 1 枚にまとめ、その不透明度で出し入れする。4 場面の組み立ては samples の showcase を見る
+- 部品は Node を返す。時間で動かすときは、`func (t)` の中で `t` から進み具合を `ease` で計算して部品に渡す。`t` は Layer の `in` が 0
+- 出し入れは Layer の `in` と `out`、薄くするのは `opacity`。場面そのものは Group か Composition 1 枚にまとめ、その `opacity` で出し入れする。4 場面の組み立ては samples の showcase を見る
+- 場面をまたぐ時刻を `func (t)` の中で使うときは、その Layer の `in` を `t` に足した全体の時刻を作る (showcase の `now`)
 
 長い解説動画は、章ごとにファイルを分けて `export func run(now)` が場面を組んで次の開始時刻を返す形にする。
 実例は <https://misebox.github.io/mophila/#/samples> の mophila_intro で、
-`main.moph` (章の順番と output) / `theme.moph` (画面、色、時間の決まり) / `slides.moph` (その動画だけの部品) /
-場面ごとのファイルに分かれている。新しく書くときは theme と slides を写して直す。
-そこにどんな部品があるかは、写したファイルを読む (ここには書かない。あの動画の都合で変わる)。
+`main.moph` (章の順番と output) / `theme.moph` (画面、色、時間の決まり、積んだ Layer の置き場) / `slides.moph` (その動画だけの部品) /
+場面ごとのファイルに分かれている。場面は Layer を共有のリストに積み、`main` が全体の長さを知ってから 1 つの Composition に `place` する。
+新しく書くときは theme と slides を写して直す。そこにどんな部品があるかは、写したファイルを読む (ここには書かない。あの動画の都合で変わる)。
 
-- ナレーション 1 行は字幕トラックに置く。**字幕を TextArea で描かない**
+- ナレーション 1 行は `Narration` として `in` と `out` を決めて置く。**字幕を TextArea で描かない**
 - 字幕は同時に 1 つ。帯は画面の下を覆うので、そこに図形や文字を置かない。長い文は 2 回に分ける
-- 右の箱の動きは場面の最初から最後まで繰り返す。ナレーションの間に止まった画を見せない
-- 同じ View を 2 つの場面で使うなら、先の場面は長さを決めた Timeline に入れて切る。切らないと、終わった Timeline が最後の値 (フェードアウト後の不透明度 0 など) を書き続けて、あとの場面で見えなくなる
+- ナレーションの `out` は次の行の `in` に合わせる。字幕は合成した音声から長さを測るので、声と字幕はずれない
+- 右の箱の動きは場面の最初から最後まで続ける。ナレーションの間に止まった画を見せない。繰り返したいなら、同じ Composition を `every` ごとに置き直す
+- 同じ絵の箱は Composition を 1 つ作り、`copy(position = ..., scale = ...)` で何度でも置ける。中の `t` は置いた Layer の `in` から始まる
+- 場面が終われば Layer も終わる。前の場面の値が残って、あとの場面に影響することはない
 - 時刻は `now` を積み上げる。`clock` は module 名と衝突するので変数名に使わない
 
 ### 書いた後の確認
 
-1. `mophila timeline a.moph` — 何がいつどう変わるかの一覧。`--filter kind=TextArea` `--filter text=字幕` `--filter from=30s --filter to=60s` で絞る。末尾の「text visibility」に、テキストごとの表示区間と、短すぎるもの (`SHORT`) が出る
+1. `mophila timeline a.moph` — Layer ごとの存在区間、字幕、音声の一覧。`--filter from=30s --filter to=60s` で時間を絞る。TextArea を直接置いた Layer の文字は「text visibility」に出る。`func (t)` の中で描く文字は出ないので、Layer の区間で読む
 2. `mophila sheet a.moph -o sheet.png --times 3s,12s,45s` — 指定した時刻 (または `--every 10s`) のフレームを格子にした画像。構成とテンポを一目で見直す
 3. 1 と 2 を、書いていない側 (別の agent か人) に渡して「伝わるか / テンポは合っているか / 被りは無いか」を指摘させ、直す
 4. `preview` で通して見る。**読める時間は式では決まらない**ので、ここで詰まる場面と待たされる場面を直す
@@ -524,14 +637,19 @@ let line = color.mix(bg, ink, 0.18)       # 罫線
 
 ### 構図
 
-View の `box` が座標系。ピクセルではないので、余白も図形の大きさもこの単位で決める。
+Composition の `box` が座標系。ピクセルではないので、余白も図形の大きさもこの単位で決める。出力の大きさは `render --size` が決めるので、構図は解像度に依らない。
 
+- **箱の比を先に決める**。16:9 の動画なら `box = Vector(16, 9)`。別の比で書き出すと余白が付くので、中身は箱の内側で完結させる
 - **余白を先に決める**。`box = Vector(16, 9)` なら外周 0.8 を空ける。中身はその内側に置く
+- **割合で決まるものは Length で書く**。箱の高さの 2 割の円は `20vy`、幅の半分の位置は `50vx`。箱の大きさを変えても、構図の比が保たれる
+- **中心は `center`**。中央に置くものは `position = center`、中心から周りに置くものは `center + polar(20vy, 角度)`。入れ子の Composition の中では、その Composition の中心になる
 - **位置は数えられる値にする**。0.8, 2.4, 4.0 のように刻みを決めて並べる。目分量の 3.17 を散らさない
-- **揃える**。左端か中心のどちらかに揃え、混ぜない。位置は目分量で書かず、`layout` module に計算させる
+- **揃える**。左端か中心のどちらかに揃え、混ぜない。並べる位置は目分量で書かず、`layout` module に計算させる
 - **大きさで順位を作る**。主役は他の 1.5 倍以上。同じ大きさのものが並ぶと、どれが主役か分からない
-- **anchor を使う**。`Pos(x, y, anchor = :topLeft)` なら左上が基準。大きさを変えても基準が動かない
+- **anchor を使う**。`Rect` は `position` が中心になる。左上を基準にするなら `anchor = Vector(0, 0)`。大きさを変えても基準が動かない
+- **回転と拡大の中心は anchor**。時計の針なら、軸に `anchor` を置いて `rotation` を動かす
 - 線の太さは全体で 2 種類まで (`strokeWidth`)。角の丸み (`Rect` の `radius`) も 1 種類に揃える
+- 背景は `Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9, fill = ...)` を先に置く。後に置いたものが手前
 
 ### 文字
 
@@ -540,25 +658,29 @@ View の `box` が座標系。ピクセルではないので、余白も図形�
 - **箱の中に置くなら余白**。幅は目分量で決めず、TextArea が置いたときに占める大きさを測るメソッドで測る。`fontSize × 文字数 × 0.6` (英数) / `× 1.0` (日本語) は当てにならないときの目安
 
 ```
-let t = TextArea(position = Pos(1, 1, anchor = :topLeft), text = s, fontSize = 0.6)
+let t = TextArea(position = Vector(1, 1), anchor = Vector(0, 0), text = s, fontSize = 0.6)
 let size = t.size()                       # 置いたときの幅と高さ (箱の座標)
 if size.x > box_width { ... }             # はみ出すなら fontSize を下げる
 next_y = next_y + size.y + gap            # 重ならないように次を置く
 ```
 
+- 行の寄せ方は `align` で決める。左揃えの文字の左端を揃えるなら、`size()` で測って `anchor` を置く
 - **太さで強調しない**。色か大きさで差をつける
 - コードを見せるなら等幅を指定する (`font = "Menlo"` など)。指定が無いと環境で幅が変わって、折り返しがずれる
 - 和文の等幅は入っていないことが多い。`Menlo` を指定すると和文だけ別のフォントで補われ、桁が揃わない。`mophila fonts` で入っている名前を確かめる
 
 ### 動き
 
+動きは `func (t)` の中の `ease` で書く。区間の長さと始まりを数で決める。
+
 - **距離が短いほど速く**。画面を横切るなら 0.6〜1.0 秒、少し動かすだけなら 0.2〜0.4 秒。同じ時間で動かすと、短い移動が間延びする
-- **等速は機械的に見える**。物が動くなら `:ease`、出てくるなら `:ease_out` (減速して止まる)、消えるなら `:ease_in` (加速して去る)
-- **同時に動かすのは 1 つ**。複数あるなら 0.06〜0.1 秒ずらす (stagger)。全部いっぺんに動くと何も追えない
+- **等速は機械的に見える**。物が動くなら `ease`、出てくるなら `ease_out` (減速して止まる)、消えるなら `ease_in` (加速して去る)
+- **同時に動かすのは 1 つ**。複数あるなら 0.06〜0.1 秒ずらす (stagger)。`i * stagger` を `ease` の時刻に足す。全部いっぺんに動くと何も追えない
 - **動きの向きに意味を持たせる**。増えるものは上か右、戻るものは逆。場面をまたいで同じ向きにする
-- **止まっている時間を作る**。動き続けると、どこを見ればいいか分からない。見せたい形になったら 1 秒は止める
-- **回すのは属性で**。頂点を計算し直さない。View ごと回せば、中の座標はそのままで全体が回る
-- 円運動や振動は範囲行 `0..1:` で式を毎フレーム評価する。キーフレームを刻んで近似すると多角形になる
+- **止まっている時間を作る**。動き続けると、どこを見ればいいか分からない。見せたい形になったら 1 秒は止める。`ease` は区間の外で端の値に止まるので、止める時間は何も書かなくてよい
+- **回すのは属性で**。頂点を計算し直さない。Group の `rotation` を動かせば、中の座標はそのままで全体が回る
+- **円運動や振動は式で**。`center + polar(r, tau * t / 周期)` や `sin` を `func (t)` に直接書く。キーフレームを刻んで近似すると多角形になる
+- **出入りは `opacity` か、`in` と `out`**。フェードは `ease` で `opacity` を動かす。`out` を過ぎた Layer は存在しないので、消えた後の値を気にしなくてよい
 
 ### fps と見え方
 
@@ -659,7 +781,7 @@ postfix     ::= "." ident
               | "(" args ")"
               | "[" ws expr ws "]"          # 添字と切り出し。String は文字単位
 
-primary     ::= number | duration | color | string | symbol | bool
+primary     ::= number | duration | length | color | string | symbol | bool
               | ident
               | "(" ws expr ws ")"
               | tuple
@@ -667,8 +789,7 @@ primary     ::= number | duration | color | string | symbol | bool
               | dict
               | if-expr
               | func-expr
-              | context-expr
-              | motion-expr
+              | progress-expr
 
 # 組。() は空、(1,) は 1 要素。末尾の "," は書いてもよい
 tuple       ::= "(" ws ")"
@@ -676,8 +797,8 @@ tuple       ::= "(" ws ")"
               | "(" ws expr (ws "," ws expr)+ (ws ",")? ws ")"
 
 args        ::= (ws arg (ws "," ws arg)* (ws ",")?)? ws
-# ... は Tuple / List / Range / Dict を引数に広げる。名前は付けられない
-arg         ::= (ident ws "=" ws)? expr | "..." ws expr
+# ... は Tuple / List / Range / Dict を引数に広げる。名前は付けられない。引数の名前に限って in も書ける (in = 2s)
+arg         ::= ((ident | "in") ws "=" ws)? expr | "..." ws expr
 
 
 dict        ::= "{" (ws dict-entry (ws "," ws dict-entry)* (ws ",")?)? ws "}"
@@ -685,22 +806,12 @@ dict-entry  ::= string ws ":" ws expr | ident
 
 if-expr     ::= "if" sp expr ws block (ws "else" ws (if-expr | block))?
 func-expr   ::= "func" ws "(" params ")" (ws "->" ws type-ann)? ws block
-context-expr ::= "context" sp expr sp "as" sp ident (ws "," ws expr sp "as" sp ident)* ws block
 
-# motion (t, a, b) { 行 }  /  motion target [:attr.path, ...] { 行 }  /  motion { 行 }
-motion-expr ::= "motion" ws motion-head? ws "{" (ws motion-row)* ws "}"
-motion-head ::= "(" ws ident (ws "," ws ident)* ws ")"
-              | motion-target ws "[" ws attr-path (ws "," ws attr-path)* ws "]"
-# 対象は名前・属性・添字で書ける (c、g.ball、balls[0])
-motion-target ::= ident ("." ident | "[" ws expr ws "]")*
-attr-path   ::= symbol ("." ident)*
-
-# 時刻は Duration か 0..1 の実数。式も書ける (dur、start + 1s)。".." は範囲の区切りなので、そこで止まる
-# 範囲 (0..1:) は補間せず毎フレーム式を評価する
-motion-row  ::= key-time (".." key-time)? ":" ws row-items? (sp modifier)*
-key-time    ::= expr
-row-items   ::= row-item (ws "," ws row-item)*
-row-item    ::= expr ws "=" ws expr | expr
+# progress [:x, :y] { 行 }。progress は ident としても使えるので、"[" と symbol が続くときだけ表
+# 行の左は 0 から 1 の実数。値の隣の modifier は、その列のこの行へ向かう曲線。_ はその列を飛ばす
+progress-expr ::= "progress" ws "[" ws symbol (ws "," ws symbol)* ws "]" ws "{" (ws progress-row)* ws "}"
+progress-row  ::= expr ":" ws progress-cell (ws "," ws progress-cell)*
+progress-cell ::= "_" | expr (sp modifier)*
 modifier    ::= ":linear" | ":ease" | ":ease_in" | ":ease_out"
 
 # ---------- 字句 ----------
@@ -709,6 +820,8 @@ integer     ::= [0-9]+
 number      ::= [0-9]+ ("." [0-9]+)? ([eE] [+-]? [0-9]+)? "%"?
 duration    ::= ([0-9]+ ("." [0-9]+)? ("ms" | "s" | "m" | "h"))+
               | [0-9]+ ":" [0-9]+ (":" [0-9]+)? ("." [0-9]+)?
+# 単位つきの長さ。単位を連ねては書けない
+length      ::= [0-9]+ ("." [0-9]+)? ("vx" | "vy" | "vmin" | "vmax" | "px")
 color       ::= "#" ([0-9a-fA-F]{8} | [0-9a-fA-F]{6} | [0-9a-fA-F]{4} | [0-9a-fA-F]{3})
 string      ::= "\"" ([^"\\\n] | "\\" ["\\nt])* "\""
 symbol      ::= ":" ident
@@ -732,6 +845,7 @@ ws          ::= [ \t\n]*
 #4080e0            # # の直後に文字が続けば Color リテラル
 name_1             # 識別子は英字・数字・_。先頭は英字か _
 :center            # Symbol
+20vy               # 数の直後に単位が続けば Length リテラル
 ```
 
 文の区切りは改行で、`{ }` の中も同じ。リテラルは 3 を参照。
@@ -765,7 +879,7 @@ name_1             # 識別子は英字・数字・_。先頭は英字か _
 
 比較は続けて書ける。`1 < 2 <= 2` は `(1 < 2) and (2 <= 2)` で、真ん中は 1 度しか評価しない。偽が出たらそこで止まる。`2 == 2 == 2` も `true`。
 
-括弧 `( expr )` は優先順位を変える。リテラル (`( )` `[ ]` `{ }`) と `func` `if` `context` `motion` は優先順位を持たない。3 と 4 を参照。
+括弧 `( expr )` は優先順位を変える。リテラル (`( )` `[ ]` `{ }`) と `func` `if` `progress` は優先順位を持たない。3 と 4 を参照。
 
 `-expr` は優先 2、`expr - expr` は優先 5。だから `-2 ^ 2` は `(-2) ^ 2` で 4 になる。改行は文の区切りなので、行頭の `- x` は引き算ではなく新しい文。
 
@@ -777,12 +891,14 @@ name_1             # 識別子は英字・数字・_。先頭は英字か _
 |---|---|---|
 | Number | `1` `1.5` `1/3` `25%` `1e-9` | 整数と実数を区別しない。`100%` = 1.0。`1e-9` は指数表記。3.2 を参照 |
 | Duration | `83s` `1m23s` `500ms` `01:23` `01:23:45.678` | 単位は ms / s / m / h。コロン形式は mm:ss と hh:mm:ss、小数秒可 |
+| Length | `20vy` `50vx` `3px` | `box` に対して描画時に解決する量。単位は vx / vy / vmin / vmax / px。3.15 を参照 |
 | Color | `#rgb` `#rgba` `#rrggbb` `#rrggbbaa` `Color(r, g, b)` `Color(r, g, b, a)` | r/g/b は 0..255、a は 0..1。3/4 桁は各桁を重ねて 6/8 桁に広げる |
 | String | `"hello"` `"say \"hi\""` | エスケープは `\"` `\\` `\n` `\t`。`+` で連結。埋め込みはしない。`"n = {n}".format(n)` が `{...}` を順に置き換える (中の名前は説明用)。Dict を渡すと `"{x} {y}".format({x, y})` のように名前で置き換える |
 | Bool | `true` `false` | |
 | Symbol | `:center` `:linear` | 名前そのものが値。同じ名前どうしだけが等しい |
 | Tuple | `(1, 1.5)` | 要素ごとに型が違ってよい。長さは書いたときに決まる。要素 1 つは `(1,)`、空は `()` |
 | List | `[1, 2, 3]` | 値を順に並べたもの。要素の型は検査しない。メソッドの署名の `T` は要素の型、`U` は変換後の型 |
+| Array | `Array(1, 2, 3)` `Array(list)` | Number だけを詰めた配列。要素ごとの値を持たないので、Rust で作った大きな並びを Rust の関数や `Shader.args` にそのまま渡せる (同じ Array である間は GPU に送り直さない)。作ったら変えない。添字・範囲・for・len は List と同じ |
 | Dict | `{ "k": v }` `{ x, y }` | キーは String。挿入順を保つ。`{ x, y }` は `{ "x": x, "y": y }` の省略形 |
 | Range | `0..5` `0..=5` | 整数の範囲。`..` は末尾を含まない。両端が整数でなければ `ValueError.OutOfRange` |
 | Func | `func (x) { x }` | 型表記は `(引数) -> 戻り値` |
@@ -835,7 +951,7 @@ let apply:  ((Number) -> Number, Number) -> Number = func (f, x) { f(x) }
 
 同じキーを 2 回書いたら、どちらの書き方でも後が勝つ。
 
-`Number` `Duration` `Bool` `String` `Symbol` `Func` はリテラルだけで、呼んでは作れない。呼ぶと `TypeError.ArgumentType` で書き方を返す。
+`Number` `Duration` `Length` `Bool` `String` `Symbol` `Func` はリテラルだけで、呼んでは作れない。呼ぶと `TypeError.ArgumentType` で書き方を返す。
 
 builtin の型の名前は予約されていて、`struct` / `record` / `type` で宣言し直すと `NameError.Reserved`。
 
@@ -843,7 +959,7 @@ builtin の型の名前は予約されていて、`struct` / `record` / `type` �
 
 既存の型を `|` で結んだ名前。`type Fill = Color | Gradient`。値は作れず、引数や属性の型として書く。
 
-言語が持つ union: `Shape` (図形すべて)、`Placeable` (`Shape | View`)、`Paint` (`Color | Gradient | Shader`)、`Font` (`String | List`。候補を並べられる)、`Projection` (space3d のカメラ 3 種)。
+言語が持つ union: `Shape` (図形すべて)、`Node` (`Shape | Group | Composition | Audio | Narration`)、`Paint` (`Color | Gradient | Shader | Image | World`)、`Font` (`String | List`。候補を並べられる)、`Projection` (space3d のカメラ 3 種)。
 
 型名の後ろに `< >` を書くと、中身の型まで見る。`List<Vector>` は要素が全部 `Vector`、`Dict<String, Number>` は値が全部 `Number`、`Tuple<Number, String>` は 1 つずつ。`Tuple<Number>` のように 1 つだけ書いたら全部その型。`< >` を書かなければ入れ物の型だけを見る。
 
@@ -930,7 +1046,7 @@ record Vec2 {
 
 #### 3.8 別名
 
-`alias P = Pos` で、長い型名に短い名前を付ける。そのファイルの、その行より後ろで使える。`export` はできない。
+`alias V = Vector` で、長い型名に短い名前を付ける。そのファイルの、その行より後ろで使える。`export` はできない。
 
 #### 3.9 決まった値しか取らない型
 
@@ -938,13 +1054,12 @@ record Vec2 {
 
 | 型 | 何を決めるか | 取れる値 (先頭が既定) |
 |---|---|---|
-| Anchor | Pos の座標が、置くもののどこを指すか | `:center` `:topLeft` `:top` `:topRight` `:left` `:right` `:bottomLeft` `:bottom` `:bottomRight` |
 | Align | TextArea の行の寄せ方 | `:left` `:center` `:right` |
 | StrokeCap | 線の両端の形 | `:butt` `:round` `:square` |
 | StrokeJoin | 折れ曲がった線の、角の形 | `:miter` `:round` `:bevel` |
 | Blend | 下にある絵との混ぜ方 | `:normal` `:multiply` `:screen` `:overlay` `:darken` `:lighten` `:difference` `:add` |
 | GradientKind | Gradient の stops を並べる向き | `:linear` `:radial` `:sweep` |
-| Easing | 区間の値の変わり方 (motion の行末にだけ書ける) | `:linear` `:ease_in` `:ease_out` `:ease` |
+| Easing | 区間の値の変わり方 (`progress` の値の隣にだけ書ける) | `:linear` `:ease_in` `:ease_out` `:ease` |
 
 同じものを自分でも書ける。
 
@@ -954,26 +1069,31 @@ type Mode = :fast | :slow
 
 #### 3.10 位置
 
-- Vector: 実数 2 つ。`.x` `.y`。`Vector ± Vector`、`Vector × Number`、`Vector ÷ Number`、`-Vector`
-- Pos: `x`、`y`、`anchor` (既定 `:center`)。`.anchor` `.vector` `.x` `.y` (`.x` `.y` は読み書きできる)。`Pos(Vector(1, 1.5))` でも作れる
+- Vector: 2 つの成分。成分は Number か Length (`Vector(50vx, 40vy)`)。`.x` `.y`。`Vector ± Vector`、`Vector × Number`、`Vector ÷ Number`、`-Vector`
+- `position` と `anchor` は別の属性で、どちらも Vector。`position` は `anchor` を置く場所で、親の座標で書く。`anchor` は Node 自身の座標で見た基準点で、`rotation` と `scale` の中心になる。3.11 を参照
 - `(8, 4.5)` は Tuple。ただし**型の決まっている場所に書いた Tuple は、その型になる** (型注釈、属性、フィールド、引数、戻り値)。`Circle(position = (8, 4.5))`、`Polygon(points = [(0, 0), (1, 0)])`、`let ps: List<Vector3> = [(0, 0, 0)]` と書ける
-- 変換するのは Tuple から `Vector` `Vector3` `Pos` `Color` へだけ。型どうしの変換は無く、数が合わなければ型エラー
-- 型の決まっていない場所では Tuple のまま。まとめて作るなら `Vector.from([(0, 0), (1, 0)])` (`Vector3` `Pos` `Color` も同じ)
-- anchor の解決 (`:topLeft` が図形のどこかを出すこと) は描画のときに行われ、スクリプトからは触れない
+- 変換するのは Tuple から `Vector` `Vector3` `Color` へだけ。型どうしの変換は無く、数が合わなければ型エラー
+- 型の決まっていない場所では Tuple のまま。まとめて作るなら `Vector.from([(0, 0), (1, 0)])` (`Vector3` `Color` も同じ)
 
 #### 3.11 図形
 
-`Circle` `Ellipse` `Rect` `TextArea` は `position` (Pos) で置く。`Line` は `from` と `to`、`Polygon` は `points`、`Path` は `from` と `segments` が位置を決めるので `position` を持たない。
+図形は不変の record。変えるときは `copy(...)` で別の値を作るか、関数で作り直す。
+
+```
+let big = dot.copy(radius = 4vy)
+```
 
 | 型 | その型だけの属性 |
 |---|---|
-| Circle | `radius: Number` |
-| Ellipse | `rx: Number` (横の半径) `ry: Number` (縦の半径) |
-| Rect | `w: Number` `h: Number` `radius: Number` (角の丸み。省略は 0) |
+| Circle | `radius: Length` |
+| Ellipse | `rx: Length` (横の半径) `ry: Length` (縦の半径) |
+| Rect | `w: Length` `h: Length` `radius: Length` (角の丸み。省略は 0) |
 | Line | `from: Vector` `to: Vector` |
 | Polygon | `points: List<Vector>` |
 | Path | `from: Vector` `segments: List<Tuple>` `closed: Bool` `upto: Number` |
-| TextArea | `text: String` (`\n` で改行) `w: Number` (折り返す幅) `font: String` `fontSize: Number` `align: Align`。`size()` で置いたときの幅と高さ (Vector) を返す |
+| TextArea | `text: String` (`\n` で改行) `w: Length` (折り返す幅) `font: String` `fontSize: Length` `align: Align`。`size()` で置いたときの幅と高さ (Vector) を返す |
+
+長さを表す属性 (`radius` `w` `h` `strokeWidth` など) は Length を取る。単位なしの数は `box` 単位。
 
 図形は `length()` で輪郭の長さを返す。`dash` と `dashOffset` で線を少しずつ描き出すときに使う。
 
@@ -982,26 +1102,43 @@ type Mode = :fast | :slow
 `upto` は「`segments` の先頭から何割を描くか」(0..1、既定は 1)。点の列はそのままに、描く範囲だけ動かせる。最後の 1 区間は途中で切るので、線の先は滑らかに伸びる。`p.point_at(1)` がその先の点なので、ペン先を置くものを合わせられる。`upto` が 1 未満なら閉じない。
 
 ```
-line.upto = t                    # 範囲の行で動かす
-pen.position = Pos(line.point_at(1))
+let drawn = line.copy(upto = t)
+let pen = dot.copy(position = drawn.point_at(1))
 ```
 
-どの図形も持つ属性。効きようがないものは、その図形が持たない (書くと `NameError.UndefinedAttribute`)。既定のあるものは、書かなくてもその値で読める:
+すべての Node が、次の transform 一式を持つ。
+
+| 属性 | 型 | 意味 |
+|---|---|---|
+| `anchor` | Vector | Node 自身の座標で見た基準点。`rotation` と `scale` の中心 |
+| `position` | Vector | `anchor` を置く場所。親の座標で書く |
+| `scale` | Number | 拡大率 |
+| `rotation` | Number | 回転。ラジアン、時計回りが正 |
+| `opacity` | Number | 不透明度 0..1 |
+
+座標は x が右、y が下に増える。Node 自身の座標の原点と `anchor` の既定は型で決まる。
+
+| 型 | 自身の原点 | `anchor` の既定 |
+|---|---|---|
+| Rect / TextArea | 左上。大きさは `w` × `h` | 自身の中心 `(w/2, h/2)` |
+| Circle / Ellipse | 中心 | `(0, 0)` |
+| Line / Polygon / Path | 点の座標がそのまま。原点は `(0, 0)` | `(0, 0)` |
+| Group | 子の座標系の `(0, 0)` | `(0, 0)` |
+
+`anchor` が既定なら `position` は Rect / TextArea の中心になる。Rect を左上に置くなら `anchor = Vector(0, 0)`。
+
+図形はこれに加えて次の属性を持つ。効きようがないものは、その図形が持たない (書くと `NameError.UndefinedAttribute`)。既定のあるものは、書かなくてもその値で読める:
 
 | 属性 | 型 | 意味 |
 |---|---|---|
 | `fill` | Paint | 塗り。Color / Gradient / Shader / Image |
 | `stroke` | Color | 線の色 |
-| `strokeWidth` | Number | 線の太さ (箱の座標の単位) |
+| `strokeWidth` | Length | 線の太さ |
 | `strokeCap` | StrokeCap | 線の端の形 |
 | `strokeJoin` | StrokeJoin | 線の角の形 |
 | `dash` | List | 破線。線と間の長さを順に並べた Number |
 | `dashOffset` | Number | 破線の始まりをずらす長さ |
-| `opacity` | Number | 不透明度 0..1 |
-| `rotation` | Number | 時計回りの回転 (度) |
-| `pivot` | Vector | 回転の中心。書かなければ、その図形を囲む四角形の中心 |
 | `blend` | Blend | 下の絵との重ね方 |
-| `zIndex` | Number | 同じ View の中で描く順。小さいものが先 (下)。既定は 0 で、同じ値なら place した順 |
 
 | 持たない図形 | 属性 | 理由 |
 |---|---|---|
@@ -1009,50 +1146,87 @@ pen.position = Pos(line.point_at(1))
 | Circle / Ellipse / Line | `strokeJoin` | 角が無い |
 | TextArea | `strokeCap` `dash` `dashOffset` | 字の輪郭を破線にできない |
 
+**Group** — Node をまとめた親。Group も不変で、transform 一式 (上の表) を持つ。中の座標は Group の `position` からの相対。子は親の `rotation` `scale` `opacity` を受けるので、Group を動かせば中身ごと動く。
+
+```
+let badge = Group(
+  Circle(radius = 1.4, fill = #2f6fd0),
+  Rect(w = 1.2, h = 1.2, fill = #ffb583),
+  position = Vector(8, 4.5),
+)
+let moved = badge.copy(position = Vector(12, 4.5))   # 丸と四角が一緒に動く
+```
+
+`camera` (Camera、3.13)、`clip` と transform 一式でない引数が中身で、書いた順に描く。中身には図形と Group を入れられる。
+
+`clip` は中身を切る図形 (マスク)。その輪郭の外にある中身は描かれない。図形の `position` や `anchor` は Group の座標で効き、`camera` で寄っても切り口は動かない。
+
+```
+Group(Circle(radius = 20vy, fill = #e04040), clip = Rect(w = 50vx, h = 100vy))
+```
+
+親子の連鎖は入れ子の深さで書く。順序に依存して親を決める記法は無い。
+
+```
+import { sin, tau } from math
+
+func leg(t) {
+  let s = sin(tau * t / 1s)
+  Group(position = Vector(50vx, 40vy), rotation = 0.5 * s,
+    Rect(anchor = Vector(1vx, 0), w = 2vx, h = 20vy, fill = #3060c0),
+    Group(position = Vector(0, 20vy), rotation = 0.4 - 0.4 * s,
+      Rect(anchor = Vector(1vx, 0), w = 2vx, h = 20vy, fill = #3060c0),
+      Group(position = Vector(0, 20vy), rotation = -0.3 * s,
+        Rect(anchor = Vector(1vx, 0), w = 6vx, h = 2vy, fill = #3060c0))))
+}
+```
+
+外側の Group の回転が内側の 2 つを動かし、2 つ目の Group の回転が最後の Group を動かす。
+
+Composition は箱 (`box`) と長さ (`duration`) を持つ。3.12 と 3.14 を参照。
+
 #### 3.12 箱
 
 ```
-View(box = Vector(16, 9))
+Composition(box = Vector(16, 9), duration = 6s)
 ```
 
 | 属性 | 型 | 意味 |
 |---|---|---|
-| `box` | Vector | 座標系の幅と高さ。`Vector(16, 9)` なら 0..16 × 0..9。ピクセルは持たない |
-| `opacity` | Number | 中身をまとめて 1 枚として掛ける。中の図形が重なっても二重に薄くならない |
-| `clip` | Bool | `true` なら箱からはみ出した中身を描かない。既定は `false` |
-| `blend` | Blend | 中身を 1 枚にしてから、下の絵と重ねる |
-| `zIndex` | Number | 親の中で描く順。図形と同じ規則 |
-| `position` `w` `h` | Pos / Number | 別の View に置かれたときの位置と大きさ |
-| `rotation` | Number | 置いたものを 1 枚として回す (度)。中身の座標は変わらない |
-| `scale` | Number | 置いたものを 1 枚として拡大する。既定は 1 |
-| `pivot` | Vector | `rotation` と `scale` の中心。子の箱の座標で書く。書かなければ箱の真ん中 |
-| `camera` | Camera | 箱の中身の寄り引き。枠は動かさず中身だけ動かす |
+| `box` | Vector | 座標系の幅と高さ。`Vector(16, 9)` なら 0..16 × 0..9。ピクセルは持たない。Length の基準 (3.15) |
+| `duration` | Duration | 長さ |
 
-`rotation` と `scale` は置いたあとの絵に掛かるので、中の図形の座標や `place` の書き方は変えなくてよい。150 枚のタイルをまとめて回すなら、タイルを入れた View を 1 つ作って、その `rotation` を動かす。
+Composition は Node でもあるので、transform 一式 (3.11) を持つ。別の Composition に置かれると、その中の座標と Length は自分の `box` が基準になる。
 
 #### 3.13 塗り
 
-**Camera** — `View.camera` に入れると、箱の**中身**の `from` が `to` の位置に来るように置いて `scale` 倍する。枠 (箱の外周) は動かない。
+**Camera** — 不変の record。Group の `camera` に渡すと、Group の**中身**の `from` が `to` の位置に来るように置いて `scale` 倍する。Group の枠 (`position` `rotation` `scale`) は `camera` とは別で、動かない。
 
 ```
-v.camera = Camera(from = Vector(3, 2.5), to = Vector(8, 4.5), scale = 10)
+Group(circle, rect, camera = Camera(from = Vector(3, 2.5), to = Vector(8, 4.5), scale = 10))
 ```
 
 | 属性 | 型 | 意味 |
 |---|---|---|
-| `from` | Vector | 中身のどの点を映すか (箱の座標) |
-| `to` | Vector | それを画面のどこに置くか (箱の座標)。省略は `from` と同じ = 中身を動かさずに拡大だけする |
+| `from` | Vector | 中身のどの点を映すか |
+| `to` | Vector | それを Group のどこに置くか。省略は `from` と同じ = 中身を動かさずに拡大だけする |
 | `scale` | Number | 倍率。省略は 1。0 以下は `ValueError.OutOfRange` |
 
-`position` `w` `h` `pivot` `rotation` `scale` は**置かれた View そのもの**を枠ごと動かすもので、`camera` とは別物。両方書けば掛かり合う。寄ると中身は箱からはみ出すので、`clip = true` と併せて使う。
+寄ると中身は枠からはみ出す。枠で切るには、同じ Group の `clip` に枠の図形を渡す。Composition の `box` の外は出力に出ない。
 
-3 つを別々の属性にせず 1 つの型にしてあるのは、途中で食い違って画面が跳ねないようにするため。動かすときはフィールドを動かす (`Camera` 値そのものは補間しない)。
+3 つを別々の属性にせず 1 つの型にしてあるのは、途中で食い違って画面が跳ねないようにするため。動かすときは、`func (t)` の中で毎フレーム新しい `Camera` を作る。
 
 ```
-motion (t) { 0..1: { v.camera.scale = math.exp(math.ln(1e12) * t) } }
+import { exp, ln } from math
+
+let len = 6s
+
+func zoom(t) {
+  Group(circle, rect, camera = Camera(from = Vector(3, 2.5), scale = exp(ln(1e12) * t / len)))
+}
 ```
 
-`fill` に入れられるのは `Color` `Gradient` `Shader` (`Paint`)。
+`fill` に入れられるのは `Color` `Gradient` `Shader` `Image` `World` (`Paint`)。
 
 ```
 Gradient(from = Vector(0, 0), to = Vector(16, 9), stops = [#4080e0, #e0604a])
@@ -1073,7 +1247,7 @@ Shader(color = func (x, y, t) { Color(x * 16, 0, 128) })
 | 属性 | 型 | 意味 |
 |---|---|---|
 | `color` | (Number, Number, Number) -> Color | 箱の座標 x, y と動画の時刻 t 秒から、そのピクセルの色を返す |
-| `args` | List | Number の並び。`color` の 4 つ目の引数として渡る |
+| `args` | Array か List | Number の並び。`color` の 4 つ目の引数として渡る。Array なら同じものである間は GPU に送り直さない |
 | `samples` | Number | 1 ピクセルあたりの評価点の数。平方数に切り上げ、4 なら 2x2 の平均。省略は 1 |
 | `zoom` | ZoomPath | ズーム動画の道筋。入れると `color` の引数の意味が変わる |
 
@@ -1089,7 +1263,7 @@ Shader(color = func (x, y, t) { Color(x * 16, 0, 128) })
 
 書けないもの: 文字列、Duration、図形、Dict、素の Tuple。
 
-`args` は毎フレーム読むので、motion の行で変えれば動く。`run` では走らず、`render` `preview` `sheet` で走る。GPU の実数は 32 bit。
+大きな表は Array で渡す (List は毎フレーム写して送るが、Array は同じものである間は送らない)。`run` では走らず、`render` `preview` `sheet` で走る。GPU の実数は 32 bit。
 
 **ZoomPath** — 1 点へ寄っていくだけのズーム動画は、(中心からの距離の対数, 角度) で見るとどのフレームも同じ絵の平行移動になる。`Shader.zoom` に `ZoomPath` を入れると、1 フレームずつ描かずに、その座標系の帯を伸ばしながら使い回す。帯は 1 フレームあたり数列しか伸びないので、1 枚ずつ描くより桁違いに速い。
 
@@ -1106,126 +1280,156 @@ Shader(zoom = ZoomPath(center = Vector(8, 4.5), zoom = func (t) { t + 1 }, durat
 
 `zoom` を入れると `color` の引数は `(中心からの距離の対数, 角度, 時刻)` になる。倍率は増えていくこと (戻ると帯を作り直すので遅い)。手で組むものではなく、標準ライブラリ `fractal` の `escape_time` が `duration` を書いたときに組み立てる。
 
+`escape_time` の `center` を 10 進の文字列 2 つで渡すと、倍率が 32 bit にも 64 bit にも収まらない深さまで行ける。中心の点の軌道 (基準軌道) を多倍長で計算し、GPU は指数を別に持つ数でそこからの差分を回し、線形近似 (BLA) で反復をまとめて飛ばす。倍率そのものは扱えないので `max_steps` には倍率の log10 が渡る。寄る先は `find_center` で探せる (その点の近くにあるミニチュアの中心・周期・大きさを返す)。
+
+**World** — `space3d` の 3D の場面。図形の `fill` に入れると、その図形の中に GPU が `Mesh` をそのまま描く。面を 1 枚ずつ図形に開く書き方と違って、1 コマにスクリプトがするのは `Solid` の置き方を変えることだけなので、面が何万枚あっても 1 コマの手間は変わらない。前後は深度で決まる。
+
+```
+let ball = space3d.Solid(mesh = space3d.sphere((0, 0, 0), 1, 16, 32), fill = #6fa3d6)
+comp.place("world", Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9,
+                         fill = space3d.World(camera = cam, parts = [ball], background = #101520)),
+           in = 0s, out = comp.duration)
+```
+
+| 属性 | 型 | 意味 |
+|---|---|---|
+| `camera` | Projection | space3d のカメラ。`box` は塗る図形の大きさに合わせる |
+| `parts` | List<Solid> | 描くもの |
+| `light` | Vector3 | 光の向き。省略は `(0.4, 0.8, 0.5)` |
+| `ambient` | Number | 光に背いた面の明るさ。省略は 0.25 |
+| `background` | Color | 何も無いところの色。省略は透明 |
+
+`Solid` は形と色と置き方の組。
+
+| 属性 | 型 | 意味 |
+|---|---|---|
+| `mesh` | Mesh | 形。`space3d.box` などが返すもの。いくつもの `Solid` で使い回せる |
+| `fill` | Color | 塗り。面の向きと `light` で陰が付く。省略は `#808080` |
+| `transform` | Transform3 | 置き方。省略は `Mesh` の座標のまま |
+
+こちらを向いていない面は描かない。`Mesh` の `edges` は使わない (線は引かない)。`run` では走らず、`render` `preview` `sheet` で走る。
+
 #### 3.14 時間
 
-時間を持つ型は 3 つ。`Motion` は値の並びだけを持ち、対象を持たない。`Timeline` は対象と属性まで決まったもので、同時に入れ物でもある。`Audio` は読み込んだ音声。
-
-`motion` が返す `Timeline` も `Timeline()` で作った `Timeline` も同じ型で、どちらも `place` で中にものを置ける。
+木は 1 本で、場所と時間を同じ Node が持つ。
 
 ```
-let m = motion (t, a, b) {      # Motion。値の表
-  0s: 1, 2, 3
-  2s: 3, 6, 9
+Composition ─ box, duration
+ ├── "bg"     in ─── out    Rect
+ ├── "badge"  in ─── out    func (t) -> Node
+ └── "intro"  in ─── out    Composition
+                              ├── "title" ...
+                              └── "logo"  ...
+```
+
+- **Composition** は大きさ (`box`) と長さ (`duration`) と、Layer の積み重ねを持つ。`output` するのは Composition
+- **Node** は描かれるものの総称。図形、Group、Composition、Audio、Narration
+- **Layer** は Composition に置かれたもの 1 つを指す言葉で、言語の型としては出てこない。名前と、置いたものと、`in` と `out` を持つ。`in` と `out` は親 Composition の時間軸で数える
+- `in <= t < out` の外では、その Layer は存在しない。描かれず、音も鳴らず、何も計算しない。残したければ `out` を伸ばす
+- Layer は束ねられない。別々の時刻に出入りするものをまとめたいときは、Composition を作って 1 枚の Layer として置く
+
+**place**
+
+```
+comp.place("badge", badge, in = 2s, out = 8s)
+```
+
+- 1 つ目が名前、2 つ目が置くもの。`in` と `out` は必須
+- 名前は String で、その Composition の中で一意。同じ名前を 2 度置いたらエラー
+- 積み重ねの順は置いた順。後に置いたものが手前
+- `place` は値を返さない
+- 置いた Layer は取り除けない。置き換えも、`in` と `out` の変更もできない。消えることは `out` で表す
+
+**Layer の中身** — 置けるものは 2 種類。
+
+- 不変の Node。`Circle(...)` `Group(...)` `Composition(...)` `Audio(...)` `Narration(...)`
+- 純粋関数 `func (t) -> Node`
+
+`t` は Layer の `in` を 0 とした時刻 (Duration)。関数は毎フレーム、新しい不変の図形を返す。代入は無く、状態は持たない。同じ `t` には同じ Node が返る。
+
+```
+func pop(t) {
+  Circle(position = center, radius = 10vy, fill = #e04040, scale = ease_out(t, 0s, 0.4s, 0, 1))
 }
-let tl = motion (t) {           # 行が属性への代入なら Timeline
-  0s: c.radius = 1
-  2s: c.radius = 3
+
+comp.place("pop-a", pop, in = 1s, out = 3s)
+comp.place("pop-b", pop, in = 4s, out = 6s)
+```
+
+`pop` の `t` は、どちらの Layer でも自分の `in` が 0。
+
+**progress** — 対象も長さも持たない、名前付きの表。0 から 1 の数を渡して呼ぶと、その点の値を Tuple で返す。行の間は補間する。
+
+```
+let slide = progress [:x, :y] {
+  0:   2, 4.5
+  0.4: _, 6 :ease
+  1:  14 :ease_out, 4.5
 }
-m.apply(c, func (o, t, [r]) { o.radius = r })   # Motion に対象を与えても Timeline
-let track = Timeline(duration = 8s)             # 入れ物だけの Timeline
-import "bgm.m4a" as bgm                         # Audio
+let (x, y) = slide(0.5)
 ```
 
-行の時刻は Duration (`2s`) か 0..1 の実数 (`0.5` `50%`)。1 つの motion で混ぜられない。実数で書いたら `duration` の設定が要る。
+- 行の左は 0 から 1。0 と 1 の行は必須
+- 列の名前を先に並べ、行には値だけを書く
+- `_` はその列を飛ばす。名前ごとに別々の位置でキーフレームを打てる
+- Easing (3.9) は値の隣に書く。書かなければ `:linear`。`:ease_in` は加速、`:ease_out` は減速、`:ease` は両方
+- 0 より小さい数を渡すと 0 の行の値、1 より大きい数を渡すと 1 の行の値を返す
+- 何秒かけるかは呼ぶ側が決める。`slide(t / 0.3s)` なら 0.3 秒で端から端まで動く
 
-時刻には式も書ける。`..` は範囲の区切りなので、そこで読むのを止める。
-
-```
-let dur = 3s
-motion (t) { 0s: c.radius = 1
-             dur: c.radius = 3 }          # 変数
-motion (t) { start: c.opacity = 0
-             start + 0.4s: c.opacity = 1 }   # 足し算
-```
-
-
-間を補間できるのは Number、Duration、Vector、Pos、Color と、それらを同じ長さで並べた Tuple / List。長さの違う並びや、補間できない値は、次の行の時刻で切り替わる。`Path` の `segments` や `Polygon` の `points` を動かすと形が変わる。
-
-`duration` は長さ。既定は最後の時刻で、代入すると長さだけが変わる (行の時刻は動かない。短くすれば、そこから先の行は使われない)。0..1 で書いた表は時刻が割合なので、`duration` が実時間を決める。Audio の `duration` はファイルの長さ。
-
-時刻そのものを動かすのはメソッド。
-
-| 書き方 | すること |
-|---|---|
-| `tl.scale(2)` | 時間の軸を 2 倍にする。時刻も長さも 2 倍 |
-| `tl.fit(3s)` | 長さが 3s になるように時間の軸を伸縮する |
-| `tl.trim(from = 1s, to = 4s)` | 1s から 4s までを取り出し、0 から始まるものにする |
-| `tl.reverse()` | 時間の向きを逆にする |
-
-どれも新しい Timeline (Motion なら Motion) を返し、元は変わらない。`scale` と `fit` は中に置いた Timeline も同じ倍率で伸縮する。音声と字幕は開始時刻だけ動き、長さは変わらない。
-
-Motion の行では、`t` はその行に書いた時刻、2 つ目以降の名前は同じ行の左の列の値。
-
-行が書けるのは、図形の属性 (`c.radius`) と**普通の変数** (`weight`、`p.x`) の両方。変数を動かせば、図形を持たない値 (重み、位相、進み具合) をそのまま動かせる。
+**補間関数**
 
 ```
-let weight = 0
-let p = Vector(0, 0)
-motion (t) {
-  0s: weight = 0, p = Vector(2, 2)
-  2s: weight = 10, p = Vector(14, 7) :ease
+ease(t, t0, t1, v0, v1)
+```
+
+`t` が `t0` から `t1` の間にあるとき `v0` から `v1` へ補間する。区間の外では端の値に止まる。引数の並びは After Effects の `ease` と同じ。`linear` `ease_in` `ease_out` も同じ形。`v0` と `v1` は Number、Vector、Length を取れる。`t` `t0` `t1` は Duration。
+
+丸が動き、棒が伸び、文字が出て、最後に消える。
+
+```
+let len = 6s
+
+func stage(t) {
+  let x = ease(t, 0s, 2s, 10vx, 80vx)
+  let bar = ease_out(t, 1s, 2.5s, 0vx, 60vx)
+  let shown = ease(t, 2.5s, 3s, 0, 1)
+  let fade = ease(t, len - 1s, len, 1, 0)
+  Group(
+    Circle(position = Vector(x, 30vy), radius = 4vy, fill = #e04040),
+    Rect(position = Vector(10vx, 60vy), w = bar, h = 2vy, fill = #000000),
+    TextArea(text = "Done", position = Vector(10vx, 75vy), opacity = shown),
+    opacity = fade
+  )
 }
+
+let comp = Composition(box = Vector(16, 9), duration = len)
+comp.place("stage", stage, in = 0s, out = len)
+output comp
 ```
 
-**範囲の行** — 時刻を `0..1:` のように範囲で書くと、その区間は補間せず、式を毎フレーム評価する。
+**描画** — 1 コマは、時刻を入れて木をたどる。
+
+1. その時刻に `in <= t < out` の Layer を、積み重ねの順に見る
+2. 置いたものが関数なら `t - in` で呼んで Node を得て、描く
+3. 置いたものが Node なら、そのまま描く
+4. 置いたものが Composition なら、同じことを再帰でやる
+
+各フレームは、その時刻だけで決まる。前のフレームには依存しないので、preview で時間を戻しても同じ画になる。
+
+動画の長さは、`output` した Composition の `duration`。
+
+**音声** — `import "bgm.m4a" as bgm` で得た Audio を Node として置く。`volume` は 1 がそのまま、`loop = true` は `out` まで繰り返す。音声は `out` で切る。繰り返さなければファイルより長くならない。同じ音声を何度でも置けて、重なれば混ざる。
 
 ```
-motion (t) { 0..1: c.position = Pos(2 + t * 12, 4.5) }
+comp.place("bgm", bgm.copy(volume = 0.6, loop = true), in = 0s, out = 30s)
 ```
 
-範囲の行は値の代わりに文の列を書ける。`let` が書けるので、1 つの点から複数の属性を決めるときに 1 度だけ計算すれば済む。
-
-```
-motion (t) {
-  0..1: {
-    let p = tip(t)
-    pen.position = Pos(p)
-    rail.to = Vector(p.x, p.y)
-  }
-}
-```
-
-同じ属性を上の行と両方で書いたら、ブロックのほうが後に走る。`mophila timeline` は、ブロックを 1 度走らせて何を書いたかを出す。
-
-属性に代入する motion は、2 つ目の名前で**経過秒**を受け取れる。`0..1` の割合で書いた行から、秒で決まる動きをそのまま書ける (長さを 2 か所に書かなくて済む)。
-
-```
-let tl = motion (t, sec) {
-  0..1: c.position = Pos(8 + math.cos(sec / 2.5s * math.TAU) * 5, 4.5)
-}
-tl.duration = 5s      # 2.5 秒で 1 周する動きが 5 秒続く
-```
-
-行末に Easing を 1 つ書ける。効くのは、前の行からその行までの区間。
-
-```
-motion (t) {
-  0s: c.radius = 1
-  1s: c.radius = 3 :ease
-}
-```
-
-`:linear` `:ease_in` `:ease_out` `:ease` の 4 つで、書かなければ `:linear`。`:ease_in` は加速、`:ease_out` は減速、`:ease` は両方。Easing は属性の型ではなく、この行末にだけ書ける。
-
-置く。`Timeline.place` は Timeline の中へ、`View.addTrack` はその View の動きとして付ける。引数は同じで、`output` した View に付いたものが動画になる。
-
-```
-v.addTrack(track)
-track.place(tl, at = 2s, fadeIn = 0.3s, fadeOut = 0.3s)
-track.place(bgm, at = 0s, duration = 30s, volume = 0.6, loop = true)
-track.place(Narration(text = "ここを読み上げる", duration = 2s), at = 5s)
-```
-
-`fadeIn` は置いた時刻から、`fadeOut` は終わりに向かって、置いたものの不透明度を動かす。View に付けると中身をまとめて 1 枚として掛かる。Narration には効かない (`duration` で長さを決める)。
-
-`duration` を指定した Timeline は、その長さより後を使わない。音声は `duration` で切り (繰り返さなければファイルより長くならない)、`volume` は 1 がそのまま、`loop = true` は `duration` か動画の終わりまで繰り返す (動画は延びない)。同じ音声を何度でも置けて、重なれば混ざる。
-
-読み上げは `Narration`。文と長さだけを持ち、Timeline に置く (画面には描かない)。**その文を読んだ音声が動画の音になり、同じ文が字幕になる**。**どう喋らせるか**は置くときに `voice` で渡す。
+読み上げは `Narration`。文だけを持ち、画面には描かない。長さは Layer の `in` から `out`。**その文を読んだ音声が動画の音になり、同じ文が字幕になる**。**どう喋らせるか**は `voice` で渡す。
 
 ```
 let kyoko = SayVoiceEngine(voice = "Kyoko")
-track.place(Narration(text = "ここを読み上げる", duration = 3s), at = 2s, voice = kyoko)
-track.place(Narration(text = "ここは速く", duration = 3s), at = 5s, voice = SayVoiceEngine(voice = "Kyoko", rate = 300))
+comp.place("line-1", Narration(text = "ここを読み上げる", voice = kyoko), in = 2s, out = 5s)
+comp.place("line-2", Narration(text = "ここは速く", voice = SayVoiceEngine(voice = "Kyoko", rate = 300)), in = 5s, out = 8s)
 ```
 
 `voice` に入れるのは音声合成の型 (`Voice`)。合成ごとに受け取る設定が違うので、型も別になっている。
@@ -1235,17 +1439,19 @@ track.place(Narration(text = "ここは速く", duration = 3s), at = 5s, voice =
 | `SayVoiceEngine` | macOS の say | `voice` (`say -v ?` の名前) `rate` (1 分あたりの語数) |
 | `EspeakVoiceEngine` | espeak-ng | `voice` (`espeak-ng --voices` の名前) `speed` `pitch` `gap` |
 
-属性はその型のものだけ。無い名前を書けば `NameError.UndefinedAttribute` で止まる。`voice` を渡さなければ、その機械に入っているもので読む。置くときの `volume` で音量を変えられる。
+属性はその型のものだけ。無い名前を書けば `NameError.UndefinedAttribute` で止まる。`voice` を渡さなければ、その機械に入っているもので読む。`volume` で音量を変えられる。
 
-合成した音声が `duration` より長ければ、そこで切って警告を出す。行の時刻は動かない。
+合成した音声が `in` から `out` より長ければ、`out` で切って警告を出す。`in` と `out` は動かない。
 
-字幕は読み上げからしか作らない。出るのは読み始めから読み終わりまでで、長さは作った音声から測る。`duration` の見積もりがずれても、字幕と声はずれない。声を付けない字幕は書けない (書けるようにすると、また人が時刻を見積もることになるため)。
+字幕は読み上げからしか作らない。出るのは読み始めから読み終わりまでで、長さは作った音声から測る。`out` の見積もりがずれても、字幕と声はずれない。声を付けない字幕は書けない (書けるようにすると、また人が時刻を見積もることになるため)。
 
 作った音声はビルドの中間物なので、リポジトリではなくキャッシュ (`~/.cache/mophila/voice/`、`$XDG_CACHE_HOME` があればその下) に置く。同じ型・同じ設定・同じ文なら作り直さない。書いたものが音声として読めなければ、そこで止まる (壊れたものをキャッシュに残さない)。
 
 `render` は音声を ffmpeg で動画の音声トラックにし、字幕を SRT にして字幕トラックに入れる (mp4 と mov は mov_text、webm は webvtt、mkv は srt)。
 
-`--trim` が時間の切り取りで、`--crop` が領域の切り取り。`--crop height` は高さを箱いっぱいにして幅を出力の比から決め、
+`--trim` が時間の切り取りで、`--crop` が領域の切り取り。`--trim` の時刻は `00:15` `1.5s` `500ms` の他に、`94%` と割合でも、
+`10978` とコマ数でも書ける (単位も `:` も無ければコマ数。`--fps` で秒に直す)。
+`94%..96%` や `2s..50%` のように混ぜてもよい。`--crop height` は高さを箱いっぱいにして幅を出力の比から決め、
 `--crop width` はその逆、`--crop 0.25,1` (`25%,100%` でも同じ) は箱に対する割合で直に決める。
 切り取った範囲が箱より小さいとき、余ったところのどこに寄せるかが `--align` で、
 `left` `center` `right` `top` `bottom` `topLeft` などの名前か、軸ごとの割合 (`30%,50%`) を書く (既定は中央)。
@@ -1255,9 +1461,40 @@ track.place(Narration(text = "ここは速く", duration = 3s), at = 5s, voice =
 
 `subs` は動画を描かずに字幕だけをファイルに出す (`-o subs.srt` / `-o subs.vtt`。省略すると標準出力)。中身は動画の字幕トラックと同じで、`--trim` も同じように効く。`preview` は音声を PCM にして鳴らし、字幕を画面の下に重ねる。`sheet` も重ねる。重ねる字幕は、箱を収めた絵の中に出す (ウィンドウの縦横比が箱と違えば、余った帯には出ない)。
 
-Motion は単独では place できない。動画の長さは、置いたものすべての終わりの最大 (音声と字幕も含む)。
+#### 3.15 Length
 
-各フレームの状態は、スクリプトを実行した直後の状態に、その時刻までに始まった Timeline を置いた順で適用して決まる。前のフレームには依存しないので、preview で時間を戻しても同じ画になる。
+Duration と同じ作りの、型つきの遅延量。単位は次の 5 つ。
+
+| 単位 | 意味 |
+|---|---|
+| `vx` | `box` の幅の 1/100 |
+| `vy` | `box` の高さの 1/100 |
+| `vmin` | `vx` と `vy` の小さい方 |
+| `vmax` | `vx` と `vy` の大きい方 |
+| `px` | 出力のピクセル |
+
+- 描く先の Composition の `box` に対して、描画時に解決する。入れ子の Composition では、それぞれの `box` が基準になる
+- 単位なしの数は `box` 単位
+- Vector の成分は Length を取れる。`Vector(50vx, 40vy)`
+- 加減算、Number との乗除算、`ease` などの補間が Length に対応する
+
+#### 3.16 角度
+
+角度は Number のラジアン。`rotation` も `polar` も `sin` も同じ単位で、時計回りが正。
+
+- `rotation` の単位は度でなくラジアン
+- math の関数は、角度の向きを `rotation` と同じ時計回りに揃える。既存の関数への適用は未決 (10 章)
+
+#### 3.17 名前
+
+- `center` は裸の名前で、描く先の Composition の中心を指す Length の Vector。入れ子の Composition の中では、その Composition の中心
+- `tau` は小文字の定数。`polar(r, a)` と共に math から import する
+- `polar(r, a)` は半径 `r`、角度 `a` の Vector を返す。`r` は Length を取れる
+
+```
+import { tau, polar } from math
+center + polar(20vy, tau / 6)
+```
 
 ### 4. 文
 
@@ -1343,31 +1580,19 @@ func first_even(xs: List<Number>) -> Number {
 }
 ```
 
-#### 4.4 context
-
-長い名前を短く書くための式。ブロックの最後の式が値になる。
-
-```
-let r = context board.left.card as o {   # o は board.left.card
-  o.radius
-}
-
-context a as x, b as y { }   # 複数書ける
-```
-
-#### 4.5 型の宣言
+#### 4.4 型の宣言
 
 ```
 record Size { }        # 3.6
 struct Counter { }     # 3.6
 @nocopy                # 3.7。直後の record / struct に付く
-alias P = Pos          # 3.8。そのファイルのその行より後ろだけ
+alias V = Vector       # 3.8。そのファイルのその行より後ろだけ
 type Fill = Color | Gradient   # 3.5
 ```
 
 `record` `struct` `type` はトップレベルにだけ書ける。
 
-#### 4.6 import
+#### 4.5 import
 
 `import` は 3 つある。何を束縛するかが違う。
 
@@ -1383,7 +1608,7 @@ import "bgm.m4a" as bgm            # 音声。Audio を束縛する
 import "logo.png" as logo          # 画像。Image を束縛する (png jpg gif webp bmp tiff)
 ```
 
-`.moph` の Module から見えるのは、そのファイルが `export` した名前と、`output` した View (`orbit.output`) だけ。
+`.moph` の Module から見えるのは、そのファイルが `export` した名前と、`output` した Composition (`orbit.output`) だけ。
 
 同じファイルは 1 度しか実行されず、2 度目以降の `import` は同じ実体を返す。循環 import はエラー。`bundle` は音声も含めて import 先を実行ファイルに埋め込む。
 
@@ -1400,7 +1625,7 @@ import "@/media/bgm.m4a" as bgm    # 文字列の中では "/" 区切り
 
 `import` はトップレベルにしか書けない。
 
-#### 4.7 export
+#### 4.6 export
 
 ```
 export let theme = #4080e0
@@ -1411,28 +1636,31 @@ export record Size { }
 
 トップレベルにだけ書ける。`alias` は export できない。
 
-#### 4.8 output
+#### 4.7 output
 
 ```
-output v      # この View が動画になる。1 つのファイルに 1 つ
+output comp   # この Composition が動画になる。1 つのファイルに 1 つ
 ```
 
 ### 5. 空間
 
-- 箱 (View) は `box = Vector(w, h)` で座標系を宣言する。中の座標はその単位
-- `view.place(shape)`。図形の位置は図形の `position` で決まる
-- `view.place(other_view, at = Pos, w =, h =)` で View を入れ子にする。w か h の片方だけなら縦横比を保ち、両方なら比率を保ったまま収める。子の座標は子の box で解釈される。置き先での位置と大きさは子の属性になるので、同じ View を 2 か所には置けない (`copy()` を置く)
-- `view.addTrack(x)` で、その View の動きとして付ける。`output` した View に付けたものが動画になる。`x` は Timeline、View、Audio、Narration のどれかで、引数は `Timeline.place` と同じ
-- クロージャと Timeline はスコープを共有する (複製しない)。定義後に変数を変えれば、その値が見える
+- 箱 (Composition) は `box = Vector(w, h)` で座標系を宣言する。中の座標はその単位。`Vector(16, 9)` なら 0..16 × 0..9
+- 座標は意味のある式で書く。`center` は描く先の Composition の中心 (3.17)
+- 単位なしの数は `box` 単位。`20vy` のような Length は描画時に `box` から解決する (3.15)
+- `comp.place(name, node, in =, out =)`。Node の位置は Node の `position` と `anchor` で決まる (3.11)
+- Composition を別の Composition に置くと入れ子になる。子の座標と Length は子の `box` で解釈され、`center` は子の中心を指す
+- 角度はラジアンで、時計回りが正 (3.16)
 
 ### 6. builtin と標準ライブラリ
 
-`import` なしで使えるのは、builtin の型の名前と、次の 2 つだけ。どちらも呼び出しの形でしか書けず、値として取り出すことはできない。
+`import` なしで使えるのは、builtin の型の名前と、次の名前だけ。関数は呼び出しの形でしか書けず、値として取り出すことはできない。
 
 | 名前 | 内容 |
 |---|---|
 | `log(値, ...)` | 引数を空白区切りで stderr へ出す。どの型でも受け取る。動画には出ない |
 | `type_of(値)` | その値の型の名前を String で返す |
+| `ease(t, t0, t1, v0, v1)` `linear` `ease_in` `ease_out` | 区間の補間。3.14 を参照 |
+| `center` | 描く先の Composition の中心。3.17 を参照 |
 
 String / List / Dict / Range のメソッドは builtin で、`import` は要らない。
 
@@ -1440,16 +1668,16 @@ String / List / Dict / Range のメソッドは builtin で、`import` は要ら
 
 | モジュール | 内容 |
 |---|---|
-| math | 数学。`PI` `TAU` `E` などの定数と、三角関数・丸め・平方根・対数・最大最小・範囲の変換。`polar(r, a)` は数学の向き (弧度・反時計回り) で Vector を作る |
+| math | 数学。`tau` `pi` `e` の定数と、三角関数・丸め・平方根・対数・最大最小・範囲の変換。角度はラジアンで、向きは時計回りが正 (3.16)。`polar(r, a)` は半径 `r`、角度 `a` の Vector を作る |
 | color | 色を作る、混ぜる。明るくする、暗くする、不透明度を変える、色相から作る |
 | shape | Polygon の `points` を作る。円周上の点、正多角形、星、矢印 |
 | layout | 並べる位置を計算する。格子、直線上の等間隔、比率を保って収めた大きさ |
-| animation | 図形や View を動かす Timeline を返す。現れる、消える、滑る、回る |
 | palette | そのまま使える配色。背景・文字・罫線・強調・系列色の組 (`Palette`) を名前で選ぶ |
 | pattern | そのまま `fill` に入れられる模様。縞、細線、市松、水玉、方眼、ざらつき |
 | icon | チェックや矢印などの記号の形。`mark` でそのまま置ける図形になる |
-| space3d | 3D の点 (`Vector3`) と変換 (`Transform3`)、カメラ 3 種、`Mesh` の作り手。投影して 2D の `Vector` と奥行きの `Number` を返す。描くのは既存の図形 |
-| fractal | エスケープタイム系フラクタルの Shader。反復式と色付けを組み合わせる。倍率は `zoom` / `duration` / `camera` のどれかで決める |
+| space3d | 3D の点 (`Vector3`) と変換 (`Transform3`)、カメラ 3 種、`Mesh` の作り手。投影して 2D の `Vector` と奥行きの `Number` を返し、描くのは既存の図形。`World` を図形の `fill` に入れれば、面を図形に開かず GPU が `Mesh` のまま描く |
+| fractal | エスケープタイム系フラクタルの Shader。反復式と色付けを組み合わせる。倍率は `zoom` / `duration` / `camera` のどれかで決める (`camera` は Camera を受ける)。中心を文字列で渡すと多倍長の基準軌道で深くまで寄れる。`find_center` は寄る先 (ミニチュアの中心) を探す |
+| bignum | 多倍長の計算。`fractal` が使う基準軌道と BLA の表、ミニチュアの探索。Rust でループを回すので、深いズームの準備がスクリプトで待たされない |
 
 ### 7. プロジェクト設定
 
@@ -1467,15 +1695,30 @@ config:
   width: 16                  # import config で読める値
   title: "mophila"
   debug: false
+render:
+  size: 4k                   # render の既定。コマンドラインに書いたほうが勝つ
+  fps: 60
+  codec: hevc_nvenc
+  codec-args: -cq 20 -b:v 0
 ```
 
 **設定の中に書いたパスは、設定ファイルのある場所からの相対**。コマンドラインに書いたパスは、いま居るディレクトリからの相対。設定はプロジェクトの形を書いたものなので、どこで実行しても同じ場所を指す。
+
+`render` に書けるのは `fps` `size` `jobs` `codec` `pix-fmt` `codec-args` `gpu-budget` `crop` `align` `pad`。
+値はコマンドラインに書くのと同じ形で、コマンドラインに書いたほうが勝つ。書かなかった名前は既定のまま (何も言わない)。
+知らない名前と読めない値のときだけ、そう言ってその項目を捨てる。
+
+描き始める前に、効いた指定を 1 行出す。括弧の中は、そのうち設定から取ったもの。
+
+```
+render 3840x2160 60fps hevc_nvenc p010le -cq 20 -b:v 0 -> out.mp4   (size fps codec pix-fmt codec-args from mophila.yaml)
+```
 
 `config` の値は数・文字列・真偽の 3 つ。`import config` で読む。
 
 ```
 import config
-let v = View(box = Vector(config.width, 9))
+let comp = Composition(box = Vector(config.width, 9), duration = 6s)
 ```
 
 値は 2 通りで上書きできる。どちらも設定に書いた型に合わせて読み、合わなければエラー。設定に無い名前を指定してもエラーになる。
@@ -1494,13 +1737,38 @@ let v = View(box = Vector(config.width, 9))
 | SyntaxError | `UnexpectedToken` 構文として読めない / `InvalidLiteral` 色の桁数、Duration の形式など |
 | NameError | `UndefinedVariable` / `UndefinedAttribute` / `AssignWithoutLet` let を書かずに初めて代入した / `Reserved` builtin の型の名前を宣言し直した |
 | TypeError | `OperandType` 演算子の左右 / `AttributeType` 属性に入れる値 / `ArgumentType` 引数 / `ArityMismatch` 引数や列の数 / `NotPlaceable` place できない型 |
-| ValueError | `DurationRequired` 時刻の単位が混在、相対時刻なのに duration が無い / `OutOfRange` 型は合うが値が範囲外 / `AlreadyPlaced` 同じ View を 2 か所に置いた |
+| ValueError | `OutOfRange` 型は合うが値が範囲外 / `AlreadyPlaced` 同じ名前の Layer を 2 度置いた |
 | RuntimeError | `DivisionByZero` / `FontNotFound` / `AudioUnreadable` / `ImageUnreadable` / `ShaderCompile` / `ShaderUnavailable` / `EndlessLoop` / `OutOfMemory` |
 
-`ShaderCompile` と `ShaderUnavailable` は描画のときに出る。`run` では Shader を走らせないので出ない。
+`run` は、スクリプトを実行したあと、`output` の Composition を始め、中ほど、終わりの 3 時刻で組み立てる。`func (t)` の Layer の中の誤りは、描く前にここで出る。描画はしないので、`ShaderCompile` と `ShaderUnavailable` は出ない。
+`ShaderCompile` と `ShaderUnavailable` は描画のときに出る。
 `OutOfMemory` も描画のときで、GPU のメモリが足りないときに、何を (Shader のテクスチャか、ズームの帯か)
 どれだけ確保できなかったかと、そのコマの合計を出す。`render --gpu-budget 2GB` を書いておくと、
 足りなくなる前に、超えたコマの時刻と内訳を警告で出す。
+
+### 9. After Effects 機能の段階
+
+いずれも「Node を受けて Node を返す関数」として足す。
+
+| Tier | 内容 |
+|---|---|
+| 1 (コア) | transform 属性、Group による親子、ease 系、progress、wiggle、複数 Composition |
+| 2 | repeat、trim path、text animators、mask (図形の輪郭で切る `clip` は Group にある。マスクどうしの合成や反転は未) |
+| 3 | effects (blur、glow、shadow など)、camera、time-remap |
+
+repeat は After Effects の Repeater に相当する。
+
+```
+repeat(n, node, rotation = tau / n, ...)
+```
+
+### 10. 未決
+
+- 入れ子の Composition が、自分の `duration` を超えた時間にどう振る舞うか
+- 文字列補間 `"dot-{i}"` を言語に入れるか、`.format` のままにするか
+- 属性名と、関数・メソッド名の camelCase と snake_case の統一
+- `fill` に入る Shader と World を、毎フレーム新しい図形を作る形でどう扱うか。関数の外で 1 度だけ作って渡す前提だが、仕様としては確定していない
+- y 軸の向きと、`atan2` など既存の math 関数の角度の向きを、時計回りが正の規約に揃える具体的な手順
 
 
 # builtin の型
@@ -1509,6 +1777,10 @@ import なしで呼べる関数:
 
 - `log(値, ...)` -> Nothing — 引数を空白区切りで stderr に表示する。動画には入らない。引数はどの型でもよいので、型を書けない
 - `type_of(値)` -> String — その値の型の名前を返す。引数はどの型でもよいので、型を書けない
+- `linear(t: Duration, t0: Duration, t1: Duration, v0: T, v1: T)` -> T — t が t0 から t1 の間にあるとき、v0 から v1 へ一定の速さで補間する。区間の外は端の値。v0 と v1 は Number、Vector、Length
+- `ease_in(t: Duration, t0: Duration, t1: Duration, v0: T, v1: T)` -> T — linear と同じ引数。ゆっくり始まって加速する
+- `ease_out(t: Duration, t0: Duration, t1: Duration, v0: T, v1: T)` -> T — linear と同じ引数。速く始まって減速する
+- `ease(t: Duration, t0: Duration, t1: Duration, v0: T, v1: T)` -> T — linear と同じ引数。加速してから減速する。After Effects の ease と同じ並び
 
 ### Number
 
@@ -1536,6 +1808,20 @@ import なしで呼べる関数:
 1m23s
 01:23
 01:23:45.678
+```
+
+### Length
+
+単位つきの長さ。vx は箱の幅の 1/100、vy は高さの 1/100、vmin と vmax はそのうち小さい方と大きい方、px は出力のピクセル。描く先の箱が決まってから数になる。足し引きと Number との掛け割りができ、Vector の成分になれる。単位なしの数は箱の単位
+
+作り方:
+
+```
+20vy
+50vx
+3vmin
+2vmax
+8px
 ```
 
 ### Bool
@@ -1631,6 +1917,35 @@ List()
 
 - `xs.len()` -> Number — 要素数
 - `xs.push(値: T)` -> Nothing — 末尾に追加する。その List 自身が変わる
+- `xs.pop()` -> T — 末尾を外して返す。その List 自身が変わる。空なら ValueError.OutOfRange
+- `xs.enumerate()` -> List<(Number, T)> — 番号と要素の組。for (i, x) in xs.enumerate() で使う
+- `xs.reverse()` -> List<T> — 逆順にした新しい List
+- `xs.contains(値: T)` -> Bool — その値を含むか
+- `xs.index_of(値: T)` -> Number — 最初に現れる位置。無ければ -1
+- `xs.sum()` -> Number — Number の合計
+- `xs.join(sep: String)` -> String — 各要素を文字列にして sep でつなぐ
+- `xs.map(f: (T) -> U)` -> List<U> — 各要素に f を通した結果の List
+- `xs.filter(f: (T) -> Bool)` -> List<T> — f が true を返した要素だけの List
+- `xs.reduce(初期値: U, f: (U, T) -> U)` -> U — 初期値から順に f を通して 1 つの値にする
+- `xs.sort()` -> List<T> — 昇順に並べた新しい List (要素は Number か Duration)
+- `xs.sort_by(f: (T) -> U)` -> List<T> — f が返す値の昇順に並べた新しい List。要素そのものが比べられなくてよい
+- `xs.zip(ys: List<U>)` -> List<(T, U)> — 同じ位置どうしを組にする。短い方に合わせる
+
+### Array
+
+Number だけを詰めた配列。要素ごとの値を持たないので、Rust で作った大きな並びを Rust の関数や Shader.args にそのまま渡せる (Shader.args は同じ Array である間は GPU に送り直さない)。作ったら変えない (push は無い)。添字、範囲、for、len、enumerate は List と同じ
+
+作り方:
+
+```
+Array(1, 2, 3)
+Array([1, 2, 3])
+Array(0..5)
+```
+
+メソッド:
+
+- `xs.len()` -> Number — 要素数
 - `xs.enumerate()` -> List<(Number, T)> — 番号と要素の組。for (i, x) in xs.enumerate() で使う
 - `xs.reverse()` -> List<T> — 逆順にした新しい List
 - `xs.contains(値: T)` -> Bool — その値を含むか
@@ -1710,7 +2025,7 @@ func (o) { o.opacity = 0 }
 
 ### Vector
 
-実数 2 つの組。座標、大きさ、複素数に使う。Vector どうしを + -、Number と * / できる
+2 つの成分の組。座標、大きさ、複素数に使う。成分は Number か Length (Vector(50vx, 40vy))。Vector どうしを + -、Number と * / できる
 
 作り方:
 
@@ -1729,119 +2044,128 @@ Vector(8, 4.5)
 - `v.flip_y()` -> Vector — y の符号を反転した Vector。数学の向き (y は上) の点を画面の向き (y は下) に写す。逆向きも同じ
 - `v.cdiv(w: Vector)` -> Vector — 複素数としての商。w が 0 なら ValueError.DivisionByZero
 
-### Pos
-
-位置と、その位置がものの どこ を指すか。フィールドは x、y、anchor で、anchor の既定は :center。図形や View の position に入れる
-
-作り方:
-
-```
-Pos(8, 4.5)
-Pos(0, 0, anchor = :topLeft)
-Pos(Vector(8, 4.5))
-```
-
-属性:
-
-- `x`: Number — 横の座標
-- `y`: Number — 縦の座標
-- `anchor`: Anchor — その座標が図形のどこを指すか
-- `vector`: Vector — 基準点を外した座標
-
 ### Circle
 
-position を中心に、radius の半径で描く円
+半径 radius の円。自身の原点は中心。position に anchor (既定は中心) を置く
 
 作り方:
 
 ```
-Circle(position = Pos(8, 4.5), radius = 1, fill = #4080e0)
+Circle(position = Vector(8, 4.5), radius = 1, fill = #4080e0)
 ```
 
 属性:
 
-- `position`: Pos (必須) — 位置と基準点 (Pos)
-- `radius`: Number (必須) — 半径
+- `radius`: Length (必須) — 半径 (Length)
 - `fill`: Paint — 塗り。Color か Shader
 - `stroke`: Color — 線の色
-- `strokeWidth`: Number — 線の太さ (箱の座標の単位)
+- `strokeWidth`: Length — 線の太さ (Length。単位なしの数は箱の単位)
 - `strokeCap`: StrokeCap — 線の端の形。:butt (既定) :round :square
 - `dash`: List<Number> — 破線。線と間の長さを順に並べた Number の List (例 [0.6, 0.4])
-- `dashOffset`: Number — 破線の始まりをずらす長さ。motion で動かすと破線が流れる
+- `dashOffset`: Number — 破線の始まりをずらす長さ。時刻から決めると破線が流れる
 - `opacity`: Number — 不透明度 0..1
-- `rotation`: Number — 時計回りの回転 (度)
-- `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
+- `rotation`: Number — 時計回りの回転 (ラジアン)。anchor を中心に掛かる
+- `scale`: Number — 拡大率 (既定は 1)。anchor を中心に掛かる
+- `anchor`: Vector — 図形自身の座標で見た基準点 (Vector)。rotation と scale の中心。Rect と TextArea の既定は中心、ほかは (0, 0)
+- `position`: Vector — anchor を置く場所 (Vector)。親の座標で書く。既定は (0, 0)
 - `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
-- `zIndex`: Number — 
 
 メソッド:
 
+- `node.copy(属性 = 値, ...)` -> T — 書いた属性だけを変えた、新しい値。元は変わらない
 - `p.length()` -> Number — 輪郭の長さ (箱の座標)。dash と dashOffset で線を少しずつ描き出すときに使う
 - `p.point_at(u: Number)` -> Vector — 輪郭を長さの割合でたどった点 (u は 0..1)。線の先にペン先を合わせるときに使う
 
-### Ellipse
+### Group
 
-楕円。rx が横の半径、ry が縦の半径
+図形をまとめた親。中の図形の座標は Group の position からの相対で、Group を動かす・回す・薄くする・拡大すると中身ごと掛かる。名前の無い引数が中身で、書いた順に描く。Group の中に Group を入れられる。camera に Camera を渡すと、枠は動かさず中身だけ寄り引きする
 
 作り方:
 
 ```
-Ellipse(position = Pos(8, 4.5), rx = 3, ry = 1.4, fill = #4080e0)
+Group(Circle(radius = 1), Rect(w = 1, h = 1), position = Vector(8, 4.5))
 ```
 
 属性:
 
-- `position`: Pos (必須) — 位置と基準点 (Pos)
-- `rx`: Number (必須) — 横の半径
-- `ry`: Number (必須) — 縦の半径
-- `fill`: Paint — 塗り。Color か Shader
-- `stroke`: Color — 線の色
-- `strokeWidth`: Number — 線の太さ (箱の座標の単位)
-- `strokeCap`: StrokeCap — 線の端の形。:butt (既定) :round :square
-- `dash`: List<Number> — 破線。線と間の長さを順に並べた Number の List (例 [0.6, 0.4])
-- `dashOffset`: Number — 破線の始まりをずらす長さ。motion で動かすと破線が流れる
 - `opacity`: Number — 不透明度 0..1
-- `rotation`: Number — 時計回りの回転 (度)
-- `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
+- `rotation`: Number — 時計回りの回転 (ラジアン)。anchor を中心に掛かる
+- `scale`: Number — 拡大率 (既定は 1)。anchor を中心に掛かる
+- `anchor`: Vector — 図形自身の座標で見た基準点 (Vector)。rotation と scale の中心。Rect と TextArea の既定は中心、ほかは (0, 0)
+- `position`: Vector — anchor を置く場所 (Vector)。親の座標で書く。既定は (0, 0)
 - `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
-- `zIndex`: Number — 
+- `camera`: Camera — 中身の寄り引き (Camera)。枠は動かさず中身だけ動かす。position や scale は枠ごと動かすもので、別物
+- `clip`: Shape — 中身を切る図形 (マスク)。輪郭の外の中身は描かれない。図形の position などは Group の座標で書く。camera で寄っても切り口は動かない
 
 メソッド:
 
+- `node.copy(属性 = 値, ...)` -> T — 書いた属性だけを変えた、新しい値。元は変わらない
+
+### Ellipse
+
+楕円。rx が横の半径、ry が縦の半径。自身の原点は中心
+
+作り方:
+
+```
+Ellipse(position = Vector(8, 4.5), rx = 3, ry = 1.4, fill = #4080e0)
+```
+
+属性:
+
+- `rx`: Length (必須) — 横の半径 (Length)
+- `ry`: Length (必須) — 縦の半径 (Length)
+- `fill`: Paint — 塗り。Color か Shader
+- `stroke`: Color — 線の色
+- `strokeWidth`: Length — 線の太さ (Length。単位なしの数は箱の単位)
+- `strokeCap`: StrokeCap — 線の端の形。:butt (既定) :round :square
+- `dash`: List<Number> — 破線。線と間の長さを順に並べた Number の List (例 [0.6, 0.4])
+- `dashOffset`: Number — 破線の始まりをずらす長さ。時刻から決めると破線が流れる
+- `opacity`: Number — 不透明度 0..1
+- `rotation`: Number — 時計回りの回転 (ラジアン)。anchor を中心に掛かる
+- `scale`: Number — 拡大率 (既定は 1)。anchor を中心に掛かる
+- `anchor`: Vector — 図形自身の座標で見た基準点 (Vector)。rotation と scale の中心。Rect と TextArea の既定は中心、ほかは (0, 0)
+- `position`: Vector — anchor を置く場所 (Vector)。親の座標で書く。既定は (0, 0)
+- `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
+
+メソッド:
+
+- `node.copy(属性 = 値, ...)` -> T — 書いた属性だけを変えた、新しい値。元は変わらない
 - `p.length()` -> Number — 輪郭の長さ (箱の座標)。dash と dashOffset で線を少しずつ描き出すときに使う
 - `p.point_at(u: Number)` -> Vector — 輪郭を長さの割合でたどった点 (u は 0..1)。線の先にペン先を合わせるときに使う
 
 ### Rect
 
-幅 w、高さ h の四角形。radius を付けると角が丸くなる
+幅 w、高さ h の四角形。自身の原点は左上で、anchor の既定は中心 (w/2, h/2)。radius を付けると角が丸くなる
 
 作り方:
 
 ```
-Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #f5f4f0)
+Rect(position = Vector(8, 4.5), w = 16, h = 9, fill = #f5f4f0)
 ```
 
 属性:
 
-- `position`: Pos (必須) — 位置と基準点 (Pos)
-- `w`: Number (必須) — 幅
-- `h`: Number (必須) — 高さ
-- `radius`: Number — 角の丸み (省略は 0)
+- `w`: Length (必須) — 幅 (Length)
+- `h`: Length (必須) — 高さ (Length)
+- `radius`: Length — 角の丸み (Length。省略は 0)
 - `fill`: Paint — 塗り。Color か Shader
 - `stroke`: Color — 線の色
-- `strokeWidth`: Number — 線の太さ (箱の座標の単位)
+- `strokeWidth`: Length — 線の太さ (Length。単位なしの数は箱の単位)
 - `strokeCap`: StrokeCap — 線の端の形。:butt (既定) :round :square
 - `dash`: List<Number> — 破線。線と間の長さを順に並べた Number の List (例 [0.6, 0.4])
-- `dashOffset`: Number — 破線の始まりをずらす長さ。motion で動かすと破線が流れる
+- `dashOffset`: Number — 破線の始まりをずらす長さ。時刻から決めると破線が流れる
 - `strokeJoin`: StrokeJoin — 線の角の形。:miter (既定) :round :bevel
 - `opacity`: Number — 不透明度 0..1
-- `rotation`: Number — 時計回りの回転 (度)
-- `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
+- `rotation`: Number — 時計回りの回転 (ラジアン)。anchor を中心に掛かる
+- `scale`: Number — 拡大率 (既定は 1)。anchor を中心に掛かる
+- `anchor`: Vector — 図形自身の座標で見た基準点 (Vector)。rotation と scale の中心。Rect と TextArea の既定は中心、ほかは (0, 0)
+- `position`: Vector — anchor を置く場所 (Vector)。親の座標で書く。既定は (0, 0)
 - `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
-- `zIndex`: Number — 
 
 メソッド:
 
+- `node.copy(属性 = 値, ...)` -> T — 書いた属性だけを変えた、新しい値。元は変わらない
 - `p.length()` -> Number — 輪郭の長さ (箱の座標)。dash と dashOffset で線を少しずつ描き出すときに使う
 - `p.point_at(u: Number)` -> Vector — 輪郭を長さの割合でたどった点 (u は 0..1)。線の先にペン先を合わせるときに使う
 
@@ -1860,18 +2184,20 @@ Line(from = Vector(0, 0), to = Vector(4, 3), stroke = #303030, strokeWidth = 0.1
 - `from`: Vector (必須) — 始点
 - `to`: Vector (必須) — 終点
 - `stroke`: Color — 線の色
-- `strokeWidth`: Number — 線の太さ (箱の座標の単位)
+- `strokeWidth`: Length — 線の太さ (Length。単位なしの数は箱の単位)
 - `strokeCap`: StrokeCap — 線の端の形。:butt (既定) :round :square
 - `dash`: List<Number> — 破線。線と間の長さを順に並べた Number の List (例 [0.6, 0.4])
-- `dashOffset`: Number — 破線の始まりをずらす長さ。motion で動かすと破線が流れる
+- `dashOffset`: Number — 破線の始まりをずらす長さ。時刻から決めると破線が流れる
 - `opacity`: Number — 不透明度 0..1
-- `rotation`: Number — 時計回りの回転 (度)
-- `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
+- `rotation`: Number — 時計回りの回転 (ラジアン)。anchor を中心に掛かる
+- `scale`: Number — 拡大率 (既定は 1)。anchor を中心に掛かる
+- `anchor`: Vector — 図形自身の座標で見た基準点 (Vector)。rotation と scale の中心。Rect と TextArea の既定は中心、ほかは (0, 0)
+- `position`: Vector — anchor を置く場所 (Vector)。親の座標で書く。既定は (0, 0)
 - `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
-- `zIndex`: Number — 
 
 メソッド:
 
+- `node.copy(属性 = 値, ...)` -> T — 書いた属性だけを変えた、新しい値。元は変わらない
 - `p.length()` -> Number — 輪郭の長さ (箱の座標)。dash と dashOffset で線を少しずつ描き出すときに使う
 - `p.point_at(u: Number)` -> Vector — 輪郭を長さの割合でたどった点 (u は 0..1)。線の先にペン先を合わせるときに使う
 
@@ -1890,19 +2216,21 @@ Polygon(points = [Vector(0, 0), Vector(2, 0), Vector(1, 2)], fill = #3f9b6d)
 - `points`: List<Vector> (必須) — 頂点。Vector の List
 - `fill`: Paint — 塗り。Color か Shader
 - `stroke`: Color — 線の色
-- `strokeWidth`: Number — 線の太さ (箱の座標の単位)
+- `strokeWidth`: Length — 線の太さ (Length。単位なしの数は箱の単位)
 - `strokeCap`: StrokeCap — 線の端の形。:butt (既定) :round :square
 - `dash`: List<Number> — 破線。線と間の長さを順に並べた Number の List (例 [0.6, 0.4])
-- `dashOffset`: Number — 破線の始まりをずらす長さ。motion で動かすと破線が流れる
+- `dashOffset`: Number — 破線の始まりをずらす長さ。時刻から決めると破線が流れる
 - `strokeJoin`: StrokeJoin — 線の角の形。:miter (既定) :round :bevel
 - `opacity`: Number — 不透明度 0..1
-- `rotation`: Number — 時計回りの回転 (度)
-- `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
+- `rotation`: Number — 時計回りの回転 (ラジアン)。anchor を中心に掛かる
+- `scale`: Number — 拡大率 (既定は 1)。anchor を中心に掛かる
+- `anchor`: Vector — 図形自身の座標で見た基準点 (Vector)。rotation と scale の中心。Rect と TextArea の既定は中心、ほかは (0, 0)
+- `position`: Vector — anchor を置く場所 (Vector)。親の座標で書く。既定は (0, 0)
 - `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
-- `zIndex`: Number — 
 
 メソッド:
 
+- `node.copy(属性 = 値, ...)` -> T — 書いた属性だけを変えた、新しい値。元は変わらない
 - `p.length()` -> Number — 輪郭の長さ (箱の座標)。dash と dashOffset で線を少しずつ描き出すときに使う
 - `p.point_at(u: Number)` -> Vector — 輪郭を長さの割合でたどった点 (u は 0..1)。線の先にペン先を合わせるときに使う
 
@@ -1924,52 +2252,55 @@ Path(from = Vector(0, 0), segments = [(:line, Vector(2, 0)), (:curve, Vector(3, 
 - `upto`: Number — segments の先頭から何割を描くか (0..1、既定は 1)。点の列はそのままに、描く範囲だけ動かせる
 - `fill`: Paint — 塗り。Color か Shader
 - `stroke`: Color — 線の色
-- `strokeWidth`: Number — 線の太さ (箱の座標の単位)
+- `strokeWidth`: Length — 線の太さ (Length。単位なしの数は箱の単位)
 - `strokeCap`: StrokeCap — 線の端の形。:butt (既定) :round :square
 - `dash`: List<Number> — 破線。線と間の長さを順に並べた Number の List (例 [0.6, 0.4])
-- `dashOffset`: Number — 破線の始まりをずらす長さ。motion で動かすと破線が流れる
+- `dashOffset`: Number — 破線の始まりをずらす長さ。時刻から決めると破線が流れる
 - `strokeJoin`: StrokeJoin — 線の角の形。:miter (既定) :round :bevel
 - `opacity`: Number — 不透明度 0..1
-- `rotation`: Number — 時計回りの回転 (度)
-- `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
+- `rotation`: Number — 時計回りの回転 (ラジアン)。anchor を中心に掛かる
+- `scale`: Number — 拡大率 (既定は 1)。anchor を中心に掛かる
+- `anchor`: Vector — 図形自身の座標で見た基準点 (Vector)。rotation と scale の中心。Rect と TextArea の既定は中心、ほかは (0, 0)
+- `position`: Vector — anchor を置く場所 (Vector)。親の座標で書く。既定は (0, 0)
 - `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
-- `zIndex`: Number — 
 
 メソッド:
 
+- `node.copy(属性 = 値, ...)` -> T — 書いた属性だけを変えた、新しい値。元は変わらない
 - `p.length()` -> Number — 輪郭の長さ (箱の座標)。dash と dashOffset で線を少しずつ描き出すときに使う
 - `p.point_at(u: Number)` -> Vector — 輪郭を長さの割合でたどった点 (u は 0..1)。線の先にペン先を合わせるときに使う
 
 ### TextArea
 
-text を描く。w を付けるとその幅で折り返し、align で行の寄せ方を決める
+text を描く。自身の原点は左上で、anchor の既定は中心。w を付けるとその幅で折り返し、align で行の寄せ方を決める
 
 作り方:
 
 ```
-TextArea(text = "hello", position = Pos(8, 4.5), fontSize = 1, fill = #303030)
+TextArea(text = "hello", position = Vector(8, 4.5), fontSize = 1, fill = #303030)
 ```
 
 属性:
 
-- `position`: Pos (必須) — 位置と基準点 (Pos)
 - `text`: String (必須) — 文字列
-- `fontSize`: Number (必須) — 文字の大きさ (箱の座標の単位)
-- `w`: Number — 折り返す幅 (省略なら折り返さない)
+- `fontSize`: Length (必須) — 文字の大きさ (Length)
+- `w`: Length — 折り返す幅 (Length。省略なら折り返さない)
 - `font`: Font — 書体の名前。候補を List で並べると、この機械にある最初のものを使う
 - `align`: Align — :left :center :right
 - `fill`: Paint — 塗り。Color か Shader
 - `stroke`: Color — 線の色
-- `strokeWidth`: Number — 線の太さ (箱の座標の単位)
+- `strokeWidth`: Length — 線の太さ (Length。単位なしの数は箱の単位)
 - `strokeJoin`: StrokeJoin — 線の角の形。:miter (既定) :round :bevel
 - `opacity`: Number — 不透明度 0..1
-- `rotation`: Number — 時計回りの回転 (度)
-- `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
+- `rotation`: Number — 時計回りの回転 (ラジアン)。anchor を中心に掛かる
+- `scale`: Number — 拡大率 (既定は 1)。anchor を中心に掛かる
+- `anchor`: Vector — 図形自身の座標で見た基準点 (Vector)。rotation と scale の中心。Rect と TextArea の既定は中心、ほかは (0, 0)
+- `position`: Vector — anchor を置く場所 (Vector)。親の座標で書く。既定は (0, 0)
 - `blend`: Blend — 下の絵との重ね方。:normal (既定) :multiply :screen :overlay :darken :lighten :difference :add
-- `zIndex`: Number — 
 
 メソッド:
 
+- `node.copy(属性 = 値, ...)` -> T — 書いた属性だけを変えた、新しい値。元は変わらない
 - `t.size()` -> Vector — 置いたときに占める幅と高さ (箱の座標)。w を書いていれば幅はその値。重なりを避けて並べたり、はみ出すなら fontSize を下げたりするのに使う
 
 ### Vector3
@@ -2041,7 +2372,7 @@ mesh.faces(cam)
 作り方:
 
 ```
-space3d.Transform3().rotate_y(30).translate(space3d.Vector3(0, 1, 0))
+space3d.Transform3().rotate_y(0.5).translate(space3d.Vector3(0, 1, 0))
 ```
 
 属性:
@@ -2066,7 +2397,7 @@ space3d.Transform3().rotate_y(30).translate(space3d.Vector3(0, 1, 0))
 作り方:
 
 ```
-space3d.PerspectiveCamera(from = space3d.Vector3(6, 4, 10), to = space3d.Vector3(0, 0, 0), fov = 45, box = Vector(16, 9))
+space3d.PerspectiveCamera(from = space3d.Vector3(6, 4, 10), to = space3d.Vector3(0, 0, 0), fov = 0.8, box = Vector(16, 9))
 ```
 
 属性:
@@ -2074,8 +2405,8 @@ space3d.PerspectiveCamera(from = space3d.Vector3(6, 4, 10), to = space3d.Vector3
 - `from`: Vector3 (必須) — 視点 (3D)
 - `to`: Vector3 (必須) — 見ている先 (3D)。画面の中心に来る
 - `up`: Vector3 — どちらを上とするか (省略は space3d.Vector3(0, 1, 0))
-- `fov`: Number — 縦の画角 (度、0 より大きく 180 未満。省略は 45)。小さいほど望遠になる
-- `box`: Vector (必須) — 落とし先の箱の幅と高さ。View の box と同じものを渡す
+- `fov`: Number — 縦の画角 (ラジアン、0 より大きく pi 未満。省略は pi / 4)。小さいほど望遠になる
+- `box`: Vector (必須) — 落とし先の箱の幅と高さ。Composition の box と同じものを渡す
 
 メソッド:
 
@@ -2102,7 +2433,7 @@ space3d.OrthographicCamera(from = space3d.Vector3(6, 4, 10), to = space3d.Vector
 - `to`: Vector3 (必須) — 見ている先 (3D)。画面の中心に来る
 - `up`: Vector3 — どちらを上とするか (省略は space3d.Vector3(0, 1, 0))
 - `height`: Number — 画面の高さに収める 3D の長さ (省略は 8)
-- `box`: Vector (必須) — 落とし先の箱の幅と高さ。View の box と同じものを渡す
+- `box`: Vector (必須) — 落とし先の箱の幅と高さ。Composition の box と同じものを渡す
 
 メソッド:
 
@@ -2126,7 +2457,7 @@ space3d.IsometricCamera(unit = 1, box = Vector(16, 9))
 属性:
 
 - `unit`: Number — 3D の 1 単位が箱でいくつになるか (省略は 1)
-- `box`: Vector (必須) — 落とし先の箱の幅と高さ。View の box と同じものを渡す
+- `box`: Vector (必須) — 落とし先の箱の幅と高さ。Composition の box と同じものを渡す
 
 メソッド:
 
@@ -2177,6 +2508,10 @@ Gradient(from = Vector(0, 0), to = Vector(16, 9), stops = [#4080e0, #e0604a])
 - `to`: Vector — :linear の終点
 - `radius`: Number — :radial の半径
 
+メソッド:
+
+- `node.copy(属性 = 値, ...)` -> T — 書いた属性だけを変えた、新しい値。元は変わらない
+
 ### Shader
 
 位置 (x, y) と時刻 t から、そのピクセルの色を返す関数。図形の fill に入れると GPU で走る
@@ -2190,7 +2525,7 @@ Shader(color = func (x, y, t) { Color(x * 16, 0, 128) })
 属性:
 
 - `color`: Func (必須) — func (x, y, t [, args]) -> Color。x y は箱の座標、t は秒
-- `args`: List<Number> — Number の List。color の 4 つ目の引数。毎フレーム読む
+- `args`: Numbers — Number の Array か List。color の 4 つ目の引数。毎フレーム読む。Array なら同じものである間は GPU に送り直さない
 - `samples`: Number — 1 ピクセルあたりの評価点の数 (4 なら 2x2 の平均。省略は 1)
 - `zoom`: ZoomPath — ズーム動画の道筋。入れると color の引数が (中心からの距離の対数, 角度, 時刻) になる
 - `camera`: Camera — 
@@ -2215,7 +2550,7 @@ ZoomPath(center = Vector(8, 4.5), zoom = func (t) { t + 1 }, duration = 2m)
 
 ### Camera
 
-箱の中身の寄り引き。View.camera に入れると、中身の from が to の位置に来るように置いて scale 倍する。枠 (箱の外周) は動かない。位置と大きさを 3 つまとめて持つので、途中で食い違って画面が跳ねない
+Group の中身の寄り引き。Group.camera に入れると、中身の from が to の位置に来るように置いて scale 倍する。Group の枠 (position / rotation / scale) は動かない。位置と大きさを 3 つまとめて持つので、途中で食い違って画面が跳ねない。動かすときは func (t) の中で毎フレーム新しい Camera を作る
 
 作り方:
 
@@ -2229,88 +2564,47 @@ Camera(from = Vector(3, 2.5), to = Vector(8, 4.5), scale = 10)
 - `to`: Vector — それを画面のどこに置くか (箱の座標。省略は from と同じ = 中身を動かさずに拡大だけする)
 - `scale`: Number — 倍率 (省略は 1)
 
-### View
+メソッド:
 
-座標系を持つ入れ物。中に図形や View を place し、addTrack で Timeline を付ける。output した View が動画になる
+- `node.copy(属性 = 値, ...)` -> T — 書いた属性だけを変えた、新しい値。元は変わらない
+
+### Composition
+
+座標系 (box) と長さ (duration) を持ち、Layer を積み重ねる入れ物。comp.place(名前, 置くもの, in =, out =) で置く。output した Composition が動画になる
 
 作り方:
 
 ```
-View(box = Vector(16, 9))
+Composition(box = Vector(16, 9), duration = 6s)
 ```
 
 属性:
 
-- `box`: Vector (必須) — 座標系の幅と高さ。ピクセルは持たない
-- `position`: Pos — 別の View に置かれたときの位置
-- `w`: Number — 別の View に置かれたときの幅
-- `h`: Number — 別の View に置かれたときの高さ
+- `box`: Vector (必須) — 座標系の幅と高さ。ピクセルは持たない。Length の基準
+- `duration`: Duration (必須) — 長さ。output した Composition の duration が動画の長さ
 - `opacity`: Number — 中身をまとめて 1 枚として掛ける不透明度
+- `rotation`: Number — 時計回りの回転 (ラジアン)。anchor を中心に掛かる
+- `scale`: Number — 拡大率 (既定は 1)。anchor を中心に掛かる
+- `anchor`: Vector — 図形自身の座標で見た基準点 (Vector)。rotation と scale の中心。Rect と TextArea の既定は中心、ほかは (0, 0)
+- `position`: Vector — anchor を置く場所 (Vector)。親の座標で書く。既定は (0, 0)
 - `blend`: Blend — 中身をまとめて 1 枚にしてから、下の絵と重ねるときの重ね方
-- `clip`: Bool — 
-- `zIndex`: Number — 
-- `rotation`: Number — 時計回りの回転 (度)
-- `scale`: Number — 
-- `pivot`: Vector — 回転の中心 (箱の座標)。書かなければ、その図形を囲む四角形の中心
-- `camera`: Camera — 箱の中身の寄り引き。枠は動かさず中身だけ動かす。position や scale は枠ごと動かすもので、別物
 
 メソッド:
 
-- `v.place(o: Placeable, at: Pos, w: Number, h: Number)` -> Nothing — View に置く。別の View を置くときは at と、w か h が要る (比率を保って収める)
-- `v.copy()` -> View — 同じ中身の新しい View。同じ View は 2 か所に置けないので、2 か所目にはこれを置く。中の図形は元と共通で、動かすと両方が動く
-- `v.addTrack(x: Timeline | View | Audio | Narration, at: Duration, fadeIn: Duration, fadeOut: Duration, duration: Duration, volume: Number, loop: Bool)` -> Nothing — その View の動きとして付ける。output した View に付いたものが動画になる
+- `comp.place(name: String, node: Node | (Duration) -> Node, in: Duration, out: Duration)` -> Nothing — Layer を 1 つ置く。後に置いたものが手前。node は不変の Node か、Layer の中の時刻 (in が 0) から Node を返す func。in <= t < out の外では存在しない。名前は Composition の中で一意
 
-### Timeline
+### Progress
 
-どの対象のどの属性が、いつ、どの値になるかの並び。行に属性への代入を書いた motion がこれになる。別の Timeline、Audio、Narration も place で時刻に置ける
+名前付きの表。0 から 1 の数を渡して呼ぶと、その点の値を Tuple で返す。行の間は補間し、範囲の外は端の値。_ はその列を飛ばす
 
 作り方:
 
 ```
-Timeline()
-Timeline(duration = 8s)
-motion (t) {
-  0s: c.radius = 1
-  2s: c.radius = 3
+progress [:x, :y] {
+  0: 2, 4.5
+  1: 14 :ease_out, 4.5
 }
 ```
-
-属性:
-
-- `duration`: Duration — 長さ。代入すると長さだけが変わる (行の時刻は動かない)。0..1 で書いた表では、これが実時間を決める。時刻ごと動かすなら scale / fit / trim
-
-メソッド:
-
-- `tl.place(x: Timeline | View | Audio | Narration, at: Duration, fadeIn: Duration, fadeOut: Duration, duration: Duration, volume: Number, loop: Bool)` -> Nothing — 中に 1 本置く。at はこの Timeline の中での開始時刻
-- `tl.reverse()` -> Timeline — 時間の向きを逆にしたもの。ease の in と out も入れ替わる
-- `tl.scale(k: Number)` -> Timeline — 時間の軸を k 倍したもの。時刻も長さも k 倍になる
-- `tl.fit(d: Duration)` -> Timeline — 長さが d になるように時間の軸を伸縮したもの
-- `tl.trim(from: Duration, to: Duration)` -> Timeline — from から to までを取り出し、0 から始まるものにする。その区間の外にあるキーフレームと、置いたものは入らない
-
-### Motion
-
-時刻と値の表。どの対象のどの属性に入れるかは持たない。apply がそれを決めて Timeline にする
-
-作り方:
-
-```
-motion (t) {
-  0s: 1
-  2s: 3
-}
-```
-
-属性:
-
-- `duration`: Duration — 長さ。代入すると長さだけが変わる (行の時刻は動かない)。0..1 で書いた表では、これが実時間を決める。時刻ごと動かすなら scale / fit / trim
-
-メソッド:
-
-- `tl.reverse()` -> Timeline — 時間の向きを逆にしたもの。ease の in と out も入れ替わる
-- `tl.scale(k: Number)` -> Timeline — 時間の軸を k 倍したもの。時刻も長さも k 倍になる
-- `tl.fit(d: Duration)` -> Timeline — 長さが d になるように時間の軸を伸縮したもの
-- `tl.trim(from: Duration, to: Duration)` -> Timeline — from から to までを取り出し、0 から始まるものにする。その区間の外にあるキーフレームと、置いたものは入らない
-- `m.apply(target: Placeable, f: (Placeable, Duration, List<Number>) -> Nothing)` -> Timeline — 各行で f(対象, 時刻, [列...]) を呼び、その中で対象の属性に代入された値をキーフレームにする
 
 ### Image
 
@@ -2330,7 +2624,7 @@ import "logo.png" as logo
 
 ### Audio
 
-読み込んだ音声ファイル。Timeline に置くと動画の音になる
+読み込んだ音声ファイル。Composition に置くと動画の音になる。copy(volume =, loop =) で音量と繰り返しを変えられる
 
 作り方:
 
@@ -2341,39 +2635,29 @@ import "bgm.m4a" as bgm
 属性:
 
 - `duration`: Duration — 音声ファイルの長さ
+- `volume`: Number — 音量。1 がそのまま
+- `loop`: Bool — out まで繰り返すか
 - `file`: String — import に書いたパス
+
+メソッド:
+
+- `audio.copy(volume: Number, loop: Bool)` -> Audio — 音量と繰り返しを変えた Audio。書いた分だけ変わる
 
 ### Narration
 
-読み上げ。Timeline に置くと、その文を読んだ音声が動画の音になり、同じ文が字幕にもなる。画面には描かない
+読み上げ。Composition に置くと、その文を読んだ音声が動画の音になり、同じ文が字幕にもなる。長さは Layer の in から out。画面には描かない
 
 作り方:
 
 ```
-Narration(text = "ここを読み上げる", duration = 3s)
+Narration(text = "ここを読み上げる")
 ```
 
 属性:
 
 - `text`: String (必須) — 読み上げる文
-- `duration`: Duration (必須) — 読み上げに使う長さ。合成した音声がこれより長ければ切る
+- `voice`: Voice — どう喋らせるか。音声合成の型 (SayVoiceEngine か EspeakVoiceEngine)
 - `volume`: Number — 混ぜるときの音量 (1 がそのまま)
-
-### Anchor
-
-Pos の anchor。その位置が、置くものの どこ にあたるかを決める
-
-値:
-
-- `:center` — 中央。書かなければこれ
-- `:topLeft` — 左上の角
-- `:top` — 上辺の中央
-- `:topRight` — 右上の角
-- `:left` — 左辺の中央
-- `:right` — 右辺の中央
-- `:bottomLeft` — 左下の角
-- `:bottom` — 下辺の中央
-- `:bottomRight` — 右下の角
 
 ### Align
 
@@ -2387,7 +2671,7 @@ TextArea の align。w で折り返した各行を、幅の中でどちらに寄
 
 ### Easing
 
-motion の行末に書く修飾子。前の行からこの行までの区間で、値がどう変わるかを決める。時刻と値は変えず、その間の通り方だけを変える。属性の型ではなく、行末にだけ書ける。名前は CSS の easing キーワードと同じ
+progress の値の隣に書く修飾子。前の行からこの行までの区間で、その列の値がどう変わるかを決める。時刻と値は変えず、その間の通り方だけを変える。属性の型ではなく、値の隣にだけ書ける。名前は CSS の easing キーワードと同じ。ease 系の関数 (ease, ease_in, ease_out, linear) が同じ曲線を使う
 
 値:
 
@@ -2418,7 +2702,7 @@ motion の行末に書く修飾子。前の行からこの行までの区間で�
 
 ### Blend
 
-図形や View を、下にある絵とどう混ぜるか。blend に渡す
+図形や Group を、下にある絵とどう混ぜるか。blend に渡す
 
 値:
 
@@ -2443,9 +2727,15 @@ Gradient の kind。stops の色をどの向きに並べるか
 
 ### Shape
 
-描ける図形をまとめた名前。View に place できて、fill や opacity など図形に共通の属性を持つ
+描ける図形をまとめた名前。Group の中身になれて、position や opacity など transform 一式を持つ
 
-まとめている型: Circle | Ellipse | Rect | Line | Polygon | Path | TextArea
+まとめている型: Circle | Ellipse | Rect | Line | Polygon | Path | TextArea | Group
+
+### Voice
+
+Narration の声を作る音声合成エンジンをまとめた名前
+
+まとめている型: SayVoiceEngine | EspeakVoiceEngine
 
 ### Projection
 
@@ -2453,11 +2743,11 @@ space3d のカメラ 3 種をまとめた名前。どれも同じメソッドを
 
 まとめている型: PerspectiveCamera | OrthographicCamera | IsometricCamera
 
-### Placeable
+### Node
 
-View の中に place できるものをまとめた名前。図形と View
+Composition に place できるものをまとめた名前。図形、Group、Composition、Audio、Narration。func (t) -> Node も置ける
 
-まとめている型: Shape | View
+まとめている型: Shape | Composition | Audio | Narration
 
 ### Font
 
@@ -2472,11 +2762,58 @@ View の中に place できるものをまとめた名前。図形と View
 
 まとめている型: String | List
 
+### Numbers
+
+Number の並び。Array か、Number だけの List。Shader.args がこれ
+
+作り方:
+
+```
+Array(1, 2, 3)
+[1, 2, 3]
+```
+
+まとめている型: Array | List
+
+### Solid
+
+World に入れる 1 つの物体。Mesh と色と、置き方 (transform)。transform を書き換えれば動く
+
+作り方:
+
+```
+space3d.Solid(mesh = ball, fill = #6fa3d6)
+```
+
+属性:
+
+- `mesh`: Mesh (必須) — 
+- `fill`: Color — 塗り。Color か Shader
+- `transform`: Transform3 — 
+
+### World
+
+3D の場面。図形の fill に入れると、その図形の中に GPU が Mesh を描く。前後は深度で決まるので、面を図形に開かない。1 コマあたりのスクリプトの仕事が面の数に依らないぶん、面が多いほど速い
+
+作り方:
+
+```
+space3d.World(camera = cam, parts = [space3d.Solid(mesh = ball)])
+```
+
+属性:
+
+- `camera`: Projection (必須) — 
+- `parts`: List<Solid> (必須) — 
+- `light`: Vector3 — 
+- `ambient`: Number — 
+- `background`: Color — 
+
 ### Paint
 
 図形の fill に入れられるものをまとめた名前
 
-まとめている型: Color | Gradient | Shader | Image
+まとめている型: Color | Gradient | Shader | Image | World
 
 ### Module
 
@@ -2512,7 +2849,7 @@ alias P = Pos
 
 ### SayVoiceEngine
 
-macOS の say で読み上げる。Timeline.place の voice に渡す
+macOS の say で読み上げる。Narration の voice に渡す
 
 作り方:
 
@@ -2527,7 +2864,7 @@ SayVoiceEngine(voice = "Kyoko")
 
 ### EspeakVoiceEngine
 
-espeak-ng で読み上げる。Timeline.place の voice に渡す
+espeak-ng で読み上げる。Narration の voice に渡す
 
 作り方:
 
@@ -2555,9 +2892,8 @@ EspeakVoiceEngine(voice = "ja")
 - `TypeError.ArgumentType` — 引数の型が合わない
 - `TypeError.ArityMismatch` — 引数や列の数が合わない
 - `TypeError.NotPlaceable` — place できない型を置いた
-- `ValueError.DurationRequired` — 時刻の単位が混ざっている、または 0..1 で書いたのに duration が無い
 - `ValueError.OutOfRange` — 型は合うが値が範囲外
-- `ValueError.AlreadyPlaced` — 同じ View を 2 か所に置いた
+- `ValueError.AlreadyPlaced` — 同じ名前の Layer を 2 度置いた
 - `RuntimeError.DivisionByZero` — 0 で割った
 - `RuntimeError.FontNotFound` — その名前のフォントが見つからない
 - `RuntimeError.AudioUnreadable` — 音声ファイルを読めない
@@ -2572,9 +2908,9 @@ EspeakVoiceEngine(voice = "ja")
 
 ### math
 
-- `math.PI` -> Number — 円周率
-- `math.TAU` -> Number — 2π
-- `math.E` -> Number — 自然対数の底
+- `math.pi` -> Number — 円周率
+- `math.tau` -> Number — 2π。1 周のラジアン
+- `math.e` -> Number — 自然対数の底
 - `math.sin(x: Number)` -> Number — 正弦 (ラジアン)
 - `math.cos(x: Number)` -> Number — 余弦 (ラジアン)
 - `math.floor(x: Number)` -> Number — 切り捨て
@@ -2583,6 +2919,7 @@ EspeakVoiceEngine(voice = "ja")
 - `math.sqrt(x: Number)` -> Number — 平方根
 - `math.ln(x: Number)` -> Number — 自然対数
 - `math.exp(x: Number)` -> Number — e の x 乗
+- `math.exp2(x: Number)` -> Number — 2 の x 乗。log2 の逆
 - `math.atan2(y: Number, x: Number)` -> Number — (x, y) の角度 (ラジアン)
 - `math.polar(r: Number, a: Number)` -> Vector — 長さ r、角度 a (ラジアン、反時計回り、0 が右) の Vector。数学の向き (y は上) で考えて、画面の向き (y は下) で返す
 - `math.max(a: Number, b: Number, ...)` -> Number — 最大。全部 Duration なら Duration のまま返す
@@ -2614,10 +2951,19 @@ EspeakVoiceEngine(voice = "ja")
 - `space3d.shade(color: Color, normal: Vector3, light: Vector3, ambient: Number = 0.25)` -> Color — 面の向きと光の向きから塗りの色を決める。光に正面から向いた面が元の色、背いた面が ambient 倍
 - `space3d.Mesh(points, edges, faces)` -> Mesh — 頂点と、それを繋ぐ線や面。作り手 (box など) が返すもの
 - `space3d.Face(points, normal, depth)` -> Face — Mesh.faces が返す、投影済みの 1 面
+- `space3d.Solid(mesh: Mesh, fill: Color = #808080, transform: Transform3 = :none)` -> Solid — World に入れる 1 つの物体。transform を書き換えれば動く
+- `space3d.World(camera: Projection, parts: List<Solid>, light: Vector3 = (0.4, 0.8, 0.5), ambient: Number = 0.25, background: Color = 透明)` -> World — 3D の場面。図形の fill に入れると、GPU が Mesh をそのまま描く。前後は深度で決まるので面を図形に開かず、1 コマのスクリプトの仕事が面の数に依らない
 - `space3d.Transform3()` -> Transform3 — 何もしない変換。rotate_x などを繋いで組み立てる
 - `space3d.PerspectiveCamera(from, to, up, fov, box)` -> PerspectiveCamera — 透視投影。遠いものほど小さくなる
 - `space3d.OrthographicCamera(from, to, up, height, box)` -> OrthographicCamera — 平行投影。遠くても大きさが変わらない
 - `space3d.IsometricCamera(unit, box)` -> IsometricCamera — 等角投影。x は右下、z は左下、y は上へ。視点は持たない
+
+### bignum
+
+- `bignum.nucleus_period(orbit: Array)` -> Number — 基準軌道の中心が周期点 (ミニチュアの中心) なら、その周期。軌道が最初に 0 に戻る反復。戻らなければ 0
+- `bignum.reference_orbit(re: String, im: String, digits: Number, steps: Number)` -> Array — 中心の点の軌道を、指定した 10 進の桁数で回して [re, im, re, im, …] の Array で返す。深いズームの基準軌道。脱出したらそこで止まる
+- `bignum.bla_table(orbit: Array, eps: Number)` -> Array — 基準軌道から、反復をまとめて飛ばす表 (BLA) を作る。eps は許す誤差 (f32 なら 2^-24)。軌道と表を 1 本にした Array を返す (Shader の args に渡す)
+- `bignum.find_center(re: String, im: String, radius: Number, digits: Number, max_period: Number)` -> (String, String, Number, Number) — その点から radius の中にあるミニチュアの中心を、周期を球で探してからニュートン法で求める。(re, im, 周期, 大きさ) を返す。re と im は桁数ぶんの文字列。大きさは心臓形の幅の目安 (全体の集合なら 1) で、span をその 4 倍にするとミニチュアが枝まで収まる
 
 ### color
 
@@ -2640,7 +2986,7 @@ EspeakVoiceEngine(voice = "ja")
 
 ### shape
 
-- `polar(cx: Number, cy: Number, r: Number, degrees: Number)` -> Vector — 中心から距離 r、角度 degrees の点。0 が真上で、時計回り
+- `polar(cx: Number, cy: Number, r: Number, angle: Number)` -> Vector — 中心から距離 r、角度 angle の点。0 が真上で、時計回り
 - `regular_polygon(
   cx: Number,
   cy: Number,
@@ -2754,85 +3100,6 @@ EspeakVoiceEngine(voice = "ja")
 - `mirror(f: (Number) -> Number, k: Number)` -> Number, k: Number) -> Number — 前半で行って後半で戻る。往復する動きを 1 本で書ける
 - `reverse_curve(f: (Number) -> Number, k: Number)` -> Number, k: Number) -> Number — 曲線を逆にする。加速が減速になる
 
-### animation
-
-- `fade_to(
-  target: Placeable,
-  from: Number,
-  to: Number,
-  duration: Duration = 0.5s,
-)` -> Timeline — target の不透明度を from から to へ変える Timeline を返す。 0 → 1 と 1 → 0 は fade_in / fade_out があるので、途中の値を使うときに呼ぶ
-- `fade_in(target: Placeable, duration: Duration = 0.5s)` -> Timeline — target が透明な状態から現れる Timeline を返す (不透明度 0 → 1)。 置いた時刻に現れてほしいものに使う
-- `fade_out(target: Placeable, duration: Duration = 0.5s)` -> Timeline — target が消える Timeline を返す (不透明度 1 → 0)。 消え終わってほしい時刻から duration だけ手前に置く
-- `slide_in(
-  target: Placeable,
-  dx: Number,
-  dy: Number,
-  duration: Duration = 0.5s,
-)` -> Timeline — target が (dx, dy) だけずれた所に現れ、今いる場所へ滑り込む Timeline を返す。 終わりに向かって減速する
-- `slide_out(
-  target: Placeable,
-  dx: Number,
-  dy: Number,
-  duration: Duration = 0.5s,
-)` -> Timeline — target が今いる場所から (dx, dy) の方へ、消えながら去る Timeline を返す。 進むほど加速する
-- `move_by(
-  target: Placeable,
-  dx: Number,
-  dy: Number,
-  duration: Duration = 0.5s,
-)` -> Timeline — target が今いる場所から (dx, dy) だけ動く Timeline を返す。 動き出しと止まり際がなめらかになる
-- `spin(
-  target: Placeable,
-  turns: Number,
-  duration: Duration = 1s,
-)` -> Timeline — target が時計回りに turns 周まわる Timeline を返す。速さは一定
-- `show_between(
-  track: Timeline,
-  targets: List<Placeable>,
-  at: Duration,
-  end: Duration,
-  duration: Duration = 0.5s,
-  stagger: Duration = 0s,
-)` -> Nothing — at に現れて end に消え終わるまでを、track に直接置く。 場面の出し入れをまとめて書くためのもので、戻り値は無い
-- `shake(
-  target: Placeable,
-  amount: Number,
-  times: Number = 3,
-  duration: Duration = 0.4s,
-)` -> Timeline — 揺らす。注意を引くときや、失敗を示すときに使う
-- `pulse(
-  target: Placeable,
-  scale: Number = 1.15,
-  duration: Duration = 0.3s,
-)` -> Timeline — 大きくしてから戻す。出てきたものを目立たせる
-- `spring_to(
-  target: Placeable,
-  to: Pos,
-  duration: Duration = 0.8s,
-  bounces: Number = 2,
-  overshoot: Number = 0.25,
-)` -> Timeline — バネのように行き過ぎて戻りながら近づく
-- `stagger(
-  track: Timeline,
-  targets: List<Placeable>,
-  make: (Placeable) -> Timeline,
-  at: Duration,
-  stagger: Duration = 0.08s,
-)` -> Timeline, at: Duration, stagger: Duration = 0.08s) -> Nothing — 同じ動きを、少しずつ遅らせて並べて置く
-- `reveal_x(
-  window: View,
-  from: Number,
-  to: Number,
-  duration: Duration = 0.5s,
-)` -> Timeline — clip した View の幅を変えて、中身を左から見せていく Timeline を返す。 中身は箱いっぱいの大きさで置いておく。箱と置いた幅を同じだけ変えるので、中身の大きさは変わらない
-- `reveal_y(
-  window: View,
-  from: Number,
-  to: Number,
-  duration: Duration = 0.5s,
-)` -> Timeline — reveal_x の縦version。中身を上から見せていく
-
 ### chart
 
 - `axes(
@@ -2845,7 +3112,7 @@ EspeakVoiceEngine(voice = "ja")
   x_name: String = "",
   y_name: String = "",
   ticks: Number = 5,
-)` -> View — 軸と目盛り。他のグラフの下に敷く
+)` -> Group — 軸と目盛り。他のグラフの下に敷く
 - `tick_values(lo: Number, hi: Number, count: Number = 5)` -> List<Number> — 目盛りに使う値。切りの良い間隔で lo..hi を刻む
 - `bar(
   values: List<Number>,
@@ -2855,10 +3122,9 @@ EspeakVoiceEngine(voice = "ja")
   colors: List<Color> = [#e04040],
   lo: Number = 0,
   hi: Number = 0,
-  duration: Duration = 0s,
-  start: Duration = 0s,
-  stagger: Duration = 0s,
-)` -> View — 棒グラフ。0 から values の値まで伸びる
+  progress: Number = 1,
+  stagger: Number = 0,
+)` -> Group — 棒グラフ。0 から values の値まで伸びる
 - `line_chart(
   points: List<Vector>,
   w: Number,
@@ -2869,17 +3135,14 @@ EspeakVoiceEngine(voice = "ja")
   y_hi: Number,
   color: Color = #e04040,
   progress: Number = 1,
-  duration: Duration = 0s,
-  start: Duration = 0s,
-)` -> View — 折れ線。progress で左から描く範囲を決める
+)` -> Group — 折れ線。progress で左から描く範囲を決める
 - `pie(
   values: List<Number>,
   size: Number,
   colors: List<Color> = [],
   hole: Number = 0,
-  duration: Duration = 0s,
-  start: Duration = 0s,
-)` -> View — 円グラフ。values の割合で切り分ける
+  progress: Number = 1,
+)` -> Group — 円グラフ。values の割合で切り分ける
 - `scatter(
   points: List<Vector>,
   w: Number,
@@ -2890,26 +3153,26 @@ EspeakVoiceEngine(voice = "ja")
   y_hi: Number,
   color: Color = #4080e0,
   radius: Number = 0,
-)` -> View — 散布図
+)` -> Group — 散布図
 - `sparkline(
   values: List<Number>,
   w: Number,
   h: Number,
   color: Color = #e04040,
-)` -> View — 小さい折れ線。軸も目盛りも出さない
+)` -> Group — 小さい折れ線。軸も目盛りも出さない
 - `legend(
   labels: List<String>,
   colors: List<Color>,
   w: Number,
   h: Number,
-)` -> View — 色の凡例
+)` -> Group — 色の凡例
 - `radar(
   labels: List<String>,
   values: List<Number>,
   size: Number,
   max: Number = 0,
   color: Color = #4080e0,
-)` -> View — レーダーチャート。軸の数だけ角がある
+)` -> Group — レーダーチャート。軸の数だけ角がある
 - `heatmap(
   cells: List<List<Number>>,
   w: Number,
@@ -2917,7 +3180,7 @@ EspeakVoiceEngine(voice = "ja")
   lo: Number = 0,
   hi: Number = 0,
   color: Color = #4080e0,
-)` -> View — 格子の濃淡
+)` -> Group — 格子の濃淡
 - `histogram(
   values: List<Number>,
   bins: Number,
@@ -2926,17 +3189,24 @@ EspeakVoiceEngine(voice = "ja")
   lo: Number = 0,
   hi: Number = 0,
   color: Color = #4080e0,
-)` -> View — ヒストグラム。値を bins 個の区間に分けて数える
+)` -> Group — ヒストグラム。値を bins 個の区間に分けて数える
 - `bar_race(
   values: Dict,
   w: Number,
   h: Number,
   top: Number = 0,
   colors: List<Color> = [],
-)` -> View — 順位の入れ替わる横棒。値の大きい順に並べ替えて上から出す
+)` -> Group — 順位の入れ替わる横棒。値の大きい順に並べ替えて上から出す
 
 ### diagram
 
+- `text_at(
+  t: TextArea,
+  x: Number,
+  y: Number,
+  ax: Number = 0.5,
+  ay: Number = 0.5,
+)` -> TextArea — 文字を、基準点を指定して置く。TextArea の anchor は自身の座標なので、幅と高さを測って割合から求める
 - `connector(
   from: Vector,
   to: Vector,
@@ -2964,11 +3234,9 @@ EspeakVoiceEngine(voice = "ja")
   target: Vector,
   text: String,
   offset: Vector,
-  w: Number,
-  h: Number,
   size: Number = 0.3,
   color: Color = #4a4f5a,
-)` -> View — 対象から引き出した線と、その先のラベル。座標は置く先の View と同じ
+)` -> Group — 対象から引き出した線と、その先のラベル。座標は置く先と同じ
 - `speech_bubble(
   text: String,
   w: Number,
@@ -2976,7 +3244,7 @@ EspeakVoiceEngine(voice = "ja")
   tail: Symbol = :bottom,
   fill: Color = #ffffff,
   size: Number = 0,
-)` -> View — 吹き出し。尾が指す向きは tail で決める
+)` -> Group — 吹き出し。尾が指す向きは tail で決める
 - `node_graph(
   nodes: Dict,
   edges: List<Tuple>,
@@ -2984,9 +3252,7 @@ EspeakVoiceEngine(voice = "ja")
   h: Number,
   revealed: Number = -1,
   color: Color = #4080e0,
-  duration: Duration = 0s,
-  start: Duration = 0s,
-)` -> View — ネットワーク図。ノードは (名前, 位置) の Dict、エッジは (名前, 名前) の組
+)` -> Group — ネットワーク図。ノードは (名前, 位置) の Dict、エッジは (名前, 名前) の組
 - `table(
   headers: List<String>,
   rows: List<List<String>>,
@@ -2994,9 +3260,7 @@ EspeakVoiceEngine(voice = "ja")
   h: Number,
   revealed: Number = -1,
   accent: Color = #e6e2da,
-  duration: Duration = 0s,
-  start: Duration = 0s,
-)` -> View — 比較表。行を順に出せる
+)` -> Group — 比較表。行を順に出せる
 
 ### text
 
@@ -3024,9 +3288,8 @@ EspeakVoiceEngine(voice = "ja")
   style: Symbol = :marker,
   color: Color = #1a1d23,
   accent: Color = #ffd34d,
-  duration: Duration = 0s,
-  start: Duration = 0s,
-)` -> View — 1 行の文字の一部を目立たせる。マーカーか下線
+  progress: Number = 1,
+)` -> Group — 1 行の文字の一部を目立たせる。マーカーか下線
 - `quote_card(
   s: String,
   author: String,
@@ -3034,7 +3297,7 @@ EspeakVoiceEngine(voice = "ja")
   h: Number,
   fill: Color = #ffffff,
   accent: Color = #e04040,
-)` -> View — 引用のカード。本文と、その下に書いた人の名前
+)` -> Group — 引用のカード。本文と、その下に書いた人の名前
 - `lower_third(
   title: String,
   subtitle: String,
@@ -3043,9 +3306,7 @@ EspeakVoiceEngine(voice = "ja")
   progress: Number = 1,
   fill: Color = #1a1d23,
   accent: Color = #e04040,
-  duration: Duration = 0s,
-  start: Duration = 0s,
-)` -> View — 画面下の帯タイトル。progress で左から出てくる
+)` -> Group — 画面下の帯タイトル。progress で左から出てくる
 - `chapter_card(
   title: String,
   w: Number,
@@ -3053,32 +3314,32 @@ EspeakVoiceEngine(voice = "ja")
   no: Number = 0,
   fill: Color = #1a1d23,
   accent: Color = #e04040,
-)` -> View — 章の中割り。番号と題を真ん中に置く
+)` -> Group — 章の中割り。番号と題を真ん中に置く
 - `word_cloud(
   words: Dict,
   w: Number,
   h: Number,
   color: Color = #e04040,
   base: Color = #8a8f98,
-)` -> View — 重みつきの単語を並べる。重いものほど大きく、上に来る
+)` -> Group — 重みつきの単語を並べる。重いものほど大きく、上に来る
 
 ### ui
 
 - `phone(
-  content: View,
+  content: Group,
   w: Number,
   h: Number,
   body: Color = #1a1d23,
   screen: Color = #ffffff,
-)` -> View — スマホの枠。content を画面の中に置く
+)` -> Group — スマホの枠。content を画面の中に置く
 - `browser(
-  content: View,
+  content: Group,
   url: String,
   w: Number,
   h: Number,
   chrome: Color = #e6e2da,
   page: Color = #ffffff,
-)` -> View — ブラウザのウィンドウ。上に url の帯が付く
+)` -> Group — ブラウザのウィンドウ。上に url の帯が付く
 - `terminal(
   lines: List<String>,
   revealed: Number,
@@ -3088,9 +3349,7 @@ EspeakVoiceEngine(voice = "ja")
   back: Color = #14161a,
   ink: Color = #9fe0a0,
   font: String = "",
-  duration: Duration = 0s,
-  start: Duration = 0s,
-)` -> View — ターミナル。行を上から順に出し、最後の行は 1 文字ずつ出る
+)` -> Group — ターミナル。行を上から順に出し、最後の行は 1 文字ずつ出る
 - `chat(
   messages: List<Tuple>,
   revealed: Number,
@@ -3098,7 +3357,7 @@ EspeakVoiceEngine(voice = "ja")
   h: Number,
   left: Color = #ffffff,
   right: Color = #4080e0,
-)` -> View — 吹き出しの会話。古い方から順に出る
+)` -> Group — 吹き出しの会話。古い方から順に出る
 - `toast(
   message: String,
   w: Number,
@@ -3106,9 +3365,7 @@ EspeakVoiceEngine(voice = "ja")
   progress: Number = 1,
   fill: Color = #1a1d23,
   accent: Color = #4aa863,
-  duration: Duration = 0s,
-  start: Duration = 0s,
-)` -> View — 通知のバブル。progress が 0 のときは上に隠れている
+)` -> Group — 通知のバブル。progress が 0 のときは上に隠れている
 - `cursor(
   at: Vector,
   size: Number = 0.5,
@@ -3122,7 +3379,7 @@ EspeakVoiceEngine(voice = "ja")
   pressed: Number = -1,
   fill: Color = #ffffff,
   accent: Color = #e04040,
-)` -> View — キーの絵。押されているキーだけ色を変える
+)` -> Group — キーの絵。押されているキーだけ色を変える
 - `social_post(
   author: String,
   body: String,
@@ -3131,15 +3388,15 @@ EspeakVoiceEngine(voice = "ja")
   h: Number,
   fill: Color = #ffffff,
   avatar: Color = #4080e0,
-)` -> View — SNS の投稿
+)` -> Group — SNS の投稿
 - `spinner(
   angle: Number,
   w: Number,
   h: Number,
-  sweep: Number = 270,
+  sweep: Number = 1.5 * math.pi,
   color: Color = #4080e0,
   track: Color = #e6e2da,
-)` -> View — ローディングの輪。angle で回す
+)` -> Group — ローディングの輪。angle で回す
 
 ### backdrop
 
@@ -3150,40 +3407,37 @@ EspeakVoiceEngine(voice = "ja")
   major: Number = 5,
   back: Color = #f6f4ee,
   line: Color = #c9d4e0,
-)` -> View — 方眼紙。細い線と、太い線を step ごとに引く
+)` -> Group — 方眼紙。細い線と、太い線を step ごとに引く
 - `vignette(
   w: Number,
   h: Number,
   amount: Number = 0.5,
   color: Color = #000000,
-)` -> View — 周辺減光。真ん中は素通しで、縁だけ暗くする。一番上に重ねる
+)` -> Group — 周辺減光。真ん中は素通しで、縁だけ暗くする。一番上に重ねる
 - `particles(
   w: Number,
   h: Number,
-  duration: Duration,
-  start: Duration = 0s,
+  progress: Number,
   count: Number = 40,
   color: Color = #ffffff,
   size: Number = 0,
-)` -> View — 粒が下から上へ流れる。duration で 1 周する
+)` -> Group — 粒が下から上へ流れる。progress が 0 から 1 になる間に流れ切る
 - `grid_pulse(
   w: Number,
   h: Number,
-  duration: Duration,
-  start: Duration = 0s,
+  progress: Number,
   step: Number = 1,
   color: Color = #4080e0,
   back: Color = #12151a,
-)` -> View — 格子が順に明るくなる。duration で 1 周する
+)` -> Group — 格子が順に明るくなる。progress が 0 から 1 になる間に端から端まで渡る
 - `radar_sweep(
   w: Number,
   h: Number,
-  duration: Duration,
-  start: Duration = 0s,
+  progress: Number,
   rings: Number = 3,
   color: Color = #4aa863,
   back: Color = #0e1412,
-)` -> View — レーダーの掃引。duration で 1 回転する
+)` -> Group — レーダーの掃引。progress が 0 から 1 になる間に 1 回転する
 - `blobs(
   w: Number,
   h: Number,
@@ -3191,13 +3445,13 @@ EspeakVoiceEngine(voice = "ja")
   a: Color = #4080e0,
   b: Color = #b04ae0,
   speed: Number = 1,
-)` -> View — にじんだ塊が漂う背景 (Shader)
+)` -> Group — にじんだ塊が漂う背景 (Shader)
 - `grain(
   w: Number,
   h: Number,
   amount: Number = 0.12,
   grain_size: Number = 1,
-)` -> View — フィルムのざらつき (Shader)。一番上に重ねる
+)` -> Group — フィルムのざらつき (Shader)。一番上に重ねる
 
 ### focus
 
@@ -3209,7 +3463,7 @@ EspeakVoiceEngine(voice = "ja")
   h: Number,
   dark: Number = 0.7,
   color: Color = #000000,
-)` -> View — 丸く開けた穴の外を暗くする。中身の上に重ねる
+)` -> Group — 丸く開けた穴の外を暗くする。中身の上に重ねる
 - `iris(
   w: Number,
   h: Number,
@@ -3217,34 +3471,30 @@ EspeakVoiceEngine(voice = "ja")
   cx: Number = -1,
   cy: Number = -1,
   color: Color = #000000,
-  duration: Duration = 0s,
-  start: Duration = 0s,
-)` -> View — 円が開く / 閉じる切り替え
+)` -> Group — 円が開く / 閉じる切り替え
 - `wipe(
   w: Number,
   h: Number,
   progress: Number,
   direction: Symbol = :left,
   color: Color = #000000,
-  duration: Duration = 0s,
-  start: Duration = 0s,
-)` -> View — 端から幕が寄せる / 引く切り替え
+)` -> Group — 端から幕が寄せる / 引く切り替え
 - `magnifier(
-  source: View,
+  source: Group,
   at: Vector,
   zoom: Number,
   w: Number,
   h: Number,
   border: Color = #ffffff,
-)` -> View — 一部を拡大した窓。source の at のあたりを zoom 倍で見せる
+)` -> Group — 一部を拡大した窓。source の at のあたりを zoom 倍で見せる
 - `split_compare(
-  before: View,
-  after: View,
+  before: Group,
+  after: Group,
   position: Number,
   w: Number,
   h: Number,
   handle: Color = #ffffff,
-)` -> View — before と after を境目で分けて見せる
+)` -> Group — before と after を境目で分けて見せる
 - `credits_roll(
   lines: List<String>,
   offset: Number,
@@ -3252,9 +3502,7 @@ EspeakVoiceEngine(voice = "ja")
   h: Number,
   fontSize: Number = 0,
   color: Color = #ffffff,
-  duration: Duration = 0s,
-  start: Duration = 0s,
-)` -> View — エンドロール。offset で下から上へ流す
+)` -> Group — エンドロール。offset で下から上へ流す
 
 ### media
 
@@ -3263,7 +3511,7 @@ EspeakVoiceEngine(voice = "ja")
   w: Number,
   h: Number,
   mode: Symbol = :contain,
-)` -> View — 画像を箱に入れる。縦横比は変えない
+)` -> Group — 画像を箱に入れる。縦横比は変えない
 - `ken_burns(
   image: Image,
   progress: Number,
@@ -3273,16 +3521,14 @@ EspeakVoiceEngine(voice = "ja")
   to_zoom: Number = 1.18,
   from_at: Vector = Vector(0.5, 0.5),
   to_at: Vector = Vector(0.5, 0.5),
-  duration: Duration = 0s,
-  start: Duration = 0s,
-)` -> View — 静止画をゆっくり寄せながら流す
+)` -> Group — 静止画をゆっくり寄せながら流す
 - `slideshow(
   images: List<Image>,
   index: Number,
   w: Number,
   h: Number,
   mode: Symbol = :cover,
-)` -> View — 画像を順に見せる。index の小数の分が次への重なりになる
+)` -> Group — 画像を順に見せる。index の小数の分が次への重なりになる
 - `watermark(
   image: Image,
   w: Number,
@@ -3290,7 +3536,7 @@ EspeakVoiceEngine(voice = "ja")
   corner: Symbol = :bottomRight,
   size: Number = 0.12,
   opacity: Number = 0.6,
-)` -> View — 隅に置くロゴ
+)` -> Group — 隅に置くロゴ
 - `to_mercator(lat: Number, lon: Number)` -> Vector — 緯度経度を 0..1 の平面座標にする (Web メルカトル)
 - `map_route(
   points: List<Vector>,
@@ -3299,9 +3545,7 @@ EspeakVoiceEngine(voice = "ja")
   h: Number,
   color: Color = #e04040,
   width: Number = 0,
-  duration: Duration = 0s,
-  start: Duration = 0s,
-)` -> View — 経路が伸びる線。点は箱の座標
+)` -> Group — 経路が伸びる線。点は箱の座標
 - `map_pin(
   at: Vector,
   progress: Number,
@@ -3309,9 +3553,7 @@ EspeakVoiceEngine(voice = "ja")
   h: Number,
   size: Number = 0.6,
   color: Color = #e04040,
-  duration: Duration = 0s,
-  start: Duration = 0s,
-)` -> View — ピンが落ちてくる
+)` -> Group — ピンが落ちてくる
 
 ### clock
 
@@ -3322,7 +3564,7 @@ EspeakVoiceEngine(voice = "ja")
   face: Color = #ffffff,
   hand: Color = #1a1d23,
   second: Color = #e04040,
-)` -> View — 針の時計
+)` -> Group — 針の時計
 - `digital(
   time: Duration,
   w: Number,
@@ -3330,7 +3572,7 @@ EspeakVoiceEngine(voice = "ja")
   format: String = "hh:mm",
   back: Color = #14161a,
   ink: Color = #9fe0a0,
-)` -> View — 数字の時計
+)` -> Group — 数字の時計
 - `countdown(
   remaining: Duration,
   total: Duration,
@@ -3339,7 +3581,7 @@ EspeakVoiceEngine(voice = "ja")
   format: String = "mm:ss",
   color: Color = #e04040,
   track: Color = #e6e2da,
-)` -> View — 残り時間。輪が減っていく
+)` -> Group — 残り時間。輪が減っていく
 - `stopwatch(
   elapsed: Duration,
   w: Number,
@@ -3347,7 +3589,7 @@ EspeakVoiceEngine(voice = "ja")
   format: String = "mm:ss.S",
   color: Color = #1a1d23,
   track: Color = #e6e2da,
-)` -> View — 経過時間。秒針代わりの点が回る
+)` -> Group — 経過時間。秒針代わりの点が回る
 - `calendar_page(
   month: String,
   day: Number,
@@ -3356,7 +3598,7 @@ EspeakVoiceEngine(voice = "ja")
   h: Number,
   accent: Color = #e04040,
   face: Color = #ffffff,
-)` -> View — カレンダーの 1 枚
+)` -> Group — カレンダーの 1 枚
 - `timeline_bar(
   markers: List<Number>,
   position: Number,
@@ -3364,9 +3606,7 @@ EspeakVoiceEngine(voice = "ja")
   h: Number,
   color: Color = #e04040,
   track: Color = #e6e2da,
-  duration: Duration = 0s,
-  start: Duration = 0s,
-)` -> View — 再生バー。印の付いた所が章の切れ目
+)` -> Group — 再生バー。印の付いた所が章の切れ目
 
 ### meter
 
@@ -3376,14 +3616,14 @@ EspeakVoiceEngine(voice = "ja")
   h: Number,
   fill: Color = #e04040,
   track: Color = #dedbd4,
-)` -> View — 横に伸びる進捗バー
+)` -> Group — 横に伸びる進捗バー
 - `progress_ring(
   progress: Number,
   size: Number,
   thickness: Number,
   fill: Color = #e04040,
   track: Color = #dedbd4,
-)` -> View — 円形の進捗リング。真上から時計回りに伸びる
+)` -> Group — 円形の進捗リング。真上から時計回りに伸びる
 - `gauge(
   value: Number,
   lo: Number,
@@ -3391,7 +3631,7 @@ EspeakVoiceEngine(voice = "ja")
   size: Number,
   fill: Color = #e04040,
   track: Color = #dedbd4,
-)` -> View — 半円のメーター。左が range の下端、右が上端
+)` -> Group — 半円のメーター。左が range の下端、右が上端
 - `thermometer(
   value: Number,
   lo: Number,
@@ -3400,40 +3640,48 @@ EspeakVoiceEngine(voice = "ja")
   h: Number,
   fill: Color = #e04040,
   track: Color = #dedbd4,
-)` -> View — 縦の温度計。下が lo、上が hi
+)` -> Group — 縦の温度計。下が lo、上が hi
 - `stars(
   value: Number,
   max: Number = 5,
   size: Number = 1,
   fill: Color = #e0b040,
   track: Color = #dedbd4,
-)` -> View — 星の評価。半端な値は星を部分的に塗る
+)` -> Group — 星の評価。半端な値は星を部分的に塗る
 - `poll_bars(
   results: Dict,
   w: Number,
   h: Number,
   colors: List<Color> = [#e04040],
   label_w: Number = 0,
-)` -> View — 投票結果の横棒。Dict の順に上から並べる
+)` -> Group — 投票結果の横棒。Dict の順に上から並べる
 
 ### fractal
 
 - `escape_time(
   formula: Dict,
   coloring: (Number, Vector) -> Color,
-  center: Vector,
+  center: Center,
   span: Number,
   zoom: (Number) -> Number = func (t) { 1 },
   duration: Duration = 0s,
   camera: MaybeCamera = :none,
-  max_steps: (Number) -> Number = func (zoom) { 200 },
+  max_steps: (Number) -> Number = func (depth) { 200 },
   samples: Number = 1,
   top_left: Vector = Vector(0, 0),
   size: Vector = Vector(16, 9),
   y_up: Bool = false,
   escape_at: Number = 256,
-  reference_steps: Number = 8000,
-)` -> Color, center: Vector, span: Number, zoom: (Number) -> Number = func (t) — エスケープタイム系フラクタルの Shader を作る。図形の fill に入れる。  倍率の決め方は 3 通り。`zoom` を書く / `zoom` と `duration` を書く / `camera` を渡す。 `duration` を書くと、動画ぜんぶを対数極座標の帯 1 本にして使い回す (中心が動かず、 倍率が増えるだけのときに使える。1 フレームあたりの計算が桁違いに減る)。 `camera` を渡すと倍率はカメラから毎フレーム読む (寄る先も動かせる代わりに帯は使えない)。 精度は深さで決まるので選ばない。中の点の軌道をここで 64 bit で計算し、GPU は差分を反復する
+  reference_steps: Number = 0,
+  digits: Number = 0,
+)` -> Color, center: Center, span: Number, zoom: (Number) -> Number = func (t) — エスケープタイム系フラクタルの Shader を作る。図形の fill に入れる。  倍率の決め方は 3 通り。`zoom` を書く / `zoom` と `duration` を書く / `camera` を渡す。 `duration` を書くと、動画ぜんぶを対数極座標の帯 1 本にして使い回す (中心が動かず、 倍率が増えるだけのときに使える。1 フレームあたりの計算が桁違いに減る)。 `camera` を渡すと倍率はカメラから毎フレーム読む (寄る先も動かせる代わりに帯は使えない)。 精度は深さで決まるので選ばない。中の点の軌道をここで 64 bit で計算し、GPU は差分を反復する
+- `find_center(
+  re: String,
+  im: String,
+  radius: Number,
+  digits: Number = 60,
+  max_period: Number = 100000,
+)` -> Tuple — 寄る先を探す。その点から radius の中にある Mandelbrot 集合のミニチュアの中心を、 周期を球で見つけてから多倍長のニュートン法で求める。escape_time の center にそのまま渡せる
 - `MANDELBROT` -> Dict — Mandelbrot 集合の反復式 z' = z² + p。z は 0 から始まり、p がピクセルの複素座標。 escape_time の formula に渡す。摂動法にも対応している
 - `julia(c: JuliaConstant)` -> Dict — Julia 集合の反復式 z' = z² + c を作る。z はピクセルの複素座標から始まり、c は全ピクセルで共通。 escape_time の formula に渡す
 - `BURNING_SHIP` -> Dict — Burning Ship の反復式 z' = (|Re z| + i|Im z|)² + p。実部と虚部の絶対値を取ってから 2 乗する。 escape_time の formula に渡す。escape_time に y_up: true を付けると、慣習どおり船が上を向く
@@ -3450,6 +3698,7 @@ EspeakVoiceEngine(voice = "ja")
 
 - `Palette` — 1 つの配色。どの色をどこに使うかを決めた組。 画面の色をここから取ると、部品をどう組み合わせても全体が揃う
 - `HOUSE` -> Palette — 標準ライブラリの既定色。色を省いて呼んだ部品はこの色で描かれるので、 何も指定しない画面はこの配色になっている
+- `MOPHILA` -> Palette — mophila のロゴの色。i の点の橙が accent、ロゴの青は series の 2 色目。本文はクリーム色に合う暖かい黒
 - `PAPER` -> Palette — 紙に刷ったような配色。白を少し落としてあるので、長く映しても目が疲れない
 - `EARTH` -> Palette — 土や草の色。地図や、自然を扱う話に合う
 - `MONO` -> Palette — 白と黒だけ。accent も黒なので、目立たせるときは大きさか太さで差を付ける。 印刷や、色を使えない場面に
@@ -3468,16 +3717,16 @@ EspeakVoiceEngine(voice = "ja")
   a: Color,
   b: Color,
   pitch: Number = 0.5,
-  angle: Number = 45,
+  angle: Number = math.pi / 4,
   samples: Number = 4,
 )` -> Shader — 縞の塗り。pitch ごとに 2 色が入れ替わる
-- `STRIPES` -> Shader — 既定の色の縞。45 度、0.5 幅
+- `STRIPES` -> Shader — 既定の色の縞。math.pi / 4 の向き、0.5 幅
 - `hatch(
   back: Color,
   line: Color,
   pitch: Number = 0.4,
   width: Number = 0.04,
-  angle: Number = 45,
+  angle: Number = math.pi / 4,
   samples: Number = 4,
 )` -> Shader — 地の上に細い平行線を引いた塗り。縞より線が細く、地の色が主になる
 - `HATCH` -> Shader — 既定の色の平行線
@@ -3509,7 +3758,7 @@ EspeakVoiceEngine(voice = "ja")
   line: Color,
   pitch: Number = 0.35,
   width: Number = 0.03,
-  angle: Number = 45,
+  angle: Number = math.pi / 4,
   samples: Number = 4,
 )` -> Shader — 向きの違う細線を 2 方向に重ねたもの。hatch を交差させた網目
 - `CROSS_HATCH` -> Shader — 既定の色の網目
@@ -3579,7 +3828,7 @@ EspeakVoiceEngine(voice = "ja")
 - `CIRCLE` -> List<List<Vector>> — 丸。点や印に。線を付ければ輪になる
 - `TRIANGLE` -> List<List<Vector>> — 上を向いた三角。注意や、向きの印に。rotation で向きを変える
 - `STAR` -> List<List<Vector>> — 五芒星。評価や、目立たせたいものに
-- `ARROW` -> List<List<Vector>> — 上を向いた矢印。rotation で向きを変える (90 で右、180 で下)
+- `ARROW` -> List<List<Vector>> — 上を向いた矢印。rotation で向きを変える (math.pi / 2 で右、math.pi で下)
 - `CHEVRON` -> List<List<Vector>> — 上を向いた山形。続きがあること、たためることに。rotation で向きを変える
 - `PLAY` -> List<List<Vector>> — 右を向いた三角。再生に
 - `PAUSE` -> List<List<Vector>> — 縦の 2 本。一時停止に。輪郭が 2 つある記号
@@ -3642,6 +3891,13 @@ let div = Vector(2, 0).cdiv(Vector(0, 1))   # Vector(0, -2)
 let flip = Vector(1, 2).flip_y()            # Vector(1, -2)。数学の向き (y は上) ↔ 画面の向き (y は下)
 # 3D の点は space3d の中にある (space3d.moph)
 
+# Length。box に対して描くときに数になる量。単位は vx vy vmin vmax px
+let len1 = 20vy + 5vy         # 25vy。同じ単位どうしは足せる
+let len2 = 10vx * 2           # 20vx
+let corner = Vector(50vx, 40vy)    # Vector の成分は Length でもよい
+let ang = 90 * math.pi / 180       # 90 度のラジアン
+let ring = center + math.polar(20vy, math.tau / 6)   # center は描く先の Composition の中心
+
 # Color の合成
 let mix = #ff0000 * 0.5 + #0000ff * 0.5
 
@@ -3650,11 +3906,10 @@ let ok = a > 5 and b <= 9
 let ng = not ok or c == 1
 
 # 標準ライブラリ (先頭の import math が要る)
-let pi = math.PI               # math.PI / math.TAU / math.E
+let pi = math.pi               # math.pi / math.tau / math.e。角度はラジアンで、時計回りが正
 let s = math.sin(3.14)
 let m = math.max(1, 2, 3)
 let f = math.floor(2.7)
-let g = math.sin               # 関数は値として取り出せる
 let r = math.round(1.23456, 2) # 1.23 (小数の桁を決めて四捨五入)
 let cl = math.clamp(5, 0, 1)   # 1   (範囲に収める)
 let lp = math.lerp(0, 10, 0.25)   # 2.5 (a と b の間)
@@ -3667,7 +3922,8 @@ log(p, q, mix)              # (1.5, 2.5) (2, 4) #800080
 log(ok, ng, s, m, f)        # true true 0.00159... 3 2  (not ok が先に結合するので (not ok) or (c == 1))
 log(tiny, big)              # 1/1000000000 2500
 log(r, cl, lp, mr, ns)      # 1.23 1 2.5 50 2
-log(u, w, rot, div, flip)   # Vector(1.5, 2.5) Vector(2, 4) Vector(0, 1) Vector(0, -2) Vector(1, -2)
+log(len1, len2, corner, ang, ring)   # 25vy 20vx Vector(50vx, 40vy) 1.5707... Vector(50vx + 10vy, 32.6...vy)
+log(pi, u, w, rot, div, flip)  # 3.14159... Vector(1.5, 2.5) Vector(2, 4) Vector(0, 1) Vector(0, -2) Vector(1, -2)
 ```
 
 ### basic.moph
@@ -3682,7 +3938,7 @@ n = n + 1
 # 数値。整数と実数を区別しない
 let a = 1
 let b = 1.5
-let c = 1/3          # 分数のまま持つ。c * 3 は 1
+let third = 1/3      # 分数のまま持つ。third * 3 は 1
 
 # Duration
 let d1 = 83s
@@ -3691,8 +3947,14 @@ let d3 = 01:23           # mm:ss
 let d4 = 01:23:45.678    # hh:mm:ss.fff
 let d5 = 500ms
 
+# Length。box に対して描くときに数になる量 (vx vy vmin vmax px)
+let l1 = 20vy
+let l2 = 50vx
+let l3 = 3vmin
+let l4 = 8px
+
 # Color
-let red   = #e04040
+let red  = #e04040
 let half  = #e04040cc            # 8 桁目までで不透明度
 let short = #e44                 # 3 桁 = #ee4444。4 桁なら不透明度付き
 let named = red
@@ -3715,17 +3977,22 @@ let ok = true
 let p  = (1, 1.5)        # 座標などに使う
 let xs = [1, 2, 3]
 
-# オブジェクト生成
-let c = Circle(fill = red, radius = 0.5)
+# 位置は Vector。成分は数でも Length でもよい。center は描く先の中心
+let here = Vector(8, 4.5)
+let mid = Vector(50vx, 50vy)
 
-# 属性の参照と更新
+# オブジェクト生成。図形は不変の値
+let c = Circle(position = center, fill = red, radius = 10vy)
+
+# 属性の参照。変えるときは copy で別の値を作る (c.radius = 1 のような代入はできない)
 let r = c.radius
-c.radius = 1
+let big = c.copy(radius = 20vy)
 
 # ログ出力 (stderr)。動画には出ない
 log("radius = ", r)
 log("radius = {r}".format(r))
-log(c)                           # オブジェクトはそのまま表示
+log(c, big)                      # オブジェクトはそのまま表示
+log(l1, l2, l3, l4, here, mid)
 ```
 
 ### collection.moph
@@ -3742,6 +4009,7 @@ xs[-1]                           # 3 (末尾)
 xs.len()                         # 3
 
 xs.push(4)                       # [1, 2, 3, 4]。破壊的
+log(xs.pop())                    # 4。末尾を外して返す。破壊的。空なら ValueError.OutOfRange
 let zs = xs + [5, 6]             # 連結。新しい List
 let sub = xs[1..3]               # [2, 3]。スライス
 
@@ -3758,14 +4026,18 @@ xs.sort()                        # 昇順
 xs.enumerate()                   # [(0, 1), (1, 2), (2, 3)]
 xs.zip([10, 20, 30])             # [(1, 10), (2, 20), (3, 30)]
 
-# 図形の List
-let v = View(box = Vector(4, 3))
+# 図形の List。Group(...items) に広げてまとめる
 let circles = [1, 2, 3].map(func (i) {
-  Circle(position = Pos(i, 1.5), radius = 0.3, fill = #e04040)
+  Circle(position = Vector(i, 1.5), radius = 0.3, fill = #e04040)
 })
+let items = []
 for c in circles {
-  v.place(c)
+  items.push(c)
 }
+let row = Group(...items)
+
+let comp = Composition(box = Vector(4, 3), duration = 2s)
+comp.place("row", row, in = 0s, out = 2s)
 
 # ---- String ----
 "hello".len()                    # 5 (文字数)
@@ -3824,12 +4096,15 @@ log(p.0, p.1, x, y, q, p.x, p.y)    # 1 1.5 1 1.5 (1, 1.5, 0) 1 1.5
 log(m["red"], m.keys(), m.has("blue"), m.has("cyan"))   # #e04040 ["red", "green", "blue"] true false
 log(s[0..5], s.split(" "), "-".repeat(5))              # こんにちは [こんにちは, world] -----
 log(["banana", "apple"].sort(), [(2, "b"), (1, "a")].sort())   # [apple, banana] [(1, a), (2, b)]
+
+output comp
 ```
 
 ### error.moph
 
 ```
 # error.moph — エラーの種類と例 (すべて仮)。各行がエラー
+# run は最初のエラーで止まるので、確かめるときは 1 行ずつ残して動かす
 
 # ---- エラー種別のツリー ----
 # Error
@@ -3848,24 +4123,25 @@ log(["banana", "apple"].sort(), [(2, "b"), (1, "a")].sort())   # [apple, banana]
 # │  ├─ ArityMismatch        引数や列の数
 # │  └─ NotPlaceable         place できない型
 # ├─ ValueError             型は合うが値が不正
-# │  ├─ DurationRequired     時刻の単位が混在、相対時刻なのに duration が無い
 # │  ├─ OutOfRange
-# │  └─ AlreadyPlaced       同じ View を 2 か所に置いた
+# │  └─ AlreadyPlaced       同じ名前の Layer を 2 度置いた
 # └─ RuntimeError           実行時
 #    ├─ DivisionByZero
 #    ├─ FontNotFound
 #    ├─ AudioUnreadable      import した音声を ffprobe が読めない (音声ストリームが無い、ffprobe が無い)
+#    ├─ ImageUnreadable      import した画像を読めない
 #    ├─ ShaderCompile        Shader の関数に GPU で計算できないものがある (描画時に出る)
 #    ├─ ShaderUnavailable    GPU の無い場面で Shader を描こうとした
-#    └─ EndlessLoop          while が 100 万回回っても条件が偽にならない
+#    ├─ EndlessLoop          while が 100 万回回っても条件が偽にならない
+#    └─ OutOfMemory          GPU のメモリが足りない (描画時に出る)
 
 # ---- SyntaxError ----
 let d = #e0404                 # SyntaxError.InvalidLiteral: color literal must have 3, 4, 6 or 8 hex digits
 let e = 1:2:3:4                # SyntaxError.InvalidLiteral: invalid duration literal "1:2:3:4"
 let f = (1, 2                  # SyntaxError.UnexpectedToken: expected ")" but found end of line
 
-let v = View(box = Vector(4, 3))
-let tr = Timeline(duration = 10s)
+let comp = Composition(box = Vector(4, 3), duration = 2s)
+let dot = Circle(position = center, radius = 10vy, fill = #e04040)
 let n = 1
 
 # ---- NameError ----
@@ -3874,34 +4150,45 @@ let ann: Numbr = 1             # NameError.UndefinedVariable: "Numbr" is not a t
 import "nope.m4a" as bgm       # NameError.UndefinedVariable: cannot read "nope.m4a": ... is not a file
 w = 1                          # NameError.AssignWithoutLet: "w" is not defined; use "let w = ..."
 record List { a: Number }      # NameError.Reserved: "List" is a builtin type and cannot be redeclared
-let x = Circle(radius = 1)
-x.width = 2                    # NameError.UndefinedAttribute: Circle has no attribute "width"
+dot.width                      # NameError.UndefinedAttribute: Circle has no attribute "width"
+let l = Line(from = Vector(0, 0), to = Vector(1, 1), fill = #e04040)   # NameError.UndefinedAttribute: Line has no field "fill" (線に面は無い)
+let g = Group(dot, ring = dot)   # NameError.UndefinedAttribute: Group has no field "ring" (Group の中身に名前は付けられない)
 
 # ---- TypeError ----
 let a = 1s + 1                 # TypeError.OperandType: cannot add Duration and Number
 let c = #e04040 + 1            # TypeError.OperandType: cannot add Color and Number
-x.position = 1                 # TypeError.AttributeType: Circle.position expects Pos, found Number
-let ta = TextArea(text = 1)   # TypeError.ArgumentType: TextArea.text expects String, found Number
-let mo = motion { 0s: 0, 1s: 1 }
-mo.apply(x, func (x, t, [p, q]) { x.radius = p })   # TypeError.ArityMismatch: motion has 1 column but 2 parameters given
-tr.place(mo, at = 0s)           # TypeError.NotPlaceable: Motion cannot be placed; apply it to make a Timeline
-tr.place(1, at = 0s)            # TypeError.ArgumentType: Timeline.place expects Timeline, View, Audio or Narration, found Number
+let k = 5vx + 1s               # TypeError.OperandType: cannot add Length and Duration
+dot.radius = 2                 # TypeError.AttributeType: Circle is immutable; make a changed one with copy(radius = ...)
+let moved = dot.copy(position = 1)   # TypeError.ArgumentType: Circle.position expects Vector, found Number
+let ta = TextArea(text = 1)    # TypeError.ArgumentType: TextArea.text expects String, found Number
+let slide = progress [:x, :y] {
+  0: 2, 4.5
+  1: 14, 4.5
+}
+let (sx, sy, sz) = slide(0.5)  # TypeError.ArityMismatch: expected a tuple of 3, found 2
+comp.place("late", dot, in = 1s)   # TypeError.ArityMismatch: Composition.place needs out =
+comp.place("one", 1, in = 0s, out = 1s)   # TypeError.NotPlaceable: Composition.place expects a Node or func (t), found Number
+output dot                     # TypeError.ArgumentType: output takes a Composition, found Circle
 
 # ---- ValueError ----
-let m = motion { 0s: 0, 0.5: 1 }   # ValueError.DurationRequired: keyframe times must be all Duration or all Number (0..1)
-let m2 = motion { 5: 0 }       # ValueError.OutOfRange: relative keyframe time must be within 0..1
-tr.place(Narration(text = "a"), at = 0s)   # ValueError.DurationRequired: a Narration needs duration before it is placed
-v.place(1)                     # TypeError.ArgumentType: View.place expects Placeable, found Number
-let inner = View(box = Vector(1, 1))
-v.place(inner, at = Pos(0, 0), w = 1)
-v.place(inner, at = Pos(1, 1), w = 1)   # ValueError.AlreadyPlaced: this View is already placed; place a copy() of it instead
-output Circle(radius = 1)      # TypeError.ArgumentType: output takes a View, found Circle
+let xs = [1, 2, 3]
+let i = xs[1.5]                # ValueError.OutOfRange: an index must be a whole number, found 1.5
+let r = Rect(w = 1, h = 1, strokeJoin = :sharp)   # ValueError.OutOfRange: Rect.strokeJoin is one of :miter | :round | :bevel, found :sharp
 let h = #e04040 * 2            # ValueError.OutOfRange: color channel exceeds 1.0
+comp.place("dot", dot, in = 0s, out = 1s)
+comp.place("dot", dot, in = 1s, out = 2s)   # ValueError.AlreadyPlaced: a layer named "dot" is already placed
 
 # ---- RuntimeError ----
-let g = 1 / (n - n)            # RuntimeError.DivisionByZero: division by zero
-let t2 = TextArea(text = "a", font = "NoSuchFont")   # RuntimeError.FontNotFound: font "NoSuchFont" not found   (未実装: フォント読み込みは M2)
+let q = 1 / (n - n)            # RuntimeError.DivisionByZero: division by zero
+let t2 = TextArea(text = "a", font = "NoSuchFont")   # RuntimeError.FontNotFound: font "NoSuchFont" not found; "mophila fonts" lists the ones this machine has
+# import "not_an_image.png" as pic   # RuntimeError.ImageUnreadable: cannot read "not_an_image.png": ... (ファイルはあるが画像として開けない。画像でない中身の .png を置いたとき)
 while true { }                 # RuntimeError.EndlessLoop: this while ran 1000000 times without its condition becoming false
+
+# ---- 複数行の例。前の行を setup として使うので、ファイルの最後に置く ----
+let bad = progress [:x] {
+  0: 1
+  2: 3
+}                              # ValueError.OutOfRange: a progress row is at a Number within 0..1, found 2
 ```
 
 ### function.moph
@@ -3932,11 +4219,11 @@ let sum3 = func ([a, b, c]) { a + b + c }
 sum3([1, 2, 3])          # 6
 
 # 既定値と名前付き引数
-func circle_at(pos, r = 0.5, fill = #a0a0a0) {
+func circle_at(pos, r = 5vy, fill = #a0a0a0) {
   Circle(position = pos, radius = r, fill = fill)
 }
-let c1 = circle_at(Pos(1, 1))
-let c2 = circle_at(Pos(2, 1), fill = #e04040)
+let c1 = circle_at(Vector(25vx, 50vy))
+let c2 = circle_at(Vector(50vx, 50vy), fill = #e04040)
 
 # 関数を返す
 func scaler(k) {
@@ -3945,14 +4232,18 @@ func scaler(k) {
 let half = scaler(1/2)
 half(4)                  # 2
 
-# context: オブジェクトに短い別名を付けて属性を扱う
-let c = Circle()
-let variableWithLongName = Rect()
-context c as o, variableWithLongName as v {
-  o.position, o.radius = Pos(1, 1.5), 0.5
-  o.fill = #4040e0
-  v.w = 1
+# 図形は不変。変えたものは copy で作る
+let c = Circle(position = center, radius = 5vy).copy(fill = #4040e0, radius = 8vy)
+
+# 時間で変わる絵は func (t) で書く。t は Layer の in を 0 とした Duration。
+# 同じ t には同じ Node が返る (状態は持たない)
+func pulse(t) {
+  Circle(position = center, radius = ease(t, 0s, 1s, 5vy, 20vy), fill = #e04040,
+         opacity = ease(t, 0.5s, 1s, 1, 0))
 }
+let comp = Composition(box = Vector(16, 9), duration = 2s)
+comp.place("pulse-a", pulse, in = 0s, out = 1s)
+comp.place("pulse-b", pulse, in = 1s, out = 2s)    # 同じ関数。t はここでも自分の in が 0
 
 # ---- ... で引数に広げる ----
 let pair = (1, 2)
@@ -3964,37 +4255,93 @@ log(double(3), add(1, 2), triple(3), sum3([1, 2, 3]), half(4))   # 6 3 9 6 2
 log(sign(-5), sign(3))   # -1 1
 log(c1, c2)
 log(c)
+output comp
+```
+
+### group.moph
+
+```
+# group.moph — 図形をまとめる。中の座標は Group の position からの相対
+
+import math
+
+let comp = Composition(box = Vector(16, 9), duration = 4s)
+
+# 属性でない引数が中身。書いた順に描く。Group も不変で、後から足せない
+let badge = Group(
+  Circle(radius = 1.4, fill = #2f6fd0),
+  Rect(w = 1.2, h = 1.2, fill = #ffb583),
+  position = Vector(2, 4.5),
+)
+log(badge.position)
+
+# Group の中に Group。原点は外側から順に足される
+let pair = Group(
+  Group(Circle(radius = 0.5, fill = #d9552c), position = Vector(-1, 0)),
+  Group(Circle(radius = 0.5, fill = #2f6fd0), position = Vector(1, 0)),
+  position = Vector(8, 1.5),
+  opacity = 0.5,          # 中身をまとめて 1 枚として薄くする
+)
+
+# 中身が先に決まらないときは、List に集めて広げる
+let items = []
+for i in 0..5 {
+  items.push(Circle(position = Vector(i * 2, 0), radius = 0.4, fill = #7d90ad))
+}
+let row = Group(...items, position = Vector(4, 7.5))
+
+# camera は中身の from を to に置いて scale 倍する。clip で枠の外を切る
+let lens = Group(
+  Circle(position = Vector(1, 1), radius = 0.5, fill = #e04040),
+  Rect(position = Vector(2, 1), w = 0.8, h = 0.8, fill = #40a040),
+  camera = Camera(from = Vector(1, 1), to = Vector(2, 2), scale = 2),
+  clip = Rect(w = 4, h = 4, anchor = Vector(0, 0)),
+  position = Vector(11, 3),
+)
+
+# Group を動かせば中身ごと動く。変えたものは copy で作る。anchor が回転の中心
+func move(t) {
+  Group(
+    badge.copy(position = Vector(ease(t, 0s, 4s, 2, 14), 4.5), rotation = ease(t, 0s, 4s, 0, math.pi)),
+    pair.copy(rotation = ease(t, 0s, 4s, 0, math.tau)),
+  )
+}
+
+comp.place("row", row, in = 0s, out = 4s)
+comp.place("lens", lens, in = 0s, out = 4s)
+comp.place("move", move, in = 0s, out = 4s)
+output comp
 ```
 
 ### media.moph
 
 ```
-# media.moph — 音声と画像 (すべて仮)。音声は Timeline に置き、render が動画のトラックにする
+# media.moph — 音声と画像 (すべて仮)。音声は Composition に Layer として置き、render が動画のトラックにする
 
-let v = View(box = Vector(4, 3))
-let track = Timeline()
+let comp = Composition(box = Vector(4, 3), duration = 6s)
 
 # ---- 音声。.moph 以外のファイルを import すると Audio か Image になる (拡張子で決まる) ----
 import "../gallery/mophila_intro/QuietSignal.m4a" as bgm
 import "sample.png" as pic              # 画像 (png jpg gif webp bmp tiff)
-log(type_of(bgm), bgm.duration, bgm.file)         # Audio 152.52s ../gallery/mophila_intro/QuietSignal.m4a
+log(type_of(bgm), bgm.duration, bgm.file)         # Audio 114.64s ../gallery/mophila_intro/QuietSignal.m4a
 
-track.place(bgm, at = 0s, fadeIn = 1s, duration=5s, fadeOut = 2s)   # 動画の終わりまで繰り返す (動画は延びない)
-track.place(bgm, at = 0.5s, duration = 5s, volume = 0.6)                                        # 3 秒から 5 秒分だけ (重ねて鳴る)
+# volume と loop は copy で決める。loop = true は out まで繰り返す。音声は out で切る
+comp.place("bgm", bgm.copy(volume = 0.6, loop = true), in = 0s, out = 6s)
+# 同じ音声を別の名前で何度でも置ける。重なれば混ざる
+comp.place("bgm-late", bgm, in = 0.5s, out = 5.5s)
 
 # ---- 読み上げ。音声と字幕になる。書き方は voice.moph ----
-track.place(Narration(text = "最初の行", duration = 3s), at = 1s)
+comp.place("line-1", Narration(text = "最初の行"), in = 1s, out = 4s)
 
 # ---- 画像。図形の fill に入れると、その形に切り抜いて敷かれる ----
 log(pic.file, pic.width, pic.height)      # import に書いたパスと、元のピクセル数
-v.place(Rect(position = Pos(0.2, 0.2, anchor = :topLeft), w = 1.6, h = 1, fill = pic))
-v.place(Circle(position = Pos(3, 2), radius = 0.8, fill = pic))   # 丸く切り抜く
+comp.place("rect", Rect(position = Vector(0.2, 0.2), anchor = Vector(0, 0), w = 1.6, h = 1, fill = pic), in = 0s, out = 6s)
+comp.place("circle", Circle(position = Vector(3, 2), radius = 0.8, fill = pic), in = 0s, out = 6s)   # 丸く切り抜く
 
-# 動画の長さは置いたものの終わりで決まる (loop でない曲が長ければ曲の終わりまで)
-v.addTrack(track)
-output v
+# 動画の長さは output した Composition の duration
+output comp
 
-# render は音声を混ぜて (adelay / amix / afade) 動画に付ける。preview でも鳴り、字幕は画面の下に重ねて出る
+# render は音声を混ぜて動画に付ける。preview でも鳴り、字幕は画面の下に重ねて出る
 # bundle は import した音声も埋め込む
 ```
 
@@ -4003,24 +4350,19 @@ output v
 ```
 # minimal.moph — 最初に動かす対象
 
-let view = View(box = Vector(200, 200))
-let redCircle = Circle(position = Pos(100, 100), radius = 10, fill = #e04040)
+let comp = Composition(box = Vector(16, 9), duration = 3s)
 
-# context は式。最後の式 (motion) が値になる
-let grow = context redCircle as c {
-  motion (t) {
-    0s: c.radius = 10
-    3s: c.radius = 100
-  }
+# 時間で変わる絵は func (t)。t は Layer の in を 0 とした時刻
+func grow(t) {
+  Circle(position = center, radius = ease(t, 0s, 3s, 10vy, 40vy), fill = #e04040)
 }
 
 let x = (1 + 2) * 3 ^ 2 / 4 % 5
 log("x = ", x)
 log("x = {x}, doubled = {d}".format(x, x * 2))
 
-view.place(redCircle)
-view.addTrack(grow)
-output view
+comp.place("grow", grow, in = 0s, out = 3s)
+output comp
 ```
 
 ### module.moph
@@ -4032,10 +4374,10 @@ output view
 import math                              # 標準ライブラリ。Module を math に束縛する
 import math as m                         # as で別名
 import .module_lib                       # 同じ場所の module_lib.moph。Module を束縛する
-import { twice, Point } from .module_lib   # 名前を直接束縛する
+import { twice, Point, badge } from .module_lib   # 名前を直接束縛する
 import "sample.png" as pic               # .moph 以外は Image か Audio (media.moph)
 
-log(m.PI == math.PI, module_lib.VERSION, module_lib.twice(3), twice(3), Point(1, 2), pic.width)
+log(m.pi == math.pi, module_lib.VERSION, module_lib.twice(3), twice(3), Point(1, 2), pic.width)
 
 # import できるのは、そのファイルが export したものだけ。
 # ".." で上のディレクトリも書けるが、ディレクトリをまたぐ設計は避ける
@@ -4045,8 +4387,8 @@ export let TITLE = "module.moph"
 export func area(w: Number, h: Number) -> Number { w * h }
 
 # ---- alias: 長い型名に短い名前を付ける。そのファイルのその行より後ろだけ。export はできない ----
-alias P = Pos
-let here = P(1, 2)
+alias V = Vector
+let here = V(50vx, 40vy)
 
 # ---- 宣言の注釈。宣言の前の行に書く ----
 @deprecated("Vector を使う") @nocopy
@@ -4058,6 +4400,14 @@ record Vec2 {
 
 let v = Vec2(1, 2)       # ここで「Vec2 は古い」と stderr に出る
 log(TITLE, area(2, 3), here, v)
+
+# ---- import した部品を Composition に置く ----
+func scene(t) {
+  badge(#e04040, ease(t, 0s, 1s, 0, 1)).copy(position = here)
+}
+let comp = Composition(box = Vector(16, 9), duration = 2s)
+comp.place("badge", scene, in = 0s, out = 2s)
+output comp
 ```
 
 ### module_lib.moph
@@ -4076,6 +4426,14 @@ export record Point {
   method swapped(self) -> Point { Point(self.y, self.x) }
 }
 
+# 部品は、時間を知らない静的な Group を返す関数にする。中の座標は部品の左上を (0, 0) とした相対
+export func badge(color: Color, progress: Number) -> Group {
+  Group(
+    Circle(position = Vector(5vy, 5vy), radius = 5vy * progress, fill = color),
+    Rect(w = 10vy, h = 10vy, stroke = color, strokeWidth = 1vy),
+  )
+}
+
 # export を書かないものは、このファイルの中だけのもの
 let inside = "見えない"
 log(VERSION, twice(21), Point(1, 2).swapped(), inside)   # 0.1 42 Point(2, 1) 見えない
@@ -4084,108 +4442,60 @@ log(VERSION, twice(21), Point(1, 2).swapped(), inside)   # 0.1 42 Point(2, 1) �
 ### motion.moph
 
 ```
-# motion.moph — motion と Timeline。View に置いて、時間で動かして、output するまで
+# motion.moph — 時間で動かす。progress の表と、ease / linear。Composition に置いて output するまで
 
-let v = View(box = Vector(4, 3))
+let len = 5s
+let comp = Composition(box = Vector(16, 9), duration = len)
 
-# ---- View に置く。位置は図形の position で決まる ----
-let red   = Circle(position = Pos(1, 1.5), radius = 0.5, fill = #e04040)
-let green = Rect(position = Pos(2, 0.5, anchor = :topLeft), w = 1, h = 1, fill = #40a040, stroke = #000000, strokeWidth = 0.05)
-let line  = Line(from = Vector(0, 3), to = Vector(4, 0), stroke = #4040e0, strokeWidth = 0.03)
-let tri   = Polygon(points = [Vector(3, 2), Vector(4, 3), Vector(2, 3)], fill = #e0a020)
-v.place(red)
-v.place(green)
-v.place(line)
-v.place(tri)
+# ---- 動かない図形は、そのまま Layer として置く。in から out までだけ存在する ----
+comp.place("line", Line(from = Vector(0, 9), to = Vector(16, 0), stroke = #4040e0, strokeWidth = 0.1), in = 0s, out = len)
+comp.place("tri", Polygon(points = [Vector(13, 6), Vector(16, 9), Vector(10, 9)], fill = #e0a020), in = 1s, out = len)
 
-# ---- Motion: 値の時間変化。対象なし ----
-# t = その行の時刻 (秒)、a = 1 列目、b = 2 列目 (同じ行の左の列を参照)
-let m1 = motion (t, a, b) {
-  1s: t*3, a*1, b*3      # 3, 3, 9
-  2s: t*4, a*2, b*4      # 8, 16, 64
-  5s: t*3, a*3, b*5      # 15, 45, 225
+# ---- progress: 0..1 を受けて値の組を返す表。対象も長さも持たない ----
+# 列の名前を先に並べる。行の左が 0..1 の位置。`_` はその列を飛ばす。行末に Easing
+let slide = progress [:x, :y, :r] {
+  0:   2, 4.5, 0.5
+  0.4: _, 6 :ease, _
+  1:  14 :ease_out, 4.5, 2
 }
-# m1.duration は 5s。延ばすには
-m1.duration = 10s
+let (x0, y0, r0) = slide(0)       # 2 4.5 0.5
+let (x1, y1, r1) = slide(1)       # 14 4.5 2
+log(slide(0.5), slide(-1) == slide(0), slide(2) == slide(1))   # (11, 5.75, 1.25) true true。範囲の外は端の値
 
-# 定数だけの Motion。行末に Easing を書ける
-let m2 = motion {
-  0s: 0
-  2s: 3
-  5s: 0 :ease_out
+# 何秒かけるかは呼ぶ側が決める。slide(t / 3s) なら 3 秒で端から端まで
+func ball(t) {
+  let (x, y, r) = slide(t / 3s)
+  Circle(position = Vector(x, y), radius = r, fill = #e04040)
 }
+comp.place("ball", ball, in = 0s, out = len)
 
-# ---- Timeline: Motion を対象に当てる ----
-let c1 = Circle(position = Pos(0.5, 1.5), radius = 0.3, fill = #a0a0a0)
-v.place(c1)
-
-# apply は builtin メソッド。列を受け取る関数を渡す
-let calc = func (c1, t, [x, r, _]) {
-  context c1 as o {
-    o.position, o.radius = Pos(x / 5, 1.5), r / 100
-  }
+# ---- ease(t, t0, t1, v0, v1): t0 から t1 の間で v0 から v1 へ ----
+# linear / ease_in / ease_out も同じ形。v は Number、Vector、Length。区間の外は端の値で止まる
+func demo(t) {
+  let w = linear(t, 0s, 4s, 0vx, 40vx)           # 一定の速さ (Length)
+  let slow = ease_in(t, 0s, 4s, 2, 14)           # 加速
+  let fast = ease_out(t, 0s, 4s, 2, 14)          # 減速
+  let both = ease(t, 0s, 4s, Vector(2, 1), Vector(14, 2))   # 加速して減速 (Vector)
+  Group(
+    Rect(position = Vector(0, 8), anchor = Vector(0, 0), w = w, h = 0.2, fill = #40a040),
+    Circle(position = Vector(slow, 0.5), radius = 0.3, fill = #a0a0a0),
+    Circle(position = Vector(fast, 1.5), radius = 0.3, fill = #a0a0a0),
+    Circle(position = both, radius = 0.3, fill = #e0a020),
+    opacity = ease(t, len - 1s, len, 1, 0),      # 最後の 1 秒で消える
+  )
 }
-let tl1 = m1.apply(c1, calc)
+comp.place("demo", demo, in = 0s, out = len)
 
-# context で囲んで属性に代入する形。戻り値は Timeline
-let tl2 = context c1 as o {
-  motion (t) {
-    1s: o.radius = t / 10
-    2s: o.radius = t / 5
-    5s: o.radius = t / 10
-  }
-}
-
-# 属性名を先に列挙する形
-let tl3 = motion c1 [:position, :radius] {
-  0s: Pos(0.5, 0.5), 0.5
-  2s: Pos(3.5, 2.5), 1
-  5s: Pos(0.5, 0.5) :ease_out
-}
-
-# 参照を辿った先だけ
-let tl4 = motion c1 [:position.x] {
-  0s: 0.5
-  2s: 3.5
-}
-
-# 時刻には式を書ける
+# ---- 時刻には式を書ける。値の変わり方の区間は、呼ぶ側が決める ----
 let dur = 2s
-let tl6 = motion c1 [:opacity] {
-  0s: 1
-  dur: 0.2
-  dur + 1s: 1
+func pulse(t) {
+  let a = ease(t, 0s, dur, 1, 0.2)                # 0.2 まで下がって
+  let b = ease(t, dur, dur + 1s, 0, 0.8)          # また戻る
+  Circle(position = Vector(8, 7), radius = 1, fill = #7d90ad, opacity = a + b)
 }
+comp.place("pulse", pulse, in = 0s, out = len)
 
-# 並びも補間される (同じ長さなら)。Path の形が変わる
-let p1 = Path(from = Vector(0, 2), segments = [(:line, Vector(2, 2)), (:line, Vector(4, 2))],
-              stroke = #e04040, strokeWidth = 0.05)
-let tl7 = motion p1 [:segments] {
-  0s: [(:line, Vector(2, 2)), (:line, Vector(4, 2))]
-  1s: [(:line, Vector(2, 0.5)), (:line, Vector(4, 2.5))]
-}
-
-# 対象は名前だけでなく、属性や添字でも書ける
-let balls = [c1]
-let tl5 = motion balls[0] [:opacity] {
-  0s: 1
-  1s: 0.2
-}
-
-log(m1, m2, tl1, tl2, tl3, tl4, tl5, tl6, tl7)
-
-# ---- Timeline を Timeline に置く ----
-let track = Timeline(duration = 10s)
-track.place(tl1, at = 0s)
-track.place(tl3, at = 3s, fadeIn = 1s)
-
-let sub = Timeline()
-sub.place(tl2, at = 0s)
-track.place(sub, at = 5s)         # 5s 時点に sub。sub の長さは中身で決まる
-
-# ---- View に Timeline を付けて出力 ----
-v.addTrack(track)
-output v
+output comp
 ```
 
 ### space3d.moph
@@ -4195,6 +4505,7 @@ output v
 # 描くのは今まで通りの図形で、出てくるのは Vector (箱の座標) と Number (奥行き) だけ
 
 import space3d
+import math
 
 # ---- 点。Vector3 が要る場所には、3 つ並べた Tuple をそのまま書ける ----
 let p = space3d.Vector3(1, 2, 3)
@@ -4206,17 +4517,17 @@ log(p.lerp((0, 0, 0), 0.5))                 # Vector3(0.5, 1, 1.5)
 let ps = space3d.Vector3.from([(0, 0, 0), (1, 0, 0), (1, 1, 0)])   # 並びをまとめて作る
 
 # ---- 変換。書いた順に点へ効く。元は変わらず、繋ぐたびに新しいものが返る ----
-let turn = space3d.Transform3().rotate_y(90).translate((0, 1, 0))
+let turn = space3d.Transform3().rotate_y(math.pi / 2).translate((0, 1, 0))
 log(turn.apply((1, 0, 0)))                  # 回してから動かす
 log(turn.apply_all(ps))                     # 並びはまとめて (ループは Rust の中で回る)
 # ほかに rotate_x rotate_z scale(k) then(other)
 
-# ---- カメラ 3 種。box は落とし先の View の box と同じものを渡す ----
-let cam = space3d.PerspectiveCamera(from = (6, 4, 10), to = (0, 0, 0), fov = 45, box = (16, 9))
+# ---- カメラ 3 種。box は落とし先の Composition の box と同じものを渡す ----
+let cam = space3d.PerspectiveCamera(from = (6, 4, 10), to = (0, 0, 0), fov = 0.8, box = (16, 9))
 let flat = space3d.OrthographicCamera(from = (6, 4, 10), to = (0, 0, 0), height = 8, box = (16, 9))
 let iso = space3d.IsometricCamera(unit = 1, box = (16, 9))   # 視点を持たない。x が右下、z が左下、y が上
 log(cam.project((0, 0, 0)))                 # Vector。箱の座標
-log(cam.depth((0, 0, 0)))                   # 視点からの奥行き。遠いほど大きい (zIndex には -depth)
+log(cam.depth((0, 0, 0)))                   # 視点からの奥行き。遠いほど大きい (並べる順を決めるのに使う)
 log(cam.scale_at((0, 0, 0)))                # その位置の 1 単位が箱でいくつになるか
 log(cam.in_front((0, 0, 20)))               # false。視点より後ろの点は project できない
 log(cam.project_all(ps), cam.depth_all(ps))
@@ -4233,18 +4544,28 @@ let lines = cube.edges(cam)                 # List<(Vector, Vector)>。Line の 
 let faces = cube.transformed(turn).faces(cam)   # List<Face>。遠い順、裏を向いた面は落ちる
 let face = faces[0]
 log(lines.len(), faces.len())               # 12 3
-log(face.points.len(), face.normal, face.depth)   # points は Polygon へ、depth は zIndex へ
+log(face.points.len(), face.normal, face.depth)   # points は Polygon へ、depth は並べる順の目安
 log(space3d.shade(#4080e0, face.normal, (0, 1, 0)))   # 面の向きと光から塗りの色を決める
 
 # ---- 落としたら、あとは 2D の図形 ----
-let v = View(box = (16, 9))
+# zIndex は無い。並べた順に描く (後が手前)。faces は遠い順なので、そのまま並べれば前後が合う。線は最後に並べて手前に出す
+let drawn = []
 for f in faces {
-  v.place(Polygon(points = f.points, fill = space3d.shade(#4080e0, f.normal, (0, 1, 0)), zIndex = -f.depth))
+  drawn.push(Polygon(points = f.points, fill = space3d.shade(#4080e0, f.normal, (0, 1, 0))))
 }
 for (a, b) in lines {
-  v.place(Line(from = a, to = b, stroke = #ffffff, strokeWidth = 0.02, zIndex = 100))
+  drawn.push(Line(from = a, to = b, stroke = #ffffff, strokeWidth = 0.02))
 }
-output v
+
+let comp = Composition(box = Vector(16, 9), duration = 6s)
+comp.place("cube", Group(...drawn), in = 0s, out = 3s)
+
+# ---- World。面を図形に開かず、Mesh のまま GPU が描く (render / preview / sheet で走る) ----
+let ball = space3d.Solid(mesh = space3d.sphere((0, 0, 0), 1, 16, 32), fill = #6fa3d6)
+comp.place("world", Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9,
+                         fill = space3d.World(camera = cam, parts = [ball], background = #101520)),
+           in = 3s, out = 6s)
+output comp
 ```
 
 ### statement.moph
@@ -4273,8 +4594,9 @@ for i in 0..=5 {         # 0 〜 5
 
 # for: リスト
 let colors = [#e04040, #40a040, #4040e0]
+let dots = []
 for col in colors {
-  let c = Circle(fill = col)
+  dots.push(Circle(position = Vector(20vx + dots.len() * 30vx, 50vy), radius = 8vy, fill = col))
 }
 
 # for: インデックス付き
@@ -4298,6 +4620,15 @@ for i in 0..100 {
 
 # ブロックは値を返す (最後の式)
 let size = if n > 3 { 1/2 } else { 1/4 }
+
+# if は func (t) の中でも式。時刻で絵を切り替える
+func blink(t) {
+  Group(...dots, opacity = if t < 1s { 1 } else { size })
+}
+
+let comp = Composition(box = Vector(16, 9), duration = 2s)
+comp.place("dots", blink, in = 0s, out = 2s)
+output comp
 ```
 
 ### type.moph
@@ -4309,23 +4640,27 @@ let size = if n > 3 { 1/2 } else { 1/4 }
 # 型名を呼ぶ形が実体で、リテラルはその短い書き方。両方書ける型は == で等しい
 # Number    1  1.5  1/3  25% (= 0.25)。整数と実数を区別しない
 # Duration  83s  1m23s  500ms  01:23  01:23:45.678
-# Bool      true  false
+# Length    20vy  50vx  3vmin  8px    box に対して描くときに数になる量
+# Bool     true  false
 # String    "hello"
 # Symbol    :center  :linear    名前そのものが値
 # Color     #e04040  #e04040cc  #e44 (= #ee4444)  #e448  Color(224, 64, 64)  Color(224, 64, 64, 1)
 #           r/g/b 0..255, a 0..1
 # Tuple     (1, 1.5)            = Tuple(1, 1.5)      要素ごとに型が違ってよい
 # List      [1, 2, 3]           = List(1, 2, 3)      要素は同じ型
+# Array     Array(1, 2, 3)      = Array([1, 2, 3])   Number だけ。Rust の関数の出入りと Shader.args 向け。作ったら変えない
 # Dict      { "red": #e04040 }  = Dict(red = #e04040)  キーは String
 # Range     0..5                = Range(0, 5)        0..=5 は Range(0, 6)
 # Func      func (x) { x }      下記
 log([1, 2, 3] == List(1, 2, 3), { "a": 1 } == Dict(a = 1), (0..5) == Range(0, 5))
+log(Array(1, 2, 3)[1], Array(0..5).len(), Array([1, 2]) == Array(1, 2), type_of(Array(1)))
 
 # ---- Func ----
 # 型の表記は宣言と同じ形: (引数の型, ...) -> 戻り値の型
 let double: (Number) -> Number = func (x) { x * 2 }
 let add:    (Number, Number) -> Number = func (a, b) { a + b }
-let mk:     (Pos) -> Circle = func (p) { Circle(position = p) }
+let mk:     (Vector) -> Circle = func (p) { Circle(position = p) }
+let layer:  (Duration) -> Circle = func (t) { Circle(position = center, radius = ease(t, 0s, 1s, 0, 10vy)) }   # Layer に置ける func (t)
 let noret:  (String) -> Nothing = func (s) { log(s) }
 # builtin の log と type_of は、どの型でも受け取るので型を書けない
 
@@ -4333,7 +4668,7 @@ let noret:  (String) -> Nothing = func (s) { log(s) }
 # import で束縛される。標準ライブラリは math と space3d が builtin、ほかは .moph (一覧は mophila doc)
 import math
 # math:       Module
-# math.PI / math.TAU / math.E:  Number
+# math.pi / math.tau / math.e:  Number
 # math.sin:   (Number) -> Number     (cos, floor, ceil, abs, sqrt も同じ)
 # math.max:   (Number...) -> Number  (min も)
 
@@ -4363,7 +4698,8 @@ let c = Counter(10)
 log(c.next(), c.next(), type_of(c))          # 11 12 Counter
 
 # ---- Union 型 ----
-# Shape (図形すべて)、Placeable (Shape | View)、Paint (Color | Shader | Gradient)、
+# Shape (図形すべて)、Node (Shape | Group | Composition | Audio | Narration)、
+# Paint (Color | Gradient | Shader | Image | World)、Font (String | List)、
 # Projection (space3d のカメラ 3 種) は言語が持っている。
 # 自分で作るときは type 名 = A | B。builtin の型名では宣言できない
 type Fill = Color | Gradient
@@ -4373,40 +4709,39 @@ let corners: Points = [(0, 0), (1, 0), (1, 1)]
 
 # ---- 決まった値しか取らない型 ----
 # 値はすべて Symbol。呼んでは作れない
-# Easing       :linear :ease_in :ease_out :ease      motion の行末。値の変わり方
+# Easing       :linear :ease_in :ease_out :ease      progress の値の隣。値の変わり方
 # Align        :left :center :right                  TextArea.align
-# Anchor       :center :topLeft :topRight :bottomLeft :bottomRight :top :bottom :left :right
 # StrokeCap    :butt :round :square                  線の端の形
 # StrokeJoin   :miter :round :bevel                  線の角の形
 # Blend        :normal :multiply :screen :overlay :darken :lighten :difference :add
 # GradientKind :linear :radial :sweep
 
 # ---- 位置 ----
-# Vector  Vector(1, 1.5)   .x .y で参照できる
-# Pos     Pos(1, 1.5)      x, y, anchor (既定 :center)。Pos(Vector(1, 1.5)) も同じ
+# Vector  Vector(1, 1.5)  Vector(50vx, 40vy)   .x .y で参照できる。成分は Number か Length
+# position は anchor を置く場所 (親の座標)、anchor は図形自身の座標で見た基準点。どちらも Vector
 #
 # (1, 1.5) は Tuple。ただし型の決まっている場所 (型注釈、属性、フィールド、引数、戻り値) に
-# 書いた Tuple は、その型になる。Vector Vector3 Pos Color の 4 つだけ
-let here: Pos = (1, 1.5)
+# 書いた Tuple は、その型になる。Vector Vector3 Color の 3 つだけ
+let here: Vector = (1, 1.5)
 let points: List<Vector> = [(0, 0), (1, 0), (1, 1)]
 log(here, points)
 # 型を書かない場所では Tuple のまま。まとめて作るなら from
 log(Vector.from([(0, 0), (1, 0)]), Color.from([(224, 64, 64)]))
-let pos = Pos(1, 1.5)
-pos.anchor                                 # :center
-pos.vector                                 # Vector(1, 1.5)
-# 基準点の違う Pos 同士の変換には図形のサイズが要るので、place された後にしかできない
+# center は描く先の Composition の中心 (Length の Vector)
+log(center, center + Vector(10vx, 0))
 
 # ---- 図形 (Shape) ----
-# 共通属性: fill: Color, stroke = Color, strokeWidth = Number, opacity = Number
-let c = Circle(position = Pos(1, 1.5),   # Pos
-  radius = 0.5,          # Number
+# 図形は不変の record。変えるには copy(...)
+# 共通属性: fill: Paint, stroke = Color, strokeWidth = Length, opacity = Number
+# transform 一式: anchor position scale rotation (ラジアン、時計回りが正) opacity
+let c = Circle(position = Vector(1, 1.5),   # Vector
+  radius = 0.5,          # Length (単位なしは box 単位)
   fill =   #e04040)
 
-let r = Rect(position = Pos(0, 0, anchor = :topLeft),
-  w = 1,                 # Number
-  h = 1/2,               # Number
-  radius = 0.1,          # Number。角の丸み。省略なら 0
+let r = Rect(position = Vector(0, 0), anchor = Vector(0, 0),   # 左上を position に置く (既定は中心)
+  w = 1,                 # Length
+  h = 1/2,               # Length
+  radius = 0.1,          # Length。角の丸み。省略なら 0
   fill = #40a040,
   stroke = #000000,
   strokeWidth = 0.02)
@@ -4420,33 +4755,33 @@ let p = Polygon(points = [(0, 0), (1, 0), (0.5, 1)],   # List<Vector>。Tuple �
   fill = #4040e0)
 
 let t = TextArea(text = "hello",        # String
-  position = Pos(0, 0, anchor = :topLeft),
-  w = 2,                 # Number。幅に合わせて折り返す
+  position = Vector(0, 0), anchor = Vector(0, 0),
+  w = 2,                 # Length。幅に合わせて折り返す
   font = ["Hiragino Sans", "Noto Sans JP"],   # Font (String | List)。List なら、この機械にある最初のもの
                          #        名前は mophila fonts で出る。読み返すと、選ばれた 1 つが返る
-  fontSize = 0.3,        # Number。箱の座標単位
+  fontSize = 0.3,        # Length。単位なしは箱の座標単位
   fill = #000000,
   align = :left,         # Align
 )
 log(t.size())            # 置いたときの幅と高さ (Vector)。w があれば幅はその値
 
-# ---- 箱 ----
-let v = View(box = Vector(4, 3))  # box: Vector。座標系 0..4 × 0..3。ピクセルは持たない
-# v.place(o: Placeable, at: Pos, w: Number, h: Number) -> Nothing
-# v.addTrack(x: Timeline | View | Audio | Narration, at: Duration, ...) -> Nothing
+# ---- Group ----
+# Node をまとめた親。不変。中の座標は Group の position からの相対
+let g = Group(c, r, position = Vector(1, 1),
+  camera = Camera(from = Vector(1, 1), scale = 2),   # 中身の from を to (省略は from) に置いて scale 倍する
+  clip = Rect(w = 2, h = 2, anchor = Vector(0, 0)))  # 枠の外の中身を描かない
 
-let win = View(box = Vector(2, 2), clip = true)   # clip: Bool。箱からはみ出した中身を描かない
-win.place(Circle(position = Pos(2, 1), radius = 0.8, fill = #e04040))   # 右にはみ出す
-v.place(win, at = Pos(0, 0, anchor = :topLeft), w = 2)
+# ---- 箱と時間 ----
+let comp = Composition(box = Vector(4, 3), duration = 10s)   # box: Vector。座標系 0..4 × 0..3。ピクセルは持たない
+# comp.place(name: String, node: Node | (Duration) -> Node, in: Duration, out: Duration) -> Nothing
+comp.place("group", g, in = 0s, out = 10s)
 
-# ---- 時間 ----
-let m  = motion { 0s: 0, 1s: 1 }             # Motion。値の時間変化。対象なし
-#   m.duration: Duration
-#   m.apply(target = Shape, f = Func<Shape, Duration, List -> Nothing>) -> Timeline
-let tl = m.apply(c, func (c, t, [x]) { c.radius = x })   # Timeline。対象 + 割り当て
-let tr = Timeline(duration = 10s)      # Timeline。入れ物にもなる
-#   tr.duration: Duration
-#   tr.place(t = Timeline, at = Duration, fadeIn = Duration, fadeOut = Duration) -> Nothing
+# progress は 0..1 を受けて値の Tuple を返す表
+let slide = progress [:x, :y] {
+  0: 0, 0
+  1: 4 :ease, 3
+}
+log(slide(0.5))
 
 # ---- 3D (space3d の中にある型) ----
 # import space3d して space3d.Vector3(...) のように作る。素の名前では作れない。書き方は space3d.moph
@@ -4469,41 +4804,40 @@ log(type_of(log(1)), type_of(Circle), type_of(math))
 type_of(c)        # "Circle"
 type_of(1s)       # "Duration"
 type_of(1/3)      # "Number"
-type_of(double)   # "(Number) -> Number"
+type_of(double)   # "Func"。型の表記は注釈に書く形で、type_of は Func と返す
 
-log(type_of(add), type_of(m), type_of(tl), type_of(tr), type_of(v), type_of(t))
+log(type_of(add), type_of(slide), type_of(g), type_of(comp), type_of(t), type_of(20vy))   # Func Progress Group Composition TextArea Length
+output comp
 ```
 
 ### voice.moph
 
 ```
-# voice.moph — 読み上げ (すべて仮)。Narration は文と長さだけを持ち、
-# どう喋らせるかは置くときに voice で渡す
+# voice.moph — 読み上げ (すべて仮)。Narration は文だけを持ち、
+# 長さは Layer の in から out、どう喋らせるかは voice で渡す
 
-let v = View(box = Vector(4, 3))
-let track = Timeline()
+let comp = Composition(box = Vector(4, 3), duration = 17s)
 
 # ---- ナレーション。画面には描かず、その文を読んだ音声が動画の音になる ----
-track.place(Narration(text = "ここを読み上げます。", duration = 3s), at = 0.5s)   # voice を書かなければ、その機械に入っているもの
+comp.place("line-1", Narration(text = "ここを読み上げます。"), in = 0.5s, out = 3.5s)   # voice を書かなければ、その機械に入っているもの
 
 # ---- 音声合成は型。受け取る設定が違うので、型ごとに分かれている ----
 let kyoko = SayVoiceEngine(voice = "Kyoko")            # macOS の say
 let hayai = SayVoiceEngine(voice = "Kyoko", rate = 300)   # 1 分あたりの語数
-track.place(Narration(text = "こちらは名前を指定した声です。", duration = 3s), at = 4s, voice = kyoko)
-track.place(Narration(text = "こちらは速く読みます。", duration = 2s), at = 7.5s, voice = hayai)
+comp.place("line-2", Narration(text = "こちらは名前を指定した声です。", voice = kyoko), in = 4s, out = 7s)
+comp.place("line-3", Narration(text = "こちらは速く読みます。", voice = hayai), in = 7.5s, out = 9.5s)
 
-# 声は行ごとに決まる。音量も置くときに
-track.place(Narration(text = "別の声で、少し小さく読みます。", duration = 3s), at = 10s, voice = SayVoiceEngine(voice = "Otoya"), volume = 0.8)
+# 声は行ごとに決まる。音量も Narration に
+comp.place("line-4", Narration(text = "別の声で、少し小さく読みます。", voice = SayVoiceEngine(voice = "Otoya"), volume = 0.8), in = 10s, out = 13s)
 
 # ---- 字幕は読み上げから作られる。書くのは台本 1 回だけ ----
 # 出るのは読み始めから読み終わりまで。長さは合成した音声から測るので、
-# duration の見積もりがずれても字幕と声はずれない
-track.place(Narration(text = "この行が、そのまま字幕になります。", duration = 3s), at = 13.5s, voice = kyoko)
+# out の見積もりがずれても字幕と声はずれない
+comp.place("line-5", Narration(text = "この行が、そのまま字幕になります。", voice = kyoko), in = 13.5s, out = 16.5s)
 
-v.addTrack(track)
-output v
+output comp
 
-# 書いた duration が長さ。合成した音声がはみ出したら、そこで切って警告を出す
+# in から out が枠。合成した音声がはみ出したら、out で切って警告を出す
 # 作った音声は ~/.cache/mophila/voice に置き、同じ型・同じ設定・同じ文なら作り直さない
 # run では合成しない (log と型の確認だけ)。render と preview で鳴る
 ```

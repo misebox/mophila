@@ -78,7 +78,7 @@ postfix     ::= "." ident
               | "(" args ")"
               | "[" ws expr ws "]"          # 添字と切り出し。String は文字単位
 
-primary     ::= number | duration | color | string | symbol | bool
+primary     ::= number | duration | length | color | string | symbol | bool
               | ident
               | "(" ws expr ws ")"
               | tuple
@@ -86,8 +86,7 @@ primary     ::= number | duration | color | string | symbol | bool
               | dict
               | if-expr
               | func-expr
-              | context-expr
-              | motion-expr
+              | progress-expr
 
 # 組。() は空、(1,) は 1 要素。末尾の "," は書いてもよい
 tuple       ::= "(" ws ")"
@@ -95,8 +94,8 @@ tuple       ::= "(" ws ")"
               | "(" ws expr (ws "," ws expr)+ (ws ",")? ws ")"
 
 args        ::= (ws arg (ws "," ws arg)* (ws ",")?)? ws
-# ... は Tuple / List / Range / Dict を引数に広げる。名前は付けられない
-arg         ::= (ident ws "=" ws)? expr | "..." ws expr
+# ... は Tuple / List / Range / Dict を引数に広げる。名前は付けられない。引数の名前に限って in も書ける (in = 2s)
+arg         ::= ((ident | "in") ws "=" ws)? expr | "..." ws expr
 
 
 dict        ::= "{" (ws dict-entry (ws "," ws dict-entry)* (ws ",")?)? ws "}"
@@ -104,22 +103,12 @@ dict-entry  ::= string ws ":" ws expr | ident
 
 if-expr     ::= "if" sp expr ws block (ws "else" ws (if-expr | block))?
 func-expr   ::= "func" ws "(" params ")" (ws "->" ws type-ann)? ws block
-context-expr ::= "context" sp expr sp "as" sp ident (ws "," ws expr sp "as" sp ident)* ws block
 
-# motion (t, a, b) { 行 }  /  motion target [:attr.path, ...] { 行 }  /  motion { 行 }
-motion-expr ::= "motion" ws motion-head? ws "{" (ws motion-row)* ws "}"
-motion-head ::= "(" ws ident (ws "," ws ident)* ws ")"
-              | motion-target ws "[" ws attr-path (ws "," ws attr-path)* ws "]"
-# 対象は名前・属性・添字で書ける (c、g.ball、balls[0])
-motion-target ::= ident ("." ident | "[" ws expr ws "]")*
-attr-path   ::= symbol ("." ident)*
-
-# 時刻は Duration か 0..1 の実数。式も書ける (dur、start + 1s)。".." は範囲の区切りなので、そこで止まる
-# 範囲 (0..1:) は補間せず毎フレーム式を評価する
-motion-row  ::= key-time (".." key-time)? ":" ws row-items? (sp modifier)*
-key-time    ::= expr
-row-items   ::= row-item (ws "," ws row-item)*
-row-item    ::= expr ws "=" ws expr | expr
+# progress [:x, :y] { 行 }。progress は ident としても使えるので、"[" と symbol が続くときだけ表
+# 行の左は 0 から 1 の実数。値の隣の modifier は、その列のこの行へ向かう曲線。_ はその列を飛ばす
+progress-expr ::= "progress" ws "[" ws symbol (ws "," ws symbol)* ws "]" ws "{" (ws progress-row)* ws "}"
+progress-row  ::= expr ":" ws progress-cell (ws "," ws progress-cell)*
+progress-cell ::= "_" | expr (sp modifier)*
 modifier    ::= ":linear" | ":ease" | ":ease_in" | ":ease_out"
 
 # ---------- 字句 ----------
@@ -128,6 +117,8 @@ integer     ::= [0-9]+
 number      ::= [0-9]+ ("." [0-9]+)? ([eE] [+-]? [0-9]+)? "%"?
 duration    ::= ([0-9]+ ("." [0-9]+)? ("ms" | "s" | "m" | "h"))+
               | [0-9]+ ":" [0-9]+ (":" [0-9]+)? ("." [0-9]+)?
+# 単位つきの長さ。単位を連ねては書けない
+length      ::= [0-9]+ ("." [0-9]+)? ("vx" | "vy" | "vmin" | "vmax" | "px")
 color       ::= "#" ([0-9a-fA-F]{8} | [0-9a-fA-F]{6} | [0-9a-fA-F]{4} | [0-9a-fA-F]{3})
 string      ::= "\"" ([^"\\\n] | "\\" ["\\nt])* "\""
 symbol      ::= ":" ident

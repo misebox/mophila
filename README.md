@@ -7,20 +7,15 @@
 上の 8 秒は `examples/gallery/passerby.moph`。木 (`fractal.moph`) と歩く人 (`walker.moph`) を import して置いただけ。
 
 ```
-let v = View(box = (16, 9))
-let c = Circle(position = Pos(8, 4.5), radius = 1, fill = #ffb454)
-v.place(c)
+let comp = Composition(box = Vector(16, 9), duration = 3.3s)
+comp.place("bg", Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9, fill = #f4f1ea), in = 0s, out = comp.duration)
 
-let grow = context c as o {
-  motion (t) {
-    0s: o.radius = 1
-    3s: o.radius = 3 :ease
-  }
+func ball(t) {
+  Circle(position = center, radius = ease(t, 0.3s, 3.3s, 1, 3), fill = #e0604a)
 }
-let track = Timeline()
-track.place(grow, at = 1s)
-v.addTrack(track)
-output v
+comp.place("ball", ball, in = 0s, out = comp.duration)
+
+output comp
 ```
 
 ```
@@ -29,11 +24,12 @@ mophila render circle.moph -o circle.mp4 --size fhd --fps 30
 
 ## 特徴
 
-- 座標は箱 (View) の中の値で書く。ピクセルの大きさは出力のときに決める
-- 変化は時刻と値の表 (`motion`) で書く。間は補間され、`duration` で全体が伸び縮みする。`0..1:` の行は毎フレーム式を評価する
-- 作った View は部品。別の View に、別の大きさで置ける。ファイルも `import` で部品になる
+- 座標は箱 (`Composition` の `box`) の中の値で書く。`20vy` のような Length は箱に対する割合で、`center` は箱の中心。ピクセルの大きさは出力のときに決める
+- 置くものは `comp.place(名前, 中身, in =, out =)` で出入りする時刻を決める。中身は不変の図形か、時刻 `t` から図形を返す純粋関数 `func (t)`
+- 動きは `ease` `linear` で区間の値を補間するか、`progress` の表に書く。動かす図形をまとめるのは `Group` で、`position` `anchor` `scale` `rotation` `opacity` が中身ごと効く。角度はラジアン (`tau` `pi`)
+- 作った Composition は部品。別の Composition に、別の大きさで置ける。ファイルも `import` で部品になる
 - どの時刻の絵も、その時刻だけから決まる。途中へ飛んでも同じ絵になる
-- 音声と字幕も同じ Timeline に置く。`Shader` で位置と時刻から色を決める塗りが書ける
+- 音声と字幕も `place` で置く。`Shader` で位置と時刻から色を決める塗りが書ける
 
 ## 必要なもの
 
@@ -56,7 +52,7 @@ cargo install --path .
 | `mophila render a.moph -o a.mp4 --gpu-budget 2GB` | GPU のメモリが足りているか見ながら書く。書き終わりに一番要ったコマと内訳が出る。予算を超えたコマは警告 |
 | `mophila preview a.moph` | ウィンドウで実時間再生。重い場面では fps が落ちる。Space で一時停止、← → で移動、`[` `]` で速度、? で操作一覧、q か ⌘W で終了 |
 | `mophila run a.moph` | 描画せずに実行する (`log` の確認) |
-| `mophila timeline a.moph` | 何が、いつ、どう変わるかをテキストで出す |
+| `mophila timeline a.moph` | 何が、いつ出入りするかをテキストで出す |
 | `mophila sheet a.moph -o sheet.png --times 1s,5s,10s` | 指定した時刻のコマを 1 枚に並べる |
 | `mophila fonts` | この機械で使えるフォント名を並べる (`TextArea` の `font` に書ける名前) |
 | `mophila bundle a.moph -o a` | スクリプトを埋め込んだ実行ファイルを作る |

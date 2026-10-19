@@ -16,7 +16,7 @@
 - **順に出す**。一度に出すのは 1 つ。前のものは消さず、最後に全体を見返す時間を置く
 - **切り替えの意味を揃える**。話題が変わるときはフェード、同じものが変化するときは移動。章の見出しは「話題が変わる」の印
 - **画面に同時に出す項目は 3 つまで**。表なら行を順に出す
-- **文字は 1 行**。ナレーションが無いので字幕が全情報になる。長くなるなら場面を分ける
+- **文字は 1 行**。ナレーションが無ければ字幕が全情報になる。長くなるなら場面を分ける
 
 ## 読める時間
 
@@ -61,16 +61,19 @@ let review = 3s         # 見返し
 let pause = 1s          # 場面の切り替え
 ```
 
-数えるのは要素で、文字ではない。
+数えるのは要素で、文字ではない。出す時刻は `now` に積み上げ、各 Layer の `in` と `out` に使う。
 
 ```
-# 立ち上がり + 新しい要素の数 x 1 要素あたり。下限は min_dwell
-func dwell(elements, per) { (lead_in + elements * per) * 1s }
+import math
 
-let now = start
-for line in lines {
-  # ここでその行を出す
-  now = now + dwell(1, per_line)
+# 立ち上がり + 新しい要素の数 x 1 要素あたり。下限は min_dwell
+func dwell(elements, per) { math.max(min_dwell, lead_in + elements * per) }
+
+let now = 0s
+for (i, line) in lines.enumerate() {
+  let end = now + dwell(1, per_line)
+  comp.place("line-{}".format(i), line, in = now, out = end)
+  now = end
 }
 ```
 
@@ -80,24 +83,27 @@ for line in lines {
 背景、周辺減光、場面の切り替え、出し入れ — は標準 module にある。
 自分で図形を並べる前に `mophila doc` かリファレンスで探す。
 
-- 動く部品は、長さと始まる時刻を渡すと自分の Timeline を持って返る。場面をまたぐ時刻は動画全体の時刻で書く
-- 場面そのものは View 1 枚にまとめ、その不透明度で出し入れする。4 場面の組み立ては samples の showcase を見る
+- 部品は Node を返す。時間で動かすときは、`func (t)` の中で `t` から進み具合を `ease` で計算して部品に渡す。`t` は Layer の `in` が 0
+- 出し入れは Layer の `in` と `out`、薄くするのは `opacity`。場面そのものは Group か Composition 1 枚にまとめ、その `opacity` で出し入れする。4 場面の組み立ては samples の showcase を見る
+- 場面をまたぐ時刻を `func (t)` の中で使うときは、その Layer の `in` を `t` に足した全体の時刻を作る (showcase の `now`)
 
 長い解説動画は、章ごとにファイルを分けて `export func run(now)` が場面を組んで次の開始時刻を返す形にする。
 実例は <https://misebox.github.io/mophila/#/samples> の mophila_intro で、
-`main.moph` (章の順番と output) / `theme.moph` (画面、色、時間の決まり) / `slides.moph` (その動画だけの部品) /
-場面ごとのファイルに分かれている。新しく書くときは theme と slides を写して直す。
-そこにどんな部品があるかは、写したファイルを読む (ここには書かない。あの動画の都合で変わる)。
+`main.moph` (章の順番と output) / `theme.moph` (画面、色、時間の決まり、積んだ Layer の置き場) / `slides.moph` (その動画だけの部品) /
+場面ごとのファイルに分かれている。場面は Layer を共有のリストに積み、`main` が全体の長さを知ってから 1 つの Composition に `place` する。
+新しく書くときは theme と slides を写して直す。そこにどんな部品があるかは、写したファイルを読む (ここには書かない。あの動画の都合で変わる)。
 
-- ナレーション 1 行は字幕トラックに置く。**字幕を TextArea で描かない**
+- ナレーション 1 行は `Narration` として `in` と `out` を決めて置く。**字幕を TextArea で描かない**
 - 字幕は同時に 1 つ。帯は画面の下を覆うので、そこに図形や文字を置かない。長い文は 2 回に分ける
-- 右の箱の動きは場面の最初から最後まで繰り返す。ナレーションの間に止まった画を見せない
-- 同じ View を 2 つの場面で使うなら、先の場面は長さを決めた Timeline に入れて切る。切らないと、終わった Timeline が最後の値 (フェードアウト後の不透明度 0 など) を書き続けて、あとの場面で見えなくなる
+- ナレーションの `out` は次の行の `in` に合わせる。字幕は合成した音声から長さを測るので、声と字幕はずれない
+- 右の箱の動きは場面の最初から最後まで続ける。ナレーションの間に止まった画を見せない。繰り返したいなら、同じ Composition を `every` ごとに置き直す
+- 同じ絵の箱は Composition を 1 つ作り、`copy(position = ..., scale = ...)` で何度でも置ける。中の `t` は置いた Layer の `in` から始まる
+- 場面が終われば Layer も終わる。前の場面の値が残って、あとの場面に影響することはない
 - 時刻は `now` を積み上げる。`clock` は module 名と衝突するので変数名に使わない
 
 ## 書いた後の確認
 
-1. `mophila timeline a.moph` — 何がいつどう変わるかの一覧。`--filter kind=TextArea` `--filter text=字幕` `--filter from=30s --filter to=60s` で絞る。末尾の「text visibility」に、テキストごとの表示区間と、短すぎるもの (`SHORT`) が出る
+1. `mophila timeline a.moph` — Layer ごとの存在区間、字幕、音声の一覧。`--filter from=30s --filter to=60s` で時間を絞る。TextArea を直接置いた Layer の文字は「text visibility」に出る。`func (t)` の中で描く文字は出ないので、Layer の区間で読む
 2. `mophila sheet a.moph -o sheet.png --times 3s,12s,45s` — 指定した時刻 (または `--every 10s`) のフレームを格子にした画像。構成とテンポを一目で見直す
 3. 1 と 2 を、書いていない側 (別の agent か人) に渡して「伝わるか / テンポは合っているか / 被りは無いか」を指摘させ、直す
 4. `preview` で通して見る。**読める時間は式では決まらない**ので、ここで詰まる場面と待たされる場面を直す

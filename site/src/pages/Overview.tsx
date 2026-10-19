@@ -26,17 +26,17 @@ export const Overview: Component = () => (
     <div class="reading">
       <section>
         <h2>丸を 1 つ置いて、大きくする</h2>
-        <p>1 秒後から 3 秒かけて半径を 1 から 3 にする。時刻と値の表を書くだけで、間は補間されます。</p>
+        <p>0.3 秒から 3.3 秒にかけて半径を 1 から 3 にする。始めと終わりの時刻と値を <code>ease</code> に渡すだけで、間は補間されます。</p>
         <Show when={data.samples.find((s) => s.name === "circle")}>{(s) => <Code text={s().code} />}</Show>
       </section>
       <section>
         <h2>特徴</h2>
         <ul class="plain">
-          <li><strong>変化は、時刻と値の表で書く。</strong>間は補間されます。表は使い回せて、<code>fit</code> で長さを変え、<code>reverse</code> で逆再生にできます</li>
-          <li><strong>絵は、時刻の関数。</strong>どのフレームもその時刻だけから決まるので、途中へ飛んでも、1 枚だけ書き出しても同じ絵になります</li>
+          <li><strong>変化は、区間と値で書く。</strong><code>ease</code> は区間の端の値から間を補間し、<code>progress</code> の表は 0 から 1 の値を名前付きで返します。表は使い回せて、何秒かけるかは呼ぶ側が決めます</li>
+          <li><strong>絵は、時刻の関数。</strong>置くものは不変の図形か <code>func (t)</code> で、どのフレームもその時刻だけから決まるので、途中へ飛んでも、1 枚だけ書き出しても同じ絵になります</li>
           <li><strong>塗りを、関数で書ける。</strong>位置と時刻から色を返す関数を Shader に渡すと、GPU が全ピクセルで走らせます。フラクタルもこれで描いています</li>
           <li><strong>作った動画が、部品になる。</strong>ファイルを import すれば、別の動画の中にそのまま置けます</li>
-          <li><strong>音も字幕も、同じ Timeline。</strong>時刻を指定して置くと、render が動画の音声トラックと字幕トラックにします</li>
+          <li><strong>音も字幕も、同じ Composition。</strong><code>place</code> で <code>in</code> と <code>out</code> を指定して置くと、render が動画の音声トラックと字幕トラックにします</li>
         </ul>
       </section>
       <section>

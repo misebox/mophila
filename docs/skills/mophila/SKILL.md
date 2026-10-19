@@ -9,7 +9,7 @@ description: Write or debug mophila (.moph) motion graphics scripts. Entry point
 
 | 読むもの | 中身 |
 |---|---|
-| [language.md](language.md) | 言語の使い方。他の言語と違うところ、型の作り方、時間の書き方、組み合わせて再利用する |
+| [language.md](language.md) | 言語の考え方と作法。Composition と Layer、不変の Node、`func (t)`、Group、Length、時間、部品化 |
 | [presentation.md](presentation.md) | 解説する動画の作り方。場面の組み立て、読める時間、確認の手順 |
 | [design.md](design.md) | 見た目。色、構図、文字、動きの質 |
 
@@ -37,15 +37,21 @@ description: Write or debug mophila (.moph) motion graphics scripts. Entry point
 ## 最小の形
 
 ```
-let v = View(box = Vector(16, 9))          # 座標系。ピクセルは持たない
-let c = Circle(position = Pos(8, 4.5), radius = 1, fill = #e04040)
-v.place(c)
-v.addTrack(motion (t) {
-  0s: c.radius = 1
-  2s: c.radius = 2 :ease
-})
-output v
+let len = 6s
+let comp = Composition(box = Vector(16, 9), duration = len)
+comp.place("bg", Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9, fill = #f4f1ea), in = 0s, out = len)
+
+func dot(t) {
+  Circle(position = Vector(ease(t, 0s, 3s, 3, 13), 4.5), radius = 1, fill = #e0604a)
+}
+comp.place("dot", dot, in = 0s, out = len)
+output comp
 ```
+
+- `Composition` が座標系 (`box`、ピクセルは持たない) と長さを持つ
+- `place(名前, 置くもの, in =, out =)` で Layer を積む。後に置いたものが手前
+- 動くものは `func (t)`。毎フレーム、その時刻の図形を返す
+- `output` した Composition が動画になる
 
 ## コマンド
 
@@ -54,10 +60,10 @@ mophila run a.moph                             # 描画せず実行。log と型
 mophila run                                    # mophila.yaml の entry を実行
 mophila render a.moph -o out.png --at 2.5s     # 1 フレーム。形式は拡張子で決まる
 mophila render a.moph -o out.mp4 --size 360p   # 動画 (fps 既定 10)
-mophila render a.moph -o out.mp4 --jobs 4      # 組み立てを 4 スレッドに分ける (重い絵だけ速くなる)
+mophila render a.moph -o out.mp4 --jobs 4      # フレームを組むスレッド数 (省略すると計測して決める)
 mophila render a.moph -o out.mp4 --trim 00:15..00:30   # 区間だけ
 mophila preview a.moph [--loop] [--at 1s]      # ウィンドウで再生
-mophila timeline a.moph [--filter k=v]         # 何がいつどう変わるかの一覧
+mophila timeline a.moph                        # Layer ごとの存在区間、字幕、音声の一覧
 mophila sheet a.moph -o sheet.png --times 3s,12s   # 場面の格子画像
 mophila subs a.moph -o subs.srt                # 字幕だけをファイルに (.vtt も)
 mophila fonts                                  # 使えるフォント名 (font に書ける名前)
@@ -71,4 +77,5 @@ preview は Space で一時停止、← → / h l で 10 秒 (停止中は 1 秒
 時間・割合・fps・一時停止は絵の下端のステータスバーに出る。
 コマは少し先まで描いておく。中身の時刻は実時間に貼り付くので音とずれない。重い場面では出す間隔が広がり、fps が落ちる。
 
-書いたら必ず `run` を通す。動きを確かめるときは小さいサイズと短い尺で。
+書いたら必ず `run` を通す。ただし `run` は Layer に置いた `func (t)` の中身を実行しない。
+中の綴りや型の誤りは、末尾に `log(dot(1s))` のように呼ぶ行を足すか、`render --at` / `sheet --times` で出す。動きを確かめるときは小さいサイズと短い尺で。

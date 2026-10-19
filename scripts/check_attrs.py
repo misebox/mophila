@@ -2,7 +2,7 @@
 """宣言した属性が、本当に絵に効くかを確かめる。
 
 `mophila doc` が挙げる図形と 3D の塗りの属性を 2 通りの値で描いて、絵が変わることを見る。
-変わらなければ「代入できるのに何も起こらない」属性なので、描画側を直すか宣言から外す。
+変わらなければ「書けるのに何も起こらない」属性なので、描画側を直すか宣言から外す。
 属性を足したのにここに書き方が無ければ、それも失敗として出る。
 
 `required` の印も見る。必須と書いた属性は、省くと描けないこと。必須と書いていない属性は、
@@ -20,20 +20,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 BIN = ROOT / "target/debug/mophila"
 
-# 図形ごとの、書かないと描けない属性
+# 図形ごとの、見える形にする属性 (必須でないものも含む)
 BASE = {
-    "Circle": {"position": "Pos(2, 2)", "radius": "1", "fill": "#e04040"},
-    "Ellipse": {"position": "Pos(2, 2)", "rx": "1.5", "ry": "0.5", "fill": "#e04040"},
-    "Rect": {"position": "Pos(2, 2)", "w": "2", "h": "1", "fill": "#e04040"},
+    "Circle": {"position": "Vector(2, 2)", "radius": "1", "fill": "#e04040"},
+    "Ellipse": {"position": "Vector(2, 2)", "rx": "1.5", "ry": "0.5", "fill": "#e04040"},
+    "Rect": {"position": "Vector(2, 2)", "w": "2", "h": "1", "fill": "#e04040"},
     "Line": {"from": "Vector(0.5, 0.5)", "to": "Vector(3.5, 3.5)", "stroke": "#e04040", "strokeWidth": "0.3"},
     "Polygon": {"points": "[Vector(0.5, 0.5), Vector(3.5, 1), Vector(2, 3.5)]", "fill": "#e04040"},
     "Path": {"from": "Vector(0.5, 0.5)", "segments": "[(:line, Vector(3.5, 2)), (:line, Vector(1, 3.5))]", "stroke": "#e04040", "strokeWidth": "0.4"},
-    "TextArea": {"position": "Pos(2, 2)", "text": '"Ag"', "fontSize": "1.5", "fill": "#e04040"},
+    "TextArea": {"position": "Vector(2, 2)", "text": '"Ag"', "fontSize": "1.5", "fill": "#e04040"},
 }
 
 # 属性ごとの、試す 2 つの値と、効き目を見るために一緒に書いておく属性
 TRY = {
-    "position": ("Pos(1, 1)", "Pos(3, 3)", {}),
+    "position": ("Vector(1, 1)", "Vector(3, 3)", {}),
+    "anchor": ("Vector(0, 0)", "Vector(1, 1)", {}),
+    "scale": ("1", "2", {}),
     "radius": ("0.4", "1.4", {}),
     "rx": ("0.4", "1.6", {}),
     "ry": ("0.3", "1.4", {}),
@@ -48,7 +50,8 @@ TRY = {
     "text": ('"Ag"', '"Xy"', {}),
     "font": ('"Helvetica"', '"Courier"', {}),
     "fontSize": ("0.6", "1.6", {}),
-    "align": (":left", ":right", {"w": "4", "position": "Pos(0, 2, anchor = :left)"}),
+    # 左上を (0, 2) に置いて、幅 4 の中で寄せる
+    "align": (":left", ":right", {"w": "4", "position": "Vector(0, 2)", "anchor": "Vector(0, 0)"}),
     "fill": ("#e04040", "#4040e0", {}),
     "stroke": ("#40e040", "#ffff00", {"strokeWidth": "0.2"}),
     "strokeWidth": ("0.05", "0.4", {"stroke": "#40e040"}),
@@ -57,35 +60,37 @@ TRY = {
     "dash": ("[]", "[0.3, 0.3]", {"stroke": "#40e040", "strokeWidth": "0.2"}),
     "dashOffset": ("0", "0.15", {"stroke": "#40e040", "strokeWidth": "0.2", "dash": "[0.3, 0.3]"}),
     "opacity": ("1", "0.2", {}),
-    "rotation": ("0", "40", {}),
-    "pivot": ("Vector(0, 0)", "Vector(2, 2)", {"rotation": "40"}),
+    "rotation": ("0", "0.7", {}),
     "blend": (":normal", ":multiply", {}),
-    # 背の四角より後ろに回ると隠れる
-    "zIndex": ("-1", "1", {}),
 }
 
-
-# View は図形と置き方が違うので別に書く。中身が枠からはみ出す形にして、clip が効くのを見る。
-# はみ出す先は外側の箱の中に収める (絵の外は描かれないので、そこへはみ出させても差が出ない)
-VIEW_BASE = {"box": "Vector(3, 3)"}
-VIEW_PLACE = {"at": "Pos(1, 0.5, anchor = :topLeft)", "w": "3"}
-# place が書く属性は、その引数を動かして見る (position は at が書く)
-BY_PLACE = {"position": "at", "w": "w", "h": "h"}
+# Group は中の円が枠 (切り口) からはみ出す形にして見る。Group の位置は (1, 0.5)
+GROUP_BASE = {"position": "Vector(1, 0.5)"}
 # (属性, 値 1, 値 2, 一緒に書いておく属性)
-VIEW_CASES = [
-    ("box", "Vector(3, 3)", "Vector(6, 3)", {}),
-    ("clip", "false", "true", {}),
+GROUP_CASES = [
+    ("position", "Vector(0.2, 0.5)", "Vector(1, 0.5)", {}),
+    ("anchor", "Vector(0, 0)", "Vector(1, 1)", {"rotation": "0.5"}),
+    ("scale", "1", "1.4", {}),
+    ("rotation", "0", "0.5", {}),
     ("opacity", "1", "0.2", {}),
     ("blend", ":normal", ":multiply", {}),
-    ("position", "Pos(0.2, 0.5, anchor = :topLeft)", "Pos(1, 0.5, anchor = :topLeft)", {}),
-    ("w", "2", "3", {}),
-    ("h", "2", "3", {}),
-    ("zIndex", "-1", "1", {}),
-    ("rotation", "0", "30", {}),
-    ("scale", "1", "1.4", {}),
-    ("pivot", "Vector(0, 0)", "Vector(3, 3)", {"rotation": "30"}),
     ("camera", "Camera(from = Vector(1, 1), to = Vector(1.5, 1.5), scale = 1)", "Camera(from = Vector(1, 1), to = Vector(1.5, 1.5), scale = 2)", {}),
+    ("clip", "Rect(w = 3, h = 3)", "Circle(radius = 0.8)", {}),
 ]
+
+# 入れ子の Composition。box は長さの単位 (vx) を通して効くので、中の円の半径を 30vx にして見る
+COMPOSITION_BASE = {"box": "Vector(3, 3)", "duration": "1s", "position": "Vector(1, 0.5)"}
+COMPOSITION_CASES = [
+    ("box", "Vector(3, 3)", "Vector(6, 3)", {}),
+    ("position", "Vector(0.2, 0.5)", "Vector(1, 0.5)", {}),
+    ("anchor", "Vector(0, 0)", "Vector(1, 1)", {"rotation": "0.5"}),
+    ("scale", "1", "1.4", {}),
+    ("rotation", "0", "0.5", {}),
+    ("opacity", "1", "0.2", {}),
+    ("blend", ":normal", ":multiply", {}),
+]
+# 絵に出ない属性。長さは動画の長さを決めるだけで、入れ子にした絵には効かない
+NOT_DRAWN = {("Composition", "duration")}
 
 
 # World と Solid は図形ではなく塗りなので別に書く。Rect の fill に入れて描く
@@ -103,59 +108,78 @@ PAINT_CASES = [
     ("Solid", "transform", "space3d.Transform3()", "space3d.Transform3().rotate_y(35)"),
 ]
 
+# 背の四角。どの絵にも敷く
+BACKGROUND = 'comp.place("bg", Rect(w = 4, h = 4, anchor = Vector(0, 0), fill = #303030), in = 0s, out = 1s)\n'
+
+
+def render(src_text: str, work: Path) -> str:
+    """スクリプトを 0 秒で描いて、絵の指紋を返す。描けなければ ERR: ..."""
+    src, out = work / "case.moph", work / "case.png"
+    src.write_text(src_text)
+    r = subprocess.run([BIN, "render", str(src), "-o", str(out), "--at", "0s"], capture_output=True, text=True)
+    if r.returncode != 0:
+        return "ERR: " + (r.stderr.strip().splitlines() or ["?"])[-1]
+    return hashlib.sha1(out.read_bytes()).hexdigest()
+
+
+def args_of(attrs: dict) -> str:
+    return ", ".join(f"{k} = {v}" for k, v in attrs.items())
+
 
 def draw_world(kind: str, attr: str, value: str, work: Path) -> str:
     """Rect の fill に World を入れて描く。attr は World か Solid のどちらかに書き足す"""
     world, solid = dict(WORLD_BASE), dict(SOLID_BASE)
     (world if kind == "World" else solid)[attr] = value
-    body = ", ".join(f"{k} = {v}" for k, v in world.items())
-    part = ", ".join(f"{k} = {v}" for k, v in solid.items())
-    src, out = work / "case.moph", work / "case.png"
-    src.write_text(
+    return render(
         "import space3d\n"
-        "let v = View(box = Vector(4, 4))\n"
-        f"let solid = space3d.Solid({part})\n"
-        f"v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 4, h = 4, fill = space3d.World({body})))\n"
-        "output v\n"
+        "let comp = Composition(box = Vector(4, 4), duration = 1s)\n"
+        f"let solid = space3d.Solid({args_of(solid)})\n"
+        f'comp.place("world", Rect(w = 4, h = 4, anchor = Vector(0, 0), fill = space3d.World({args_of(world)})), in = 0s, out = 1s)\n'
+        "output comp\n",
+        work,
     )
-    r = subprocess.run([BIN, "render", str(src), "-o", str(out), "--at", "0s"], capture_output=True, text=True)
-    if r.returncode != 0:
-        return "ERR: " + (r.stderr.strip().splitlines() or ["?"])[-1]
-    return hashlib.sha1(out.read_bytes()).hexdigest()
 
 
-def draw_view(attrs: dict, place: dict, work: Path) -> str:
-    """内側の View を外側に置いて描く。中の円は枠からはみ出す位置にある"""
-    body = ", ".join(f"{k} = {v}" for k, v in attrs.items())
-    placed = ", ".join(f"{k} = {v}" for k, v in place.items())
-    src, out = work / "case.moph", work / "case.png"
-    src.write_text(
-        "let outer = View(box = Vector(4, 4))\n"
-        "outer.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 4, h = 4, fill = #303030))\n"
-        f"let inner = View({body})\n"
-        "inner.place(Circle(position = Pos(0, 1.5), radius = 1, fill = #e04040))\n"
-        f"outer.place(inner, {placed})\n"
-        "output outer\n"
+def draw_group(attrs: dict, work: Path) -> str:
+    """Group に入れた円を描く。円は Group の枠からはみ出す位置にある"""
+    return render(
+        "let comp = Composition(box = Vector(4, 4), duration = 1s)\n"
+        + BACKGROUND
+        + f"let g = Group(Circle(position = Vector(0, 1.5), radius = 1, fill = #e04040), {args_of(attrs)})\n"
+        'comp.place("g", g, in = 0s, out = 1s)\n'
+        "output comp\n",
+        work,
     )
-    r = subprocess.run([BIN, "render", str(src), "-o", str(out), "--at", "0s"], capture_output=True, text=True)
-    if r.returncode != 0:
-        return "ERR: " + (r.stderr.strip().splitlines() or ["?"])[-1]
-    return hashlib.sha1(out.read_bytes()).hexdigest()
+
+
+def draw_nested(attrs: dict, work: Path) -> str:
+    """入れ子の Composition に円を置いて描く。円の半径は箱の幅の 30%"""
+    return render(
+        "let comp = Composition(box = Vector(4, 4), duration = 1s)\n"
+        + BACKGROUND
+        + f"let inner = Composition({args_of(attrs)})\n"
+        'inner.place("dot", Circle(position = Vector(0, 1.5), radius = 30vx, fill = #e04040), in = 0s, out = 1s)\n'
+        'comp.place("inner", inner, in = 0s, out = 1s)\n'
+        "output comp\n",
+        work,
+    )
 
 
 def draw(kind: str, attrs: dict, work: Path) -> str:
-    body = ", ".join(f"{k} = {v}" for k, v in attrs.items())
-    src, out = work / "case.moph", work / "case.png"
-    src.write_text(
-        "let v = View(box = Vector(4, 4))\n"
-        "v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 4, h = 4, fill = #303030))\n"
-        f"v.place({kind}({body}))\n"
-        "output v\n"
+    return render(
+        "let comp = Composition(box = Vector(4, 4), duration = 1s)\n"
+        + BACKGROUND
+        + f'comp.place("shape", {kind}({args_of(attrs)}), in = 0s, out = 1s)\n'
+        "output comp\n",
+        work,
     )
-    r = subprocess.run([BIN, "render", str(src), "-o", str(out), "--at", "0s"], capture_output=True, text=True)
-    if r.returncode != 0:
-        return "ERR: " + (r.stderr.strip().splitlines() or ["?"])[-1]
-    return hashlib.sha1(out.read_bytes()).hexdigest()
+
+
+def differs(label: str, a: str, b: str, failed: list[str]) -> None:
+    if a.startswith("ERR") or b.startswith("ERR"):
+        failed.append(f"{label}: {a if a.startswith('ERR') else b}")
+    elif a == b:
+        failed.append(f"{label}: 値を変えても絵が変わらない")
 
 
 def check_required(doc: dict, work: Path) -> tuple[int, list[str]]:
@@ -174,13 +198,15 @@ def check_required(doc: dict, work: Path) -> tuple[int, list[str]]:
             checked += 1
             if not draw(kind, {k: v for k, v in base.items() if k != attr}, work).startswith("ERR"):
                 failed.append(f"{kind}.{attr}: 必須と書いてあるが、省いても描ける")
-    # View は box だけが必須
+    # Composition は box と duration が必須
+    for attr in required.get("Composition", []):
+        checked += 1
+        rest = {k: v for k, v in COMPOSITION_BASE.items() if k != attr}
+        if not draw_nested(rest, work).startswith("ERR"):
+            failed.append(f"Composition.{attr}: 必須と書いてあるが、省いても描ける")
     checked += 1
-    if not draw_view({}, VIEW_PLACE, work).startswith("ERR"):
-        failed.append("View.box: 必須と書いてあるが、省いても描ける")
-    checked += 1
-    if draw_view(VIEW_BASE, VIEW_PLACE, work).startswith("ERR"):
-        failed.append("View: 必須の属性だけでは描けない (必須の印が足りない)")
+    if draw_nested({k: v for k, v in COMPOSITION_BASE.items() if k in required.get("Composition", [])}, work).startswith("ERR"):
+        failed.append("Composition: 必須の属性だけでは描けない (必須の印が足りない)")
     return checked, failed
 
 
@@ -198,38 +224,25 @@ def main() -> int:
                     continue
                 a, b, extra = TRY[attr]
                 setup = {**base, **extra}
-                ha = draw(kind, {**setup, attr: a}, work)
-                hb = draw(kind, {**setup, attr: b}, work)
-                if ha.startswith("ERR") or hb.startswith("ERR"):
-                    failed.append(f"{kind}.{attr}: {ha if ha.startswith('ERR') else hb}")
-                elif ha == hb:
-                    failed.append(f"{kind}.{attr}: 値を変えても絵が変わらない")
-        # View は別の置き方で見る
-        for attr, a, b, extra in VIEW_CASES:
+                differs(f"{kind}.{attr}", draw(kind, {**setup, attr: a}, work), draw(kind, {**setup, attr: b}, work), failed)
+        # Group
+        for attr, a, b, extra in GROUP_CASES:
             checked += 1
-            if attr in BY_PLACE:
-                arg = BY_PLACE[attr]
-                ha = draw_view({**VIEW_BASE, **extra}, {**VIEW_PLACE, arg: a}, work)
-                hb = draw_view({**VIEW_BASE, **extra}, {**VIEW_PLACE, arg: b}, work)
-            else:
-                ha = draw_view({**VIEW_BASE, **extra, attr: a}, VIEW_PLACE, work)
-                hb = draw_view({**VIEW_BASE, **extra, attr: b}, VIEW_PLACE, work)
-            if ha.startswith("ERR") or hb.startswith("ERR"):
-                failed.append(f"View.{attr}: {ha if ha.startswith('ERR') else hb}")
-            elif ha == hb:
-                failed.append(f"View.{attr}: 値を変えても絵が変わらない")
-        missing = [a for a in types.get("View", []) if a not in {c[0] for c in VIEW_CASES}]
+            differs(f"Group.{attr}", draw_group({**GROUP_BASE, **extra, attr: a}, work), draw_group({**GROUP_BASE, **extra, attr: b}, work), failed)
+        missing = [a for a in types.get("Group", []) if a not in {c[0] for c in GROUP_CASES}]
         if missing:
-            failed.append(f"View: 試す値が scripts/check_attrs.py に無い: {' '.join(missing)}")
+            failed.append(f"Group: 試す値が scripts/check_attrs.py に無い: {' '.join(missing)}")
+        # 入れ子の Composition
+        for attr, a, b, extra in COMPOSITION_CASES:
+            checked += 1
+            differs(f"Composition.{attr}", draw_nested({**COMPOSITION_BASE, **extra, attr: a}, work), draw_nested({**COMPOSITION_BASE, **extra, attr: b}, work), failed)
+        missing = [a for a in types.get("Composition", []) if a not in {c[0] for c in COMPOSITION_CASES} and ("Composition", a) not in NOT_DRAWN]
+        if missing:
+            failed.append(f"Composition: 試す値が scripts/check_attrs.py に無い: {' '.join(missing)}")
         # 3D の塗りも同じように見る
         for kind, attr, a, b in PAINT_CASES:
             checked += 1
-            ha = draw_world(kind, attr, a, work)
-            hb = draw_world(kind, attr, b, work)
-            if ha.startswith("ERR") or hb.startswith("ERR"):
-                failed.append(f"{kind}.{attr}: {ha if ha.startswith('ERR') else hb}")
-            elif ha == hb:
-                failed.append(f"{kind}.{attr}: 値を変えても絵が変わらない")
+            differs(f"{kind}.{attr}", draw_world(kind, attr, a, work), draw_world(kind, attr, b, work), failed)
         for kind in ("World", "Solid"):
             missing = [a for a in types.get(kind, []) if a not in {c[1] for c in PAINT_CASES if c[0] == kind}]
             if missing:

@@ -366,7 +366,7 @@ record Size {
 
 - `func` は受け手なしで型名から呼ぶ (`Counter.new(10)`)。`method` は第 1 引数が受け手 (使わないなら `_`)
 - `func new` が無ければ、`private` でないフィールドを宣言順に受け取る。位置で渡せるのは既定値の無いフィールドまで
-- 複製は record が `copy(field = 値)`、struct が `shallowCopy()` / `deepCopy()`
+- 複製は record が `copy(field = 値)`、struct が `shallow_copy()` / `deep_copy()`
 - 宣言の前の行に `@immutable` `@nocopy` `@nodeepcopy` `@deprecated("説明")` を並べられる
 - `alias V = Vector` はそのファイルの中だけの短い名前。`export` できない
 
@@ -664,7 +664,7 @@ if size.x > box_width { ... }             # はみ出すなら fontSize を下�
 next_y = next_y + size.y + gap            # 重ならないように次を置く
 ```
 
-- 行の寄せ方は `align` で決める。左揃えの文字の左端を揃えるなら、`size()` で測って `anchor` を置く
+- 行の寄せ方は `align` で決める。左揃えの文字の左端を揃えるなら、`anchorRatio = Vector(0, 0.5)` で左端を `position` に合わせる
 - **太さで強調しない**。色か大きさで差をつける
 - コードを見せるなら等幅を指定する (`font = "Menlo"` など)。指定が無いと環境で幅が変わって、折り返しがずれる
 - 和文の等幅は入っていないことが多い。`Menlo` を指定すると和文だけ別のフォントで補われ、桁が揃わない。`mophila fonts` で入っている名前を確かめる
@@ -893,7 +893,7 @@ name_1             # 識別子は英字・数字・_。先頭は英字か _
 | Duration | `83s` `1m23s` `500ms` `01:23` `01:23:45.678` | 単位は ms / s / m / h。コロン形式は mm:ss と hh:mm:ss、小数秒可 |
 | Length | `20vy` `50vx` `3px` | `box` に対して描画時に解決する量。単位は vx / vy / vmin / vmax / px。3.15 を参照 |
 | Color | `#rgb` `#rgba` `#rrggbb` `#rrggbbaa` `Color(r, g, b)` `Color(r, g, b, a)` | r/g/b は 0..255、a は 0..1。3/4 桁は各桁を重ねて 6/8 桁に広げる |
-| String | `"hello"` `"say \"hi\""` | エスケープは `\"` `\\` `\n` `\t`。`+` で連結。埋め込みはしない。`"n = {n}".format(n)` が `{...}` を順に置き換える (中の名前は説明用)。Dict を渡すと `"{x} {y}".format({x, y})` のように名前で置き換える |
+| String | `"hello"` `"say \"hi\""` | エスケープは `\"` `\\` `\n` `\t`。`+` で連結。文字列の中に式は埋め込めず、値を入れる書き方は `.format` だけ。`"n = {n}".format(n)` が `{...}` を順に置き換える (中の名前は説明用)。Dict を渡すと `"{x} {y}".format({x, y})` のように名前で置き換える |
 | Bool | `true` `false` | |
 | Symbol | `:center` `:linear` | 名前そのものが値。同じ名前どうしだけが等しい |
 | Tuple | `(1, 1.5)` | 要素ごとに型が違ってよい。長さは書いたときに決まる。要素 1 つは `(1,)`、空は `()` |
@@ -902,6 +902,8 @@ name_1             # 識別子は英字・数字・_。先頭は英字か _
 | Dict | `{ "k": v }` `{ x, y }` | キーは String。挿入順を保つ。`{ x, y }` は `{ "x": x, "y": y }` の省略形 |
 | Range | `0..5` `0..=5` | 整数の範囲。`..` は末尾を含まない。両端が整数でなければ `ValueError.OutOfRange` |
 | Func | `func (x) { x }` | 型表記は `(引数) -> 戻り値` |
+| Progress | `progress [:x, :y] { ... }` | 0 から 1 の数で呼ぶと、その点の値を Tuple で返す名前付きの表。3.14 を参照 |
+| Progress | `progress [:x] { 0: 1  1: 2 }` | 0 から 1 の数で呼ぶと、その点の値を Tuple で返す名前付きの表。3.14 を参照 |
 | Type | `Circle` | 型そのもの。呼ぶとその型の値を作る |
 | Nothing | | 値を返さなかった関数の戻り値。書き方は無い |
 
@@ -1017,8 +1019,8 @@ b.copy(w = 9)  # 入れ直さずに、w だけ違う Size を作る (func new �
 let c = Counter(0)
 let d = c
 c.next()          # 実体そのものが変わるので、d から見ても n は 1
-c.shallowCopy()   # 属性を写した別の実体。中の struct は元と同じものを指す
-c.deepCopy()      # 中の record と struct もたどって写した別の実体
+c.shallow_copy()  # 属性を写した別の実体。中の struct は元と同じものを指す
+c.deep_copy()     # 中の record と struct もたどって写した別の実体
 ```
 
 record のフィールドへの代入は、その値を変えるのではなく、変数や属性に新しい record を入れ直す。だから同じ record を持っている他の変数は変わらない。関数の引数に代入しても、呼んだ側には伝わらない。
@@ -1032,8 +1034,8 @@ record のフィールドへの代入は、その値を変えるのではなく�
 | 注釈 | 意味 |
 |---|---|
 | `@immutable` | `struct` をイミュータブルにする (record と同じ扱いになる) |
-| `@nocopy` | `copy` `shallowCopy` `deepCopy` をすべて禁止する |
-| `@nodeepcopy` | `deepCopy` だけ禁止する |
+| `@nocopy` | `copy` `shallow_copy` `deep_copy` をすべて禁止する |
+| `@nodeepcopy` | `deep_copy` だけ禁止する |
 | `@deprecated("説明")` | その型を最初に作ったときに stderr へ警告を出す |
 
 ```
@@ -1072,7 +1074,7 @@ type Mode = :fast | :slow
 - Vector: 2 つの成分。成分は Number か Length (`Vector(50vx, 40vy)`)。`.x` `.y`。`Vector ± Vector`、`Vector × Number`、`Vector ÷ Number`、`-Vector`
 - `position` と `anchor` は別の属性で、どちらも Vector。`position` は `anchor` を置く場所で、親の座標で書く。`anchor` は Node 自身の座標で見た基準点で、`rotation` と `scale` の中心になる。3.11 を参照
 - `(8, 4.5)` は Tuple。ただし**型の決まっている場所に書いた Tuple は、その型になる** (型注釈、属性、フィールド、引数、戻り値)。`Circle(position = (8, 4.5))`、`Polygon(points = [(0, 0), (1, 0)])`、`let ps: List<Vector3> = [(0, 0, 0)]` と書ける
-- 変換するのは Tuple から `Vector` `Vector3` `Color` へだけ。型どうしの変換は無く、数が合わなければ型エラー
+- 変換するのは Tuple から `Vector` `Vector3` `Color` へだけ。型どうしの変換は無く、数が合わなければ `TypeError.ArgumentType` (`Circle(position = (1, 1, 1))` は `Circle.position expects Vector, found Tuple`)。`copy(position = 1)` も同じ
 - 型の決まっていない場所では Tuple のまま。まとめて作るなら `Vector.from([(0, 0), (1, 0)])` (`Vector3` `Color` も同じ)
 
 #### 3.11 図形
@@ -1091,7 +1093,7 @@ let big = dot.copy(radius = 4vy)
 | Line | `from: Vector` `to: Vector` |
 | Polygon | `points: List<Vector>` |
 | Path | `from: Vector` `segments: List<Tuple>` `closed: Bool` `upto: Number` |
-| TextArea | `text: String` (`\n` で改行) `w: Length` (折り返す幅) `font: String` `fontSize: Length` `align: Align`。`size()` で置いたときの幅と高さ (Vector) を返す |
+| TextArea | `text: String` (`\n` で改行) `w: Length` (折り返す幅) `font: String` `fontSize: Length` `align: Align` `anchorRatio: Vector` (基準点を箱の割合で書く。3.11)。`size()` で置いたときの幅と高さ (Vector) を返す |
 
 長さを表す属性 (`radius` `w` `h` `strokeWidth` など) は Length を取る。単位なしの数は `box` 単位。
 
@@ -1120,12 +1122,15 @@ let pen = dot.copy(position = drawn.point_at(1))
 
 | 型 | 自身の原点 | `anchor` の既定 |
 |---|---|---|
-| Rect / TextArea | 左上。大きさは `w` × `h` | 自身の中心 `(w/2, h/2)` |
+| Rect | 左上。大きさは `w` × `h` | 自身の中心 `(w/2, h/2)` |
+| TextArea | 左上。大きさは組んだ文字の箱 | 箱の割合 `anchorRatio` で決まる。既定は `(0.5, 0.5)` で箱の中心 |
 | Circle / Ellipse | 中心 | `(0, 0)` |
 | Line / Polygon / Path | 点の座標がそのまま。原点は `(0, 0)` | `(0, 0)` |
 | Group | 子の座標系の `(0, 0)` | `(0, 0)` |
 
 `anchor` が既定なら `position` は Rect / TextArea の中心になる。Rect を左上に置くなら `anchor = Vector(0, 0)`。
+
+TextArea は `anchor` の代わりに `anchorRatio` (Vector) で基準点を割合で書ける。`(0, 0)` が箱の左上、`(1, 1)` が右下で、文字の大きさを測らずに「右端を `position` に合わせる」ような置き方ができる。`anchor` と `anchorRatio` を両方書くと `TypeError.ArgumentType`。`diagram.text_at` はこの属性を使う。
 
 図形はこれに加えて次の属性を持つ。効きようがないものは、その図形が持たない (書くと `NameError.UndefinedAttribute`)。既定のあるものは、書かなくてもその値で読める:
 
@@ -1265,6 +1270,8 @@ Shader(color = func (x, y, t) { Color(x * 16, 0, 128) })
 
 大きな表は Array で渡す (List は毎フレーム写して送るが、Array は同じものである間は送らない)。`run` では走らず、`render` `preview` `sheet` で走る。GPU の実数は 32 bit。
 
+`Shader` と `World` は `func (t)` の中で毎フレーム新しく作ってよい。同じ大きさの GPU の描き先は、フレームをまたいで使い回す。`color` が外側から取り込んだ値がフレームごとに違うと、フレームごとに GPU のプログラムを作り直すので、毎フレーム変わる値は `args` で渡すほうが速い。ただし `ZoomPath` の帯は、塗られた図形に付いて前のフレームを引き継ぐ。`ZoomPath` の `zoom` は関数の外で 1 度だけ作って渡し、`ZoomPath` を使う `Shader` を塗る図形も、関数の外で 1 度だけ作る。
+
 **ZoomPath** — 1 点へ寄っていくだけのズーム動画は、(中心からの距離の対数, 角度) で見るとどのフレームも同じ絵の平行移動になる。`Shader.zoom` に `ZoomPath` を入れると、1 フレームずつ描かずに、その座標系の帯を伸ばしながら使い回す。帯は 1 フレームあたり数列しか伸びないので、1 枚ずつ描くより桁違いに速い。
 
 ```
@@ -1326,6 +1333,7 @@ Composition ─ box, duration
 - **Node** は描かれるものの総称。図形、Group、Composition、Audio、Narration
 - **Layer** は Composition に置かれたもの 1 つを指す言葉で、言語の型としては出てこない。名前と、置いたものと、`in` と `out` を持つ。`in` と `out` は親 Composition の時間軸で数える
 - `in <= t < out` の外では、その Layer は存在しない。描かれず、音も鳴らず、何も計算しない。残したければ `out` を伸ばす
+- 入れ子の Composition は `[0, duration)` の外では存在しない。自分の `duration` を過ぎると消え、最後の絵は残らない。残したければ `duration` を伸ばす
 - Layer は束ねられない。別々の時刻に出入りするものをまとめたいときは、Composition を作って 1 枚の Layer として置く
 
 **place**
@@ -1368,6 +1376,8 @@ let slide = progress [:x, :y] {
 }
 let (x, y) = slide(0.5)
 ```
+
+列が 1 つの表も Tuple を返す。分解は `let (x) = grow(0.5)` と、括弧を付けて書く。
 
 - 行の左は 0 から 1。0 と 1 の行は必須
 - 列の名前を先に並べ、行には値だけを書く
@@ -1418,10 +1428,10 @@ output comp
 
 動画の長さは、`output` した Composition の `duration`。
 
-**音声** — `import "bgm.m4a" as bgm` で得た Audio を Node として置く。`volume` は 1 がそのまま、`loop = true` は `out` まで繰り返す。音声は `out` で切る。繰り返さなければファイルより長くならない。同じ音声を何度でも置けて、重なれば混ざる。
+**音声** — `import "bgm.m4a" as bgm` で得た Audio を Node として置く。`volume` は 1 がそのまま、`loop = true` は `out` まで繰り返す。音声は `out` で切る。繰り返さなければファイルより長くならない。同じ音声を何度でも置けて、重なれば混ざる。`fadeIn` と `fadeOut` (Duration) は、置いた区間の頭と終わりで音量を 0 から、または 0 へ直線で変える。
 
 ```
-comp.place("bgm", bgm.copy(volume = 0.6, loop = true), in = 0s, out = 30s)
+comp.place("bgm", bgm.copy(volume = 0.6, loop = true, fadeOut = 3s), in = 0s, out = 30s)
 ```
 
 読み上げは `Narration`。文だけを持ち、画面には描かない。長さは Layer の `in` から `out`。**その文を読んだ音声が動画の音になり、同じ文が字幕になる**。**どう喋らせるか**は `voice` で渡す。
@@ -1461,6 +1471,16 @@ comp.place("line-2", Narration(text = "ここは速く", voice = SayVoiceEngine(
 
 `subs` は動画を描かずに字幕だけをファイルに出す (`-o subs.srt` / `-o subs.vtt`。省略すると標準出力)。中身は動画の字幕トラックと同じで、`--trim` も同じように効く。`preview` は音声を PCM にして鳴らし、字幕を画面の下に重ねる。`sheet` も重ねる。重ねる字幕は、箱を収めた絵の中に出す (ウィンドウの縦横比が箱と違えば、余った帯には出ない)。
 
+**timeline** — `mophila timeline a.moph` は、動画を描かずに、何がいつ存在するかを時刻順に出す。1 行目が `duration`、続いて 3 つの表。
+
+| 表 | 中身 |
+|---|---|
+| `layers` | Layer ごとの開始、終了、長さ、名前、中身の型。入れ子の中は `intro/title` のように道筋を付け、時刻は動画の時間軸の絶対時刻 |
+| `text visibility` | 文字が見えている区間。TextArea を直接置いた Layer (Group の中を含む) の文字だけが出る |
+| `subtitles and audio` | 字幕と音声の区間。動画に入るものと同じ |
+
+`func (t)` の中で作る文字は `text visibility` に出ない。その Layer が存在する区間は `layers` で読む。`--filter key=value` (繰り返せる) の `kind` `text` `from` `to` で絞れる。
+
 #### 3.15 Length
 
 Duration と同じ作りの、型つきの遅延量。単位は次の 5 つ。
@@ -1483,7 +1503,8 @@ Duration と同じ作りの、型つきの遅延量。単位は次の 5 つ。
 角度は Number のラジアン。`rotation` も `polar` も `sin` も同じ単位で、時計回りが正。
 
 - `rotation` の単位は度でなくラジアン
-- math の関数は、角度の向きを `rotation` と同じ時計回りに揃える。既存の関数への適用は未決 (10 章)
+- y が下向きの画面座標では、素の `sin` `cos` で時計回りが正になる。`(cos a, sin a)` は `a` が増えるにつれ右から下へ回る。`atan2(y, x)` も同じ向きの角度を返す
+- `polar(r, a)` は `(r cos a, r sin a)`。向きを変える補正はしない
 
 #### 3.17 名前
 
@@ -1653,6 +1674,8 @@ output comp   # この Composition が動画になる。1 つのファイルに 
 
 ### 6. builtin と標準ライブラリ
 
+名前の規則は種類で決まる。属性の名前は camelCase (`fontSize` `strokeWidth`)。関数とメソッドの名前は snake_case (`text_at` `point_at` `deep_copy`)。Symbol の値は、語が複数あれば snake_case (`:ease_in`)。モジュール名とファイル名は小文字で、この規則の対象外。
+
 `import` なしで使えるのは、builtin の型の名前と、次の名前だけ。関数は呼び出しの形でしか書けず、値として取り出すことはできない。
 
 | 名前 | 内容 |
@@ -1736,7 +1759,7 @@ let comp = Composition(box = Vector(config.width, 9), duration = 6s)
 |---|---|
 | SyntaxError | `UnexpectedToken` 構文として読めない / `InvalidLiteral` 色の桁数、Duration の形式など |
 | NameError | `UndefinedVariable` / `UndefinedAttribute` / `AssignWithoutLet` let を書かずに初めて代入した / `Reserved` builtin の型の名前を宣言し直した |
-| TypeError | `OperandType` 演算子の左右 / `AttributeType` 属性に入れる値 / `ArgumentType` 引数 / `ArityMismatch` 引数や列の数 / `NotPlaceable` place できない型 |
+| TypeError | `OperandType` 演算子の左右 / `AttributeType` 描くとき、属性に入っていた値が使えない / `ArgumentType` 引数 (型を呼ぶとき、`copy` に名前付きで渡した属性の値を含む) / `ArityMismatch` 引数や列の数 / `NotPlaceable` place できない型 |
 | ValueError | `OutOfRange` 型は合うが値が範囲外 / `AlreadyPlaced` 同じ名前の Layer を 2 度置いた |
 | RuntimeError | `DivisionByZero` / `FontNotFound` / `AudioUnreadable` / `ImageUnreadable` / `ShaderCompile` / `ShaderUnavailable` / `EndlessLoop` / `OutOfMemory` |
 
@@ -1764,11 +1787,7 @@ repeat(n, node, rotation = tau / n, ...)
 
 ### 10. 未決
 
-- 入れ子の Composition が、自分の `duration` を超えた時間にどう振る舞うか
-- 文字列補間 `"dot-{i}"` を言語に入れるか、`.format` のままにするか
-- 属性名と、関数・メソッド名の camelCase と snake_case の統一
-- `fill` に入る Shader と World を、毎フレーム新しい図形を作る形でどう扱うか。関数の外で 1 度だけ作って渡す前提だが、仕様としては確定していない
-- y 軸の向きと、`atan2` など既存の math 関数の角度の向きを、時計回りが正の規約に揃える具体的な手順
+現在、未決の項目はない。
 
 
 # builtin の型
@@ -2272,7 +2291,7 @@ Path(from = Vector(0, 0), segments = [(:line, Vector(2, 0)), (:curve, Vector(3, 
 
 ### TextArea
 
-text を描く。自身の原点は左上で、anchor の既定は中心。w を付けるとその幅で折り返し、align で行の寄せ方を決める
+text を描く。自身の原点は左上で、基準点の既定は中心 (anchorRatio で割合を変える)。w を付けるとその幅で折り返し、align で行の寄せ方を決める
 
 作り方:
 
@@ -2287,6 +2306,7 @@ TextArea(text = "hello", position = Vector(8, 4.5), fontSize = 1, fill = #303030
 - `w`: Length — 折り返す幅 (Length。省略なら折り返さない)
 - `font`: Font — 書体の名前。候補を List で並べると、この機械にある最初のものを使う
 - `align`: Align — :left :center :right
+- `anchorRatio`: Vector — 基準点を文字の箱の割合で書く Vector。(0, 0) が左上、(1, 1) が右下。既定は (0.5, 0.5)。anchor とは同時に書けない
 - `fill`: Paint — 塗り。Color か Shader
 - `stroke`: Color — 線の色
 - `strokeWidth`: Length — 線の太さ (Length。単位なしの数は箱の単位)
@@ -2624,7 +2644,7 @@ import "logo.png" as logo
 
 ### Audio
 
-読み込んだ音声ファイル。Composition に置くと動画の音になる。copy(volume =, loop =) で音量と繰り返しを変えられる
+読み込んだ音声ファイル。Composition に置くと動画の音になる。copy(volume =, loop =, fadeIn =, fadeOut =) で音量、繰り返し、頭と終わりのフェードを変えられる
 
 作り方:
 
@@ -2637,11 +2657,13 @@ import "bgm.m4a" as bgm
 - `duration`: Duration — 音声ファイルの長さ
 - `volume`: Number — 音量。1 がそのまま
 - `loop`: Bool — out まで繰り返すか
+- `fadeIn`: Duration — 頭で音量を 0 から上げる長さ
+- `fadeOut`: Duration — 終わりで音量を 0 へ下げる長さ
 - `file`: String — import に書いたパス
 
 メソッド:
 
-- `audio.copy(volume: Number, loop: Bool)` -> Audio — 音量と繰り返しを変えた Audio。書いた分だけ変わる
+- `audio.copy(volume: Number, loop: Bool, fadeIn: Duration, fadeOut: Duration)` -> Audio — 音量、繰り返し、頭と終わりのフェードを変えた Audio。書いた分だけ変わる
 
 ### Narration
 
@@ -2921,7 +2943,7 @@ EspeakVoiceEngine(voice = "ja")
 - `math.exp(x: Number)` -> Number — e の x 乗
 - `math.exp2(x: Number)` -> Number — 2 の x 乗。log2 の逆
 - `math.atan2(y: Number, x: Number)` -> Number — (x, y) の角度 (ラジアン)
-- `math.polar(r: Number, a: Number)` -> Vector — 長さ r、角度 a (ラジアン、反時計回り、0 が右) の Vector。数学の向き (y は上) で考えて、画面の向き (y は下) で返す
+- `math.polar(r: Number, a: Number)` -> Vector — 長さ r、角度 a (ラジアン、時計回り、0 が右) の Vector。画面の向き (y は下) のまま (r cos a, r sin a) を返す
 - `math.max(a: Number, b: Number, ...)` -> Number — 最大。全部 Duration なら Duration のまま返す
 - `math.min(a: Number, b: Number, ...)` -> Number — 最小。全部 Duration なら Duration のまま返す
 - `math.tan(x: Number)` -> Number — 正接 (ラジアン)
@@ -3206,7 +3228,7 @@ EspeakVoiceEngine(voice = "ja")
   y: Number,
   ax: Number = 0.5,
   ay: Number = 0.5,
-)` -> TextArea — 文字を、基準点を指定して置く。TextArea の anchor は自身の座標なので、幅と高さを測って割合から求める
+)` -> TextArea — 文字を、基準点を割合で指定して置く。TextArea の anchorRatio を使う
 - `connector(
   from: Vector,
   to: Vector,
@@ -3922,7 +3944,7 @@ log(p, q, mix)              # (1.5, 2.5) (2, 4) #800080
 log(ok, ng, s, m, f)        # true true 0.00159... 3 2  (not ok が先に結合するので (not ok) or (c == 1))
 log(tiny, big)              # 1/1000000000 2500
 log(r, cl, lp, mr, ns)      # 1.23 1 2.5 50 2
-log(len1, len2, corner, ang, ring)   # 25vy 20vx Vector(50vx, 40vy) 1.5707... Vector(50vx + 10vy, 32.6...vy)
+log(len1, len2, corner, ang, ring)   # 25vy 20vx Vector(50vx, 40vy) 1.5707... Vector(50vx + 10vy, 67.3...vy)
 log(pi, u, w, rot, div, flip)  # 3.14159... Vector(1.5, 2.5) Vector(2, 4) Vector(0, 1) Vector(0, -2) Vector(1, -2)
 ```
 
@@ -4396,7 +4418,7 @@ record Vec2 {
   x: Number
   y: Number
 }
-# @immutable は struct をイミュータブルにする。@nodeepcopy は deepCopy だけ禁じる
+# @immutable は struct をイミュータブルにする。@nodeepcopy は deep_copy だけ禁じる
 
 let v = Vec2(1, 2)       # ここで「Vec2 は古い」と stderr に出る
 log(TITLE, area(2, 3), here, v)

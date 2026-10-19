@@ -20,7 +20,7 @@ pub const DOCS: &[Entry] = &[
     Entry { name: "exp", signature: "math.exp(x: Number)", returns: "Number", doc: "e の x 乗" },
     Entry { name: "exp2", signature: "math.exp2(x: Number)", returns: "Number", doc: "2 の x 乗。log2 の逆" },
     Entry { name: "atan2", signature: "math.atan2(y: Number, x: Number)", returns: "Number", doc: "(x, y) の角度 (ラジアン)" },
-    Entry { name: "polar", signature: "math.polar(r: Number, a: Number)", returns: "Vector", doc: "長さ r、角度 a (ラジアン、反時計回り、0 が右) の Vector。数学の向き (y は上) で考えて、画面の向き (y は下) で返す" },
+    Entry { name: "polar", signature: "math.polar(r: Number, a: Number)", returns: "Vector", doc: "長さ r、角度 a (ラジアン、時計回り、0 が右) の Vector。画面の向き (y は下) のまま (r cos a, r sin a) を返す" },
     Entry { name: "max", signature: "math.max(a: Number, b: Number, ...)", returns: "Number", doc: "最大。全部 Duration なら Duration のまま返す" },
     Entry { name: "min", signature: "math.min(a: Number, b: Number, ...)", returns: "Number", doc: "最小。全部 Duration なら Duration のまま返す" },
     Entry { name: "tan", signature: "math.tan(x: Number)", returns: "Number", doc: "正接 (ラジアン)" },
@@ -57,7 +57,7 @@ pub fn module() -> Module {
 pub fn call(name: &str, values: &[Value]) -> Result<Value> {
     // 半径が単位つきの長さなら、成分も長さのまま返す
     if let ("polar", [Value::Length(r), Value::Number(a, _)]) = (name, values) {
-        return Ok(Value::LVec(r.scaled(a.cos()), r.scaled(-a.sin())));
+        return Ok(Value::LVec(r.scaled(a.cos()), r.scaled(a.sin())));
     }
     // 長さを比べるだけなら、秒に直して掛け直さなくて済む。単位が混ざるものは通さない
     if matches!(name, "max" | "min" | "clamp") && !values.is_empty() && values.iter().all(|v| matches!(v, Value::Duration(_))) {
@@ -79,10 +79,9 @@ pub fn call(name: &str, values: &[Value]) -> Result<Value> {
         _ => err(Kind::ArityMismatch, format!("{name} takes 2 arguments, {} given", nums.len())),
     };
     match name {
-        // 数学の向き (反時計回り、y は上) で考えて、画面の向き (y は下) の Vector にして返す
+        // 画面の向き (y は下) のまま、角度は時計回りに増える
         "polar" => match nums.as_slice() {
-            // + 0.0 は -0 を 0 にするため (符号を反転した 0 が表示に出ないように)
-            [r, a] => Ok(Value::Vector(r * a.cos(), -(r * a.sin()) + 0.0)),
+            [r, a] => Ok(Value::Vector(r * a.cos(), r * a.sin())),
             _ => err(Kind::ArityMismatch, format!("polar takes 2 arguments (r, a), {} given", nums.len())),
         },
         "sin" => unary(f64::sin),

@@ -4,7 +4,8 @@
 # 型名を呼ぶ形が実体で、リテラルはその短い書き方。両方書ける型は == で等しい
 # Number    1  1.5  1/3  25% (= 0.25)。整数と実数を区別しない
 # Duration  83s  1m23s  500ms  01:23  01:23:45.678
-# Bool      true  false
+# Length    20vy  50vx  3vmin  8px    box に対して描くときに数になる量
+# Bool     true  false
 # String    "hello"
 # Symbol    :center  :linear    名前そのものが値
 # Color     #e04040  #e04040cc  #e44 (= #ee4444)  #e448  Color(224, 64, 64)  Color(224, 64, 64, 1)
@@ -22,7 +23,8 @@ log(Array(1, 2, 3)[1], Array(0..5).len(), Array([1, 2]) == Array(1, 2), type_of(
 # 型の表記は宣言と同じ形: (引数の型, ...) -> 戻り値の型
 let double: (Number) -> Number = func (x) { x * 2 }
 let add:    (Number, Number) -> Number = func (a, b) { a + b }
-let mk:     (Pos) -> Circle = func (p) { Circle(position = p) }
+let mk:     (Vector) -> Circle = func (p) { Circle(position = p) }
+let layer:  (Duration) -> Circle = func (t) { Circle(position = center, radius = ease(t, 0s, 1s, 0, 10vy)) }   # Layer に置ける func (t)
 let noret:  (String) -> Nothing = func (s) { log(s) }
 # builtin の log と type_of は、どの型でも受け取るので型を書けない
 
@@ -30,7 +32,7 @@ let noret:  (String) -> Nothing = func (s) { log(s) }
 # import で束縛される。標準ライブラリは math と space3d が builtin、ほかは .moph (一覧は mophila doc)
 import math
 # math:       Module
-# math.PI / math.TAU / math.E:  Number
+# math.pi / math.tau / math.e:  Number
 # math.sin:   (Number) -> Number     (cos, floor, ceil, abs, sqrt も同じ)
 # math.max:   (Number...) -> Number  (min も)
 
@@ -60,7 +62,8 @@ let c = Counter(10)
 log(c.next(), c.next(), type_of(c))          # 11 12 Counter
 
 # ---- Union 型 ----
-# Shape (図形すべて)、Placeable (Shape | View)、Paint (Color | Shader | Gradient)、
+# Shape (図形すべて)、Node (Shape | Group | Composition | Audio | Narration)、
+# Paint (Color | Gradient | Shader | Image | World)、Font (String | List)、
 # Projection (space3d のカメラ 3 種) は言語が持っている。
 # 自分で作るときは type 名 = A | B。builtin の型名では宣言できない
 type Fill = Color | Gradient
@@ -70,40 +73,39 @@ let corners: Points = [(0, 0), (1, 0), (1, 1)]
 
 # ---- 決まった値しか取らない型 ----
 # 値はすべて Symbol。呼んでは作れない
-# Easing       :linear :ease_in :ease_out :ease      motion の行末。値の変わり方
+# Easing       :linear :ease_in :ease_out :ease      progress の値の隣。値の変わり方
 # Align        :left :center :right                  TextArea.align
-# Anchor       :center :topLeft :topRight :bottomLeft :bottomRight :top :bottom :left :right
 # StrokeCap    :butt :round :square                  線の端の形
 # StrokeJoin   :miter :round :bevel                  線の角の形
 # Blend        :normal :multiply :screen :overlay :darken :lighten :difference :add
 # GradientKind :linear :radial :sweep
 
 # ---- 位置 ----
-# Vector  Vector(1, 1.5)   .x .y で参照できる
-# Pos     Pos(1, 1.5)      x, y, anchor (既定 :center)。Pos(Vector(1, 1.5)) も同じ
+# Vector  Vector(1, 1.5)  Vector(50vx, 40vy)   .x .y で参照できる。成分は Number か Length
+# position は anchor を置く場所 (親の座標)、anchor は図形自身の座標で見た基準点。どちらも Vector
 #
 # (1, 1.5) は Tuple。ただし型の決まっている場所 (型注釈、属性、フィールド、引数、戻り値) に
-# 書いた Tuple は、その型になる。Vector Vector3 Pos Color の 4 つだけ
-let here: Pos = (1, 1.5)
+# 書いた Tuple は、その型になる。Vector Vector3 Color の 3 つだけ
+let here: Vector = (1, 1.5)
 let points: List<Vector> = [(0, 0), (1, 0), (1, 1)]
 log(here, points)
 # 型を書かない場所では Tuple のまま。まとめて作るなら from
 log(Vector.from([(0, 0), (1, 0)]), Color.from([(224, 64, 64)]))
-let pos = Pos(1, 1.5)
-pos.anchor                                 # :center
-pos.vector                                 # Vector(1, 1.5)
-# 基準点の違う Pos 同士の変換には図形のサイズが要るので、place された後にしかできない
+# center は描く先の Composition の中心 (Length の Vector)
+log(center, center + Vector(10vx, 0))
 
 # ---- 図形 (Shape) ----
-# 共通属性: fill: Color, stroke = Color, strokeWidth = Number, opacity = Number
-let c = Circle(position = Pos(1, 1.5),   # Pos
-  radius = 0.5,          # Number
+# 図形は不変の record。変えるには copy(...)
+# 共通属性: fill: Paint, stroke = Color, strokeWidth = Length, opacity = Number
+# transform 一式: anchor position scale rotation (ラジアン、時計回りが正) opacity
+let c = Circle(position = Vector(1, 1.5),   # Vector
+  radius = 0.5,          # Length (単位なしは box 単位)
   fill =   #e04040)
 
-let r = Rect(position = Pos(0, 0, anchor = :topLeft),
-  w = 1,                 # Number
-  h = 1/2,               # Number
-  radius = 0.1,          # Number。角の丸み。省略なら 0
+let r = Rect(position = Vector(0, 0), anchor = Vector(0, 0),   # 左上を position に置く (既定は中心)
+  w = 1,                 # Length
+  h = 1/2,               # Length
+  radius = 0.1,          # Length。角の丸み。省略なら 0
   fill = #40a040,
   stroke = #000000,
   strokeWidth = 0.02)
@@ -117,33 +119,33 @@ let p = Polygon(points = [(0, 0), (1, 0), (0.5, 1)],   # List<Vector>。Tuple �
   fill = #4040e0)
 
 let t = TextArea(text = "hello",        # String
-  position = Pos(0, 0, anchor = :topLeft),
-  w = 2,                 # Number。幅に合わせて折り返す
+  position = Vector(0, 0), anchor = Vector(0, 0),
+  w = 2,                 # Length。幅に合わせて折り返す
   font = ["Hiragino Sans", "Noto Sans JP"],   # Font (String | List)。List なら、この機械にある最初のもの
                          #        名前は mophila fonts で出る。読み返すと、選ばれた 1 つが返る
-  fontSize = 0.3,        # Number。箱の座標単位
+  fontSize = 0.3,        # Length。単位なしは箱の座標単位
   fill = #000000,
   align = :left,         # Align
 )
 log(t.size())            # 置いたときの幅と高さ (Vector)。w があれば幅はその値
 
-# ---- 箱 ----
-let v = View(box = Vector(4, 3))  # box: Vector。座標系 0..4 × 0..3。ピクセルは持たない
-# v.place(o: Placeable, at: Pos, w: Number, h: Number) -> Nothing
-# v.addTrack(x: Timeline | View | Audio | Narration, at: Duration, ...) -> Nothing
+# ---- Group ----
+# Node をまとめた親。不変。中の座標は Group の position からの相対
+let g = Group(c, r, position = Vector(1, 1),
+  camera = Camera(from = Vector(1, 1), scale = 2),   # 中身の from を to (省略は from) に置いて scale 倍する
+  clip = Rect(w = 2, h = 2, anchor = Vector(0, 0)))  # 枠の外の中身を描かない
 
-let win = View(box = Vector(2, 2), clip = true)   # clip: Bool。箱からはみ出した中身を描かない
-win.place(Circle(position = Pos(2, 1), radius = 0.8, fill = #e04040))   # 右にはみ出す
-v.place(win, at = Pos(0, 0, anchor = :topLeft), w = 2)
+# ---- 箱と時間 ----
+let comp = Composition(box = Vector(4, 3), duration = 10s)   # box: Vector。座標系 0..4 × 0..3。ピクセルは持たない
+# comp.place(name: String, node: Node | (Duration) -> Node, in: Duration, out: Duration) -> Nothing
+comp.place("group", g, in = 0s, out = 10s)
 
-# ---- 時間 ----
-let m  = motion { 0s: 0, 1s: 1 }             # Motion。値の時間変化。対象なし
-#   m.duration: Duration
-#   m.apply(target = Shape, f = Func<Shape, Duration, List -> Nothing>) -> Timeline
-let tl = m.apply(c, func (c, t, [x]) { c.radius = x })   # Timeline。対象 + 割り当て
-let tr = Timeline(duration = 10s)      # Timeline。入れ物にもなる
-#   tr.duration: Duration
-#   tr.place(t = Timeline, at = Duration, fadeIn = Duration, fadeOut = Duration) -> Nothing
+# progress は 0..1 を受けて値の Tuple を返す表
+let slide = progress [:x, :y] {
+  0: 0, 0
+  1: 4 :ease, 3
+}
+log(slide(0.5))
 
 # ---- 3D (space3d の中にある型) ----
 # import space3d して space3d.Vector3(...) のように作る。素の名前では作れない。書き方は space3d.moph
@@ -166,6 +168,7 @@ log(type_of(log(1)), type_of(Circle), type_of(math))
 type_of(c)        # "Circle"
 type_of(1s)       # "Duration"
 type_of(1/3)      # "Number"
-type_of(double)   # "(Number) -> Number"
+type_of(double)   # "Func"。型の表記は注釈に書く形で、type_of は Func と返す
 
-log(type_of(add), type_of(m), type_of(tl), type_of(tr), type_of(v), type_of(t))
+log(type_of(add), type_of(slide), type_of(g), type_of(comp), type_of(t), type_of(20vy))   # Func Progress Group Composition TextArea Length
+output comp

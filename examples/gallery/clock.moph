@@ -1,10 +1,11 @@
 # clock.moph — アナログ時計。16 秒で秒針が 2 周し、分針と時針もわずかに進む
 
+import math
 import { polar } from shape
-import { spin } from animation
 
-let v = View(box = Vector(16, 9))
-v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #e8e4d8))
+let total = 16s
+let comp = Composition(box = Vector(16, 9), duration = total)
+comp.place("bg", Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9, fill = #e8e4d8), in = 0s, out = total)
 
 let cx = 8
 let cy = 4.5
@@ -12,32 +13,34 @@ let ink = #303030
 let red = #d03030
 
 # 文字盤
-v.place(Circle(position = Pos(cx, cy), radius = 4, fill = #fffdf5, stroke = ink, strokeWidth = 0.08))
+let face = [Circle(position = Vector(cx, cy), radius = 4, fill = #fffdf5, stroke = ink, strokeWidth = 0.08)]
 
-# 目盛り。5 の倍数だけ太く長い。polar は中心から距離と角度で点を出す (0 が真上、時計回り)
+# 目盛り。5 の倍数だけ太く長い。polar は中心から距離と角度で点を出す (0 が真上、時計回り、ラジアン)
 for i in 0..60 {
   let big = i % 5 == 0
-  v.place(Line(from = polar(cx, cy, if big { 3.3 } else { 3.6 }, i * 6),
-    to = polar(cx, cy, 3.8, i * 6),
+  face.push(Line(from = polar(cx, cy, if big { 3.3 } else { 3.6 }, i * math.tau / 60),
+    to = polar(cx, cy, 3.8, i * math.tau / 60),
     stroke = ink,
     strokeWidth = if big { 0.08 } else { 0.03 }))
 }
 
 # 数字
 for (i, n) in ["12", "3", "6", "9"].enumerate() {
-  v.place(TextArea(text = n, position = Pos(polar(cx, cy, 2.8, i * 90)), fontSize = 0.55, fill = ink, align = :center))
+  face.push(TextArea(text = n, position = polar(cx, cy, 2.8, i * math.tau / 4), fontSize = 0.55, fill = ink, align = :center))
 }
+comp.place("face", Group(...face), in = 0s, out = total)
 
-# 針。真上を向けて置き、spin で回す。中心は Line の from なので、from を文字盤の中心にする。
+# 針。真上を向けて置き、anchor を中心に rotation で回す。
 # 16 秒で秒針は 2 周、分針はその 60 分の 1、時針は 720 分の 1 だけ進む
-let total = 16s
-let track = Timeline(duration = total)
-for (length, width, color, turns) in [(2.0, 0.16, ink, 2/720), (3.3, 0.1, ink, 2/60), (3.5, 0.04, red, 2)] {
-  let hand = Line(from = Vector(cx, cy), to = Vector(cx, cy - length), stroke = color, strokeWidth = width)
-  v.place(hand)
-  track.place(spin(hand, turns, total), at = 0s)
+func hand_of(length, width, color, turns) {
+  func (t) {
+    Line(from = Vector(cx, cy), to = Vector(cx, cy - length), stroke = color, strokeWidth = width,
+      anchor = Vector(cx, cy), rotation = math.tau * turns * t / total)
+  }
 }
-v.place(Circle(position = Pos(cx, cy), radius = 0.15, fill = red))
+comp.place("hour", hand_of(2.0, 0.16, ink, 2/720), in = 0s, out = total)
+comp.place("minute", hand_of(3.3, 0.1, ink, 2/60), in = 0s, out = total)
+comp.place("second", hand_of(3.5, 0.04, red, 2), in = 0s, out = total)
+comp.place("pin", Circle(position = Vector(cx, cy), radius = 0.15, fill = red), in = 0s, out = total)
 
-v.addTrack(track)
-output v
+output comp

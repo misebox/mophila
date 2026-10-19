@@ -4,10 +4,10 @@
 import math                              # 標準ライブラリ。Module を math に束縛する
 import math as m                         # as で別名
 import .module_lib                       # 同じ場所の module_lib.moph。Module を束縛する
-import { twice, Point } from .module_lib   # 名前を直接束縛する
+import { twice, Point, badge } from .module_lib   # 名前を直接束縛する
 import "sample.png" as pic               # .moph 以外は Image か Audio (media.moph)
 
-log(m.PI == math.PI, module_lib.VERSION, module_lib.twice(3), twice(3), Point(1, 2), pic.width)
+log(m.pi == math.pi, module_lib.VERSION, module_lib.twice(3), twice(3), Point(1, 2), pic.width)
 
 # import できるのは、そのファイルが export したものだけ。
 # ".." で上のディレクトリも書けるが、ディレクトリをまたぐ設計は避ける
@@ -17,8 +17,8 @@ export let TITLE = "module.moph"
 export func area(w: Number, h: Number) -> Number { w * h }
 
 # ---- alias: 長い型名に短い名前を付ける。そのファイルのその行より後ろだけ。export はできない ----
-alias P = Pos
-let here = P(1, 2)
+alias V = Vector
+let here = V(50vx, 40vy)
 
 # ---- 宣言の注釈。宣言の前の行に書く ----
 @deprecated("Vector を使う") @nocopy
@@ -30,3 +30,11 @@ record Vec2 {
 
 let v = Vec2(1, 2)       # ここで「Vec2 は古い」と stderr に出る
 log(TITLE, area(2, 3), here, v)
+
+# ---- import した部品を Composition に置く ----
+func scene(t) {
+  badge(#e04040, ease(t, 0s, 1s, 0, 1)).copy(position = here)
+}
+let comp = Composition(box = Vector(16, 9), duration = 2s)
+comp.place("badge", scene, in = 0s, out = 2s)
+output comp

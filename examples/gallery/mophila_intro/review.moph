@@ -1,7 +1,7 @@
 # review.moph — LLM を使って書く 3: 確認も文字で。timeline の出力は LLM が読める
 
-import { W, H, v, track, ink, dim, accent, mono, review, dwell, longer } from .theme
-import { place, text, heading, card, scene, add, say, close } from .slides
+import { W, H, ink, dim, accent, mono, review, dwell, longer } from .theme
+import { text, heading, card, scene, add, say, close } from .slides
 
 export func run(now) {
   log("review", now)
@@ -14,12 +14,12 @@ export func run(now) {
     "duration: 26.00s",
     "",
     "# events: start  length  object  attribute  change",
-    "    0.00s    7.32s  View      position.x -6 → 16.5",
-    "    0.50s   15.23s  View      position.x -2.4 → 16.5",
+    "    0.00s    7.32s  Group     position.x -6 → 16.5",
+    "    0.50s   15.23s  Group     position.x -2.4 → 16.5",
     "   12.00s    0.10s  Circle    opacity 0.25 → 1",
     "   12.00s    0.10s  Circle    opacity 0 → 1",
     "   13.36s    0.40s  Rect      opacity 0 → 0.9",
-    "   23.50s    2.50s  View      opacity 1 → 0 :ease_in",
+    "   23.50s    2.50s  Rect      opacity 0 → 1 :ease_in",
     "",
     "# subtitles and audio: from – to  length  content",
     "    1.00s –    7.00s     6.0s  Narration (SayVoiceEngine) \"…\"",

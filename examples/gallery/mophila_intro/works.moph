@@ -1,7 +1,7 @@
 # works.moph — 作れるもの。サンプルの動画を 1 つずつ全画面で出す
 
-import { W, H, v, track, dim, pause } from .theme
-import { demo, demo_cut, scene, say, close, text, show } from .slides
+import { W, H, dim, pause } from .theme
+import { demo, scene, say, close, text, show } from .slides
 import ..crowd
 import ..mandelbrot
 import ..fractal
@@ -15,23 +15,15 @@ export func run(now) {
   log("works", now)
   let sc = scene()
   let t = say(sc, "これらは、すべてこの言語のスクリプトです。", now + 0.5s)
+  # Mandelbrot は 40 秒目 (うずまきの所) から見せる。中の Layer を 40 秒前に置くと、その分進んだ所から始まる
+  let deep = Composition(box = Vector(16, 9), duration = 7s)
+  deep.place("mandelbrot", mandelbrot.output, in = -40s, out = 7s)
   # 1 つずつ、少し重ねながら
-  let items = [(crowd.output, 0s, 7s), (mandelbrot.output, 6s, 7s), (fractal.output, 12s, 7s), (walker.output, 18s, 6s)]
+  let items = [(crowd.output, 0s, 7s), (deep, 6s, 7s), (fractal.output, 12s, 7s), (walker.output, 18s, 6s)]
   let at = now
   for (sub, from, len) in items {
-    demo_cut(sub, 0, 0, 16, at + from, len)
+    demo(sub, 0, 0, 16, at + from, at + from + len)
   }
-  # crowd はあとの場面で小さく置き直すので、ここでは全画面に戻しておく
-  let full = context crowd.output as o {
-    motion (t) {
-      0s: o.position = Pos(0, 0, anchor = :topLeft), o.w = 16
-    }
-  }
-  track.place(full, at = at)
-  # Mandelbrot は 40 秒目 (うずまきの所) から見せる。置く時刻を前にずらすと、その分進んだ所から始まる
-  let deep = Timeline(duration = 47s)
-  deep.place(mandelbrot.output, at = 0s)
-  track.place(deep, at = at + 6s - 40s)
   t = say(sc, "図形の動画も、フラクタルも、歩く人も。", at + 8s)
   t = say(sc, "どれも短いファイルです。", at + 19s)
   # 最後に 2x2

@@ -1,46 +1,34 @@
 # cube3d.moph — 3D の箱を回す。床に格子を敷き、面の向きと光の向きで陰を付ける (space3d の例)
 
 import space3d
+import math
 
-let v = View(box = (16, 9))
-v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #0e1018))
+let len = 8s
+let comp = Composition(box = Vector(16, 9), duration = len)
+comp.place("bg", Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9, fill = #0e1018), in = 0s, out = len)
 
 # 3D の点を箱の座標に落とすのはカメラ。描くのは今まで通りの図形。
 # 3 つ並べた Tuple は、Vector3 が要る場所では Vector3 になる
-let cam = space3d.PerspectiveCamera(from = (4.5, 3.6, 7), to = (0, 0, 0), fov = 40, box = (16, 9))
+let cam = space3d.PerspectiveCamera(from = (4.5, 3.6, 7), to = (0, 0, 0), fov = 0.7, box = (16, 9))
 let light = (0.5, 1, 0.4)
 
 # 床は動かないので 1 度だけ投影する
-for (a, b) in space3d.grid((0, -1.3, 0), 16, 16, 1).edges(cam) {
-  v.place(Line(from = a, to = b, stroke = #222a45, strokeWidth = 0.02))
-}
+let floor_lines = space3d.grid((0, -1.3, 0), 16, 16, 1).edges(cam).map(func (e) {
+  Line(from = e[0], to = e[1], stroke = #222a45, strokeWidth = 0.02)
+})
+comp.place("floor", Group(...floor_lines), in = 0s, out = len)
 
 let cube = space3d.box((0, 0, 0), (2.6, 2.6, 2.6))
 let color = #4f8bd6
 
-# 箱から見えるのは多くて 3 面。奥から順に使い、余った板は隠す
-let panels = []
-for i in 0..3 {
-  let p = Polygon(points = [(0, 0)], fill = color, stroke = #0e1018, strokeWidth = 0.04, opacity = 0)
-  v.place(p)
-  panels.push(p)
+# faces は遠い順。奥の面から描けば手前が上に乗る。見える面は多くて 3 枚
+func spin(t) {
+  let turn = space3d.Transform3().rotate_y(t / len * math.tau).rotate_x(0.35)
+  let faces = cube.transformed(turn).faces(cam)
+  Group(...faces.map(func (f) {
+    Polygon(points = f.points, fill = space3d.shade(color, f.normal, light), stroke = #0e1018, strokeWidth = 0.04)
+  }))
 }
+comp.place("cube", spin, in = 0s, out = len)
 
-let spin = motion (t) {
-  0..1: {
-    let turn = space3d.Transform3().rotate_y(t * 360).rotate_x(20)
-    # faces は遠い順。奥の板から描けば手前が上に乗る
-    let faces = cube.transformed(turn).faces(cam)
-    for (i, p) in panels.enumerate() {
-      p.opacity = if i < faces.len() { 1 } else { 0 }
-      if i < faces.len() {
-        p.points = faces[i].points
-        p.fill = space3d.shade(color, faces[i].normal, light)
-      }
-    }
-  }
-}
-spin.duration = 8s
-v.addTrack(spin)
-
-output v
+output comp

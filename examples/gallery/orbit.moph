@@ -2,34 +2,12 @@
 
 import math
 
-let v = View(box = Vector(16, 9))
-v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #101020))
-
+let total = 15s
 let cx = 8
 let cy = 4.5
 
-# 太陽。脈動は 3 つのキーフレーム
-let sun = Circle(position = Pos(cx, cy), radius = 0.9, fill = #f0c040)
-v.place(sun)
-let pulse = context sun as s {
-  motion (t) {
-    0:   s.radius = 0.9
-    0.5: s.radius = 1.05 :ease
-    1:   s.radius = 0.9  :ease
-  }
-}
-pulse.duration = 4s
-
-# 円軌道。0..1 の区間で式を毎フレーム評価するので、t が 0→1 で 1 周する。period で速さを決める
-func orbit(body, r, period) {
-  let tl = context body as b {
-    motion (t) {
-      0..1: b.position = Pos(cx + r * math.cos(math.TAU * t), cy + r * math.sin(math.TAU * t))
-    }
-  }
-  tl.duration = period
-  tl
-}
+let comp = Composition(box = Vector(16, 9), duration = total)
+comp.place("bg", Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9, fill = #101020), in = 0s, out = total)
 
 let planets = [
   { "r": 1.6, "size": 0.16, "period": 3s,  "color": #c0c0c0 },
@@ -39,48 +17,48 @@ let planets = [
 ]
 
 # 軌道の線 (fill なし、stroke だけの Circle)
+let rings = []
 for p in planets {
-  v.place(Circle(position = Pos(cx, cy), radius = p["r"], stroke = #303050, strokeWidth = 0.02))
+  rings.push(Circle(position = Vector(cx, cy), radius = p["r"], stroke = #303050, strokeWidth = 0.02))
+}
+comp.place("rings", Group(...rings), in = 0s, out = total)
+
+# 太陽。脈動は 4 秒ごとにくり返す 3 つのキーフレーム
+let pulse = progress [:radius] {
+  0:   0.9
+  0.5: 1.05 :ease
+  1:   0.9  :ease
 }
 
-let total = 15s
-let track = Timeline(duration = total)
-for i in 0..4 {
-  track.place(pulse, at = i * 4s)
+func sun(t) {
+  Circle(position = Vector(cx, cy), radius = pulse((t / 4s) % 1)[0], fill = #f0c040)
+}
+comp.place("sun", sun, in = 0s, out = total)
+
+# 円軌道。period で 1 周する速さを決める
+func orbit_at(t, r, period) {
+  let a = math.tau * (t / period)
+  Vector(cx + r * math.cos(a), cy + r * math.sin(a))
 }
 
-for p in planets {
-  let body = Circle(position = Pos(cx + p["r"], cy), radius = p["size"], fill = p["color"])
-  v.place(body)
-  # 公転を total の間繰り返す
-  let tl = orbit(body, p["r"], p["period"])
-  let n = total / p["period"]
-  for i in 0..math.ceil(n) {
-    track.place(tl, at = i * p["period"])
-  }
+func planet(r, size, period, color) {
+  func (t) { Circle(position = orbit_at(t, r, period), radius = size, fill = color) }
+}
+
+for (i, p) in planets.enumerate() {
+  comp.place("planet-{i}".format(i), planet(p["r"], p["size"], p["period"], p["color"]), in = 0s, out = total)
 }
 
 # 地球 (r = 3.4, 8 秒で 1 周) の月。地球の位置に、6 倍速の小さな円運動を足す
-let moon = Circle(position = Pos(cx + 3.4 + 0.5, cy), radius = 0.08, fill = #d0d0d0)
-v.place(moon)
-let moon_tl = context moon as m {
-  motion (t) {
-    0..1: m.position = Pos(cx + 3.4 * math.cos(math.TAU * t) + 0.5 * math.cos(math.TAU * t * 6), cy + 3.4 * math.sin(math.TAU * t) + 0.5 * math.sin(math.TAU * t * 6))
-  }
+func moon(t) {
+  let a = math.tau * (t / 8s)
+  Circle(position = Vector(cx + 3.4 * math.cos(a) + 0.5 * math.cos(a * 6), cy + 3.4 * math.sin(a) + 0.5 * math.sin(a * 6)), radius = 0.08, fill = #d0d0d0)
 }
-moon_tl.duration = 8s
-track.place(moon_tl, at = 0s)
-track.place(moon_tl, at = 8s)
-track.place(moon_tl, at = 16s)
+comp.place("moon", moon, in = 0s, out = total)
 
-let title = TextArea(text = "orbit", position = Pos(0.4, 0.3, anchor = :topLeft), fontSize = 0.6, fill = #e0e0f0)
-v.place(title)
-track.place(context title as o {
-  motion (t) {
-    0s:   o.opacity = 0
-    1.5s: o.opacity = 1
-  }
-}, at = 0s)
+func title(t) {
+  TextArea(text = "orbit", position = Vector(0.4, 0.3), anchor = Vector(0, 0), fontSize = 0.6, fill = #e0e0f0, opacity = ease(t, 0s, 1.5s, 0, 1))
+}
+comp.place("title", title, in = 0s, out = total)
 
-v.addTrack(track)
-output v
+output comp

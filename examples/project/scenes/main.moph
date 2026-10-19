@@ -6,22 +6,20 @@ import { hsl } from color
 import { make } from @parts.box   # aliases の parts から。名前を直接持ち込む
 import @.scenes.title             # root からの相対。Module として読む
 
-let v = View(box = Vector(config.width, config.height))
-v.place(make(0, 0, config.width, config.height, #f4f1ea))   # 背景
-v.place(title.make(config.title))
+# config.seconds は Number。1s を掛けて Duration に
+let len = config.seconds * 1s
+let comp = Composition(box = Vector(config.width, config.height), duration = len)
+comp.place("background", make(0, 0, config.width, config.height, #f4f1ea), in = 0s, out = len)
+comp.place("title", title.make(config.title), in = 0s, out = len)
 
-let bar = make(1, 4, 2, 1, hsl(config.hue, 0.7, 0.55))
-v.place(bar)
-
-# キーフレームの時刻には式を書けないので、0..1 で書いて duration を後から決める
-let grow = motion (t) {
-  0: bar.w = 2
-  1: bar.w = config.width - 2 :ease
+# 棒は、時刻に合わせて伸びる
+let color = hsl(config.hue, 0.7, 0.55)
+func bar(t) {
+  make(1, 4, ease(t, 0s, len, 2, config.width - 2), 1, color)
 }
-grow.duration = config.seconds * 1s        # config.seconds は Number。1s を掛けて Duration に
-v.addTrack(grow)
+comp.place("bar", bar, in = 0s, out = len)
 
 if config.debug {
   log("title", config.title, "size", config.width, config.height)
 }
-output v
+output comp

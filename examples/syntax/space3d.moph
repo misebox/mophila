@@ -2,6 +2,7 @@
 # 描くのは今まで通りの図形で、出てくるのは Vector (箱の座標) と Number (奥行き) だけ
 
 import space3d
+import math
 
 # ---- 点。Vector3 が要る場所には、3 つ並べた Tuple をそのまま書ける ----
 let p = space3d.Vector3(1, 2, 3)
@@ -13,17 +14,17 @@ log(p.lerp((0, 0, 0), 0.5))                 # Vector3(0.5, 1, 1.5)
 let ps = space3d.Vector3.from([(0, 0, 0), (1, 0, 0), (1, 1, 0)])   # 並びをまとめて作る
 
 # ---- 変換。書いた順に点へ効く。元は変わらず、繋ぐたびに新しいものが返る ----
-let turn = space3d.Transform3().rotate_y(90).translate((0, 1, 0))
+let turn = space3d.Transform3().rotate_y(math.pi / 2).translate((0, 1, 0))
 log(turn.apply((1, 0, 0)))                  # 回してから動かす
 log(turn.apply_all(ps))                     # 並びはまとめて (ループは Rust の中で回る)
 # ほかに rotate_x rotate_z scale(k) then(other)
 
-# ---- カメラ 3 種。box は落とし先の View の box と同じものを渡す ----
-let cam = space3d.PerspectiveCamera(from = (6, 4, 10), to = (0, 0, 0), fov = 45, box = (16, 9))
+# ---- カメラ 3 種。box は落とし先の Composition の box と同じものを渡す ----
+let cam = space3d.PerspectiveCamera(from = (6, 4, 10), to = (0, 0, 0), fov = 0.8, box = (16, 9))
 let flat = space3d.OrthographicCamera(from = (6, 4, 10), to = (0, 0, 0), height = 8, box = (16, 9))
 let iso = space3d.IsometricCamera(unit = 1, box = (16, 9))   # 視点を持たない。x が右下、z が左下、y が上
 log(cam.project((0, 0, 0)))                 # Vector。箱の座標
-log(cam.depth((0, 0, 0)))                   # 視点からの奥行き。遠いほど大きい (zIndex には -depth)
+log(cam.depth((0, 0, 0)))                   # 視点からの奥行き。遠いほど大きい (並べる順を決めるのに使う)
 log(cam.scale_at((0, 0, 0)))                # その位置の 1 単位が箱でいくつになるか
 log(cam.in_front((0, 0, 20)))               # false。視点より後ろの点は project できない
 log(cam.project_all(ps), cam.depth_all(ps))
@@ -40,15 +41,25 @@ let lines = cube.edges(cam)                 # List<(Vector, Vector)>。Line の 
 let faces = cube.transformed(turn).faces(cam)   # List<Face>。遠い順、裏を向いた面は落ちる
 let face = faces[0]
 log(lines.len(), faces.len())               # 12 3
-log(face.points.len(), face.normal, face.depth)   # points は Polygon へ、depth は zIndex へ
+log(face.points.len(), face.normal, face.depth)   # points は Polygon へ、depth は並べる順の目安
 log(space3d.shade(#4080e0, face.normal, (0, 1, 0)))   # 面の向きと光から塗りの色を決める
 
 # ---- 落としたら、あとは 2D の図形 ----
-let v = View(box = (16, 9))
+# zIndex は無い。並べた順に描く (後が手前)。faces は遠い順なので、そのまま並べれば前後が合う。線は最後に並べて手前に出す
+let drawn = []
 for f in faces {
-  v.place(Polygon(points = f.points, fill = space3d.shade(#4080e0, f.normal, (0, 1, 0)), zIndex = -f.depth))
+  drawn.push(Polygon(points = f.points, fill = space3d.shade(#4080e0, f.normal, (0, 1, 0))))
 }
 for (a, b) in lines {
-  v.place(Line(from = a, to = b, stroke = #ffffff, strokeWidth = 0.02, zIndex = 100))
+  drawn.push(Line(from = a, to = b, stroke = #ffffff, strokeWidth = 0.02))
 }
-output v
+
+let comp = Composition(box = Vector(16, 9), duration = 6s)
+comp.place("cube", Group(...drawn), in = 0s, out = 3s)
+
+# ---- World。面を図形に開かず、Mesh のまま GPU が描く (render / preview / sheet で走る) ----
+let ball = space3d.Solid(mesh = space3d.sphere((0, 0, 0), 1, 16, 32), fill = #6fa3d6)
+comp.place("world", Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9,
+                         fill = space3d.World(camera = cam, parts = [ball], background = #101520)),
+           in = 3s, out = 6s)
+output comp

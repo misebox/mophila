@@ -1,58 +1,46 @@
 # shapes.moph — 丸は動きながら大きさが変わり、四角は回り、五角形は頂点そのものが波打つ
 
 import math
-import { regular_polygon } from shape
-
-let v = View(box = Vector(16, 9))
-v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #f5f4f0))
+import { regular_polygon, polar } from shape
 
 let total = 6s
 let cx = 8
 let swing = 3.2
-let track = Timeline()
 
 # 丸。止まる、動く、止まる。行末の :ease で動き出しと止まり際がなめらかになる
-let ball = Circle(position = Pos(cx - swing, 2.5), radius = 0.65, fill = #e0604a)
-v.place(ball)
-let roll = context ball as c {
-  motion (t) {
-    0:    c.position.x = cx - swing, c.radius = 0.65
-    0.15: c.position.x = cx - swing, c.radius = 0.65
-    0.5:  c.position.x = cx + swing, c.radius = 1.25 :ease
-    0.65: c.position.x = cx + swing, c.radius = 1.25
-    1:    c.position.x = cx - swing, c.radius = 0.65 :ease
-  }
+let roll = progress [:x, :radius] {
+  0:    cx - swing, 0.65
+  0.15: cx - swing, 0.65
+  0.5:  cx + swing :ease, 1.25 :ease
+  0.65: cx + swing, 1.25
+  1:    cx - swing :ease, 0.65 :ease
 }
-roll.duration = total
-track.place(roll, at = 0s)
 
-# 四角。rotation は時計回りの角度。中心は囲む四角形の中心で、pivot を書けばそこを軸にできる
-let square = Polygon(points = regular_polygon(cx, 4.6, 0.95, 4), fill = #3a6fb0)
-v.place(square)
-let spin = context square as s {
-  motion (t) {
-    0: s.rotation = 0
-    1: s.rotation = 360
-  }
+func ball(t) {
+  let (x, radius) = roll(t / total)
+  Circle(position = Vector(x, 2.5), radius = radius, fill = #e0604a)
 }
-spin.duration = total
-track.place(spin, at = 0s)
 
-# 五角形。頂点ごとに中心からの距離を変えて、うねらせる。0..1 の行は毎フレーム評価される
+# 四角。rotation は時計回りのラジアン。点を原点のまわりに作り、position で置くと、原点が回転の軸になる
+func square(t) {
+  Polygon(points = regular_polygon(0, 0, 0.95, 4), position = Vector(cx, 4.6), rotation = math.tau * (t / total), fill = #3a6fb0)
+}
+
+# 五角形。頂点ごとに中心からの距離を変えて、うねらせる
 let py = 6.7
-let penta = Polygon(points = regular_polygon(cx, py, 0.95, 5), fill = #3f9b6d)
-v.place(penta)
-let wobble = context penta as p {
-  motion (t) {
-    0..1: p.points = (0..5).to_list().map(func (i) {
-      let a = (i * 72 - 90) * math.PI / 180
-      let r = 0.95 + 0.3 * math.sin(math.TAU * t * 2 + i * 1.5)
-      Vector(cx + r * math.cos(a), py + r * math.sin(a))
-    })
-  }
-}
-wobble.duration = total
-track.place(wobble, at = 0s)
 
-v.addTrack(track)
-output v
+func penta(t) {
+  let points = (0..5).to_list().map(func (i) {
+    let r = 0.95 + 0.3 * math.sin(math.tau * (t / 1s) * 2 + i * 1.5)
+    polar(cx, py, r, i * math.tau / 5)
+  })
+  Polygon(points = points, fill = #3f9b6d)
+}
+
+let comp = Composition(box = Vector(16, 9), duration = total)
+comp.place("bg", Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9, fill = #f5f4f0), in = 0s, out = total)
+comp.place("ball", ball, in = 0s, out = total)
+comp.place("square", square, in = 0s, out = total)
+comp.place("penta", penta, in = 0s, out = total)
+
+output comp

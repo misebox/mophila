@@ -1,7 +1,7 @@
 # commands.moph — 使う: 動画にも画像にもできて、その場でプレビューもできる
 
-import { W, H, v, track, dim, review, dwell, dwell_code, longer } from .theme
-import { place, heading, card, scene, add, say, close } from .slides
+import { W, H, dim, review, dwell, dwell_code, longer } from .theme
+import { heading, card, scene, add, say, close } from .slides
 
 export func run(now) {
   log("commands", now)
@@ -18,7 +18,7 @@ export func run(now) {
     let (cmd, desc, narration) = c
     let y = 1.9 + i * 1.3
     let objs = card(["$ " + cmd], 1.2, y, 13.6, 0.36)
-    objs.push(place(TextArea(text = desc, position = Pos(1.7, y + 0.95, anchor = :topLeft), w = 12.5, fontSize = 0.28, fill = dim, align = :left, opacity = 0)))
+    objs.push(TextArea(text = desc, position = Vector(1.7, y + 0.95), anchor = Vector(0, 0), w = 12.5, fontSize = 0.28, fill = dim, align = :left))
     add(sc, objs, t)
     for line in narration { t = say(sc, line, t + 0.3s) }
   }

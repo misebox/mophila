@@ -1,14 +1,14 @@
 # files.moph — 組み合わせ 3: ファイルも部品。import して置くだけ
 
-import { W, H, v, track, ink, dim, accent, blue, green, line, panel, review, dwell } from .theme
-import { place, text, heading, card, scene, add, say, close } from .slides
+import { W, H, ink, dim, accent, blue, green, line, panel, review, dwell } from .theme
+import { text, heading, card, scene, add, say, close } from .slides
 
 func box(label, cx, cy, w, color) {
-  [place(Rect(position = Pos(cx, cy), w = w, h = 1.0, radius = 0.15, fill = panel, stroke = color, strokeWidth = 0.05, opacity = 0)),
+  [Rect(position = Vector(cx, cy), w = w, h = 1.0, radius = 0.15, fill = panel, stroke = color, strokeWidth = 0.05),
    text(label, cx, cy, 0.4, ink, :center)]
 }
 func link(x1, y1, x2, y2) {
-  place(Line(from = Vector(x1, y1), to = Vector(x2, y2), stroke = line, strokeWidth = 0.05, opacity = 0))
+  Line(from = Vector(x1, y1), to = Vector(x2, y2), stroke = line, strokeWidth = 0.05)
 }
 
 export func run(now) {
@@ -20,8 +20,9 @@ export func run(now) {
     "import { escape_time, MANDELBROT } from fractal",
     "import ..orbit",
     "",
-    "v.place(orbit.output, at = Pos(1, 1, anchor = :topLeft), w = 6)",
-    "track.place(orbit.output, at = 0s)",
+    "comp.place(\"orbit\", orbit.output.copy(",
+    "  position = Vector(1, 1), anchor = Vector(0, 0)),",
+    "  in = 0s, out = 6s)",
   ], 0.7, 1.8, 7.6, 0.28), now + 0.4s)
   # 右: passerby.moph が walker.moph と fractal.moph からできている図
   let cx = 12.2
@@ -38,6 +39,6 @@ export func run(now) {
   let t2 = t
   add(sc, l2 + [e2], t2)
   t = say(sc, "枝分かれする木を描く fractal.moph を import しています。", t2)
-  t = say(sc, "output した View も、そのまま別の箱に置けます。", t)
+  t = say(sc, "output した Composition も、そのまま別の Composition に置けます。", t)
   close(sc, t + review)
 }

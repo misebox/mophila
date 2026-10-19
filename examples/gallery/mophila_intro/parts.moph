@@ -1,37 +1,44 @@
-# parts.moph — 組み合わせ 2: 作った View は部品。別の箱に、別の大きさで、何個でも
+# parts.moph — 組み合わせ 2: 作った Group は部品。別の場所に、別の大きさで、何個でも
 
-import { W, H, v, track, ink, dim, accent, review, dwell, longer } from .theme
-import { place, text, heading, card, outline, loop_demo, scene, add, say, close } from .slides
+import { W, H, ink, dim, accent, review, dwell, longer } from .theme
+import { text, heading, card, outline, loop_func, scene, add, say, close } from .slides
 import { make, speed, floor } from ..walker
+
+# 幅 w、足元が地面 7.0 に来るように置いた、その場で歩く人
+func person(color, x, w) {
+  let y = 7.0 - (6 - floor) * w / 6 - w
+  func (t) {
+    make(color, #8b93a7, t).copy(position = Vector(x, y), scale = w / 6)
+  }
+}
 
 export func run(now) {
   log("parts", now)
   let sc = scene()
   add(sc, [heading("作ったものは、部品")], now)
   add(sc, card([
-    "# walker.moph — 歩く人の View を作って返す",
+    "# walker.moph — 歩く人の Group を作って返す",
     "export func make(near: Color, far: Color,",
-    "                 long: Duration) -> View {",
-    "  let box = View(box = Vector(6, 6))",
-    "  # ... 腰、腿、脛、足を置いて motion を付ける",
-    "  box",
+    "                 t: Duration) -> Group {",
+    "  # ... 腰、腿、脛、足を t の歩きで置く",
+    "  Group(...)",
     "}",
     "",
     "import { make } from .walker        # 使う側",
-    "let p = make(color, #8b93a7, 20s)",
-    "v.place(p, at = Pos(x, 7, anchor = :bottomLeft), w = w)",
-    "track.place(p, at = 0s)",
+    "func (t) {",
+    "  make(color, #8b93a7, t).copy(",
+    "    position = Vector(x, 7), scale = w / 6)",
+    "}",
   ], 0.7, 1.6, 7.6, 0.26), now + 0.4s)
   let t1 = now + 0.5s
-  let t = say(sc, "作った View は部品です。関数にすれば、何個でも作れます。", t1)
+  let t = say(sc, "作った Group は部品です。関数にすれば、何個でも作れます。", t1)
   t = say(sc, "同じ人を、別の場所に別の大きさで置きました。", t)
   t = say(sc, "中の座標は変えていません。置く側が場所と大きさを決めます。", t)
   t = say(sc, "同じ部品を、奥行きを変えて何人も並べれば、通りになります。", t)
   let end = longer(t, t1 + 16s)
   let sizes = [(8.6, 2.2, #9aa1b8), (10.6, 3.4, #c2c8dc), (12.8, 4.6, accent)]
   for (x, w, color) in sizes {
-    let p = make(color, #8b93a7, end - t1)
-    loop_demo(p, x, 7.0 - (6 - floor) * w / 6 - w, w, t1, end - t1, end)
+    loop_func(person(color, x, w), t1, end - t1, end)
   }
   close(sc, end)
 }

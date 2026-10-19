@@ -1,29 +1,27 @@
-# voice.moph — 読み上げ (すべて仮)。Narration は文と長さだけを持ち、
-# どう喋らせるかは置くときに voice で渡す
+# voice.moph — 読み上げ (すべて仮)。Narration は文だけを持ち、
+# 長さは Layer の in から out、どう喋らせるかは voice で渡す
 
-let v = View(box = Vector(4, 3))
-let track = Timeline()
+let comp = Composition(box = Vector(4, 3), duration = 17s)
 
 # ---- ナレーション。画面には描かず、その文を読んだ音声が動画の音になる ----
-track.place(Narration(text = "ここを読み上げます。", duration = 3s), at = 0.5s)   # voice を書かなければ、その機械に入っているもの
+comp.place("line-1", Narration(text = "ここを読み上げます。"), in = 0.5s, out = 3.5s)   # voice を書かなければ、その機械に入っているもの
 
 # ---- 音声合成は型。受け取る設定が違うので、型ごとに分かれている ----
 let kyoko = SayVoiceEngine(voice = "Kyoko")            # macOS の say
 let hayai = SayVoiceEngine(voice = "Kyoko", rate = 300)   # 1 分あたりの語数
-track.place(Narration(text = "こちらは名前を指定した声です。", duration = 3s), at = 4s, voice = kyoko)
-track.place(Narration(text = "こちらは速く読みます。", duration = 2s), at = 7.5s, voice = hayai)
+comp.place("line-2", Narration(text = "こちらは名前を指定した声です。", voice = kyoko), in = 4s, out = 7s)
+comp.place("line-3", Narration(text = "こちらは速く読みます。", voice = hayai), in = 7.5s, out = 9.5s)
 
-# 声は行ごとに決まる。音量も置くときに
-track.place(Narration(text = "別の声で、少し小さく読みます。", duration = 3s), at = 10s, voice = SayVoiceEngine(voice = "Otoya"), volume = 0.8)
+# 声は行ごとに決まる。音量も Narration に
+comp.place("line-4", Narration(text = "別の声で、少し小さく読みます。", voice = SayVoiceEngine(voice = "Otoya"), volume = 0.8), in = 10s, out = 13s)
 
 # ---- 字幕は読み上げから作られる。書くのは台本 1 回だけ ----
 # 出るのは読み始めから読み終わりまで。長さは合成した音声から測るので、
-# duration の見積もりがずれても字幕と声はずれない
-track.place(Narration(text = "この行が、そのまま字幕になります。", duration = 3s), at = 13.5s, voice = kyoko)
+# out の見積もりがずれても字幕と声はずれない
+comp.place("line-5", Narration(text = "この行が、そのまま字幕になります。", voice = kyoko), in = 13.5s, out = 16.5s)
 
-v.addTrack(track)
-output v
+output comp
 
-# 書いた duration が長さ。合成した音声がはみ出したら、そこで切って警告を出す
+# in から out が枠。合成した音声がはみ出したら、out で切って警告を出す
 # 作った音声は ~/.cache/mophila/voice に置き、同じ型・同じ設定・同じ文なら作り直さない
 # run では合成しない (log と型の確認だけ)。render と preview で鳴る

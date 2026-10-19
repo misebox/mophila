@@ -1,102 +1,54 @@
-# motion.moph — motion と Timeline。View に置いて、時間で動かして、output するまで
+# motion.moph — 時間で動かす。progress の表と、ease / linear。Composition に置いて output するまで
 
-let v = View(box = Vector(4, 3))
+let len = 5s
+let comp = Composition(box = Vector(16, 9), duration = len)
 
-# ---- View に置く。位置は図形の position で決まる ----
-let red   = Circle(position = Pos(1, 1.5), radius = 0.5, fill = #e04040)
-let green = Rect(position = Pos(2, 0.5, anchor = :topLeft), w = 1, h = 1, fill = #40a040, stroke = #000000, strokeWidth = 0.05)
-let line  = Line(from = Vector(0, 3), to = Vector(4, 0), stroke = #4040e0, strokeWidth = 0.03)
-let tri   = Polygon(points = [Vector(3, 2), Vector(4, 3), Vector(2, 3)], fill = #e0a020)
-v.place(red)
-v.place(green)
-v.place(line)
-v.place(tri)
+# ---- 動かない図形は、そのまま Layer として置く。in から out までだけ存在する ----
+comp.place("line", Line(from = Vector(0, 9), to = Vector(16, 0), stroke = #4040e0, strokeWidth = 0.1), in = 0s, out = len)
+comp.place("tri", Polygon(points = [Vector(13, 6), Vector(16, 9), Vector(10, 9)], fill = #e0a020), in = 1s, out = len)
 
-# ---- Motion: 値の時間変化。対象なし ----
-# t = その行の時刻 (秒)、a = 1 列目、b = 2 列目 (同じ行の左の列を参照)
-let m1 = motion (t, a, b) {
-  1s: t*3, a*1, b*3      # 3, 3, 9
-  2s: t*4, a*2, b*4      # 8, 16, 64
-  5s: t*3, a*3, b*5      # 15, 45, 225
+# ---- progress: 0..1 を受けて値の組を返す表。対象も長さも持たない ----
+# 列の名前を先に並べる。行の左が 0..1 の位置。`_` はその列を飛ばす。行末に Easing
+let slide = progress [:x, :y, :r] {
+  0:   2, 4.5, 0.5
+  0.4: _, 6 :ease, _
+  1:  14 :ease_out, 4.5, 2
 }
-# m1.duration は 5s。延ばすには
-m1.duration = 10s
+let (x0, y0, r0) = slide(0)       # 2 4.5 0.5
+let (x1, y1, r1) = slide(1)       # 14 4.5 2
+log(slide(0.5), slide(-1) == slide(0), slide(2) == slide(1))   # (11, 5.75, 1.25) true true。範囲の外は端の値
 
-# 定数だけの Motion。行末に Easing を書ける
-let m2 = motion {
-  0s: 0
-  2s: 3
-  5s: 0 :ease_out
+# 何秒かけるかは呼ぶ側が決める。slide(t / 3s) なら 3 秒で端から端まで
+func ball(t) {
+  let (x, y, r) = slide(t / 3s)
+  Circle(position = Vector(x, y), radius = r, fill = #e04040)
 }
+comp.place("ball", ball, in = 0s, out = len)
 
-# ---- Timeline: Motion を対象に当てる ----
-let c1 = Circle(position = Pos(0.5, 1.5), radius = 0.3, fill = #a0a0a0)
-v.place(c1)
-
-# apply は builtin メソッド。列を受け取る関数を渡す
-let calc = func (c1, t, [x, r, _]) {
-  context c1 as o {
-    o.position, o.radius = Pos(x / 5, 1.5), r / 100
-  }
+# ---- ease(t, t0, t1, v0, v1): t0 から t1 の間で v0 から v1 へ ----
+# linear / ease_in / ease_out も同じ形。v は Number、Vector、Length。区間の外は端の値で止まる
+func demo(t) {
+  let w = linear(t, 0s, 4s, 0vx, 40vx)           # 一定の速さ (Length)
+  let slow = ease_in(t, 0s, 4s, 2, 14)           # 加速
+  let fast = ease_out(t, 0s, 4s, 2, 14)          # 減速
+  let both = ease(t, 0s, 4s, Vector(2, 1), Vector(14, 2))   # 加速して減速 (Vector)
+  Group(
+    Rect(position = Vector(0, 8), anchor = Vector(0, 0), w = w, h = 0.2, fill = #40a040),
+    Circle(position = Vector(slow, 0.5), radius = 0.3, fill = #a0a0a0),
+    Circle(position = Vector(fast, 1.5), radius = 0.3, fill = #a0a0a0),
+    Circle(position = both, radius = 0.3, fill = #e0a020),
+    opacity = ease(t, len - 1s, len, 1, 0),      # 最後の 1 秒で消える
+  )
 }
-let tl1 = m1.apply(c1, calc)
+comp.place("demo", demo, in = 0s, out = len)
 
-# context で囲んで属性に代入する形。戻り値は Timeline
-let tl2 = context c1 as o {
-  motion (t) {
-    1s: o.radius = t / 10
-    2s: o.radius = t / 5
-    5s: o.radius = t / 10
-  }
-}
-
-# 属性名を先に列挙する形
-let tl3 = motion c1 [:position, :radius] {
-  0s: Pos(0.5, 0.5), 0.5
-  2s: Pos(3.5, 2.5), 1
-  5s: Pos(0.5, 0.5) :ease_out
-}
-
-# 参照を辿った先だけ
-let tl4 = motion c1 [:position.x] {
-  0s: 0.5
-  2s: 3.5
-}
-
-# 時刻には式を書ける
+# ---- 時刻には式を書ける。値の変わり方の区間は、呼ぶ側が決める ----
 let dur = 2s
-let tl6 = motion c1 [:opacity] {
-  0s: 1
-  dur: 0.2
-  dur + 1s: 1
+func pulse(t) {
+  let a = ease(t, 0s, dur, 1, 0.2)                # 0.2 まで下がって
+  let b = ease(t, dur, dur + 1s, 0, 0.8)          # また戻る
+  Circle(position = Vector(8, 7), radius = 1, fill = #7d90ad, opacity = a + b)
 }
+comp.place("pulse", pulse, in = 0s, out = len)
 
-# 並びも補間される (同じ長さなら)。Path の形が変わる
-let p1 = Path(from = Vector(0, 2), segments = [(:line, Vector(2, 2)), (:line, Vector(4, 2))],
-              stroke = #e04040, strokeWidth = 0.05)
-let tl7 = motion p1 [:segments] {
-  0s: [(:line, Vector(2, 2)), (:line, Vector(4, 2))]
-  1s: [(:line, Vector(2, 0.5)), (:line, Vector(4, 2.5))]
-}
-
-# 対象は名前だけでなく、属性や添字でも書ける
-let balls = [c1]
-let tl5 = motion balls[0] [:opacity] {
-  0s: 1
-  1s: 0.2
-}
-
-log(m1, m2, tl1, tl2, tl3, tl4, tl5, tl6, tl7)
-
-# ---- Timeline を Timeline に置く ----
-let track = Timeline(duration = 10s)
-track.place(tl1, at = 0s)
-track.place(tl3, at = 3s, fadeIn = 1s)
-
-let sub = Timeline()
-sub.place(tl2, at = 0s)
-track.place(sub, at = 5s)         # 5s 時点に sub。sub の長さは中身で決まる
-
-# ---- View に Timeline を付けて出力 ----
-v.addTrack(track)
-output v
+output comp

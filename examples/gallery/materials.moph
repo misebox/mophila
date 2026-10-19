@@ -5,26 +5,33 @@ import palette
 import pattern
 import { mark } from icon
 import icon
-import { stagger, fade_in, fade_to } from animation
+import { text_at } from diagram
 
 # 画面そのものの色も配色から取る
 let base = palette.HOUSE
-let v = View(box = Vector(16, 9))
-v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = base.back))
-
-let track = Timeline(duration = 9s)
-v.addTrack(track)
 let hold = 2.9s
+let total = 9s
 
-# 1 場面ぶんの入れ物。見出しを付けて、終わりに消える
-func scene(title: String, no: Number) -> View {
-  let stage = View(box = Vector(16, 9), opacity = 0)
-  stage.place(TextArea(position = Pos(0.6, 0.65, anchor = :left), text = title, fontSize = 0.34, fill = base.sub))
-  v.place(stage, at = Pos(0, 0, anchor = :topLeft), w = 16)
-  # 順番に出て、次の場面に入れ替わる。最後の場面は消さない
-  track.place(fade_in(stage, 0.3s), at = hold * no)
-  if no < 2 { track.place(fade_to(stage, 1, 0, 0.35s), at = hold * no + 2.5s) }
-  stage
+let comp = Composition(box = Vector(16, 9), duration = total)
+comp.place("bg", Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9, fill = base.back), in = 0s, out = total)
+
+# 1 場面ぶんの Layer。見出しを付けて、順番に出て、次の場面に入れ替わる (最後の場面は消さない)。
+# items は先頭から step ずつ遅れて 0.4 秒で現れる
+func scene(title: String, no: Number, items: List<Group>, step: Duration, fade: Duration) -> (Duration) -> Group {
+  let start = hold * no
+  func (t) {
+    let shown = ease(t, start, start + 0.3s, 0, 1)
+    let gone = if no < 2 { ease(t, start + 2.5s, start + 2.85s, 1, 0) } else { 1 }
+    let parts = items.enumerate().map(func (pair) {
+      let at = start + 0.15s + pair[0] * step
+      pair[1].copy(opacity = ease(t, at, at + fade, 0, 1))
+    })
+    Group(
+      text_at(TextArea(text = title, fontSize = 0.34, fill = base.sub), 0.6, 0.65, 0, 0.5),
+      ...parts,
+      opacity = shown * gone
+    )
+  }
 }
 
 # ---- palette。1 枚が 1 つの配色。名前 (ink)、accent の帯、series の 5 色 ----
@@ -35,7 +42,6 @@ let sets = [
   (palette.NEON, "NEON"), (palette.FOREST, "FOREST"), (palette.SUNSET, "SUNSET"),
   (palette.BLUEPRINT, "BLUEPRINT"),
 ]
-let colors = scene("palette — 配色", 0)
 # 7 列 2 段。カードの幅も中身も、外周 0.6 を空けた残りから割り出す
 let card_step = 14.8 / 7
 let card_w = card_step - 0.2
@@ -43,22 +49,22 @@ let bar_w = (card_w - 0.32 - 0.05 * 4) / 5
 let cards = []
 for (i, set) in sets.enumerate() {
   let (p, name) = set
-  let card = View(box = Vector(card_w, 3.5), opacity = 0)
-  card.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = card_w, h = 3.5, fill = p.back))
-  card.place(TextArea(position = Pos(card_w / 2, 0.5), text = name, fontSize = 0.26, fill = p.ink))
-  card.place(Rect(position = Pos(0.16, 0.9, anchor = :topLeft), w = card_w - 0.32, h = 0.5, fill = p.accent))
+  let items = [
+    Rect(anchor = Vector(0, 0), w = card_w, h = 3.5, fill = p.back),
+    TextArea(position = Vector(card_w / 2, 0.5), text = name, fontSize = 0.26, fill = p.ink),
+    Rect(position = Vector(0.16, 0.9), anchor = Vector(0, 0), w = card_w - 0.32, h = 0.5, fill = p.accent),
+  ]
   for (j, c) in p.series.enumerate() {
-    card.place(Rect(position = Pos(0.16 + j * (bar_w + 0.05), 1.85, anchor = :topLeft), w = bar_w, h = 1.45, fill = c))
+    items.push(Rect(position = Vector(0.16 + j * (bar_w + 0.05), 1.85), anchor = Vector(0, 0), w = bar_w, h = 1.45, fill = c))
   }
-  card.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = card_w, h = 3.5, stroke = p.line, strokeWidth = 0.03))
-  colors.place(card, at = Pos(0.6 + (i - math.floor(i / 7) * 7) * card_step, 1.0 + math.floor(i / 7) * 3.7, anchor = :topLeft), w = card_w)
-  cards.push(card)
+  items.push(Rect(anchor = Vector(0, 0), w = card_w, h = 3.5, stroke = p.line, strokeWidth = 0.03))
+  cards.push(Group(...items, position = Vector(0.6 + (i - math.floor(i / 7) * 7) * card_step, 1.0 + math.floor(i / 7) * 3.7)))
 }
-stagger(track, cards, func (c) { fade_in(c, 0.4s) }, at = 0.15s, stagger = 0.08s)
+comp.place("palette", scene("palette — 配色", 0, cards, 0.08s, 0.4s), in = 0s, out = total)
 
 # ---- pattern。色はどれも同じにして、模様だけを変える ----
 let fills = [
-  (pattern.stripes(base.back, base.sub, 0.3, 60), "stripes"),
+  (pattern.stripes(base.back, base.sub, 0.3, math.pi / 3), "stripes"),
   (pattern.hatch(base.back, base.sub, 0.3, 0.035), "hatch"),
   (pattern.cross_hatch(base.back, base.sub, 0.3, 0.025), "cross_hatch"),
   (pattern.waves(base.back, base.sub, 0.3, 0.2, 1.4), "waves"),
@@ -71,18 +77,16 @@ let fills = [
   (pattern.bricks(base.back, base.sub, 0.7, 0.28, 0.035), "bricks"),
   (pattern.noise(base.back, base.sub, 70), "noise"),
 ]
-let faces = scene("pattern — 模様", 1)
 let tiles = []
 for (i, item) in fills.enumerate() {
   let (fill, name) = item
-  let tile = View(box = Vector(2.3, 3.3), opacity = 0)
-  tile.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 2.3, h = 2.8, fill = fill))
-  tile.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 2.3, h = 2.8, stroke = base.line, strokeWidth = 0.03))
-  tile.place(TextArea(position = Pos(1.15, 3.08), text = name, fontSize = 0.24, fill = base.sub))
-  faces.place(tile, at = Pos(0.6 + (i - math.floor(i / 6) * 6) * 2.5, 1.0 + math.floor(i / 6) * 3.6, anchor = :topLeft), w = 2.3)
-  tiles.push(tile)
+  tiles.push(Group(
+    Rect(anchor = Vector(0, 0), w = 2.3, h = 2.8, fill = fill),
+    Rect(anchor = Vector(0, 0), w = 2.3, h = 2.8, stroke = base.line, strokeWidth = 0.03),
+    TextArea(position = Vector(1.15, 3.08), text = name, fontSize = 0.24, fill = base.sub),
+    position = Vector(0.6 + (i - math.floor(i / 6) * 6) * 2.5, 1.0 + math.floor(i / 6) * 3.6)))
 }
-stagger(track, tiles, func (c) { fade_in(c, 0.4s) }, at = hold + 0.15s, stagger = 0.08s)
+comp.place("pattern", scene("pattern — 模様", 1, tiles, 0.08s, 0.4s), in = 0s, out = total)
 
 # ---- icon。色も大きさも同じにして、形だけを変える ----
 let signs = [
@@ -94,17 +98,15 @@ let signs = [
   (icon.USER, "USER"), (icon.MAIL, "MAIL"), (icon.FOLDER, "FOLDER"), (icon.FILE, "FILE"),
   (icon.CLOCK, "CLOCK"), (icon.GEAR, "GEAR"), (icon.LOCK, "LOCK"), (icon.BELL, "BELL"), (icon.CHAT, "CHAT"),
 ]
-let marks_view = scene("icon — 記号", 2)
 let step = 14.8 / 7
 let marks = []
 for (i, item) in signs.enumerate() {
   let (sign, name) = item
-  let cell = View(box = Vector(step, 1.85), opacity = 0)
-  cell.place(mark(sign, Vector(step / 2, 0.66), 1.05, base.ink))
-  cell.place(TextArea(position = Pos(step / 2, 1.55), text = name, fontSize = 0.2, fill = base.sub))
-  marks_view.place(cell, at = Pos(0.6 + (i - math.floor(i / 7) * 7) * step, 1.05 + math.floor(i / 7) * 1.9, anchor = :topLeft), w = step)
-  marks.push(cell)
+  marks.push(Group(
+    mark(sign, Vector(step / 2, 0.66), 1.05, base.ink),
+    TextArea(position = Vector(step / 2, 1.55), text = name, fontSize = 0.2, fill = base.sub),
+    position = Vector(0.6 + (i - math.floor(i / 7) * 7) * step, 1.05 + math.floor(i / 7) * 1.9)))
 }
-stagger(track, marks, func (c) { fade_in(c, 0.35s) }, at = hold * 2 + 0.15s, stagger = 0.06s)
+comp.place("icon", scene("icon — 記号", 2, marks, 0.06s, 0.35s), in = 0s, out = total)
 
-output v
+output comp

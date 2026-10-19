@@ -1,67 +1,59 @@
 # bounce.moph — 色の違うボールが順に落ちて弾み、弾み終えてすぐ逆再生で戻る。落下は ease_in (加速)、上昇は ease_out (減速)
 
-let v = View(box = Vector(16, 9))
-v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #1c1c24))
+let comp = Composition(box = Vector(16, 9), duration = 9.9s)
+comp.place("bg", Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9, fill = #1c1c24), in = 0s, out = comp.duration)
 let floor = 7.8
-v.place(Line(from = Vector(0, floor), to = Vector(16, floor), stroke = #50505a, strokeWidth = 0.05))
+comp.place("floor", Line(from = Vector(0, floor), to = Vector(16, floor), stroke = #50505a, strokeWidth = 0.05), in = 0s, out = comp.duration)
 
 let colors = [#e04040, #e0a020, #40a060, #4080e0, #a060e0]
-let track = Timeline()
 
-# 1 個分の落下と 3 回のバウンド。高さは 1 回ごとに 55% に減る
-func drop(ball, r) {
-  let top = 1 + r
-  let ground = floor - r
-  let h1 = (ground - top) * 0.55
-  let h2 = h1 * 0.55
-  let h3 = h2 * 0.55
-  context ball as b {
-    motion (t) {
-      0s:   b.position.y = top
-      1s:   b.position.y = ground            :ease_in
-      1.6s: b.position.y = ground - h1       :ease_out
-      2.2s: b.position.y = ground            :ease_in
-      2.6s: b.position.y = ground - h2       :ease_out
-      3s:   b.position.y = ground            :ease_in
-      3.25s: b.position.y = ground - h3      :ease_out
-      3.5s: b.position.y = ground            :ease_in
-    }
-  }
+# 1 個分の落下と 3 回のバウンド。progress 0..1 が 3.5 秒。
+# drop は落とす高さに対する割合 (0 が上、1 が床)。高さは 1 回ごとに 55% に減る
+let drop = progress [:down] {
+  0:     0
+  2/7:   1      :ease_in
+  16/35: 0.45  :ease_out
+  22/35: 1      :ease_in
+  26/35: 0.6975 :ease_out
+  6/7:   1      :ease_in
+  13/14: 0.8336 :ease_out
+  1:     1      :ease_in
+}
+# 着地の瞬間だけ影を濃くする
+let pulse = progress [:opacity] {
+  0:     0.15
+  2/7:   0.6
+  13/35: 0.2
+  22/35: 0.5
+  5/7:   0.2
+  6/7:   0.4
+  1:     0.25
 }
 
-# 着地の瞬間だけ影を濃くする
-func shadow_pulse(shadow) {
-  context shadow as s {
-    motion (t) {
-      0s:   s.opacity = 0.15
-      1s:   s.opacity = 0.6
-      1.3s: s.opacity = 0.2
-      2.2s: s.opacity = 0.5
-      2.5s: s.opacity = 0.2
-      3s:   s.opacity = 0.4
-      3.5s: s.opacity = 0.25
-    }
+let fall_time = 3.5s
+let back_at = 5.2s
+
+# 落ちて弾み、止まったまま待ち、back_at から同じ動きを逆向きにたどる。
+# 5 個は 0.3 秒ずつずらして始める
+func ball_at(i, r, x, color) {
+  func (t) {
+    let local = t - i * 0.3s
+    let p = if local < back_at { local / fall_time } else { 1 - (local - back_at) / fall_time }
+    let top = 1 + r
+    let down = drop(p)[0]
+    let opacity = pulse(p)[0]
+    Group(
+      Rect(position = Vector(x, floor), w = r * 2.4, h = 0.12, fill = #000000, opacity = opacity),
+      Circle(position = Vector(x, top + (floor - r - top) * down), radius = r, fill = color),
+    )
   }
 }
 
 for (i, color) in colors.enumerate() {
   let r = 0.45 + i * 0.05
-  let x = 2.5 + i * 2.75
-  let shadow = Rect(position = Pos(x, floor), w = r * 2.4, h = 0.12, fill = #000000, opacity = 0.15)
-  let ball = Circle(position = Pos(x, 1 + r), radius = r, fill = color)
-  v.place(shadow)
-  v.place(ball)
-  let fall = drop(ball, r)
-  let pulse = shadow_pulse(shadow)
-  track.place(fall, at = i * 0.3s)
-  track.place(pulse, at = i * 0.3s)
-  # 逆再生。reverse は区間ごとの ease_in / ease_out を入れ替える
-  track.place(fall.reverse(), at = 5.2s + i * 0.3s)
-  track.place(pulse.reverse(), at = 5.2s + i * 0.3s)
+  comp.place("ball-{i}".format(i), ball_at(i, r, 2.5 + i * 2.75, color), in = 0s, out = comp.duration)
 }
 
-let title = TextArea(text = "bounce", position = Pos(0.5, 0.3, anchor = :topLeft), fontSize = 0.6, fill = #d0d0d8)
-v.place(title)
+comp.place("title", TextArea(text = "bounce", position = Vector(0.5, 0.3), anchor = Vector(0, 0), fontSize = 0.6, fill = #d0d0d8), in = 0s, out = comp.duration)
 
-v.addTrack(track)
-output v
+output comp

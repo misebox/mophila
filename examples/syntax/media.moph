@@ -1,27 +1,27 @@
-# media.moph — 音声と画像 (すべて仮)。音声は Timeline に置き、render が動画のトラックにする
+# media.moph — 音声と画像 (すべて仮)。音声は Composition に Layer として置き、render が動画のトラックにする
 
-let v = View(box = Vector(4, 3))
-let track = Timeline()
+let comp = Composition(box = Vector(4, 3), duration = 6s)
 
 # ---- 音声。.moph 以外のファイルを import すると Audio か Image になる (拡張子で決まる) ----
 import "../gallery/mophila_intro/QuietSignal.m4a" as bgm
 import "sample.png" as pic              # 画像 (png jpg gif webp bmp tiff)
-log(type_of(bgm), bgm.duration, bgm.file)         # Audio 152.52s ../gallery/mophila_intro/QuietSignal.m4a
+log(type_of(bgm), bgm.duration, bgm.file)         # Audio 114.64s ../gallery/mophila_intro/QuietSignal.m4a
 
-track.place(bgm, at = 0s, fadeIn = 1s, duration=5s, fadeOut = 2s)   # 動画の終わりまで繰り返す (動画は延びない)
-track.place(bgm, at = 0.5s, duration = 5s, volume = 0.6)                                        # 3 秒から 5 秒分だけ (重ねて鳴る)
+# volume と loop は copy で決める。loop = true は out まで繰り返す。音声は out で切る
+comp.place("bgm", bgm.copy(volume = 0.6, loop = true), in = 0s, out = 6s)
+# 同じ音声を別の名前で何度でも置ける。重なれば混ざる
+comp.place("bgm-late", bgm, in = 0.5s, out = 5.5s)
 
 # ---- 読み上げ。音声と字幕になる。書き方は voice.moph ----
-track.place(Narration(text = "最初の行", duration = 3s), at = 1s)
+comp.place("line-1", Narration(text = "最初の行"), in = 1s, out = 4s)
 
 # ---- 画像。図形の fill に入れると、その形に切り抜いて敷かれる ----
 log(pic.file, pic.width, pic.height)      # import に書いたパスと、元のピクセル数
-v.place(Rect(position = Pos(0.2, 0.2, anchor = :topLeft), w = 1.6, h = 1, fill = pic))
-v.place(Circle(position = Pos(3, 2), radius = 0.8, fill = pic))   # 丸く切り抜く
+comp.place("rect", Rect(position = Vector(0.2, 0.2), anchor = Vector(0, 0), w = 1.6, h = 1, fill = pic), in = 0s, out = 6s)
+comp.place("circle", Circle(position = Vector(3, 2), radius = 0.8, fill = pic), in = 0s, out = 6s)   # 丸く切り抜く
 
-# 動画の長さは置いたものの終わりで決まる (loop でない曲が長ければ曲の終わりまで)
-v.addTrack(track)
-output v
+# 動画の長さは output した Composition の duration
+output comp
 
-# render は音声を混ぜて (adelay / amix / afade) 動画に付ける。preview でも鳴り、字幕は画面の下に重ねて出る
+# render は音声を混ぜて動画に付ける。preview でも鳴り、字幕は画面の下に重ねて出る
 # bundle は import した音声も埋め込む

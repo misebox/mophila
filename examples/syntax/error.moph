@@ -1,4 +1,5 @@
 # error.moph — エラーの種類と例 (すべて仮)。各行がエラー
+# run は最初のエラーで止まるので、確かめるときは 1 行ずつ残して動かす
 
 # ---- エラー種別のツリー ----
 # Error
@@ -17,24 +18,25 @@
 # │  ├─ ArityMismatch        引数や列の数
 # │  └─ NotPlaceable         place できない型
 # ├─ ValueError             型は合うが値が不正
-# │  ├─ DurationRequired     時刻の単位が混在、相対時刻なのに duration が無い
 # │  ├─ OutOfRange
-# │  └─ AlreadyPlaced       同じ View を 2 か所に置いた
+# │  └─ AlreadyPlaced       同じ名前の Layer を 2 度置いた
 # └─ RuntimeError           実行時
 #    ├─ DivisionByZero
 #    ├─ FontNotFound
 #    ├─ AudioUnreadable      import した音声を ffprobe が読めない (音声ストリームが無い、ffprobe が無い)
+#    ├─ ImageUnreadable      import した画像を読めない
 #    ├─ ShaderCompile        Shader の関数に GPU で計算できないものがある (描画時に出る)
 #    ├─ ShaderUnavailable    GPU の無い場面で Shader を描こうとした
-#    └─ EndlessLoop          while が 100 万回回っても条件が偽にならない
+#    ├─ EndlessLoop          while が 100 万回回っても条件が偽にならない
+#    └─ OutOfMemory          GPU のメモリが足りない (描画時に出る)
 
 # ---- SyntaxError ----
 let d = #e0404                 # SyntaxError.InvalidLiteral: color literal must have 3, 4, 6 or 8 hex digits
 let e = 1:2:3:4                # SyntaxError.InvalidLiteral: invalid duration literal "1:2:3:4"
 let f = (1, 2                  # SyntaxError.UnexpectedToken: expected ")" but found end of line
 
-let v = View(box = Vector(4, 3))
-let tr = Timeline(duration = 10s)
+let comp = Composition(box = Vector(4, 3), duration = 2s)
+let dot = Circle(position = center, radius = 10vy, fill = #e04040)
 let n = 1
 
 # ---- NameError ----
@@ -43,31 +45,42 @@ let ann: Numbr = 1             # NameError.UndefinedVariable: "Numbr" is not a t
 import "nope.m4a" as bgm       # NameError.UndefinedVariable: cannot read "nope.m4a": ... is not a file
 w = 1                          # NameError.AssignWithoutLet: "w" is not defined; use "let w = ..."
 record List { a: Number }      # NameError.Reserved: "List" is a builtin type and cannot be redeclared
-let x = Circle(radius = 1)
-x.width = 2                    # NameError.UndefinedAttribute: Circle has no attribute "width"
+dot.width                      # NameError.UndefinedAttribute: Circle has no attribute "width"
+let l = Line(from = Vector(0, 0), to = Vector(1, 1), fill = #e04040)   # NameError.UndefinedAttribute: Line has no field "fill" (線に面は無い)
+let g = Group(dot, ring = dot)   # NameError.UndefinedAttribute: Group has no field "ring" (Group の中身に名前は付けられない)
 
 # ---- TypeError ----
 let a = 1s + 1                 # TypeError.OperandType: cannot add Duration and Number
 let c = #e04040 + 1            # TypeError.OperandType: cannot add Color and Number
-x.position = 1                 # TypeError.AttributeType: Circle.position expects Pos, found Number
-let ta = TextArea(text = 1)   # TypeError.ArgumentType: TextArea.text expects String, found Number
-let mo = motion { 0s: 0, 1s: 1 }
-mo.apply(x, func (x, t, [p, q]) { x.radius = p })   # TypeError.ArityMismatch: motion has 1 column but 2 parameters given
-tr.place(mo, at = 0s)           # TypeError.NotPlaceable: Motion cannot be placed; apply it to make a Timeline
-tr.place(1, at = 0s)            # TypeError.ArgumentType: Timeline.place expects Timeline, View, Audio or Narration, found Number
+let k = 5vx + 1s               # TypeError.OperandType: cannot add Length and Duration
+dot.radius = 2                 # TypeError.AttributeType: Circle is immutable; make a changed one with copy(radius = ...)
+let moved = dot.copy(position = 1)   # TypeError.ArgumentType: Circle.position expects Vector, found Number
+let ta = TextArea(text = 1)    # TypeError.ArgumentType: TextArea.text expects String, found Number
+let slide = progress [:x, :y] {
+  0: 2, 4.5
+  1: 14, 4.5
+}
+let (sx, sy, sz) = slide(0.5)  # TypeError.ArityMismatch: expected a tuple of 3, found 2
+comp.place("late", dot, in = 1s)   # TypeError.ArityMismatch: Composition.place needs out =
+comp.place("one", 1, in = 0s, out = 1s)   # TypeError.NotPlaceable: Composition.place expects a Node or func (t), found Number
+output dot                     # TypeError.ArgumentType: output takes a Composition, found Circle
 
 # ---- ValueError ----
-let m = motion { 0s: 0, 0.5: 1 }   # ValueError.DurationRequired: keyframe times must be all Duration or all Number (0..1)
-let m2 = motion { 5: 0 }       # ValueError.OutOfRange: relative keyframe time must be within 0..1
-tr.place(Narration(text = "a"), at = 0s)   # ValueError.DurationRequired: a Narration needs duration before it is placed
-v.place(1)                     # TypeError.ArgumentType: View.place expects Placeable, found Number
-let inner = View(box = Vector(1, 1))
-v.place(inner, at = Pos(0, 0), w = 1)
-v.place(inner, at = Pos(1, 1), w = 1)   # ValueError.AlreadyPlaced: this View is already placed; place a copy() of it instead
-output Circle(radius = 1)      # TypeError.ArgumentType: output takes a View, found Circle
+let xs = [1, 2, 3]
+let i = xs[1.5]                # ValueError.OutOfRange: an index must be a whole number, found 1.5
+let r = Rect(w = 1, h = 1, strokeJoin = :sharp)   # ValueError.OutOfRange: Rect.strokeJoin is one of :miter | :round | :bevel, found :sharp
 let h = #e04040 * 2            # ValueError.OutOfRange: color channel exceeds 1.0
+comp.place("dot", dot, in = 0s, out = 1s)
+comp.place("dot", dot, in = 1s, out = 2s)   # ValueError.AlreadyPlaced: a layer named "dot" is already placed
 
 # ---- RuntimeError ----
-let g = 1 / (n - n)            # RuntimeError.DivisionByZero: division by zero
-let t2 = TextArea(text = "a", font = "NoSuchFont")   # RuntimeError.FontNotFound: font "NoSuchFont" not found   (未実装: フォント読み込みは M2)
+let q = 1 / (n - n)            # RuntimeError.DivisionByZero: division by zero
+let t2 = TextArea(text = "a", font = "NoSuchFont")   # RuntimeError.FontNotFound: font "NoSuchFont" not found; "mophila fonts" lists the ones this machine has
+# import "not_an_image.png" as pic   # RuntimeError.ImageUnreadable: cannot read "not_an_image.png": ... (ファイルはあるが画像として開けない。画像でない中身の .png を置いたとき)
 while true { }                 # RuntimeError.EndlessLoop: this while ran 1000000 times without its condition becoming false
+
+# ---- 複数行の例。前の行を setup として使うので、ファイルの最後に置く ----
+let bad = progress [:x] {
+  0: 1
+  2: 3
+}                              # ValueError.OutOfRange: a progress row is at a Number within 0..1, found 2

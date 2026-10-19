@@ -1,25 +1,22 @@
-# table.moph — 時間 1: 時刻と値の表。間は補間され、duration で全体が伸び縮みする
+# table.moph — 時間 1: 時刻と値の表。間は補間され、渡す progress の速さで全体が伸び縮みする
 
-import { W, H, v, track, ink, dim, accent, blue, review, dwell, longer } from .theme
-import { place, text, heading, card, outline, loop_demo, scene, add, say, close } from .slides
+import { W, H, ink, dim, accent, blue, review, dwell, longer } from .theme
+import { text, heading, card, outline, loop_demo, scene, add, say, close } from .slides
 
-# 同じ表を、違う duration で
+# progress の表。どれだけの時間で往復するかは、呼ぶ側が決める
+let go = progress [:x] {
+  0:   0.6
+  0.5: 3.4 :ease
+  1:   0.6 :ease
+}
+
+# 同じ表を、違う長さで
 func bouncer(color, life) {
-  let b = View(box = Vector(4, 3))
-  b.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 4, h = 3, fill = #1b2130))
-  let c = Circle(position = Pos(0.6, 1.5), radius = 0.35, fill = color)
-  b.place(c)
-  let go = context c as o {
-    motion (t) {
-      0:   o.position.x = 0.6
-      0.5: o.position.x = 3.4 :ease
-      1:   o.position.x = 0.6 :ease
-    }
-  }
-  go.duration = life
-  let tl = Timeline()
-  tl.place(go, at = 0s)
-  b.addTrack(tl)
+  let b = Composition(box = Vector(4, 3), duration = life)
+  b.place("bg", Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 4, h = 3, fill = #1b2130), in = 0s, out = life)
+  b.place("ball", func (t) {
+    Circle(position = Vector(go(t / life)[0], 1.5), radius = 0.35, fill = color)
+  }, in = 0s, out = life)
   b
 }
 
@@ -28,23 +25,22 @@ export func run(now) {
   let sc = scene()
   add(sc, [heading("時刻と値を、表に書く")], now)
   add(sc, card([
-    "let go = context c as o {",
-    "  motion (t) {",
-    "    0:   o.position.x = 0.6",
-    "    0.5: o.position.x = 3.4 :ease",
-    "    1:   o.position.x = 0.6 :ease",
-    "  }",
+    "let go = progress [:x] {",
+    "  0:   0.6",
+    "  0.5: 3.4 :ease",
+    "  1:   0.6 :ease",
     "}",
-    "go.duration = 2s      # 右上",
-    "go.duration = 4s      # 右下",
+    "",
+    "go(t / 2s)[0]      # 右上",
+    "go(t / 4s)[0]      # 右下",
   ], 0.7, 1.8, 7.6, 0.28), now + 0.4s)
   let t1 = now + 0.5s
   let x0 = 9.4
-  add(sc, [outline(x0 - 0.1, 1.5, 3.4, 2.6), outline(x0 - 0.1, 4.3, 3.4, 2.6), text("duration = 2s", x0 + 3.6, 2.8, 0.3, dim, :left), text("duration = 4s", x0 + 3.6, 5.6, 0.3, dim, :left)], t1)
+  add(sc, [outline(x0 - 0.1, 1.5, 3.4, 2.6), outline(x0 - 0.1, 4.3, 3.4, 2.6), text("t / 2s", x0 + 3.6, 2.8, 0.3, dim, :left), text("t / 4s", x0 + 3.6, 5.6, 0.3, dim, :left)], t1)
   # ナレーションの長さを先に出し、その終わりまで往復させる
   let t = say(sc, "変化は、時刻と値の表で書きます。間は補間されます。", t1)
   t = say(sc, ":ease を付けた区間は、ゆっくり始まり、ゆっくり止まります。", t)
-  t = say(sc, "時刻を 0 から 1 で書き、duration を変えると、同じ表が伸び縮みします。", t)
+  t = say(sc, "時刻は 0 から 1 で書き、何秒で割るかを変えると、同じ表が伸び縮みします。", t)
   t = say(sc, "上は 2 秒、下は 4 秒で往復しています。", t)
   let end = longer(t, t1 + 22s)
   loop_demo(bouncer(accent, 2s), x0, 1.6, 3.2, t1, 2s, end)

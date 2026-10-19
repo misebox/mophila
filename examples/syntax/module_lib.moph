@@ -11,6 +11,14 @@ export record Point {
   method swapped(self) -> Point { Point(self.y, self.x) }
 }
 
+# 部品は、時間を知らない静的な Group を返す関数にする。中の座標は部品の左上を (0, 0) とした相対
+export func badge(color: Color, progress: Number) -> Group {
+  Group(
+    Circle(position = Vector(5vy, 5vy), radius = 5vy * progress, fill = color),
+    Rect(w = 10vy, h = 10vy, stroke = color, strokeWidth = 1vy),
+  )
+}
+
 # export を書かないものは、このファイルの中だけのもの
 let inside = "見えない"
 log(VERSION, twice(21), Point(1, 2).swapped(), inside)   # 0.1 42 Point(2, 1) 見えない

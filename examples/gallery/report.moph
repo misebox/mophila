@@ -2,59 +2,77 @@
 
 import { graph_paper, vignette } from backdrop
 import { bar, line_chart, axes } from chart
-import { arrow, leader_label } from diagram
-import { table } from diagram
+import { arrow, leader_label, table, text_at } from diagram
 import { lower_third, thousands } from text
 import { toast } from ui
 import { timeline_bar } from clock
-import { fade_in } from animation
 
 let months = ["4月", "5月", "6月", "7月", "8月", "9月"]
 let sales = [820, 1240, 990, 1560, 1810, 2380]
 
-let v = View(box = Vector(16, 9))
-v.place(graph_paper(16, 9, 0.5, 4), at = Pos(0, 0, anchor = :topLeft), w = 16)
+let total = 10s
+let comp = Composition(box = Vector(16, 9), duration = total)
 
-let track = Timeline(duration = 10s)
-v.addTrack(track)
+# 部品は左上を (0, 0) として作られる。置く場所は外側の Group の position で決める
+func at(part, x, y) { Group(part, position = Vector(x, y)) }
+
+comp.place("paper", graph_paper(16, 9, 0.5, 4), in = 0s, out = total)
 
 # 見出し
-v.place(lower_third("上半期の売上", "単位: 千円", 7, 1.3, duration = 0.5s, start = 0.3s), at = Pos(0.6, 0.5, anchor = :topLeft), w = 7)
+func headline(t) {
+  at(lower_third("上半期の売上", "単位: 千円", 7, 1.3, ease(t, 0.3s, 0.8s, 0, 1)), 0.6, 0.5)
+}
+comp.place("headline", headline, in = 0s, out = total)
 
-# 棒グラフ。1 本ずつ伸びる
-v.place(axes(6.6, 4, 0, 6, 0, 2500, "", "", 5), at = Pos(1, 2.6, anchor = :topLeft), w = 6.6)
-v.place(bar(sales, months, 6.6, 4, [#e04040], 0, 2500, duration = 0.9s, start = 1.2s, stagger = 0.12s), at = Pos(1, 2.6, anchor = :topLeft), w = 6.6)
+# 棒グラフ。1 本ずつ伸びる (1 本が 0.9 秒、0.12 秒ずつ遅れて、全体で 1.5 秒)
+comp.place("bar-axes", at(axes(6.6, 4, 0, 6, 0, 2500, "", "", 5), 1, 2.6), in = 0s, out = total)
+func bars(t) {
+  at(bar(sales, months, 6.6, 4, [#e04040], 0, 2500, ease(t, 1.2s, 2.7s, 0, 1), 0.12 / 0.9), 1, 2.6)
+}
+comp.place("bars", bars, in = 0s, out = total)
 
 # 一番高い月を指す
-let peak = TextArea(position = Pos(7.2, 2.2, anchor = :right), text = thousands(2380), fontSize = 0.5, fill = #1a1d23, opacity = 0)
-v.place(peak)
-let point = arrow(Vector(6.6, 2.9), Vector(7.3, 2.4), 1, #1a1d23, 0.05)
-point.opacity = 0
-v.place(point)
-track.place(fade_in(peak, 0.4s), at = 2.6s)
-track.place(fade_in(point, 0.4s), at = 2.6s)
+func peak(t) {
+  let shown = ease(t, 2.6s, 3s, 0, 1)
+  Group(
+    text_at(TextArea(text = thousands(2380), fontSize = 0.5, fill = #1a1d23), 7.2, 2.2, 1, 0.5).copy(opacity = shown),
+    arrow(Vector(6.6, 2.9), Vector(7.3, 2.4), 1, #1a1d23, 0.05).copy(opacity = shown)
+  )
+}
+comp.place("peak", peak, in = 0s, out = total)
 
 # 折れ線。左から描かれる
 let trend = [Vector(0, 12), Vector(1, 18), Vector(2, 16), Vector(3, 24), Vector(4, 29), Vector(5, 38)]
-v.place(axes(6.4, 3.2, 0, 5, 0, 40, "", "", 4), at = Pos(9, 2.6, anchor = :topLeft), w = 6.4)
-v.place(line_chart(trend, 6.4, 3.2, 0, 5, 0, 40, #3f6fb0, 1, duration = 1.2s, start = 3.6s), at = Pos(9, 2.6, anchor = :topLeft), w = 6.4)
+comp.place("line-axes", at(axes(6.4, 3.2, 0, 5, 0, 40, "", "", 4), 9, 2.6), in = 0s, out = total)
+func trend_line(t) {
+  at(line_chart(trend, 6.4, 3.2, 0, 5, 0, 40, #3f6fb0, ease(t, 3.6s, 4.8s, 0, 1)), 9, 2.6)
+}
+comp.place("trend", trend_line, in = 0s, out = total)
+
 # 折れ線の右端 (9 + 6.4, 2.6 + 3.2 * (1 - 38/40)) を指す
-let note = leader_label(Vector(15.4, 2.76), "伸び続けている", Vector(-2.4, 1.1), 16, 9, 0.38, #3f6fb0)
-note.opacity = 0
-v.place(note, at = Pos(0, 0, anchor = :topLeft), w = 16)
-track.place(fade_in(note, 0.4s), at = 4.8s)
+func note(t) {
+  leader_label(Vector(15.4, 2.76), "伸び続けている", Vector(-2.4, 1.1), 0.38, #3f6fb0).copy(opacity = ease(t, 4.8s, 5.2s, 0, 1))
+}
+comp.place("note", note, in = 0s, out = total)
 
 # 表。1 行ずつ出る
-let sheet = View(box = Vector(6.4, 2.4), opacity = 0)
-sheet.place(table(["月", "売上", "前月比"], [["7月", "1,560", "+58%"], ["8月", "1,810", "+16%"], ["9月", "2,380", "+31%"]],
-                  6.4, 2.4, duration = 1.2s, start = 5.4s),
-            at = Pos(0, 0, anchor = :topLeft), w = 6.4)
-v.place(sheet, at = Pos(9, 6.2, anchor = :topLeft), w = 6.4)
-track.place(fade_in(sheet, 0.3s), at = 5.2s)
+func sheet(t) {
+  let rows = [["7月", "1,560", "+58%"], ["8月", "1,810", "+16%"], ["9月", "2,380", "+31%"]]
+  let revealed = ease(t, 5.4s, 6.6s, 0, 3)
+  Group(table(["月", "売上", "前月比"], rows, 6.4, 2.4, revealed), position = Vector(9, 6.2), opacity = ease(t, 5.2s, 5.5s, 0, 1))
+}
+comp.place("sheet", sheet, in = 0s, out = total)
 
 # 締め
-v.place(toast("目標を超えました", 5, 0.9, duration = 0.4s, start = 7.4s), at = Pos(1, 7.6, anchor = :topLeft), w = 5)
-v.place(timeline_bar([0.12, 0.36, 0.54, 0.74], 1, 6.6, 0.5, duration = 9.4s), at = Pos(1, 8.2, anchor = :topLeft), w = 6.6)
+func closing(t) {
+  at(toast("目標を超えました", 5, 0.9, ease(t, 7.4s, 7.8s, 0, 1)), 1, 7.6)
+}
+comp.place("toast", closing, in = 0s, out = total)
 
-v.place(vignette(16, 9, 0.35), at = Pos(0, 0, anchor = :topLeft), w = 16)
-output v
+func playhead(t) {
+  at(timeline_bar([0.12, 0.36, 0.54, 0.74], ease(t, 0s, 9.4s, 0, 1), 6.6, 0.5), 1, 8.2)
+}
+comp.place("timeline", playhead, in = 0s, out = total)
+
+comp.place("vignette", vignette(16, 9, 0.35), in = 0s, out = total)
+output comp

@@ -1,7 +1,7 @@
 # llm.moph — LLM を使って書く 1: 文法とドキュメントを渡して頼む (依頼 → コード → 動画)
 
-import { W, H, v, track, ink, dim, accent, panel, line, mono, review, dwell, dwell_code, longer } from .theme
-import { place, show, text, heading, card, outline, scene, add, say, close } from .slides
+import { W, H, ink, dim, accent, panel, line, mono, review, dwell, dwell_code, longer } from .theme
+import { show, text, heading, card, outline, demo, scene, add, say, close } from .slides
 import ..crowd
 
 export func run(now) {
@@ -9,22 +9,20 @@ export func run(now) {
   let sc = scene()
   add(sc, [heading("文法とドキュメントを渡して、頼む")], now)
   # 依頼の吹き出し
-  let ask = [place(Rect(position = Pos(0.7, 1.6, anchor = :topLeft), w = 7.6, h = 1.7, radius = 0.3, fill = #22304a, opacity = 0)),
-             place(TextArea(text = "docs/mophila.gbnf と misebox.github.io/mophila を読んで、mophila で書いて。夕暮れの通りを、人が歩いていく動画。奥の人は小さく。", position = Pos(1.0, 1.8, anchor = :topLeft), w = 7.0, fontSize = 0.27, fill = ink, align = :left, opacity = 0))]
+  let ask = [Rect(position = Vector(0.7, 1.6), anchor = Vector(0, 0), w = 7.6, h = 1.7, radius = 0.3, fill = #22304a),
+             TextArea(text = "docs/mophila.gbnf と misebox.github.io/mophila を読んで、mophila で書いて。夕暮れの通りを、人が歩いていく動画。奥の人は小さく。", position = Vector(1.0, 1.8), anchor = Vector(0, 0), w = 7.0, fontSize = 0.27, fill = ink, align = :left)]
   let t1 = now + 0.5s
   add(sc, ask, t1)
   let t = say(sc, "文法とドキュメントの場所を渡して、mophila で書いてと頼みます。", t1)
   # コードが 1 行ずつ現れる
   let lines = [
     "import { make } from .walker",
-    "for (ground, w, start) in people {      # 奥から順",
-    "  let p = make(#e8ecf7, #8b93a7, 8s)",
-    "  v.place(p, at = Pos(-w, ground, anchor = :bottomLeft), w = w)",
-    "  let walk = context p as o {",
-    "    motion (t) { 0: o.position.x = -w  1: o.position.x = 16.5 }",
-    "  }",
-    "  track.place(p, at = start)",
-    "  track.place(walk, at = start)",
+    "for (n, (ground, w, start)) in people.enumerate() {  # 奥から順",
+    "  comp.place(\"walk-{n}\".format(n), func (t) {",
+    "    make(#e8ecf7, #8b93a7, t).copy(",
+    "      position = Vector(x_at(t), ground),",
+    "      scale = w / 6)",
+    "  }, in = start, out = start + 8s)",
     "}",
   ]
   let code = card(lines, 0.7, 2.7, 7.6, 0.23)
@@ -37,15 +35,8 @@ export func run(now) {
   let t3 = longer(t, t2 + 4s)
   let end = t3 + 12s
   add(sc, [outline(8.8, 1.8, 6.6, 6.6 * 9 / 16)], t3)
-  # crowd の View は冒頭で置いてあるので、ここでは位置と大きさを変えて動かし直す
-  let small = context crowd.output as o {
-    motion (t) {
-      0s: o.position = Pos(8.8, 1.8, anchor = :topLeft), o.w = 6.6
-    }
-  }
-  track.place(small, at = t3 - 0.1s)
-  track.place(crowd.output, at = t3)
-  show([crowd.output], t3, end)
+  # crowd の Composition を、位置と大きさを変えて置く
+  demo(crowd.output, 8.8, 1.8, 6.6, t3, end)
   t = say(sc, "書いたものが、そのまま動画になります。", t3)
   t = say(sc, "直したければ、文章で言い直します。", t)
   close(sc, longer(t, end))

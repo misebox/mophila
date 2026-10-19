@@ -33,6 +33,13 @@ let div = Vector(2, 0).cdiv(Vector(0, 1))   # Vector(0, -2)
 let flip = Vector(1, 2).flip_y()            # Vector(1, -2)。数学の向き (y は上) ↔ 画面の向き (y は下)
 # 3D の点は space3d の中にある (space3d.moph)
 
+# Length。box に対して描くときに数になる量。単位は vx vy vmin vmax px
+let len1 = 20vy + 5vy         # 25vy。同じ単位どうしは足せる
+let len2 = 10vx * 2           # 20vx
+let corner = Vector(50vx, 40vy)    # Vector の成分は Length でもよい
+let ang = 90 * math.pi / 180       # 90 度のラジアン
+let ring = center + math.polar(20vy, math.tau / 6)   # center は描く先の Composition の中心
+
 # Color の合成
 let mix = #ff0000 * 0.5 + #0000ff * 0.5
 
@@ -41,11 +48,10 @@ let ok = a > 5 and b <= 9
 let ng = not ok or c == 1
 
 # 標準ライブラリ (先頭の import math が要る)
-let pi = math.PI               # math.PI / math.TAU / math.E
+let pi = math.pi               # math.pi / math.tau / math.e。角度はラジアンで、時計回りが正
 let s = math.sin(3.14)
 let m = math.max(1, 2, 3)
 let f = math.floor(2.7)
-let g = math.sin               # 関数は値として取り出せる
 let r = math.round(1.23456, 2) # 1.23 (小数の桁を決めて四捨五入)
 let cl = math.clamp(5, 0, 1)   # 1   (範囲に収める)
 let lp = math.lerp(0, 10, 0.25)   # 2.5 (a と b の間)
@@ -58,4 +64,5 @@ log(p, q, mix)              # (1.5, 2.5) (2, 4) #800080
 log(ok, ng, s, m, f)        # true true 0.00159... 3 2  (not ok が先に結合するので (not ok) or (c == 1))
 log(tiny, big)              # 1/1000000000 2500
 log(r, cl, lp, mr, ns)      # 1.23 1 2.5 50 2
-log(u, w, rot, div, flip)   # Vector(1.5, 2.5) Vector(2, 4) Vector(0, 1) Vector(0, -2) Vector(1, -2)
+log(len1, len2, corner, ang, ring)   # 25vy 20vx Vector(50vx, 40vy) 1.5707... Vector(50vx + 10vy, 32.6...vy)
+log(pi, u, w, rot, div, flip)  # 3.14159... Vector(1.5, 2.5) Vector(2, 4) Vector(0, 1) Vector(0, -2) Vector(1, -2)

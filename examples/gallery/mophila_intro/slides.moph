@@ -1,28 +1,49 @@
 # slides.moph — intro の場面を組む部品。基本形は「左にコード、右にそれが動く箱、下にナレーションの字幕」
 
 import math
-import { fade_to } from animation
-import { W, H, v, track, ink, dim, panel, line, accent, mono, fade_time, stagger, chapter_time, review, pause, dwell, longer } from .theme
+import { W, H, layers, ink, dim, panel, line, accent, mono, fade_time, stagger, chapter_time, review, pause, dwell, longer } from .theme
 
-export func place(o) {
-  v.place(o)
-  o
+# Layer を積む。Composition に置くのは main
+export func put(node, at, end) {
+  layers.push((node, at, end))
 }
 
-export func fade(o, at, from, to) {
-  track.place(fade_to(o, from, to, fade_time), at = at)
+func still(o) {
+  func (t) { o }
+}
+
+# f(t) を、at から end の間だけ見せる。s はこの Layer の始まり。端でフェードする
+func fading(f, s, at, end) {
+  func (t) {
+    let g = s + t
+    f(t).copy(opacity = ease(g, at, at + fade_time, 0, 1) * ease(g, end - fade_time, end, 1, 0))
+  }
+}
+
+# 時刻 t から図形を返す func を、at から end まで見せる
+export func show_func(f, at, end) {
+  put(fading(f, at, at, end), at, end)
 }
 
 # at から end まで見せる。end の時点で消え終わる
 export func show(objs, at, end) {
   for (i, o) in objs.enumerate() {
-    fade(o, at + i * stagger, 0, 1)
-    fade(o, end - fade_time, 1, 0)
+    let start = at + i * stagger
+    put(fading(still(o), start, start, end), start, end)
   }
 }
 
-export func text(s, x, y, size, color, anchor) {
-  place(TextArea(text = s, position = Pos(x, y, anchor = anchor), fontSize = size, fill = color, align = :center, opacity = 0))
+# side は :center :left :right。x, y に文字のどこを置くか
+export func text(s, x, y, size, color, side) {
+  let t = TextArea(text = s, position = Vector(x, y), fontSize = size, fill = color, align = :center)
+  let box = t.size()
+  if side == :left {
+    return t.copy(anchor = Vector(0, box.y / 2))
+  }
+  if side == :right {
+    return t.copy(anchor = Vector(box.x, box.y / 2))
+  }
+  t
 }
 
 export func heading(s) { text(s, W / 2, 0.95, 0.66, accent, :center) }
@@ -31,50 +52,41 @@ export func heading(s) { text(s, W / 2, 0.95, 0.66, accent, :center) }
 export func card(lines, x, y, w, size) {
   let lh = size * 1.6
   let h = lines.len() * lh + size * 1.2
-  let objs = [place(Rect(position = Pos(x, y, anchor = :topLeft), w = w, h = h, radius = 0.15, fill = panel, stroke = line, strokeWidth = 0.04, opacity = 0))]
+  let objs = [Rect(position = Vector(x, y), anchor = Vector(0, 0), w = w, h = h, radius = 0.15, fill = panel, stroke = line, strokeWidth = 0.04)]
   for (i, s) in lines.enumerate() {
-    objs.push(place(TextArea(text = s, position = Pos(x + size * 0.8, y + size * 0.6 + i * lh, anchor = :topLeft), fontSize = size, fill = mono, align = :left, opacity = 0)))
+    objs.push(TextArea(text = s, position = Vector(x + size * 0.8, y + size * 0.6 + i * lh), anchor = Vector(0, 0), fontSize = size, fill = mono, align = :left))
   }
   objs
 }
 
-# 線だけの枠 (先に置いた View を隠さない)
+# 線だけの枠
 export func outline(x, y, w, h) {
-  place(Rect(position = Pos(x, y, anchor = :topLeft), w = w, h = h, radius = 0.15, stroke = line, strokeWidth = 0.04, opacity = 0))
+  Rect(position = Vector(x, y), anchor = Vector(0, 0), w = w, h = h, radius = 0.15, stroke = line, strokeWidth = 0.04)
 }
 
-# 別の View を箱として置き、at からその Timeline を動かす。end で消える
-export func demo(sub, x, y, w, at, end) {
-  sub.opacity = 0
-  v.place(sub, at = Pos(x, y, anchor = :topLeft), w = w)
-  track.place(sub, at = at)
-  show([sub], at, end)
-  sub
+# 別の Composition を、左上 (x, y)、幅 w の箱として置く
+export func scaled(sub, x, y, w) {
+  sub.copy(position = Vector(x, y), anchor = Vector(0, 0), scale = w / sub.box.x)
 }
 
-# 別の View を at から len だけ動かして消す。中の Timeline は len で切るので、あとで同じ View を置き直せる
-# (切らないと、中の Timeline が最後まで進んで終わった値を書き続ける)
-export func demo_cut(sub, x, y, w, at, len) {
-  sub.opacity = 0
-  v.place(sub, at = Pos(x, y, anchor = :topLeft), w = w)
-  let cut = Timeline(duration = len)
-  cut.place(sub, at = 0s)
-  track.place(cut, at = at)
-  show([sub], at, at + len)
-  sub
+# f(t) を at から every ごとに t = 0 から置き直して end まで繰り返す。全体で 1 度だけフェードする
+export func loop_func(f, at, every, end) {
+  let n = math.ceil((end - at) / every)
+  for i in 0..n {
+    let s = at + i * every
+    let stop = if s + every < end { s + every } else { end }
+    put(fading(f, s, at, end), s, stop)
+  }
 }
 
-# 箱を置き、every ごとに置き直して end まで繰り返す
+# 別の Composition を箱として置き、at から end まで動かす。every ごとに最初から
 export func loop_demo(sub, x, y, w, at, every, end) {
-  demo(sub, x, y, w, at, end)
-  let n = math.ceil((end - at) / every)
-  for i in 1..n { track.place(sub, at = at + i * every) }
-  sub
+  loop_func(still(scaled(sub, x, y, w)), at, every, end)
 }
 
-export func repeat(tl, at, every, end) {
-  let n = math.ceil((end - at) / every)
-  for i in 0..n { track.place(tl, at = at + i * every) }
+# 別の Composition を箱として置き、at から end まで 1 度だけ動かす
+export func demo(sub, x, y, w, at, end) {
+  loop_demo(sub, x, y, w, at, end - at, end)
 }
 
 # 場面: 出したものと字幕を覚えておき、終わりが決まったら一斉に置く。字幕は同時に 1 つ
@@ -95,14 +107,14 @@ export func close(sc, end) {
       let (next_s, next_at) = caps[i + 1]
       stop = next_at
     }
-    track.place(Narration(text = s, duration = stop - at), at = at)
+    put(Narration(text = s), at, stop)
   }
   end + pause
 }
 
 export func chapter(title, at) {
   let t = text(title, W / 2, 4.2, 0.95, ink, :center)
-  let bar = place(Rect(position = Pos(W / 2, 5.25), w = 3.2, h = 0.06, fill = accent, opacity = 0))
+  let bar = Rect(position = Vector(W / 2, 5.25), w = 3.2, h = 0.06, fill = accent)
   show([t, bar], at, at + chapter_time)
   at + chapter_time + pause
 }

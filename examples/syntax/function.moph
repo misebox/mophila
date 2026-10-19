@@ -23,11 +23,11 @@ let sum3 = func ([a, b, c]) { a + b + c }
 sum3([1, 2, 3])          # 6
 
 # 既定値と名前付き引数
-func circle_at(pos, r = 0.5, fill = #a0a0a0) {
+func circle_at(pos, r = 5vy, fill = #a0a0a0) {
   Circle(position = pos, radius = r, fill = fill)
 }
-let c1 = circle_at(Pos(1, 1))
-let c2 = circle_at(Pos(2, 1), fill = #e04040)
+let c1 = circle_at(Vector(25vx, 50vy))
+let c2 = circle_at(Vector(50vx, 50vy), fill = #e04040)
 
 # 関数を返す
 func scaler(k) {
@@ -36,14 +36,18 @@ func scaler(k) {
 let half = scaler(1/2)
 half(4)                  # 2
 
-# context: オブジェクトに短い別名を付けて属性を扱う
-let c = Circle()
-let variableWithLongName = Rect()
-context c as o, variableWithLongName as v {
-  o.position, o.radius = Pos(1, 1.5), 0.5
-  o.fill = #4040e0
-  v.w = 1
+# 図形は不変。変えたものは copy で作る
+let c = Circle(position = center, radius = 5vy).copy(fill = #4040e0, radius = 8vy)
+
+# 時間で変わる絵は func (t) で書く。t は Layer の in を 0 とした Duration。
+# 同じ t には同じ Node が返る (状態は持たない)
+func pulse(t) {
+  Circle(position = center, radius = ease(t, 0s, 1s, 5vy, 20vy), fill = #e04040,
+         opacity = ease(t, 0.5s, 1s, 1, 0))
 }
+let comp = Composition(box = Vector(16, 9), duration = 2s)
+comp.place("pulse-a", pulse, in = 0s, out = 1s)
+comp.place("pulse-b", pulse, in = 1s, out = 2s)    # 同じ関数。t はここでも自分の in が 0
 
 # ---- ... で引数に広げる ----
 let pair = (1, 2)
@@ -55,3 +59,4 @@ log(double(3), add(1, 2), triple(3), sum3([1, 2, 3]), half(4))   # 6 3 9 6 2
 log(sign(-5), sign(3))   # -1 1
 log(c1, c2)
 log(c)
+output comp

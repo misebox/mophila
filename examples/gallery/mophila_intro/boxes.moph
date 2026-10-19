@@ -1,27 +1,20 @@
 # boxes.moph — 組み合わせ 1: 座標は箱の中の値。大きさは出力のときに決まる
 
 import math
-import { W, H, v, track, ink, dim, accent, blue, review, dwell } from .theme
-import { place, text, heading, card, outline, demo, scene, add, say, close } from .slides
+import { W, H, ink, dim, accent, blue, review, dwell } from .theme
+import { text, heading, card, outline, demo, scene, add, say, close } from .slides
 
-# 同じ絵の箱を作る (1 つの View は 1 か所にしか置けない)
+# 同じ絵の箱を作る。Composition は不変なので、何度でも置ける
 func picture(life) {
-  let b = View(box = Vector(4, 3))
-  b.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 4, h = 3, fill = #1b2130))
-  let c = Circle(position = Pos(1.4, 1.5), radius = 0.8, fill = accent)
-  b.place(c)
-  let r = Rect(position = Pos(3.0, 1.5), w = 1.0, h = 1.6, radius = 0.2, fill = blue)
-  b.place(r)
-  let sway = context c as o, r as q {
-    motion (t) {
-      0..1: o.position.y = 1.5 + 0.3 * math.sin(math.TAU * t * (life / 1s) / 3)
-      0..1: q.position.y = 1.5 - 0.3 * math.sin(math.TAU * t * (life / 1s) / 3)
-    }
-  }
-  sway.duration = life
-  let tl = Timeline()
-  tl.place(sway, at = 0s)
-  b.addTrack(tl)
+  let b = Composition(box = Vector(4, 3), duration = life)
+  b.place("bg", Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 4, h = 3, fill = #1b2130), in = 0s, out = life)
+  b.place("sway", func (t) {
+    let s = 0.3 * math.sin(math.tau * t / 3s)
+    Group(
+      Circle(position = Vector(1.4, 1.5 + s), radius = 0.8, fill = accent),
+      Rect(position = Vector(3.0, 1.5 - s), w = 1.0, h = 1.6, radius = 0.2, fill = blue),
+    )
+  }, in = 0s, out = life)
   b
 }
 
@@ -30,14 +23,15 @@ export func run(now) {
   let sc = scene()
   add(sc, [heading("座標は、箱の中の値")], now)
   add(sc, card([
-    "let b = View(box = Vector(4, 3))",
-    "b.place(Circle(",
-    "  position = Pos(1.4, 1.5), radius = 0.8,",
-    "))",
-    "b.place(Rect(",
-    "  position = Pos(3.0, 1.5), w = 1, h = 1.6,",
-    "))",
-    "output b",
+    "let comp = Composition(box = Vector(4, 3),",
+    "                       duration = 6s)",
+    "comp.place(\"dot\", Circle(",
+    "  position = Vector(1.4, 1.5), radius = 0.8,",
+    "), in = 0s, out = 6s)",
+    "comp.place(\"bar\", Rect(",
+    "  position = Vector(3.0, 1.5), w = 1, h = 1.6,",
+    "), in = 0s, out = 6s)",
+    "output comp",
     "",
     "$ mophila render a.moph --size fhd",
     "$ mophila render a.moph --size vga",

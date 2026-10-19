@@ -1,6 +1,6 @@
-# walker.moph — 歩く人。関節ごとの図形が、親の先端を毎フレーム読んでつながる (腰 → 腿 → 脛 → 足、肩 → 上腕 → 前腕)。
+# walker.moph — 歩く人。関節ごとの図形が、親の先端から次の関節へつながる (腰 → 腿 → 脛 → 足、肩 → 上腕 → 前腕)。
 # 歩行の周期は sin で作る。脚が前に振れるとき膝が曲がり、着いているときは伸びる。腕は同じ側の脚と逆に振る。
-# make(near, far, long) が「その場で long の間歩く人」の View (箱 6 x 6、足元は y 5.6) を返す。import して並べられる。
+# make(near, far, t) が「その場で歩く人」の Group (箱 6 x 6、足元は y 5.6) を、時刻 t のぶんだけ返す。import して並べられる。
 # 進むのは置いた側の仕事で、箱の幅 6 のとき 1 秒に speed 進めると足が滑らない
 
 import math
@@ -20,100 +20,63 @@ let width   = 0.13
 # 角度 0 が真下、正が前 (x が増える向き)
 func direction(a) { Vector(math.sin(a), math.cos(a)) }
 # 歩行の位相。side は 0 (手前) か 1 (奥) で半周期ずれる
-func phase(t, side, long) { math.TAU * t * (long / 1s) / period + side * math.PI }
-func hip_at(t, long) { Vector(3, floor - thigh - shin + 0.15 - 0.07 * math.cos(2 * phase(t, 0, long))) }
+func phase(t, side) { math.tau * (t / 1s) / period + side * math.pi }
+func hip_at(t) { Vector(3, floor - thigh - shin + 0.15 - 0.07 * math.cos(2 * phase(t, 0))) }
 func thigh_angle(p) { swing * math.sin(p) }
 # 前に振れている間 (cos > 0) だけ膝を曲げる
 func shin_angle(p) { thigh_angle(p) - 0.1 - 0.9 * math.max(0, math.cos(p)) }
 func upper_angle(p) { -0.6 * math.sin(p) }
 func fore_angle(p) { upper_angle(p) + 0.55 }
 
-func limb(box, color) {
-  let l = Line(from = Vector(0, 0), to = Vector(0, 0), stroke = color, strokeWidth = width)
-  box.place(l)
-  l
-}
-func joint(box, color, r) {
-  let c = Circle(position = Pos(0, 0), radius = r, fill = color)
-  box.place(c)
-  c
+func limb(from, to, color) { Line(from = from, to = to, stroke = color, strokeWidth = width) }
+func joint(at, color, r) { Circle(position = at, radius = r, fill = color) }
+
+# 片側の脚と腕。親の先端を次の起点にしてつなぐ。戻り値は図形の List
+func side_of(side, color, t) {
+  let p = phase(t, side)
+  let hip = hip_at(t)
+  let knee = hip + direction(thigh_angle(p)) * thigh
+  let ankle = knee + direction(shin_angle(p)) * shin
+  let toe = ankle + direction(shin_angle(p) + math.pi / 2) * 0.35
+  let shoulder = hip + Vector(0.12, -torso)
+  let elbow = shoulder + direction(upper_angle(p)) * upper
+  let hand = elbow + direction(fore_angle(p)) * fore
+  [
+    limb(hip, knee, color), limb(knee, ankle, color), limb(ankle, toe, color),
+    limb(shoulder, elbow, color), limb(elbow, hand, color),
+    joint(knee, color, width / 2), joint(ankle, color, width / 2),
+    joint(elbow, color, width / 2), joint(hand, color, width * 0.7),
+  ]
 }
 
-# 片側の脚と腕。親の先端を読む行でつなぐ。戻り値は Timeline
-func side_of(box, side, color, long) {
-  let th = limb(box, color)
-  let sh = limb(box, color)
-  let ft = limb(box, color)
-  let ua = limb(box, color)
-  let fa = limb(box, color)
-  let knee = joint(box, color, width / 2)
-  let ankle = joint(box, color, width / 2)
-  let elbow = joint(box, color, width / 2)
-  let hand = joint(box, color, width * 0.7)
-  let tl = context th as a, sh as b, ft as c, ua as d, fa as e, knee as k, ankle as n, elbow as m, hand as h {
-    motion (t) {
-      0..1: a.from = hip_at(t, long)
-      0..1: a.to = a.from + direction(thigh_angle(phase(t, side, long))) * thigh
-      0..1: b.from = a.to
-      0..1: b.to = b.from + direction(shin_angle(phase(t, side, long))) * shin
-      0..1: c.from = b.to
-      0..1: c.to = c.from + direction(shin_angle(phase(t, side, long)) + math.PI / 2) * 0.35
-      0..1: k.position = Pos(a.to)
-      0..1: n.position = Pos(b.to)
-      0..1: d.from = hip_at(t, long) + Vector(0.12, -torso)
-      0..1: d.to = d.from + direction(upper_angle(phase(t, side, long))) * upper
-      0..1: e.from = d.to
-      0..1: e.to = e.from + direction(fore_angle(phase(t, side, long))) * fore
-      0..1: m.position = Pos(d.to)
-      0..1: h.position = Pos(e.to)
-    }
-  }
-  tl.duration = long
-  tl
+# 胴と頭
+func trunk_of(color, t) {
+  let hip = hip_at(t)
+  let neck = hip + Vector(0.12, -torso)
+  [
+    limb(hip, neck, color),
+    joint(hip, color, width * 0.8), joint(neck, color, width / 2),
+    joint(neck + Vector(0.08, -0.5), color, 0.36),
+  ]
 }
 
-# その場で long の間歩く人。near は手前の手足と胴の色、far は奥の手足の色
-export func make(near: Color, far: Color, long: Duration) -> View {
-  let box = View(box = Vector(6, 6))
-  let tl = Timeline()
-  # 奥 → 胴 → 手前 の順に置き、同じ順に当てる (親の値を読む行は、親の行が先に当たっている必要がある)
-  tl.place(side_of(box, 1, far, long), at = 0s)
-  let body = limb(box, near)
-  let hip = joint(box, near, width * 0.8)
-  let neck = joint(box, near, width / 2)
-  let head = joint(box, near, 0.36)
-  let trunk = context body as b, hip as p, neck as n, head as h {
-    motion (t) {
-      0..1: b.from = hip_at(t, long)
-      0..1: b.to = b.from + Vector(0.12, -torso)
-      0..1: p.position = Pos(b.from)
-      0..1: n.position = Pos(b.to)
-      0..1: h.position = Pos(b.to + Vector(0.08, -0.5))
-    }
-  }
-  trunk.duration = long
-  tl.place(trunk, at = 0s)
-  tl.place(side_of(box, 0, near, long), at = 0s)
-  box.addTrack(tl)
-  box
+# その場で歩く人。near は手前の手足と胴の色、far は奥の手足の色、t は歩き始めからの時刻
+export func make(near: Color, far: Color, t: Duration) -> Group {
+  # 奥 → 胴 → 手前 の順に重ねる
+  Group(...side_of(1, far, t), ...trunk_of(near, t), ...side_of(0, near, t))
 }
 
 # ---------- 単体で見るとき: 1 人が左から右へ横切る ----------
-let v = View(box = Vector(16, 9))
-let track = Timeline()
-v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #14161c))
-let ground_y = 8
-v.place(Line(from = Vector(0, ground_y), to = Vector(16, ground_y), stroke = #3a4560, strokeWidth = 0.04))
 let total = 7s
-let one = make(#e8ecf7, #8b93a7, total)
-v.place(one, at = Pos(-5, ground_y + 6 - floor, anchor = :bottomLeft), w = 6)
-let travel = context one as o {
-  motion (t) {
-    0s: o.position.x = -5
-    7s: o.position.x = -5 + speed * 7
-  }
+let ground_y = 8
+
+func one(t) {
+  make(#e8ecf7, #8b93a7, t).copy(anchor = Vector(0, 6), position = Vector(-5 + speed * (t / 1s), ground_y + 6 - floor))
 }
-track.place(one, at = 0s)
-track.place(travel, at = 0s)
-v.addTrack(track)
-output v
+
+let comp = Composition(box = Vector(16, 9), duration = total)
+comp.place("bg", Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9, fill = #14161c), in = 0s, out = total)
+comp.place("ground", Line(from = Vector(0, ground_y), to = Vector(16, ground_y), stroke = #3a4560, strokeWidth = 0.04), in = 0s, out = total)
+comp.place("person", one, in = 0s, out = total)
+
+output comp

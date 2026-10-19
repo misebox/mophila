@@ -1,7 +1,7 @@
-# placing.moph — 時間 3: Timeline に時刻を指定して置く。入れ子、繰り返し、音と字幕も同じ軸
+# placing.moph — 時間 3: Composition に in と out を指定して置く。入れ子、繰り返し、音と字幕も同じ軸
 
-import { W, H, v, track, ink, dim, accent, blue, green, line, review, dwell, longer } from .theme
-import { place, text, heading, card, repeat, scene, add, say, close } from .slides
+import { W, H, ink, dim, accent, blue, green, line, review, dwell, longer } from .theme
+import { text, heading, card, loop_func, scene, add, say, close } from .slides
 
 export func run(now) {
   log("placing", now)
@@ -10,13 +10,14 @@ export func run(now) {
   add(sc, card([
     "# 人を出る時刻をずらして置く。渡り切ったらまた置く",
     "for (p, start) in people {",
-    "  track.place(p, at = start)",
-    "  track.place(p, at = start + 18s)",
+    "  comp.place(\"walk-a\", p, in = start, out = start + 18s)",
+    "  comp.place(\"walk-b\", p, in = start + 18s, out = ...)",
     "}",
-    "# 音楽と読み上げも同じ Timeline",
-    "track.place(bgm, at = 0s, loop = true, volume = 0.6)",
-    "track.place(Narration(text = \"…\", duration = 5s),",
-    "            at = 12s)",
+    "# 音楽と読み上げも同じ Composition",
+    "comp.place(\"bgm\", bgm.copy(volume = 0.6, loop = true),",
+    "           in = 0s, out = 30s)",
+    "comp.place(\"line\", Narration(text = \"…\"),",
+    "           in = 12s, out = 17s)",
   ], 0.7, 1.8, 7.6, 0.28), now + 0.4s)
   # 右: 時間軸に並んだ帯。再生位置の線が渡る
   let x0 = 9.6
@@ -27,26 +28,23 @@ export func run(now) {
     let (name, color, from, len) = l
     let y = 2.3 + i * 0.95
     objs.push(text(name, x0 - 0.4, y, 0.3, dim, :right))
-    objs.push(place(Rect(position = Pos(x0 + from, y - 0.25, anchor = :topLeft), w = len, h = 0.5, radius = 0.1, fill = color, opacity = 0)))
+    objs.push(Rect(position = Vector(x0 + from, y - 0.25), anchor = Vector(0, 0), w = len, h = 0.5, radius = 0.1, fill = color))
     if i == 4 {
-      objs.push(place(Rect(position = Pos(x0 + 3.6, y - 0.25, anchor = :topLeft), w = 1.4, h = 0.5, radius = 0.1, fill = color, opacity = 0)))
+      objs.push(Rect(position = Vector(x0 + 3.6, y - 0.25), anchor = Vector(0, 0), w = 1.4, h = 0.5, radius = 0.1, fill = color))
     }
   }
   let t1 = now + 0.5s
   add(sc, objs, t1)
-  let head = place(Line(from = Vector(x0, 1.9), to = Vector(x0, 6.4), stroke = ink, strokeWidth = 0.05, opacity = 0))
-  add(sc, [head], t1)
-  let sweep = context head as h {
-    motion (t) {
-      0s: h.from.x = x0, h.to.x = x0
-      6s: h.from.x = x0 + lane_w, h.to.x = x0 + lane_w
-    }
-  }
-  let t = say(sc, "動きは、Timeline に時刻を指定して置きます。", t1)
+  let t = say(sc, "動きは、Composition に in と out を指定して置きます。", t1)
   t = say(sc, "置いた時刻から、その動きが始まります。同じものを何度でも置けます。", t)
-  t = say(sc, "音楽と字幕も、同じ Timeline に置きます。", t)
+  t = say(sc, "音楽と字幕も、同じ Composition に置きます。", t)
   t = say(sc, "この動画の音楽と字幕も、そう書いてあります。", t)
   let end = t + review
-  repeat(sweep, t1, 6s, end)
+  # 再生位置の線。6 秒で右へ渡り、また左から
+  let sweep = func (t) {
+    let x = ease(t, 0s, 6s, x0, x0 + lane_w)
+    Line(from = Vector(x, 1.9), to = Vector(x, 6.4), stroke = ink, strokeWidth = 0.05)
+  }
+  loop_func(sweep, t1, 6s, end)
   close(sc, end)
 }

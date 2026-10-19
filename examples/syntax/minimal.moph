@@ -1,20 +1,15 @@
 # minimal.moph — 最初に動かす対象
 
-let view = View(box = Vector(200, 200))
-let redCircle = Circle(position = Pos(100, 100), radius = 10, fill = #e04040)
+let comp = Composition(box = Vector(16, 9), duration = 3s)
 
-# context は式。最後の式 (motion) が値になる
-let grow = context redCircle as c {
-  motion (t) {
-    0s: c.radius = 10
-    3s: c.radius = 100
-  }
+# 時間で変わる絵は func (t)。t は Layer の in を 0 とした時刻
+func grow(t) {
+  Circle(position = center, radius = ease(t, 0s, 3s, 10vy, 40vy), fill = #e04040)
 }
 
 let x = (1 + 2) * 3 ^ 2 / 4 % 5
 log("x = ", x)
 log("x = {x}, doubled = {d}".format(x, x * 2))
 
-view.place(redCircle)
-view.addTrack(grow)
-output view
+comp.place("grow", grow, in = 0s, out = 3s)
+output comp

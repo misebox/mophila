@@ -26,14 +26,18 @@ xs.sort()                        # 昇順
 xs.enumerate()                   # [(0, 1), (1, 2), (2, 3)]
 xs.zip([10, 20, 30])             # [(1, 10), (2, 20), (3, 30)]
 
-# 図形の List
-let v = View(box = Vector(4, 3))
+# 図形の List。Group(...items) に広げてまとめる
 let circles = [1, 2, 3].map(func (i) {
-  Circle(position = Pos(i, 1.5), radius = 0.3, fill = #e04040)
+  Circle(position = Vector(i, 1.5), radius = 0.3, fill = #e04040)
 })
+let items = []
 for c in circles {
-  v.place(c)
+  items.push(c)
 }
+let row = Group(...items)
+
+let comp = Composition(box = Vector(4, 3), duration = 2s)
+comp.place("row", row, in = 0s, out = 2s)
 
 # ---- String ----
 "hello".len()                    # 5 (文字数)
@@ -92,3 +96,5 @@ log(p.0, p.1, x, y, q, p.x, p.y)    # 1 1.5 1 1.5 (1, 1.5, 0) 1 1.5
 log(m["red"], m.keys(), m.has("blue"), m.has("cyan"))   # #e04040 ["red", "green", "blue"] true false
 log(s[0..5], s.split(" "), "-".repeat(5))              # こんにちは [こんにちは, world] -----
 log(["banana", "apple"].sort(), [(2, "b"), (1, "a")].sort())   # [apple, banana] [(1, a), (2, b)]
+
+output comp

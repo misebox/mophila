@@ -4,7 +4,6 @@
 import math
 import { escape_time, BURNING_SHIP, smooth_bands } from fractal
 
-let v = View(box = Vector(16, 9))
 let total = 40s
 let seconds = total / 1s
 let end_zoom = 50
@@ -21,8 +20,8 @@ let set = escape_time(
   max_steps = func (depth) { 150 + 230 * depth },   # depth は倍率の log10
   samples = 4,
 )
-v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = set))
 
-let track = Timeline(duration = total)
-v.addTrack(track)
-output v
+let comp = Composition(box = Vector(16, 9), duration = total)
+comp.place("set", Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9, fill = set), in = 0s, out = total)
+
+output comp

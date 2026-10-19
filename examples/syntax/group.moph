@@ -1,39 +1,50 @@
 # group.moph — 図形をまとめる。中の座標は Group の position からの相対
 
-let v = View(box = Vector(16, 9))
+import math
 
-# 属性でない引数が中身。書いた順に描く。名前を付けた中身は、その名前で読める
+let comp = Composition(box = Vector(16, 9), duration = 4s)
+
+# 属性でない引数が中身。書いた順に描く。Group も不変で、後から足せない
 let badge = Group(
-  ring   = Circle(position = Pos(0, 0), radius = 1.4, fill = #2f6fd0),
-  square = Rect(position = Pos(0, 0), w = 1.2, h = 1.2, fill = #ffb583),
-  position = Pos(2, 4.5),
+  Circle(radius = 1.4, fill = #2f6fd0),
+  Rect(w = 1.2, h = 1.2, fill = #ffb583),
+  position = Vector(2, 4.5),
 )
-v.place(badge)
-badge.ring.fill = #1d4f9c
-log(badge.square.w)
+log(badge.position)
 
 # Group の中に Group。原点は外側から順に足される
 let pair = Group(
-  Group(Circle(position = Pos(0, 0), radius = 0.5, fill = #d9552c), position = Pos(-1, 0)),
-  Group(Circle(position = Pos(0, 0), radius = 0.5, fill = #2f6fd0), position = Pos(1, 0)),
-  position = Pos(8, 1.5),
+  Group(Circle(radius = 0.5, fill = #d9552c), position = Vector(-1, 0)),
+  Group(Circle(radius = 0.5, fill = #2f6fd0), position = Vector(1, 0)),
+  position = Vector(8, 1.5),
   opacity = 0.5,          # 中身をまとめて 1 枚として薄くする
 )
-v.place(pair)
 
-# 後から足す
-let row = Group(position = Pos(4, 7.5))
+# 中身が先に決まらないときは、List に集めて広げる
+let items = []
 for i in 0..5 {
-  row.place(Circle(position = Pos(i * 2, 0), radius = 0.4, fill = #7d90ad))
+  items.push(Circle(position = Vector(i * 2, 0), radius = 0.4, fill = #7d90ad))
 }
-v.place(row)
+let row = Group(...items, position = Vector(4, 7.5))
 
-# Group を動かせば中身ごと動く。中の図形は別々に動かせる
-let move = motion (t) {
-  0s:  badge.position = Pos(2, 4.5), pair.rotation = 0, badge.square.rotation = 0
-  4s:  badge.position = Pos(14, 4.5), pair.rotation = 180, badge.square.rotation = 90
+# camera は中身の from を to に置いて scale 倍する。clip で枠の外を切る
+let lens = Group(
+  Circle(position = Vector(1, 1), radius = 0.5, fill = #e04040),
+  Rect(position = Vector(2, 1), w = 0.8, h = 0.8, fill = #40a040),
+  camera = Camera(from = Vector(1, 1), to = Vector(2, 2), scale = 2),
+  clip = Rect(w = 4, h = 4, anchor = Vector(0, 0)),
+  position = Vector(11, 3),
+)
+
+# Group を動かせば中身ごと動く。変えたものは copy で作る。anchor が回転の中心
+func move(t) {
+  Group(
+    badge.copy(position = Vector(ease(t, 0s, 4s, 2, 14), 4.5), rotation = ease(t, 0s, 4s, 0, math.pi)),
+    pair.copy(rotation = ease(t, 0s, 4s, 0, math.tau)),
+  )
 }
-let track = Timeline()
-track.place(move)
-v.addTrack(track)
-output v
+
+comp.place("row", row, in = 0s, out = 4s)
+comp.place("lens", lens, in = 0s, out = 4s)
+comp.place("move", move, in = 0s, out = 4s)
+output comp

@@ -1,24 +1,33 @@
 # bars.moph — 棒グラフが順に伸び、値のラベルが後から現れる
 
-import { fade_in } from animation
+import color
 
-let v = View(box = Vector(16, 9))
-v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #f7f7f2))
+let len = 7s
+let comp = Composition(box = Vector(16, 9), duration = len)
+comp.place("bg", Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9, fill = #f7f7f2), in = 0s, out = len)
 
-let title = TextArea(text = "Monthly visitors", position = Pos(1, 0.6, anchor = :topLeft), fontSize = 0.7, fill = #202020, opacity = 0)
-v.place(title)
+func title(t) {
+  TextArea(text = "Monthly visitors", position = Vector(1, 0.6), anchor = Vector(0, 0), fontSize = 0.7, fill = #202020, opacity = linear(t, 0s, 0.6s, 0, 1))
+}
+comp.place("title", title, in = 0s, out = len)
 
 # 目盛りの線。棒の高さが読めるように、薄く 4 本
+let ticks = []
 for i in 1..5 {
   let y = 7.5 - 5 * i / 5
-  v.place(Line(from = Vector(1.5, y), to = Vector(15, y), stroke = #e0ded6, strokeWidth = 0.02))
+  ticks.push(Line(from = Vector(1.5, y), to = Vector(15, y), stroke = #e0ded6, strokeWidth = 0.02))
 }
+comp.place("ticks", Group(...ticks), in = 0s, out = len)
 
 # 軸
-let x_axis = Line(from = Vector(1.5, 7.5), to = Vector(15, 7.5), stroke = #808080, strokeWidth = 0.03, opacity = 0)
-let y_axis = Line(from = Vector(1.5, 2), to = Vector(1.5, 7.5), stroke = #808080, strokeWidth = 0.03, opacity = 0)
-v.place(x_axis)
-v.place(y_axis)
+func axes(t) {
+  Group(
+    Line(from = Vector(1.5, 7.5), to = Vector(15, 7.5), stroke = #808080, strokeWidth = 0.03),
+    Line(from = Vector(1.5, 2), to = Vector(1.5, 7.5), stroke = #808080, strokeWidth = 0.03),
+    opacity = linear(t, 0s, 0.5s, 0, 1),
+  )
+}
+comp.place("axes", axes, in = 0.4s, out = len)
 
 let data = [
   { "label": "Jan", "value": 32, "color": #4080e0 },
@@ -32,48 +41,37 @@ let max = 100
 let chart_h = 5
 let bar_w = 1.4
 let gap = 0.8
+let grow_time = 1.5s
 
-let track = Timeline()
-
-track.place(fade_in(title, 0.6s), at = 0s)
-track.place(fade_in(x_axis, 0.5s), at = 0.4s)
-track.place(fade_in(y_axis, 0.5s), at = 0.4s)
-
-# 棒は下端を固定 (bottom を基準点にする) して h だけ伸ばす
-func grow(bar, h, delay) {
-  let tl = context bar as b {
-    motion (t) {
-      0s: b.h = 0.01
-      1.5s: b.h = h :ease_out
-    }
+# 棒は下端を固定 (anchor を下端に置く) して h だけ伸ばす。
+# 最大の棒は伸び切ってから色を変えて強調する。値のラベルは伸び切ってから現れる
+func column(x, d, start) {
+  let h = chart_h * d["value"] / max
+  let highlight = d["value"] == 80
+  let recolor_at = 6.2s - start
+  func (t) {
+    let grown = ease_out(t, 0s, grow_time, 0.01, h)
+    let fill = if highlight { color.mix(d["color"], #e04040, ease(t, recolor_at, recolor_at + 0.8s, 0, 1)) } else { d["color"] }
+    let value = TextArea(text = "{v}".format(d["value"]), fontSize = 0.4, fill = #202020, align = :center, opacity = linear(t, grow_time, grow_time + 0.4s, 0, 1))
+    Group(
+      Rect(position = Vector(x + bar_w / 2, 7.5), anchor = Vector(bar_w / 2, grown), w = bar_w, h = grown, fill = fill),
+      value.copy(position = Vector(x + bar_w / 2, 7.5 - h - 0.15), anchor = Vector(value.size().x / 2, value.size().y)),
+    )
   }
-  track.place(tl, at = delay)
 }
 
+# 月の名前は最初から見えている
+let names = []
 for (i, d) in data.enumerate() {
   let x = 2.2 + i * (bar_w + gap)
-  let h = chart_h * d["value"] / max
-  let bar = Rect(position = Pos(x + bar_w / 2, 7.5, anchor = :bottom), w = bar_w, h = 0.01, fill = d["color"])
-  v.place(bar)
-  grow(bar, h, 1s + i * 0.6s)
+  let name = TextArea(text = d["label"], fontSize = 0.4, fill = #404040, align = :center)
+  names.push(name.copy(position = Vector(x + bar_w / 2, 7.7), anchor = Vector(name.size().x / 2, 0)))
+}
+comp.place("names", Group(...names), in = 0s, out = len)
 
-  let name = TextArea(text = d["label"], position = Pos(x + bar_w / 2, 7.7, anchor = :top), fontSize = 0.4, fill = #404040, align = :center)
-  v.place(name)
-
-  let value = TextArea(text = "{v}".format(d["value"]), position = Pos(x + bar_w / 2, 7.5 - h - 0.15, anchor = :bottom), fontSize = 0.4, fill = #202020, align = :center, opacity = 0)
-  v.place(value)
-  track.place(fade_in(value, 0.4s), at = 1s + i * 0.6s + 1.5s)
-
-  # 最大の棒は最後に色を変えて強調する
-  if d["value"] == 80 {
-    track.place(context bar as b {
-      motion (t) {
-        0s:   b.fill = d["color"]
-        0.8s: b.fill = #e04040 :ease
-      }
-    }, at = 6.2s)
-  }
+for (i, d) in data.enumerate() {
+  let start = 1s + i * 0.6s
+  comp.place("bar-{i}".format(i), column(2.2 + i * (bar_w + gap), d, start), in = start, out = len)
 }
 
-v.addTrack(track)
-output v
+output comp

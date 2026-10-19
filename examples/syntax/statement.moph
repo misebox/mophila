@@ -21,8 +21,9 @@ for i in 0..=5 {         # 0 〜 5
 
 # for: リスト
 let colors = [#e04040, #40a040, #4040e0]
+let dots = []
 for col in colors {
-  let c = Circle(fill = col)
+  dots.push(Circle(position = Vector(20vx + dots.len() * 30vx, 50vy), radius = 8vy, fill = col))
 }
 
 # for: インデックス付き
@@ -46,3 +47,12 @@ for i in 0..100 {
 
 # ブロックは値を返す (最後の式)
 let size = if n > 3 { 1/2 } else { 1/4 }
+
+# if は func (t) の中でも式。時刻で絵を切り替える
+func blink(t) {
+  Group(...dots, opacity = if t < 1s { 1 } else { size })
+}
+
+let comp = Composition(box = Vector(16, 9), duration = 2s)
+comp.place("dots", blink, in = 0s, out = 2s)
+output comp

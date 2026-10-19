@@ -1,4 +1,4 @@
-# grid.moph — 4 つのサンプルを 2x2 に並べて同時に再生する (View の入れ子と import の例)
+# grid.moph — 4 つのサンプルを 2x2 に並べて同時に再生する (Composition の入れ子と import の例)
 
 import { grid_centers } from layout
 import .orbit
@@ -6,15 +6,20 @@ import .bars
 import .clock
 import .bounce
 
-let v = View(box = Vector(16, 9))
-v.place(Rect(position = Pos(0, 0, anchor = :topLeft), w = 16, h = 9, fill = #202028))
-
-# 余白 0.3 を除いた領域を 2x2 に分け、各マスの中心に置く
 let subs = [orbit.output, bars.output, clock.output, bounce.output]
-let track = Timeline()
-for (sub, center) in subs.zip(grid_centers(0.3, 0.3, 15.4, 8.4, 2, 2)) {
-  v.place(sub, at = Pos(center), w = 7.5)
-  track.place(sub, at = 0s)
+
+# いちばん長いサンプルに合わせる
+let len = 0s
+for sub in subs {
+  if sub.duration > len { len = sub.duration }
 }
-v.addTrack(track)
-output v
+
+let comp = Composition(box = Vector(16, 9), duration = len)
+comp.place("bg", Rect(position = Vector(0, 0), anchor = Vector(0, 0), w = 16, h = 9, fill = #202028), in = 0s, out = len)
+
+# 余白 0.3 を除いた領域を 2x2 に分け、各マスの中心に置く。幅 7.5 に縮める
+for (i, (sub, spot)) in subs.zip(grid_centers(0.3, 0.3, 15.4, 8.4, 2, 2)).enumerate() {
+  comp.place("cell-{i}".format(i), sub.copy(position = spot, anchor = Vector(8, 4.5), scale = 7.5 / 16), in = 0s, out = len)
+}
+
+output comp
